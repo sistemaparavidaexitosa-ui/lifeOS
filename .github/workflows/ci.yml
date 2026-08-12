@@ -11,13 +11,42 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Verificación explícita (F15): si algún dotfile crítico no llegó al
+      # repo (muy común cuando se sube el proyecto arrastrando archivos
+      # sueltos en vez de la carpeta completa), el job falla aquí con un
+      # mensaje claro, en vez de con el error críptico de setup-node.
+      - name: Verify critical dotfiles are committed
+        run: |
+          MISSING=""
+          for f in .nvmrc .npmrc .gitignore; do
+            if [ ! -f "$f" ]; then
+              MISSING="$MISSING $f"
+            fi
+          done
+          if [ -n "$MISSING" ]; then
+            echo "::error::Faltan estos archivos en el repositorio:$MISSING"
+            echo "Estos son dotfiles (empiezan con '.'). Es común que se pierdan"
+            echo "al subir el proyecto arrastrando archivos sueltos en vez de la"
+            echo "carpeta completa, o vía la interfaz web de GitHub. Corre:"
+            echo "  git ls-files | grep -E '^\.(nvmrc|npmrc|gitignore)$'"
+            echo "localmente para confirmar, y si faltan, agrégalos con 'git add' y haz push."
+            exit 1
+          fi
+          echo "OK: .nvmrc, .npmrc y .gitignore están presentes en el repo."
+
       - uses: pnpm/action-setup@v4
         with:
           version: 9.15.4
 
+      # F15 (nuevo, corrige el fallo real reportado por el owner): ya NO se
+      # usa `node-version-file: .nvmrc`. Aunque .nvmrc siga en el repo (para
+      # que `nvm use` funcione en local), el CI fija la versión de Node de
+      # forma EXPLÍCITA aquí, para que un .nvmrc faltante o corrupto en el
+      # repo remoto nunca vuelva a romper el pipeline. Mantén este valor
+      # sincronizado con `.nvmrc` y `engines.node` en package.json.
       - uses: actions/setup-node@v4
         with:
-          node-version-file: ".nvmrc"
+          node-version: "20.18.1"
           cache: "pnpm"
 
       # F1: install limpio y reproducible con lockfile commiteado.
@@ -35,8 +64,8 @@ jobs:
       - name: Unit tests (domain, framework-agnostic)
         run: pnpm test:unit
 
-      # F1/F2: build limpio en el Node de .nvmrc, con envs dummy suficientes
-      # para que env.ts (safeParse + defaults) no rompa el build (F4).
+      # F1/F2: build limpio, con envs dummy suficientes para que env.ts
+      # (safeParse + defaults) no rompa el build (F4).
       - name: Build
         env:
           NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
@@ -52,8 +81,7 @@ jobs:
           version: latest
 
       # F9/F13: aplica TODAS las migraciones desde cero + seed, y corre las
-      # pruebas pgTAP (RLS positivas Y negativas). Esto NO se pudo ejecutar en
-      # el entorno del asistente (sin Docker/Supabase CLI) — ver /docs/CHECKS.md.
+      # pruebas pgTAP (RLS positivas Y negativas).
       - name: Start Supabase (local)
         run: supabase start
 
