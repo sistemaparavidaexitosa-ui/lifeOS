@@ -1,0 +1,43 @@
+{
+  "name": "lifeos-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "20.18.1"
+  },
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "lint": "next lint",
+    "test:unit": "node --experimental-strip-types --test tests/domain/*.test.ts",
+    "gen:types": "supabase gen types typescript --linked > src/types/database.types.ts",
+    "db:reset": "supabase db reset",
+    "db:test": "supabase test db",
+    "verify": "pnpm install --frozen-lockfile && pnpm typecheck && pnpm lint && pnpm test:unit && pnpm build && supabase db reset && supabase db test"
+  },
+  "dependencies": {
+    "next": "15.1.8",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "@supabase/ssr": "0.5.2",
+    "@supabase/supabase-js": "2.47.10",
+    "zod": "3.24.1",
+    "clsx": "2.1.1"
+  },
+  "devDependencies": {
+    "typescript": "5.7.3",
+    "@types/node": "22.10.5",
+    "@types/react": "19.0.2",
+    "@types/react-dom": "19.0.2",
+    "eslint": "9.18.0",
+    "eslint-config-next": "15.1.8",
+    "@eslint/eslintrc": "3.2.0",
+    "tailwindcss": "3.4.17",
+    "postcss": "8.4.49",
+    "autoprefixer": "10.4.20"
+  }
+}
