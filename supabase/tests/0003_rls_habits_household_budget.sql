@@ -1,5 +1,7 @@
 -- 0003_rls_habits_household_budget.sql — pgTAP: Hábitos, Hogar, Presupuesto.
 -- ⚠️ NO EJECUTADO en el entorno del asistente. Correr con: `supabase test db`.
+-- (Este archivo NO fue reportado como fallido en la corrida de CI; se incluye
+-- sin cambios de lógica para mantener el set de pruebas consistente.)
 
 begin;
 select plan(6);

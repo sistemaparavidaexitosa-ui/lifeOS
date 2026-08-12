@@ -1,5 +1,19 @@
 -- 0002_rls_execution_collaboration.sql — pgTAP: RLS de Execution/Collaboration.
 -- ⚠️ NO EJECUTADO en el entorno del asistente. Correr con: `supabase test db`.
+--
+-- Rev. fix (post primera corrida en CI, que reportó "planned 7 tests but ran
+-- 0" — abort de transacción, no un fallo de aserción):
+--   1) Se reemplazó `throws_ok` (que esperaba una excepción de un UPDATE
+--      bloqueado por RLS) por un conteo de filas afectadas vía RETURNING +
+--      is(), ya que RLS no lanza excepciones al filtrar filas en la
+--      cláusula USING — el UPDATE simplemente afecta 0 filas.
+--   2) Se hicieron EXPLÍCITOS todos los `ON CONFLICT` (target concreto en
+--      vez de la forma genérica), para eliminar cualquier ambigüedad de
+--      arbitraje de índice.
+-- Si el error persiste tras este fix, busca en el log completo de GitHub
+-- Actions (arriba del resumen de pg_prove) una línea con el formato
+-- `psql:supabase/tests/0002_rls_execution_collaboration.sql:NN: ERROR: ...`
+-- — ese es el mensaje real de Postgres que identifica la línea exacta.
 
 begin;
 select plan(7);
@@ -23,7 +37,7 @@ on conflict (id) do nothing;
 
 insert into public.memberships (workspace_id, user_id, user_name, role, status)
 values ('77777777-7777-4777-8777-777777777777', '55555555-5555-4555-8555-555555555555', 'Member', 'Member', 'Active')
-on conflict do nothing;
+on conflict (workspace_id, user_id) do nothing;
 
 -- Proyecto personal del Owner, movido al workspace y compartido con nivel 'view'
 insert into public.projects (id, owner_id, workspace_id, title)
@@ -32,7 +46,7 @@ on conflict (id) do nothing;
 
 insert into public.project_shares (project_id, workspace_id, access_level)
 values ('88888888-8888-4888-8888-888888888888', '77777777-7777-4777-8777-777777777777', 'view')
-on conflict do nothing;
+on conflict (project_id) do nothing;
 
 -- Como Member: POSITIVA — puede leer el proyecto compartido (nivel view)
 select set_config('request.jwt.claims', json_build_object('sub', '55555555-5555-4555-8555-555555555555', 'role', 'authenticated')::text, true);
@@ -43,10 +57,16 @@ select isnt_empty(
   'Member SÍ ve el proyecto compartido con nivel view (RLS positiva, FR-COL-001)'
 );
 
--- Como Member: NEGATIVA — no puede editar (access_level = view, no 'edit')
-select throws_ok(
-  $$ update public.projects set title = 'Hackeado' where id = '88888888-8888-4888-8888-888888888888' $$,
-  null, null,
+-- CORREGIDO (era throws_ok): el UPDATE se ejecuta sin error pero afecta 0
+-- filas, porque can_edit_project() (usado en la cláusula USING de
+-- projects_update_edit) devuelve false para un Member con nivel 'view'.
+select is(
+  (with upd as (
+     update public.projects set title = 'Hackeado'
+     where id = '88888888-8888-4888-8888-888888888888'
+     returning 1
+   ) select count(*)::int from upd),
+  0,
   'Member NO puede editar un proyecto compartido solo con nivel view (RLS negativa, BR-015/can_edit_project)'
 );
 
