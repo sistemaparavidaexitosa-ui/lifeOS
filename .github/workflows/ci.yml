@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "pnpm"
+
+      # F1: install limpio y reproducible con lockfile commiteado.
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      # F2: tsc --noEmit por separado ANTES del build, para atrapar TODOS los
+      # errores de tipo de una sola vez (no iterar deploy-por-deploy).
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Unit tests (domain, framework-agnostic)
+        run: pnpm test:unit
+
+      # F1/F2: build limpio en el Node de .nvmrc, con envs dummy suficientes
+      # para que env.ts (safeParse + defaults) no rompa el build (F4).
+      - name: Build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+        run: pnpm build
+
+  db:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # F9/F13: aplica TODAS las migraciones desde cero + seed, y corre las
+      # pruebas pgTAP (RLS positivas Y negativas). Esto NO se pudo ejecutar en
+      # el entorno del asistente (sin Docker/Supabase CLI) — ver /docs/CHECKS.md.
+      - name: Start Supabase (local)
+        run: supabase start
+
+      - name: Reset DB (migrations + seed)
+        run: supabase db reset
+
+      - name: Run pgTAP tests (RLS positive/negative)
+        run: supabase test db
