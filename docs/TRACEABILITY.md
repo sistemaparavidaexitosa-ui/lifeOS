@@ -1,0 +1,40 @@
+# TRACEABILITY — Requisito → Tabla → Política RLS → API/Action → Componente → Test
+
+Fuente de requisitos: `MASTER_PRODUCT_SOFTWARE_ARCHITECTURE_SPECIFICATION_v0.4.md`.
+Ningún ID de requisito fue renumerado.
+
+| Requisito | Tabla(s) | Política RLS | Server Action / Route | Componente | Test |
+|---|---|---|---|---|---|
+| FR-IAM-001/002 | `auth.users` (Supabase Auth) | RLS por `auth.uid()` en todas las tablas | `signIn`/`signUp` | `login-form.tsx` | Manual (sin CLI Supabase en este entorno) |
+| FR-USR-001 | `profiles` | `profiles_select_own`/`update_own` | `completeOnboarding`,`updateProfile` | `onboarding-form.tsx`,`settings/page.tsx` | Manual |
+| BR-012/019/027 (privacidad Money OS/Time/Habits) | `accounts`,`journal_entries`,`occupations`,`habits`,`books`,`family_members` | Todas `for all using (user_id = auth.uid())`, **sin** `workspace_id` | — | — | `supabase/tests/0001_rls_money.sql`, `0003_rls_habits_household_budget.sql` (⚠️ NO EJECUTADO) |
+| FR-EXE-001…005 | `projects`,`tasks`,`task_history` | `projects_select_access`,`tasks_select`/`tasks_write` (vía `has_project_access`/`can_edit_project`) | `createProject`,`createTask`,`setTaskStatus` | `execution/page.tsx`,`NewProjectForm.tsx`,`NewTaskForm.tsx`,`TaskStatusButtons.tsx` | `tests/domain/task-state.test.ts` (8 casos, ✅ ejecutado) |
+| FR-EXE-013 (maestro-detalle) | `projects`,`tasks` | igual que arriba | consulta filtrada por `?project=` en la página | `execution/page.tsx` | Manual |
+| FR-EXE-014, FR-VIEW-007/008, BR-023 (Eisenhower) | `tasks.urgent` | `tasks_write` (misma política, `urgent` es una columna más) | `changeTaskQuadrant` | `eisenhower/Board.tsx` | `tests/domain/eisenhower.test.ts` (8 casos, ✅ ejecutado) |
+| FR-INT-011, BR-022 (secuenciación IA) | `tasks` (lectura) | `tasks_select` | `requestProjectSequence`,`applyProjectSequence` (solo audita, no reordena) | `SequenceButton.tsx` | `tests/domain/project-sequence.test.ts` (6 casos, ✅ ejecutado) |
+| FR-PLN-002/004/005/008 | `daily_plans`,`weekly_reviews`,`logbook` | `daily_plans_own`,`weekly_reviews_own` | `approveDailyPlan`,`closeoutTask`,`saveDailyLearning`,`approveWeeklyReview` | `DailyPlanForm.tsx`,`CloseoutPanel.tsx`,`WeeklyReviewPanel.tsx` | Manual |
+| FR-TIM-001…008 | `occupations`,`profiles` (ventana) | `occupations_own` | `updateActivityWindow`,`upsertOccupation`,`deleteOccupation`,`assignTaskToSlot` | `time/page.tsx`,`Timeline.tsx`,`WeekView.tsx` | `tests/domain/time.test.ts` (7 casos, ✅ ejecutado) |
+| FR-HAB-001…006, BR-026, FR-HOM-007 | `habits`,`habit_logs`,`books`,`book_notes` | `habits_own`,`habit_logs_own`,`books_own`,`book_notes_own` | `upsertHabit`,`toggleHabitToday`,`upsertBook`,`addBookNote` | `habits/page.tsx`,`HabitRow.tsx`,`BookForm.tsx` | `tests/domain/habits.test.ts` (5 casos, ✅ ejecutado); FK `ON DELETE SET NULL` en `0004_planning_time_habits.sql` (⚠️ NO EJECUTADO contra Postgres real) |
+| FR-WSP-001…007, FR-COL-001…009 | `workspaces`,`memberships`,`invitations`,`project_shares`,`comments`,`workspace_activity` | `is_workspace_member`,`workspace_role`,`has_project_access`,`can_edit_project` | `createWorkspace`,`inviteMember`,`removeMember`,`shareProject`,`deleteWorkspace` | `workspaces/page.tsx` | `supabase/tests/0002_rls_execution_collaboration.sql` (7 casos, ⚠️ NO EJECUTADO) |
+| FR-MNY-001…012 | `accounts`,`journal_entries`,`journal_lines`,`budgets` | `accounts_own`,`journal_entries_own`,`journal_lines_own`,`budgets_own` | `createAccount`,`postTransaction`,`reconcileEntry`,`reverseEntry` | `money/page.tsx`,`NewTransactionForm.tsx` | `tests/domain/money.test.ts` (11 casos, ✅ ejecutado) |
+| FR-MNY-018/019, BR-028 (Presupuesto tabular) | `budgets` (extendida) | `budgets_own` | `upsertBudgetLine`,`deleteBudgetLine` | `budget/page.tsx`,`BudgetLineForm.tsx` | `tests/domain/budget.test.ts` (5 casos, ✅ ejecutado) |
+| FR-DEB-001…005 | `debts` | `debts_own` | `upsertDebt`,`deleteDebt` | `debt/page.tsx`,`DebtForm.tsx`,`DebtSimulator.tsx` | `tests/domain/debt.test.ts` (6 casos, ✅ ejecutado) |
+| FR-DEB-006, BR-024 (pago vinculado) | `journal_entries.debt_id` | `journal_entries_own` (misma tabla) | `postTransaction` (con `debtId`),`reverseEntry` | `NewTransactionForm.tsx` | `tests/domain/money.test.ts::applyDebtPayment` (✅ ejecutado) |
+| FR-DEB-007, BR-025 (Cashback) | `cashback_cards`,`cashback_redemptions` | `cashback_cards_own`,`cashback_redemptions_own` | `upsertCashbackCard`,`redeemCashback` | `cashback/page.tsx` | `tests/domain/money.test.ts::cashbackAccrued` (✅ ejecutado) |
+| FR-DEB-008 (simulador editable) | `debts` (lectura) | `debts_own` | `saveDebtScenario` (solo audita) | `DebtSimulator.tsx` (modo "single") | `tests/domain/debt.test.ts::simulateSingleDebt` (✅ ejecutado) |
+| FR-SAV-001…003 | `savings_goals` | `savings_goals_own` | `upsertSavingsGoal`,`contributeToSaving` | `savings/page.tsx` | `tests/domain/money.test.ts::savingsProjection` (✅ ejecutado) |
+| FR-INV-001…007 | `investments` | `investments_own` | `upsertInvestment`,`deleteInvestment` | `investments/page.tsx` | `tests/domain/money.test.ts::investmentReturnPct` (✅ ejecutado) |
+| FR-WLT-001…004, BR-004 | `assets`,`liabilities`,`net_worth_snapshots` | `assets_own`,`liabilities_own`,`net_worth_snapshots_own` | `upsertAsset`,`createNetWorthSnapshot` | `wealth/page.tsx` | `tests/domain/money.test.ts::netWorth` (✅ ejecutado) |
+| FR-GOL-001…004 | `financial_goals` | `financial_goals_own` | `upsertFinancialGoal`,`deleteFinancialGoal` | `goals/page.tsx` | Manual |
+| FR-MNY-013…017, BR-020/021 (Hogar) | `family_members` | `family_members_own` | `upsertFamilyMember`,`deleteFamilyMember` | `household/page.tsx` | `supabase/tests/0003_rls_habits_household_budget.sql` (⚠️ NO EJECUTADO) |
+| FR-RPT-001/002 | (agregación de múltiples tablas) | heredadas de cada tabla | — (solo lectura) | `reports/page.tsx` | Manual |
+| NFR-SEC-001/002/003 | todas | RLS + `server-only` en `admin.ts` | `middleware.ts` (CSP + refresh de sesión) | — | ⚠️ NO EJECUTADO (pentest fuera de alcance de este entorno) |
+
+## Cobertura de pruebas ejecutadas (evidencia real)
+
+```
+tests/domain/*.test.ts → 56 tests, 56 pass, 0 fail (node --experimental-strip-types --test)
+```
+
+Ver `/docs/CHECKS.md` para el desglose exacto por archivo y para los ítems
+marcados honestamente como NO EJECUTADOS.
