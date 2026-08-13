@@ -11,6 +11,20 @@
 // para reemplazar este archivo por el generado real, que reflejará con
 // exactitud las tablas de /supabase/migrations/*.sql.
 //
+// Rev. fix (post primera corrida real de `tsc` en CI): se agregó el arreglo
+// `Relationships` con las FKs reales del esquema en las tablas que participan
+// en un `.select("*, tabla_hija(*)")` en la app (journal_lines, tasks), y se
+// completó para el resto de tablas por consistencia/robustez futura.
+// @supabase/postgrest-js usa este array para resolver el tipo de un embed
+// anidado; sin él, cualquier select anidado se tipa como
+// `SelectQueryError<"could not find the relation...">` en vez de un array
+// real, rompiendo `.map()`/`.reduce()` sobre esa relación (bug real
+// detectado en CI, no hipotético).
+//
+// También se agregó `list_workspace_members` a `Functions` (RPC creado en
+// supabase/migrations/0012_fix_rls_recursion_structural.sql para restaurar
+// el roster completo de un workspace tras el fix de recursión de RLS).
+//
 // Este stub SÍ satisface la forma `GenericSchema` de @supabase/supabase-js
 // (Tables/Views/Functions/Enums/CompositeTypes con Row/Insert/Update), para
 // que el resto del código compile contra un contrato razonable mientras
@@ -20,6 +34,14 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 
 type Timestamptz = string;
 type DateStr = string;
+
+interface Relationship {
+  foreignKeyName: string;
+  columns: string[];
+  isOneToOne: boolean;
+  referencedRelation: string;
+  referencedColumns: string[];
+}
 
 export interface Database {
   public: {
@@ -59,13 +81,17 @@ export interface Database {
         Row: { id: string; workspace_id: string; user_id: string; user_name: string; role: string; status: string; created_at: Timestamptz };
         Insert: Partial<Database["public"]["Tables"]["memberships"]["Row"]> & { workspace_id: string; user_id: string; user_name: string; role: string };
         Update: Partial<Database["public"]["Tables"]["memberships"]["Row"]>;
-        Relationships: [];
+        Relationships: [
+          { foreignKeyName: "memberships_workspace_id_fkey"; columns: ["workspace_id"]; isOneToOne: false; referencedRelation: "workspaces"; referencedColumns: ["id"] }
+        ];
       };
       invitations: {
         Row: { id: string; workspace_id: string; email: string; role: string; token: string; status: string; expires_at: Timestamptz; created_at: Timestamptz };
         Insert: Partial<Database["public"]["Tables"]["invitations"]["Row"]> & { workspace_id: string; email: string };
         Update: Partial<Database["public"]["Tables"]["invitations"]["Row"]>;
-        Relationships: [];
+        Relationships: [
+          { foreignKeyName: "invitations_workspace_id_fkey"; columns: ["workspace_id"]; isOneToOne: false; referencedRelation: "workspaces"; referencedColumns: ["id"] }
+        ];
       };
       projects: {
         Row: {
@@ -91,19 +117,26 @@ export interface Database {
         };
         Insert: Partial<Database["public"]["Tables"]["projects"]["Row"]> & { owner_id: string; title: string };
         Update: Partial<Database["public"]["Tables"]["projects"]["Row"]>;
-        Relationships: [];
+        Relationships: [
+          { foreignKeyName: "projects_workspace_id_fkey"; columns: ["workspace_id"]; isOneToOne: false; referencedRelation: "workspaces"; referencedColumns: ["id"] }
+        ];
       };
       milestones: {
         Row: { id: string; project_id: string; title: string; done: boolean; created_at: Timestamptz };
         Insert: Partial<Database["public"]["Tables"]["milestones"]["Row"]> & { project_id: string; title: string };
         Update: Partial<Database["public"]["Tables"]["milestones"]["Row"]>;
-        Relationships: [];
+        Relationships: [
+          { foreignKeyName: "milestones_project_id_fkey"; columns: ["project_id"]; isOneToOne: false; referencedRelation: "projects"; referencedColumns: ["id"] }
+        ];
       };
       project_shares: {
         Row: { id: string; project_id: string; workspace_id: string; access_level: string; created_at: Timestamptz };
         Insert: Partial<Database["public"]["Tables"]["project_shares"]["Row"]> & { project_id: string; workspace_id: string };
         Update: Partial<Database["public"]["Tables"]["project_shares"]["Row"]>;
-        Relationships: [];
+        Relationships: [
+          { foreignKeyName: "project_shares_project_id_fkey"; columns: ["project_id"]; isOneToOne: true; referencedRelation: "projects"; referencedColumns: ["id"] },
+          { foreignKeyName: "project_shares_workspace_id_fkey"; columns: ["workspace_id"]; isOneToOne: false; referencedRelation: "workspaces"; referencedColumns: ["id"] }
+        ];
       };
       tasks: {
         Row: {
@@ -123,43 +156,58 @@ export interface Database {
         };
         Insert: Partial<Database["public"]["Tables"]["tasks"]["Row"]> & { project_id: string; title: string };
         Update: Partial<Database["public"]["Tables"]["tasks"]["Row"]>;
-        Relationships: [];
+        Relationships: [
+          { foreignKeyName: "tasks_project_id_fkey"; columns: ["project_id"]; isOneToOne: false; referencedRelation: "projects"; referencedColumns: ["id"] }
+        ];
       };
       task_history: {
         Row: { id: string; task_id: string; from_state: string | null; to_state: string; ts: Timestamptz };
         Insert: Partial<Database["public"]["Tables"]["task_history"]["Row"]> & { task_id: string; to_state: string };
         Update: Partial<Database["public"]["Tables"]["task_history"]["Row"]>;
-        Relationships: [];
+        Relationships: [
+          { foreignKeyName: "task_history_task_id_fkey"; columns: ["task_id"]; isOneToOne: false; referencedRelation: "tasks"; referencedColumns: ["id"] }
+        ];
       };
       task_assignees: {
         Row: { task_id: string; user_name: string };
         Insert: Database["public"]["Tables"]["task_assignees"]["Row"];
         Update: Partial<Database["public"]["Tables"]["task_assignees"]["Row"]>;
-        Relationships: [];
+        Relationships: [
+          { foreignKeyName: "task_assignees_task_id_fkey"; columns: ["task_id"]; isOneToOne: false; referencedRelation: "tasks"; referencedColumns: ["id"] }
+        ];
       };
       comments: {
         Row: { id: string; subject_type: string; subject_id: string; author_id: string; author_name: string; body: string; mentions: string[]; read: boolean; created_at: Timestamptz };
         Insert: Partial<Database["public"]["Tables"]["comments"]["Row"]> & { subject_type: string; subject_id: string; author_id: string; author_name: string; body: string };
         Update: Partial<Database["public"]["Tables"]["comments"]["Row"]>;
+        // subject_id es polimórfico (task o project); no se puede declarar una
+        // única FK real, por eso queda sin Relationships.
         Relationships: [];
       };
       workspace_activity: {
         Row: { id: string; workspace_id: string; project_id: string | null; type: string; text: string; actor: string; created_at: Timestamptz };
         Insert: Partial<Database["public"]["Tables"]["workspace_activity"]["Row"]> & { workspace_id: string; type: string; text: string; actor: string };
         Update: Partial<Database["public"]["Tables"]["workspace_activity"]["Row"]>;
-        Relationships: [];
+        Relationships: [
+          { foreignKeyName: "workspace_activity_workspace_id_fkey"; columns: ["workspace_id"]; isOneToOne: false; referencedRelation: "workspaces"; referencedColumns: ["id"] },
+          { foreignKeyName: "workspace_activity_project_id_fkey"; columns: ["project_id"]; isOneToOne: false; referencedRelation: "projects"; referencedColumns: ["id"] }
+        ];
       };
       logbook: {
         Row: { id: string; user_id: string; project_id: string | null; type: string; text: string; created_at: Timestamptz };
         Insert: Partial<Database["public"]["Tables"]["logbook"]["Row"]> & { user_id: string; type: string; text: string };
         Update: Partial<Database["public"]["Tables"]["logbook"]["Row"]>;
-        Relationships: [];
+        Relationships: [
+          { foreignKeyName: "logbook_project_id_fkey"; columns: ["project_id"]; isOneToOne: false; referencedRelation: "projects"; referencedColumns: ["id"] }
+        ];
       };
       knowledge_items: {
         Row: { id: string; user_id: string; project_id: string | null; title: string; type: string; url: string; note: string; version: number; created_at: Timestamptz };
         Insert: Partial<Database["public"]["Tables"]["knowledge_items"]["Row"]> & { user_id: string; title: string; type: string };
         Update: Partial<Database["public"]["Tables"]["knowledge_items"]["Row"]>;
-        Relationships: [];
+        Relationships: [
+          { foreignKeyName: "knowledge_items_project_id_fkey"; columns: ["project_id"]; isOneToOne: false; referencedRelation: "projects"; referencedColumns: ["id"] }
+        ];
       };
       daily_plans: {
         Row: {
@@ -194,13 +242,17 @@ export interface Database {
         Row: { id: string; user_id: string; name: string; frequency: string; category: string; occupation_id: string | null; created_at: Timestamptz };
         Insert: Partial<Database["public"]["Tables"]["habits"]["Row"]> & { user_id: string; name: string };
         Update: Partial<Database["public"]["Tables"]["habits"]["Row"]>;
-        Relationships: [];
+        Relationships: [
+          { foreignKeyName: "habits_occupation_id_fkey"; columns: ["occupation_id"]; isOneToOne: false; referencedRelation: "occupations"; referencedColumns: ["id"] }
+        ];
       };
       habit_logs: {
         Row: { id: string; habit_id: string; log_date: DateStr; completed_at: Timestamptz };
         Insert: Partial<Database["public"]["Tables"]["habit_logs"]["Row"]> & { habit_id: string; log_date: DateStr };
         Update: Partial<Database["public"]["Tables"]["habit_logs"]["Row"]>;
-        Relationships: [];
+        Relationships: [
+          { foreignKeyName: "habit_logs_habit_id_fkey"; columns: ["habit_id"]; isOneToOne: false; referencedRelation: "habits"; referencedColumns: ["id"] }
+        ];
       };
       books: {
         Row: { id: string; user_id: string; title: string; author: string; status: string; current_page: number; total_pages: number; started_at: DateStr | null; finished_at: DateStr | null; updated_at: Timestamptz };
@@ -212,7 +264,9 @@ export interface Database {
         Row: { id: string; book_id: string; page_ref: number; text: string; created_at: Timestamptz };
         Insert: Partial<Database["public"]["Tables"]["book_notes"]["Row"]> & { book_id: string; text: string };
         Update: Partial<Database["public"]["Tables"]["book_notes"]["Row"]>;
-        Relationships: [];
+        Relationships: [
+          { foreignKeyName: "book_notes_book_id_fkey"; columns: ["book_id"]; isOneToOne: false; referencedRelation: "books"; referencedColumns: ["id"] }
+        ];
       };
       accounts: {
         Row: { id: string; user_id: string; name: string; type: string; currency: string; opening_balance: number; created_at: Timestamptz };
@@ -247,13 +301,23 @@ export interface Database {
         };
         Insert: Partial<Database["public"]["Tables"]["journal_entries"]["Row"]> & { user_id: string; type: string; memo: string; entry_date: DateStr; effective_at: DateStr; dedupe_key: string };
         Update: Partial<Database["public"]["Tables"]["journal_entries"]["Row"]>;
-        Relationships: [];
+        Relationships: [
+          { foreignKeyName: "journal_entries_family_member_id_fkey"; columns: ["family_member_id"]; isOneToOne: false; referencedRelation: "family_members"; referencedColumns: ["id"] },
+          { foreignKeyName: "journal_entries_debt_id_fkey"; columns: ["debt_id"]; isOneToOne: false; referencedRelation: "debts"; referencedColumns: ["id"] }
+        ];
       };
       journal_lines: {
         Row: { id: string; entry_id: string; account_id: string; amount: number };
         Insert: Partial<Database["public"]["Tables"]["journal_lines"]["Row"]> & { entry_id: string; account_id: string; amount: number };
         Update: Partial<Database["public"]["Tables"]["journal_lines"]["Row"]>;
-        Relationships: [];
+        // Estas dos FKs son las que permiten tipar correctamente
+        // `.from("journal_entries").select("*, journal_lines(*)")` como un
+        // array real (Row[]) en vez de SelectQueryError — bug real corregido
+        // aquí tras la primera corrida de `tsc` en CI.
+        Relationships: [
+          { foreignKeyName: "journal_lines_entry_id_fkey"; columns: ["entry_id"]; isOneToOne: false; referencedRelation: "journal_entries"; referencedColumns: ["id"] },
+          { foreignKeyName: "journal_lines_account_id_fkey"; columns: ["account_id"]; isOneToOne: false; referencedRelation: "accounts"; referencedColumns: ["id"] }
+        ];
       };
       budgets: {
         Row: { id: string; user_id: string; period: string; cycle: string; category: string; amount: number; monthly_cost: number; q1_amount: number; q2_amount: number; created_at: Timestamptz };
@@ -271,13 +335,18 @@ export interface Database {
         Row: { id: string; user_id: string; name: string; account_id: string | null; debt_id: string | null; rate_pct: number; eligible_categories: string[]; accrued_estimate: number; created_at: Timestamptz };
         Insert: Partial<Database["public"]["Tables"]["cashback_cards"]["Row"]> & { user_id: string; name: string };
         Update: Partial<Database["public"]["Tables"]["cashback_cards"]["Row"]>;
-        Relationships: [];
+        Relationships: [
+          { foreignKeyName: "cashback_cards_account_id_fkey"; columns: ["account_id"]; isOneToOne: false; referencedRelation: "accounts"; referencedColumns: ["id"] },
+          { foreignKeyName: "cashback_cards_debt_id_fkey"; columns: ["debt_id"]; isOneToOne: false; referencedRelation: "debts"; referencedColumns: ["id"] }
+        ];
       };
       cashback_redemptions: {
         Row: { id: string; card_id: string; amount: number; redeemed_at: DateStr };
         Insert: Partial<Database["public"]["Tables"]["cashback_redemptions"]["Row"]> & { card_id: string; amount: number };
         Update: Partial<Database["public"]["Tables"]["cashback_redemptions"]["Row"]>;
-        Relationships: [];
+        Relationships: [
+          { foreignKeyName: "cashback_redemptions_card_id_fkey"; columns: ["card_id"]; isOneToOne: false; referencedRelation: "cashback_cards"; referencedColumns: ["id"] }
+        ];
       };
       savings_goals: {
         Row: { id: string; user_id: string; name: string; type: string; target: number; current_amount: number; target_date: DateStr | null; priority: string; monthly: number; created_at: Timestamptz };
@@ -289,13 +358,17 @@ export interface Database {
         Row: { id: string; user_id: string; kind: string; name: string; institution: string; broker: string; principal: number; rate: number; valuation: number; as_of: DateStr; source: string; currency: string; family_member_id: string | null; created_at: Timestamptz };
         Insert: Partial<Database["public"]["Tables"]["investments"]["Row"]> & { user_id: string; kind: string; name: string };
         Update: Partial<Database["public"]["Tables"]["investments"]["Row"]>;
-        Relationships: [];
+        Relationships: [
+          { foreignKeyName: "investments_family_member_id_fkey"; columns: ["family_member_id"]; isOneToOne: false; referencedRelation: "family_members"; referencedColumns: ["id"] }
+        ];
       };
       financial_goals: {
         Row: { id: string; user_id: string; name: string; target: number; horizon: DateStr | null; priority: string; account_ids: string[]; current_amount: number; family_member_id: string | null; created_at: Timestamptz };
         Insert: Partial<Database["public"]["Tables"]["financial_goals"]["Row"]> & { user_id: string; name: string };
         Update: Partial<Database["public"]["Tables"]["financial_goals"]["Row"]>;
-        Relationships: [];
+        Relationships: [
+          { foreignKeyName: "financial_goals_family_member_id_fkey"; columns: ["family_member_id"]; isOneToOne: false; referencedRelation: "family_members"; referencedColumns: ["id"] }
+        ];
       };
       assets: {
         Row: { id: string; user_id: string; name: string; kind: string; value: number; currency: string; as_of: DateStr; source: string; created_at: Timestamptz };
@@ -343,7 +416,9 @@ export interface Database {
         Row: { id: string; automation_id: string; result: string; ts: Timestamptz };
         Insert: Partial<Database["public"]["Tables"]["automation_runs"]["Row"]> & { automation_id: string; result: string };
         Update: Partial<Database["public"]["Tables"]["automation_runs"]["Row"]>;
-        Relationships: [];
+        Relationships: [
+          { foreignKeyName: "automation_runs_automation_id_fkey"; columns: ["automation_id"]; isOneToOne: false; referencedRelation: "automations"; referencedColumns: ["id"] }
+        ];
       };
       audit_log: {
         Row: { id: string; user_id: string; action: string; object: string | null; correlation_id: string; meta: Json | null; created_at: Timestamptz };
@@ -358,6 +433,7 @@ export interface Database {
       workspace_role: { Args: { p_workspace_id: string }; Returns: string | null };
       has_project_access: { Args: { p_project_id: string }; Returns: boolean };
       can_edit_project: { Args: { p_project_id: string }; Returns: boolean };
+      list_workspace_members: { Args: { p_workspace_id: string }; Returns: Database["public"]["Tables"]["memberships"]["Row"][] };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
