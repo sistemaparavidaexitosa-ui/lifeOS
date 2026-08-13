@@ -77,6 +77,22 @@ const bookSchema = z.object({
   totalPages: z.coerce.number().int().min(0).default(0)
 });
 
+// Fix (post primera corrida real de `tsc` en CI, TS2769): el payload YA NO
+// se tipa como `Record<string, unknown>` (eso hacía que TypeScript perdiera
+// el tipo concreto de cada campo — incluyendo `title: string` — al hacer
+// spread en el INSERT, generando "Property 'title' is missing"). Ahora usa
+// una interfaz explícita con todos los campos tipados correctamente.
+interface BookUpsertPayload {
+  title: string;
+  author: string;
+  status: string;
+  current_page: number;
+  total_pages: number;
+  updated_at: string;
+  started_at?: string | null;
+  finished_at?: string | null;
+}
+
 /** FR-HAB-003: registrar/actualizar un libro de la biblioteca. */
 export async function upsertBook(id: string | null, formData: FormData) {
   const parsed = bookSchema.parse({
@@ -94,7 +110,7 @@ export async function upsertBook(id: string | null, formData: FormData) {
   if (!user) throw new Error("No autenticado");
 
   const t0 = todayLocal();
-  const payload: Record<string, unknown> = {
+  const payload: BookUpsertPayload = {
     title: parsed.title,
     author: parsed.author,
     status: parsed.status,
