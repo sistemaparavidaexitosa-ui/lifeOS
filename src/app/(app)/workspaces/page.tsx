@@ -12,12 +12,31 @@ export default async function WorkspacesPage({ searchParams }: { searchParams: P
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: workspaces }, { data: memberships }, { data: invitations }, { data: myProjects }] = await Promise.all([
+  const [{ data: workspaces }, { data: invitations }, { data: myProjects }] = await Promise.all([
     supabase.from("workspaces").select("*").order("created_at"),
-    supabase.from("memberships").select("*"),
     supabase.from("invitations").select("*"),
     supabase.from("projects").select("id, title, workspace_id").is("workspace_id", null)
   ]);
+
+  // Fix 0012: `memberships` ahora solo expone, vía SELECT directo, la fila
+  // propia del usuario (para eliminar el riesgo de recursión de RLS). Para
+  // el roster completo de cada workspace (necesario para "X miembros" y
+  // para administrar el equipo) se usa el RPC list_workspace_members, que
+  // SÍ ve todas las filas si el usuario es Owner/Admin/Member de ese
+  // workspace — ver supabase/migrations/0012_fix_rls_recursion_structural.sql.
+  interface MembershipRow {
+    id: string;
+    workspace_id: string;
+    user_id: string;
+    user_name: string;
+    role: string;
+    status: string;
+  }
+  const membershipsByWorkspace = new Map<string, MembershipRow[]>();
+  for (const w of workspaces ?? []) {
+    const { data: members } = await supabase.rpc("list_workspace_members", { p_workspace_id: w.id });
+    membershipsByWorkspace.set(w.id, (members ?? []) as MembershipRow[]);
+  }
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -50,7 +69,7 @@ export default async function WorkspacesPage({ searchParams }: { searchParams: P
       ) : (
         <div className="grid md:grid-cols-3 gap-3.5">
           {workspaces.map((w) => {
-            const members = (memberships ?? []).filter((m) => m.workspace_id === w.id);
+            const members = membershipsByWorkspace.get(w.id) ?? [];
             const myRole = w.owner_id === user.id ? "Owner" : members.find((m) => m.user_id === user.id)?.role ?? null;
             return (
               <a key={w.id} href={`/workspaces?ws=${w.id}`} className="card block" style={selectedWs === w.id ? { outline: "2px solid var(--accent)" } : undefined}>
@@ -76,7 +95,7 @@ export default async function WorkspacesPage({ searchParams }: { searchParams: P
         (() => {
           const ws = workspaces?.find((w) => w.id === selectedWs);
           if (!ws) return <Card><EmptyState icon="❓" text="Workspace no encontrado." /></Card>;
-          const members = (memberships ?? []).filter((m) => m.workspace_id === ws.id);
+          const members = membershipsByWorkspace.get(ws.id) ?? [];
           const canManage = ws.owner_id === user.id || members.find((m) => m.user_id === user.id)?.role === "Admin";
           const wsInvitations = (invitations ?? []).filter((i) => i.workspace_id === ws.id);
 
