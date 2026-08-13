@@ -34,19 +34,35 @@ jobs:
           fi
           echo "OK: .nvmrc, .npmrc y .gitignore están presentes en el repo."
 
+      # Verificación explícita del lockfile (bug real detectado en CI):
+      # "Dependencies lock file is not found... Supported file patterns:
+      # pnpm-lock.yaml". El lockfile debe generarse UNA VEZ localmente
+      # (`pnpm install`, sin --frozen-lockfile la primera vez) y commitearse.
+      # Este entorno de build no tiene acceso a un registro npm real, por lo
+      # que nunca pudo generarlo — ver /docs/CHECKS.md.
+      - name: Verify lockfile is committed
+        run: |
+          if [ ! -f "pnpm-lock.yaml" ]; then
+            echo "::error::pnpm-lock.yaml no existe en el repositorio."
+            echo "Corre 'pnpm install' UNA VEZ en tu máquina local (genera el"
+            echo "lockfile), luego 'git add pnpm-lock.yaml && git commit && git push'."
+            echo "Ver /docs/CHECKS.md sección 'Instalación real' para más contexto."
+            exit 1
+          fi
+          echo "OK: pnpm-lock.yaml está presente en el repo."
+
       - uses: pnpm/action-setup@v4
         with:
           version: 9.15.4
 
-      # F15 (nuevo, corrige el fallo real reportado por el owner): ya NO se
-      # usa `node-version-file: .nvmrc`. Aunque .nvmrc siga en el repo (para
-      # que `nvm use` funcione en local), el CI fija la versión de Node de
-      # forma EXPLÍCITA aquí, para que un .nvmrc faltante o corrupto en el
-      # repo remoto nunca vuelva a romper el pipeline. Mantén este valor
-      # sincronizado con `.nvmrc` y `engines.node` en package.json.
+      # Node 24 (Active LTS, verificado en vivo el 12-ago-2026): Node 20
+      # alcanzó su fin de vida el 30-abr-2026 y GitHub Actions ya usa Node 24
+      # como runtime por defecto para sus propias actions desde jun-2026.
+      # Mantén este valor sincronizado con .nvmrc y engines.node en
+      # package.json.
       - uses: actions/setup-node@v4
         with:
-          node-version: "20.18.1"
+          node-version: "24.19.0"
           cache: "pnpm"
 
       # F1: install limpio y reproducible con lockfile commiteado.
