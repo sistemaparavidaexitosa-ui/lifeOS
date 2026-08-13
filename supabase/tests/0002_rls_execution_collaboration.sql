@@ -1,19 +1,15 @@
 -- 0002_rls_execution_collaboration.sql — pgTAP: RLS de Execution/Collaboration.
 -- ⚠️ NO EJECUTADO en el entorno del asistente. Correr con: `supabase test db`.
 --
--- Rev. fix (post primera corrida en CI, que reportó "planned 7 tests but ran
--- 0" — abort de transacción, no un fallo de aserción):
---   1) Se reemplazó `throws_ok` (que esperaba una excepción de un UPDATE
---      bloqueado por RLS) por un conteo de filas afectadas vía RETURNING +
---      is(), ya que RLS no lanza excepciones al filtrar filas en la
---      cláusula USING — el UPDATE simplemente afecta 0 filas.
---   2) Se hicieron EXPLÍCITOS todos los `ON CONFLICT` (target concreto en
---      vez de la forma genérica), para eliminar cualquier ambigüedad de
---      arbitraje de índice.
--- Si el error persiste tras este fix, busca en el log completo de GitHub
--- Actions (arriba del resumen de pg_prove) una línea con el formato
--- `psql:supabase/tests/0002_rls_execution_collaboration.sql:NN: ERROR: ...`
--- — ese es el mensaje real de Postgres que identifica la línea exacta.
+-- Rev. fix 2 (post segunda corrida real en CI):
+--   1) "infinite recursion detected in policy for relation projects": bug de
+--      diseño real en las políticas RLS (ciclo projects <-> project_shares
+--      vía has_project_access/can_edit_project). Corregido en la migración
+--      supabase/migrations/0011_fix_rls_recursion.sql (row_security=off en
+--      las funciones helper). Este archivo de test no cambia su lógica de
+--      negocio, solo se beneficia del fix de la migración.
+--   2) Mismo bug de "WITH clause ... must be at the top level" que en
+--      0001 — corregido con el mismo patrón (WITH al nivel superior).
 
 begin;
 select plan(7);
@@ -54,18 +50,17 @@ set local role authenticated;
 
 select isnt_empty(
   $$ select 1 from public.projects where id = '88888888-8888-4888-8888-888888888888' $$,
-  'Member SÍ ve el proyecto compartido con nivel view (RLS positiva, FR-COL-001)'
+  'Member SÍ ve el proyecto compartido con nivel view (RLS positiva, FR-COL-001) — requiere fix 0011 (recursión)'
 );
 
--- CORREGIDO (era throws_ok): el UPDATE se ejecuta sin error pero afecta 0
--- filas, porque can_edit_project() (usado en la cláusula USING de
--- projects_update_edit) devuelve false para un Member con nivel 'view'.
+-- CORREGIDO (fix 2): WITH data-modifying al nivel superior del statement.
+with upd as (
+  update public.projects set title = 'Hackeado'
+  where id = '88888888-8888-4888-8888-888888888888'
+  returning 1
+)
 select is(
-  (with upd as (
-     update public.projects set title = 'Hackeado'
-     where id = '88888888-8888-4888-8888-888888888888'
-     returning 1
-   ) select count(*)::int from upd),
+  (select count(*)::int from upd),
   0,
   'Member NO puede editar un proyecto compartido solo con nivel view (RLS negativa, BR-015/can_edit_project)'
 );

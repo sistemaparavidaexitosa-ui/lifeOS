@@ -2,12 +2,11 @@
 -- ⚠️ NO EJECUTADO en el entorno del asistente (sin supabase CLI/psql
 -- disponibles aquí — ver /docs/CHECKS.md). Correr con: `supabase test db`.
 --
--- Rev. fix (post primera corrida en CI): el test 4 original usaba
--- `throws_ok` para verificar que un UPDATE bloqueado por RLS lanzara una
--- excepción. Eso es INCORRECTO: cuando la cláusula USING de una política RLS
--- no matchea una fila, Postgres simplemente actualiza 0 filas de forma
--- EXITOSA (no lanza excepción). Se corrigió usando un conteo de filas
--- afectadas con RETURNING + is().
+-- Rev. fix 2 (post segunda corrida real en CI): el error de Postgres fue
+-- "WITH clause containing a data-modifying statement must be at the top
+-- level". Un CTE que modifica datos (UPDATE...RETURNING) debe encabezar
+-- TODO el statement; no puede ir anidado como argumento de otra función
+-- (is(...)). Se corrigió moviendo el `with` al nivel superior del select.
 
 begin;
 select plan(6);
@@ -55,15 +54,16 @@ select is_empty(
   'user2 NO puede ver la cuenta de user1 (RLS negativa — aislamiento Money OS, NG-007)'
 );
 
--- CORREGIDO (era throws_ok): RLS filtra la fila en la cláusula USING; el
--- UPDATE se ejecuta con éxito pero afecta 0 filas (NO lanza excepción).
--- Se mide con un CTE de escritura (RETURNING) + conteo.
+-- CORREGIDO (fix 2): el WITH que modifica datos (UPDATE...RETURNING) va al
+-- nivel superior del statement completo; is() solo referencia el resultado
+-- vía una subconsulta escalar sobre el CTE ya materializado.
+with upd as (
+  update public.accounts set name = 'hackeado'
+  where id = '33333333-3333-4333-8333-333333333333'
+  returning 1
+)
 select is(
-  (with upd as (
-     update public.accounts set name = 'hackeado'
-     where id = '33333333-3333-4333-8333-333333333333'
-     returning 1
-   ) select count(*)::int from upd),
+  (select count(*)::int from upd),
   0,
   'user2 no puede actualizar la cuenta de user1: RLS filtra la fila (0 filas afectadas, no excepción)'
 );
