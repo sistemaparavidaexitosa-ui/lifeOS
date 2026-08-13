@@ -11,6 +11,13 @@
 // para reemplazar este archivo por el generado real, que reflejará con
 // exactitud las tablas de /supabase/migrations/*.sql.
 //
+// Rev. fix 2 (post primer `next build` real y en verde en CI): se eliminó
+// la interfaz `Relationship` (singular), que quedó definida pero sin usarse
+// directamente en ningún tipo (cada tabla declara su array de relaciones
+// inline) — causaba el warning de ESLint
+// "'Relationship' is defined but never used." Se retiró como código muerto;
+// no cambia ningún comportamiento ni tipo expuesto.
+//
 // Rev. fix (post primera corrida real de `tsc` en CI): se agregó el arreglo
 // `Relationships` con las FKs reales del esquema en las tablas que participan
 // en un `.select("*, tabla_hija(*)")` en la app (journal_lines, tasks), y se
@@ -34,14 +41,6 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 
 type Timestamptz = string;
 type DateStr = string;
-
-interface Relationship {
-  foreignKeyName: string;
-  columns: string[];
-  isOneToOne: boolean;
-  referencedRelation: string;
-  referencedColumns: string[];
-}
 
 export interface Database {
   public: {
@@ -312,8 +311,7 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["journal_lines"]["Row"]>;
         // Estas dos FKs son las que permiten tipar correctamente
         // `.from("journal_entries").select("*, journal_lines(*)")` como un
-        // array real (Row[]) en vez de SelectQueryError — bug real corregido
-        // aquí tras la primera corrida de `tsc` en CI.
+        // array real (Row[]) en vez de SelectQueryError.
         Relationships: [
           { foreignKeyName: "journal_lines_entry_id_fkey"; columns: ["entry_id"]; isOneToOne: false; referencedRelation: "journal_entries"; referencedColumns: ["id"] },
           { foreignKeyName: "journal_lines_account_id_fkey"; columns: ["account_id"]; isOneToOne: false; referencedRelation: "accounts"; referencedColumns: ["id"] }
