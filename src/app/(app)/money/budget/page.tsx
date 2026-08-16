@@ -3,8 +3,11 @@ import { createClient } from "@/lib/supabase/server";
 import { Card, EmptyState } from "@/components/ui";
 import { money0 } from "@/lib/format";
 import { budgetTabRow } from "@/lib/domain/budget.ts";
+import { accountBalance } from "@/lib/domain/money.ts";
 import { addDaysISO, todayLocal } from "@/lib/data/dates";
 import BudgetLineForm from "./BudgetLineForm";
+import QuincenalIncomeForm from "./QuincenalIncomeForm";
+import CreateBudgetButton from "./CreateBudgetButton";
 
 export default async function BudgetTabPage() {
   const supabase = await createClient();
@@ -13,16 +16,22 @@ export default async function BudgetTabPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: profile }, { data: budgets }, { data: categories }, { data: entries }] = await Promise.all([
-    supabase.from("profiles").select("currency, locale").eq("user_id", user.id).single(),
-    supabase.from("budgets").select("*").eq("period", "current"),
-    supabase.from("categories").select("name"),
-    supabase.from("journal_entries").select("*, journal_lines(*)").eq("type", "expense")
-  ]);
+  const [{ data: profile }, { data: budgets }, { data: categories }, { data: expenseEntries }, { data: accounts }, { data: allEntries }] =
+    await Promise.all([
+      supabase.from("profiles").select("currency, locale, quincenal_income").eq("user_id", user.id).single(),
+      supabase.from("budgets").select("*").eq("period", "current"),
+      supabase.from("categories").select("name"),
+      supabase.from("journal_entries").select("*, journal_lines(*)").eq("type", "expense"),
+      supabase.from("accounts").select("id, opening_balance"),
+      // Todos los tipos de movimiento (no solo gastos) — necesario para
+      // calcular la liquidez real disponible en cuentas (igual que en
+      // /money y /debt) y así conciliarla con el balance del presupuesto.
+      supabase.from("journal_entries").select("*, journal_lines(*)")
+    ]);
   if (!profile) throw new Error("Perfil no encontrado.");
 
   const from15 = addDaysISO(todayLocal(), -15);
-  const entriesForDomain = (entries ?? []).map((e) => ({
+  const entriesForDomain = (expenseEntries ?? []).map((e) => ({
     id: e.id,
     type: e.type as "income" | "expense" | "transfer",
     date: e.entry_date,
@@ -47,21 +56,88 @@ export default async function BudgetTabPage() {
     { monthlyCost: 0, q1: 0, q2: 0, balance: 0 }
   );
 
+  // Diferencia entre el ingreso quincenal declarado y lo comprometido en
+  // cada quincena. Un valor negativo indica que el presupuesto excede el
+  // ingreso disponible para esa quincena.
+  const income = profile.quincenal_income ?? 0;
+  const diffQ1 = income - totals.q1;
+  const diffQ2 = income - totals.q2;
+
+  // Conciliación: liquidez real disponible en cuentas (todas las
+  // transacciones, no solo gastos) vs. lo que el presupuesto asume
+  // disponible (balance total). Reutiliza accountBalance() — la misma
+  // función usada en /money y /debt — para no duplicar lógica de dominio.
+  const allEntriesForDomain = (allEntries ?? []).map((e) => ({
+    id: e.id,
+    type: e.type as "income" | "expense" | "transfer",
+    date: e.entry_date,
+    category: e.category,
+    status: e.status as "Posted" | "Reconciled" | "Reversed",
+    lines: (e.journal_lines ?? []).map((l) => ({ account: l.account_id, amount: l.amount }))
+  }));
+  const liquidity = (accounts ?? []).reduce((sum, a) => sum + accountBalance(a.id, a.opening_balance, allEntriesForDomain), 0);
+  const liquidityGap = liquidity - totals.balance;
+
   return (
     <div className="flex flex-col gap-3.5">
-      <div className="text-sm p-2.5 rounded-r-xl" style={{ background: "color-mix(in srgb, var(--accent) 8%, var(--surface))", borderLeft: "3px solid var(--accent)" }}>
+      <div
+        className="text-sm p-2.5 rounded-r-xl"
+        style={{ background: "color-mix(in srgb, var(--accent) 8%, var(--surface))", borderLeft: "3px solid var(--accent)" }}
+      >
         Pestaña dedicada de Presupuesto: concepto, costo mensual, aportación Quincena 1, aportación Quincena 2 y balance
         (FR-MNY-018/019).
       </div>
 
-      <div className="flex items-center justify-between">
+      <Card>
+        <div className="flex items-center justify-between flex-wrap" style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          <div>
+            <h3 className="font-bold">Ingreso quincenal</h3>
+            <p className="text-xs" style={{ color: "var(--muted)" }}>
+              Se usa para calcular la diferencia si tus aportaciones Q1/Q2 exceden el ingreso disponible.
+            </p>
+          </div>
+          <b className="text-xl">{money0(income, profile.currency, profile.locale)}</b>
+        </div>
+        <QuincenalIncomeForm income={income} />
+        {income > 0 && (
+          <div className="grid grid-cols-2 gap-3 mt-3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div className="stat card" style={{ padding: 15 }}>
+              <span className="text-xs" style={{ color: "var(--muted)" }}>
+                Diferencia Quincena 1
+              </span>
+              <b className="block text-lg" style={{ color: diffQ1 < 0 ? "var(--danger)" : "var(--ok)" }}>
+                {money0(diffQ1, profile.currency, profile.locale)}
+              </b>
+              <span className="text-xs" style={{ color: "var(--muted)" }}>
+                {diffQ1 < 0 ? "Excede tu ingreso quincenal" : "Dentro de tu ingreso quincenal"}
+              </span>
+            </div>
+            <div className="stat card" style={{ padding: 15 }}>
+              <span className="text-xs" style={{ color: "var(--muted)" }}>
+                Diferencia Quincena 2
+              </span>
+              <b className="block text-lg" style={{ color: diffQ2 < 0 ? "var(--danger)" : "var(--ok)" }}>
+                {money0(diffQ2, profile.currency, profile.locale)}
+              </b>
+              <span className="text-xs" style={{ color: "var(--muted)" }}>
+                {diffQ2 < 0 ? "Excede tu ingreso quincenal" : "Dentro de tu ingreso quincenal"}
+              </span>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      <div className="flex items-center justify-between" style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
         <h3 className="font-bold">Conceptos del presupuesto</h3>
-        {availableCategories.length > 0 && <BudgetLineForm categories={availableCategories} />}
+        <div className="flex items-center gap-2" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {!rows.length && <CreateBudgetButton categories={availableCategories} hasIncome={income > 0} />}
+          {availableCategories.length > 0 && rows.length > 0 && <BudgetLineForm categories={availableCategories} />}
+        </div>
       </div>
 
       <Card className="overflow-auto">
         {!rows.length ? (
-          <EmptyState icon="🧾" text="Agrega tu primer concepto de presupuesto." />
+          <EmptyState icon="🧾" text="Crea tu presupuesto para empezar a llevar el control de tus conceptos." />
         ) : (
           <>
             <table className="w-full text-sm">
@@ -116,9 +192,46 @@ export default async function BudgetTabPage() {
         )}
       </Card>
 
-      <div className="text-xs p-2.5 rounded-r-xl" style={{ background: "color-mix(in srgb, var(--info) 9%, var(--surface))", borderLeft: "3px solid var(--info)" }}>
+      {rows.length > 0 && (
+        <Card>
+          <div className="flex items-center justify-between" style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+            <h3 className="font-bold">Conciliación con cuentas</h3>
+            <span className={`chip ${liquidityGap < 0 ? "bad" : "ok"}`}>{liquidityGap < 0 ? "Excede lo disponible" : "Conciliado"}</span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-2" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
+            <div className="stat card" style={{ padding: 15 }}>
+              <span className="text-xs" style={{ color: "var(--muted)" }}>Disponible en cuentas</span>
+              <b className="block text-lg">{money0(liquidity, profile.currency, profile.locale)}</b>
+            </div>
+            <div className="stat card" style={{ padding: 15 }}>
+              <span className="text-xs" style={{ color: "var(--muted)" }}>Balance del presupuesto</span>
+              <b className="block text-lg" style={{ color: totals.balance < 0 ? "var(--warn)" : undefined }}>
+                {money0(totals.balance, profile.currency, profile.locale)}
+              </b>
+            </div>
+            <div className="stat card" style={{ padding: 15 }}>
+              <span className="text-xs" style={{ color: "var(--muted)" }}>Diferencia</span>
+              <b className="block text-lg" style={{ color: liquidityGap < 0 ? "var(--danger)" : "var(--ok)" }}>
+                {money0(liquidityGap, profile.currency, profile.locale)}
+              </b>
+            </div>
+          </div>
+          {liquidityGap < 0 && (
+            <p className="text-xs mt-2" style={{ color: "var(--danger)" }}>
+              El balance de tu presupuesto asume más dinero del que tienes disponible en tus cuentas. Revisa tus
+              conceptos o registra los movimientos pendientes en Dashboard y Gastos.
+            </p>
+          )}
+        </Card>
+      )}
+
+      <div
+        className="text-xs p-2.5 rounded-r-xl"
+        style={{ background: "color-mix(in srgb, var(--info) 9%, var(--surface))", borderLeft: "3px solid var(--info)" }}
+      >
         Balance = Costo mensual − gasto conciliado del concepto en el ciclo vigente (BR-028). Un balance negativo indica que
-        excediste el costo mensual planeado.
+        excediste el costo mensual planeado. Los movimientos que registres en Dashboard y Gastos deducen automáticamente
+        el concepto indicado en cuanto se concilian.
       </div>
     </div>
   );

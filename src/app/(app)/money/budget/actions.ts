@@ -59,3 +59,32 @@ export async function deleteBudgetLine(id: string) {
   revalidatePath("/money/budget");
   revalidatePath("/money");
 }
+
+const incomeSchema = z.object({
+  quincenalIncome: z.coerce.number().min(0, "El ingreso quincenal no puede ser negativo")
+});
+
+/**
+ * Extensión Presupuesto: guarda el ingreso quincenal declarado por el
+ * usuario (profiles.quincenal_income). Se usa en budget/page.tsx para
+ * calcular la diferencia si las aportaciones Q1/Q2 exceden ese ingreso.
+ */
+export async function updateQuincenalIncome(formData: FormData) {
+  const parsed = incomeSchema.parse({ quincenalIncome: formData.get("quincenalIncome") });
+
+  const supabase = await createClient();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ quincenal_income: round2(parsed.quincenalIncome) })
+    .eq("user_id", user.id);
+  if (error) throw new Error(error.message);
+
+  await supabase.from("audit_log").insert({ user_id: user.id, action: "budget.income.update", meta: { quincenalIncome: parsed.quincenalIncome } });
+  revalidatePath("/money/budget");
+  revalidatePath("/home");
+}
