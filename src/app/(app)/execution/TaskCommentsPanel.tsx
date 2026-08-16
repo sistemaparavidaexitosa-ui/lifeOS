@@ -1,10 +1,5 @@
 "use client";
 
-// FASE 1 — Comentarios y menciones (@nombre) de una tarea. FR-COL-004. La
-// tabla `comments` ya existía en el esquema (0003_execution_collaboration.sql)
-// con RLS/GRANTs correctos, pero no tenía ninguna UI en el módulo de
-// ejecución del repo (sí existía en el HTML de referencia, taskCommentsPanel()).
-
 import { useState, useTransition } from "react";
 import { addTaskComment } from "./task-detail-actions";
 

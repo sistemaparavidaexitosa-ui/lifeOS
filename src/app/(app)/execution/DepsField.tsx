@@ -1,11 +1,5 @@
 "use client";
 
-// FASE 1 — Dependencias (deps) de una tarea. La columna tasks.deps ya existía
-// en el esquema y evaluateTransition() (src/lib/domain/task-state.ts) ya
-// validaba "no completar con dependencias abiertas" (FR-EXE-005), pero no
-// había checklist real en la UI para EDITAR esa relación tras crear la tarea
-// — este componente cierra ese gap.
-
 import { useState, useTransition } from "react";
 import { setTaskDeps } from "./task-detail-actions";
 

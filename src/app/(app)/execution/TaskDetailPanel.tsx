@@ -4,11 +4,10 @@
 // Orquesta: edición de campos básicos, cambio de estado (TaskStatusButtons),
 // responsables, dependencias, comentarios/menciones e historial.
 //
-// ACTUALIZACIÓN FASE 2 (respecto a la versión de la Fase 1): se agregó la
-// prop opcional `compact` para poder embeber este panel dentro de una
+// Prop opcional `compact` para poder embeber este panel dentro de una
 // tarjeta Kanban (KanbanBoard.tsx) sin duplicar el título de la tarea, que
 // en esa vista ya lo muestra la tarjeta contenedora. Sin `compact`, el
-// comportamiento es idéntico al de la Fase 1 (uso en la vista de Lista).
+// comportamiento es idéntico al uso en la vista de Lista.
 
 import { useState, useTransition } from "react";
 import {

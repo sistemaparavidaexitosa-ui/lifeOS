@@ -1,10 +1,5 @@
 "use client";
 
-// FASE 1 — Responsables (assignees) de una tarea. FR-COL-003, BR-015: solo
-// se listan miembros con acceso al proyecto (calculados por getTaskDetail en
-// task-detail-actions.ts). Si el proyecto es personal, solo aparece el
-// propio titular.
-
 import { useState, useTransition } from "react";
 import { setTaskAssignees } from "./task-detail-actions";
 

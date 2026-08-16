@@ -1,10 +1,6 @@
-// FASE 2 — Selector de vistas (adelanto parcial de la Fase 8 del plan de
-// cierre de brechas). Por ahora solo alterna entre "Lista" y "Kanban", que
-// son las dos vistas ya construidas; cuando se agreguen Tabla/Calendario/
-// Gantt (Fases 3, 6, 7) solo hace falta sumar un <Link> más aquí.
-//
-// Server Component puro (sin "use client"): usa <Link> con query params,
-// mismo patrón que "?project=" (execution/page.tsx) y "?period=" (reports).
+// Selector de vistas (adelanto parcial de la Fase 8). Alterna entre "Lista"
+// y "Kanban". Server Component puro, usa <Link> con query params, mismo
+// patrón que "?project=" y "?period=" ya usados en el repo.
 
 import Link from "next/link";
 

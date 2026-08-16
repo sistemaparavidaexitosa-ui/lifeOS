@@ -11,14 +11,11 @@ import KanbanBoard, { type KanbanTask } from "./KanbanBoard";
 import ViewToggle from "./ViewToggle";
 import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
 
-// FASE 2 — cambios respecto a la versión de la Fase 1:
-//   1. Se lee también `searchParams.view` ("list" | "kanban", default "list").
-//   2. Cuando view === "kanban" se cargan además los responsables de cada
-//      tarea del proyecto seleccionado (task_assignees) para pintarlos en
-//      las tarjetas, y se renderiza <KanbanBoard> en vez de la lista.
-//   3. Se agrega <ViewToggle> junto al título del bloque de tareas.
-// Todo lo demás (selección de proyecto, progreso, SequenceButton,
-// formularios) se conserva igual a la Fase 1.
+// FIX (build de GitHub Actions, TS2322): el componente <Card> del repo solo
+// acepta { children, className, hero } — no acepta la prop `style`. Se quitó
+// `style={{ background: "var(--surface2)" }}` del bloque "Tareas de:
+// {proyecto}"; el fondo distintivo ahora se logra con un <div> interno en
+// vez de pasarle `style` directamente a <Card>.
 export default async function ExecutionPage({
   searchParams
 }: {
@@ -120,44 +117,46 @@ export default async function ExecutionPage({
           const proj = projects?.find((p) => p.id === selectedProjectId);
           if (!proj) return null;
           return (
-            <Card style={{ background: "var(--surface2)" }}>
-              <div className="flex items-center justify-between wrap" style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                <h3>Tareas de: {proj.title}</h3>
-                <div className="flex items-center" style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <ViewToggle projectId={proj.id} view={view} />
-                  <SequenceButton
-                    projectId={proj.id}
-                    tasks={selectedTasks.map((t) => ({ id: t.id, title: t.title }))}
-                  />
+            <Card>
+              <div style={{ background: "var(--surface2)", margin: "-16px", padding: 16, borderRadius: "inherit" }}>
+                <div className="flex items-center justify-between wrap" style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                  <h3>Tareas de: {proj.title}</h3>
+                  <div className="flex items-center" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <ViewToggle projectId={proj.id} view={view} />
+                    <SequenceButton
+                      projectId={proj.id}
+                      tasks={selectedTasks.map((t) => ({ id: t.id, title: t.title }))}
+                    />
+                  </div>
                 </div>
-              </div>
-              <div style={{ marginTop: 8 }}>
-                <NewTaskForm projectId={proj.id} />
-              </div>
-              {!selectedTasks.length && <EmptyState icon="✅" text="Este proyecto no tiene tareas todavía." />}
+                <div style={{ marginTop: 8 }}>
+                  <NewTaskForm projectId={proj.id} />
+                </div>
+                {!selectedTasks.length && <EmptyState icon="✅" text="Este proyecto no tiene tareas todavía." />}
 
-              {selectedTasks.length > 0 && view === "list" && (
-                <>
-                  {selectedTasks.map((t) => (
-                    <TaskDetailPanel key={t.id} taskId={t.id} taskTitle={t.title} />
-                  ))}
-                </>
-              )}
+                {selectedTasks.length > 0 && view === "list" && (
+                  <>
+                    {selectedTasks.map((t) => (
+                      <TaskDetailPanel key={t.id} taskId={t.id} taskTitle={t.title} />
+                    ))}
+                  </>
+                )}
 
-              {selectedTasks.length > 0 && view === "kanban" && (
-                <KanbanBoard
-                  projectId={proj.id}
-                  initialTasks={selectedTasks.map((t) => ({
-                    id: t.id,
-                    title: t.title,
-                    status: t.status,
-                    priority: t.priority,
-                    urgent: t.urgent,
-                    due: t.due
-                  }))}
-                  assigneesByTask={assigneesByTask}
-                />
-              )}
+                {selectedTasks.length > 0 && view === "kanban" && (
+                  <KanbanBoard
+                    projectId={proj.id}
+                    initialTasks={selectedTasks.map((t) => ({
+                      id: t.id,
+                      title: t.title,
+                      status: t.status,
+                      priority: t.priority,
+                      urgent: t.urgent,
+                      due: t.due
+                    }))}
+                    assigneesByTask={assigneesByTask}
+                  />
+                )}
+              </div>
             </Card>
           );
         })()}

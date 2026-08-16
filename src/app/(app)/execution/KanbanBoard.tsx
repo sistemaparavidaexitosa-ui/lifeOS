@@ -12,6 +12,14 @@
 //     completo (responsables, dependencias, comentarios, historial) sin
 //     duplicar código.
 //
+// FIX (build de GitHub Actions, TS2739): TaskStatus tiene 6 miembros
+// (Pending, InProgress, Blocked, Completed, Rescheduled, Cancelled), no 4.
+// El objeto `map` que satisface Record<TaskStatus, KanbanTask[]> debe
+// inicializar las 6 claves aunque el Kanban solo muestre 4 columnas — las
+// tareas Rescheduled/Cancelled simplemente no se listan en ninguna columna
+// visible (mismo criterio que progressByProject en page.tsx, que también
+// excluye Cancelled de los cálculos).
+//
 // Patrón de optimistic update: igual que eisenhower/Board.tsx (BR-023) — se
 // actualiza el estado local inmediatamente al soltar la tarjeta y, si el
 // servidor rechaza la transición (por ejemplo BR-014: no completar con deps
@@ -64,7 +72,14 @@ export default function KanbanBoard({
   const [, startTransition] = useTransition();
 
   const byColumn = useMemo(() => {
-    const map: Record<TaskStatus, KanbanTask[]> = { Pending: [], InProgress: [], Blocked: [], Completed: [] };
+    const map: Record<TaskStatus, KanbanTask[]> = {
+      Pending: [],
+      InProgress: [],
+      Blocked: [],
+      Completed: [],
+      Rescheduled: [],
+      Cancelled: []
+    };
     for (const t of tasks) map[t.status]?.push(t);
     return map;
   }, [tasks]);

@@ -1,13 +1,3 @@
-// FASE 1 — Historial de estados de una tarea (solo lectura). La tabla
-// task_history ya se poblaba desde setTaskStatus() y changeTaskQuadrant()
-// (execution/actions.ts y execution/eisenhower/actions.ts), pero no existía
-// ningún panel en la UI que la mostrara — este componente cierra ese gap
-// (equivalente a taskHistoryPanel() en el HTML de referencia).
-//
-// Es un componente puro (sin "use client"): recibe los datos ya cargados
-// como prop y solo renderiza — se usa dentro de TaskDetailPanel.tsx, que sí
-// es "use client".
-
 interface HistoryRow {
   id: string;
   from_state: string | null;
