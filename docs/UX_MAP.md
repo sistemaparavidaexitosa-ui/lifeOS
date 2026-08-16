@@ -18,7 +18,7 @@ Server Action real que escribe en Postgres (guardrail NO-MOCK, F8).
 | Hábitos y Lectura | `/habits` | `habits/page.tsx` | `habits`,`habit_logs`,`books`,`book_notes` | `upsertHabit`,`toggleHabitToday`,`upsertBook`,`addBookNote` |
 | Equipos y Colaboración | `/workspaces` | `workspaces/page.tsx` | `workspaces`,`memberships`,`invitations`,`project_shares` | `createWorkspace`,`inviteMember`,`removeMember`,`shareProject`,`deleteWorkspace` |
 | Dashboard y Gastos | `/money` | `money/page.tsx` | `accounts`,`journal_entries`,`journal_lines`,`budgets` | `createAccount`,`postTransaction`,`reconcileEntry`,`reverseEntry` |
-| Presupuesto (tabular) | `/money/budget` | `budget/page.tsx` | `budgets` (monthly_cost/q1/q2) | `upsertBudgetLine`,`deleteBudgetLine` |
+| Presupuesto (tabular) | `/money/budget` | `budget/page.tsx`,`QuincenalIncomeForm.tsx`,`CreateBudgetButton.tsx` | `budgets` (monthly_cost/q1/q2); `profiles.quincenal_income`; `accounts`+`journal_entries` (conciliación, lectura reutilizada) | `upsertBudgetLine`,`deleteBudgetLine`,`updateQuincenalIncome` |
 | Inversiones | `/investments` | `investments/page.tsx` | `investments` | `upsertInvestment`,`deleteInvestment` |
 | Ahorros | `/savings` | `savings/page.tsx` | `savings_goals` | `upsertSavingsGoal`,`contributeToSaving`,`deleteSavingsGoal` |
 | Deudas | `/debt` | `debt/page.tsx` | `debts` | `upsertDebt`,`deleteDebt`,`saveDebtScenario`,`acceptAiDebtPlan` |

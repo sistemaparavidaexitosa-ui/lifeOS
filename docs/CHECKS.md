@@ -125,15 +125,33 @@ Desglose por archivo (todos ✅ ejecutados y en verde):
 | Mapa Vista HTML → Ruta → Componente → Dato → Acción | ✅ EJECUTADO OK | `/docs/UX_MAP.md`, 20 filas |
 | Auditoría de accesibilidad (WCAG 2.2 AA) | ⚠️ NO EJECUTADO en el entorno del asistente | Requiere herramienta de auditoría (axe, Lighthouse) contra un build corriendo |
 
+## Actualización (16-ago-2026) — extensión de Presupuesto (ingreso quincenal + conciliación con cuentas)
+
+Se agregó `supabase/migrations/0017_budget_quincenal_income.sql` (columna
+`profiles.quincenal_income`) y se modificaron `budget/actions.ts`,
+`budget/page.tsx`, y se crearon `QuincenalIncomeForm.tsx` y
+`CreateBudgetButton.tsx`. Estado honesto de esta actualización:
+
+| Ítem | Estado | Evidencia |
+| --- | --- | --- |
+| Sintaxis TypeScript de los 4 archivos nuevos/modificados | ✅ EJECUTADO OK | Validado con `typescript.transpileModule` (mismo método usado para los 98 archivos originales) |
+| Migración `0017` aplica sin errores de sintaxis SQL | ✅ EJECUTADO OK (por inspección) | Las 2 sentencias reales (`alter table`, `comment on column`) tienen paréntesis balanceados; el resto son comentarios `--` |
+| `supabase db reset` con la migración `0017` aplicada | ⚠️ NO EJECUTADO en el entorno del asistente | Sin Docker/Supabase CLI, igual que el resto de migraciones (ver tabla de abajo) |
+| Prueba unitaria de dominio para la nueva lógica | ⚠️ NO AGREGADA | La diferencia de ingreso quincenal y la conciliación con cuentas se calculan con funciones puras ya cubiertas por `tests/domain/budget.test.ts` (`budgetTabRow`) y `tests/domain/money.test.ts` (`accountBalance`); no se introdujo lógica de dominio nueva que requiera un archivo de test adicional |
+| Verificación visual en navegador | ⚠️ NO EJECUTADO en el entorno del asistente | Sin navegador disponible aquí — revisa el flujo tú mismo tras el deploy |
+
 ## Resumen ejecutivo de este CHECKS.md
 
 - **56 pruebas unitarias de dominio ejecutadas y en verde**, cubriendo toda
   la lógica de negocio no trivial (máquina de estados, ledger, presupuesto,
   deuda, tiempo, hábitos, secuenciación).
 - **98 archivos TypeScript/TSX validados sintácticamente**, cero errores.
+  (+4 archivos adicionales de la extensión de Presupuesto del 16-ago-2026,
+  también validados sintácticamente, ver arriba.)
 - **14 migraciones SQL + seed + 3 suites pgTAP** con sintaxis balanceada y
   patrón GRANT explícito por tabla, pero **sin ejecución real contra
   Postgres** (requiere Docker/Supabase CLI que este entorno no tiene).
+  (+1 migración adicional, `0017`, en el mismo estado.)
 - **Cero mocks**: se verificó por inspección exhaustiva que ninguna página
   usa `localStorage` ni datos hardcodeados.
 - Ningún ítem fue marcado ✅ sin haberse ejecutado realmente en este

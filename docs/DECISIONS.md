@@ -44,6 +44,29 @@
   paquetes de terceros en este set. `.npmrc legacy-peer-deps=true` se
   mantiene como red de seguridad documentada, no como parche a ciegas.
 
+### Resoluciones adicionales (extensión Presupuesto, 16-ago-2026)
+- **D-009 Ingreso quincenal en `profiles`, no en `budgets`**: se solicitó
+  poder declarar el ingreso quincenal para calcular la diferencia cuando las
+  aportaciones Q1/Q2 excedan ese ingreso. Se agregó como columna
+  `quincenal_income` en `profiles` (migración
+  `0017_budget_quincenal_income.sql`) en vez de en `budgets`, porque es un
+  dato único del ciclo financiero del usuario (no por concepto) — mismo
+  patrón que `activity_window_start/end`. _(Recommended default, subject to
+  owner approval.)_
+- **D-010 Conciliación con cuentas reutiliza `accountBalance`**: el
+  requisito de "conciliar el balance del presupuesto con lo disponible en
+  cuentas" se implementó en `budget/page.tsx` reutilizando
+  `accountBalance()` de `src/lib/domain/money.ts` (la misma función que usan
+  `/money` y `/debt`), sin crear ninguna tabla ni función de dominio
+  paralela — consistente con D-003.
+- **D-011 "Crear presupuesto" como flujo combinado**: el botón "+ Crear
+  presupuesto" (visible solo cuando el usuario aún no tiene ningún
+  concepto) combina en un solo formulario la declaración del ingreso
+  quincenal y el primer concepto, reutilizando las Server Actions ya
+  existentes (`updateQuincenalIncome`, `upsertBudgetLine`). Una vez creado
+  el primer concepto, se usa el flujo habitual "+ Concepto"
+  (`BudgetLineForm`), que ya soportaba edición de conceptos existentes.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo
