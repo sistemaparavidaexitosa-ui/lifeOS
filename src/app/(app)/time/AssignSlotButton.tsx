@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { assignTaskToSlot } from "./actions";
+import { assignTaskToDate } from "./actions";
 
 interface TaskLite {
   id: string;
@@ -9,16 +9,22 @@ interface TaskLite {
   est: number;
 }
 
-export default function AssignSlotButton({ slotLabel, tasks }: { slotLabel: string; tasks: TaskLite[] }) {
+/**
+ * FR-TIM-007 (generalizado a cualquier día): ahora recibe `date` explícito
+ * como prop (antes asignaba implícitamente a "hoy" dentro del servidor). La
+ * vista del día le pasa el día actual; la vista semanal le pasa el día de
+ * la columna correspondiente (ver DayEditor.tsx).
+ */
+export default function AssignSlotButton({ slotLabel, tasks, date }: { slotLabel: string; tasks: TaskLite[]; date: string }) {
   const [open, setOpen] = useState(false);
   const [taskId, setTaskId] = useState(tasks[0]?.id ?? "");
   const [pending, startTransition] = useTransition();
 
   if (!tasks.length) {
     return (
-      <button className="btn-ghost btn-sm" disabled>
+      <span className="text-xs" style={{ color: "var(--muted)" }}>
         Sin tareas pendientes
-      </button>
+      </span>
     );
   }
 
@@ -31,7 +37,7 @@ export default function AssignSlotButton({ slotLabel, tasks }: { slotLabel: stri
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="row" style={{ display: "flex", gap: 6, alignItems: "center" }}>
       <select value={taskId} onChange={(e) => setTaskId(e.target.value)} style={{ minWidth: 160 }}>
         {tasks.map((t) => (
           <option key={t.id} value={t.id}>
@@ -44,7 +50,7 @@ export default function AssignSlotButton({ slotLabel, tasks }: { slotLabel: stri
         disabled={pending}
         onClick={() =>
           startTransition(async () => {
-            await assignTaskToSlot(taskId);
+            await assignTaskToDate(taskId, date);
             setOpen(false);
           })
         }
