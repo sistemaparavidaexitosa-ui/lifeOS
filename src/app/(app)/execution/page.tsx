@@ -5,12 +5,28 @@ import { Card, Chip, Progress, EmptyState } from "@/components/ui";
 import { fdate } from "@/lib/format";
 import NewProjectForm from "./NewProjectForm";
 import NewTaskForm from "./NewTaskForm";
-import TaskStatusButtons from "./TaskStatusButtons";
 import SequenceButton from "./SequenceButton";
-import type { TaskStatus } from "@/lib/domain/types.ts";
+import TaskDetailPanel from "./TaskDetailPanel";
+import KanbanBoard, { type KanbanTask } from "./KanbanBoard";
+import ViewToggle from "./ViewToggle";
+import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
 
-export default async function ExecutionPage({ searchParams }: { searchParams: Promise<{ project?: string }> }) {
-  const { project: selectedProjectId } = await searchParams;
+// FASE 2 — cambios respecto a la versión de la Fase 1:
+//   1. Se lee también `searchParams.view` ("list" | "kanban", default "list").
+//   2. Cuando view === "kanban" se cargan además los responsables de cada
+//      tarea del proyecto seleccionado (task_assignees) para pintarlos en
+//      las tarjetas, y se renderiza <KanbanBoard> en vez de la lista.
+//   3. Se agrega <ViewToggle> junto al título del bloque de tareas.
+// Todo lo demás (selección de proyecto, progreso, SequenceButton,
+// formularios) se conserva igual a la Fase 1.
+export default async function ExecutionPage({
+  searchParams
+}: {
+  searchParams: Promise<{ project?: string; view?: string }>;
+}) {
+  const { project: selectedProjectId, view: rawView } = await searchParams;
+  const view: "list" | "kanban" = rawView === "kanban" ? "kanban" : "list";
+
   const supabase = await createClient();
   const {
     data: { user }
@@ -27,86 +43,124 @@ export default async function ExecutionPage({ searchParams }: { searchParams: Pr
   };
   const countByProject = (projectId: string) => (allTasks ?? []).filter((t) => t.project_id === projectId).length;
 
-  let selectedTasks: { id: string; title: string; status: TaskStatus; priority: string; due: string | null; est: number }[] = [];
+  let selectedTasks: {
+    id: string;
+    title: string;
+    status: TaskStatus;
+    priority: Priority;
+    due: string | null;
+    est: number;
+    urgent: boolean;
+  }[] = [];
+  let assigneesByTask: Record<string, string[]> = {};
+
   if (selectedProjectId) {
     const { data } = await supabase.from("tasks").select("*").eq("project_id", selectedProjectId).order("created_at");
     selectedTasks = (data ?? []) as typeof selectedTasks;
+
+    // Solo se necesitan los responsables cuando se pinta el Kanban (las
+    // tarjetas muestran "👤 nombre1, nombre2"); la vista de Lista no los usa
+    // directamente aquí (los muestra el propio TaskDetailPanel al abrir).
+    if (view === "kanban" && selectedTasks.length) {
+      const { data: assigneeRows } = await supabase
+        .from("task_assignees")
+        .select("task_id, user_name")
+        .in(
+          "task_id",
+          selectedTasks.map((t) => t.id)
+        );
+      assigneesByTask = (assigneeRows ?? []).reduce<Record<string, string[]>>((acc, row) => {
+        (acc[row.task_id] ??= []).push(row.user_name);
+        return acc;
+      }, {});
+    }
   }
 
   return (
     <div className="flex flex-col gap-3.5">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <h3 className="font-bold">Proyectos</h3>
+      <div className="flex items-center justify-between wrap" style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+        <h2 className="font-bold text-lg">Proyectos</h2>
+        <NewProjectForm />
       </div>
 
-      <div className="grid md:grid-cols-3 gap-3.5">
+      <div className="grid gap-3.5" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 14 }}>
         {!projects?.length && <EmptyState icon="📁" text="Crea tu primer proyecto." />}
         {(projects ?? []).map((p) => {
           const prog = progressByProject(p.id);
           const isSelected = selectedProjectId === p.id;
           return (
-            <Link
-              key={p.id}
-              href={isSelected ? "/execution" : `/execution?project=${p.id}`}
-              className="card block"
-              style={isSelected ? { outline: "2px solid var(--accent)" } : undefined}
-            >
-              <div className="flex items-center justify-between">
-                <Chip kind={p.status === "Active" ? "accent" : p.status === "Completed" ? "ok" : undefined}>{p.status}</Chip>
-                <Chip>Personal</Chip>
+            <Card key={p.id}>
+              <div className="flex items-center justify-between" style={{ display: "flex", justifyContent: "space-between" }}>
+                <Chip kind={p.status === "Active" ? "accent" : p.status === "Completed" ? "ok" : ""}>{p.status}</Chip>
+                <Chip>{p.workspace_id ? "Workspace" : "Personal"}</Chip>
               </div>
-              <h3 className="mt-2 mb-0.5 font-bold">{p.title}</h3>
-              <p className="text-sm truncate" style={{ color: "var(--muted)" }}>
+              <h3 style={{ margin: "8px 0 2px" }}>{p.title}</h3>
+              <p className="text-sm" style={{ color: "var(--muted)" }}>
                 {p.objective || "—"}
               </p>
-              <div className="my-2">
-                <Progress pct={prog} />
-              </div>
-              <div className="flex justify-between text-xs" style={{ color: "var(--muted)" }}>
+              <Progress pct={prog} kind={prog < 40 ? undefined : prog < 80 ? "warn" : undefined} />
+              <div className="flex items-center justify-between text-xs" style={{ display: "flex", justifyContent: "space-between", color: "var(--muted)", marginTop: 6 }}>
                 <span>
                   {prog}% · {countByProject(p.id)} tareas
                 </span>
                 <span>{p.target_date ? `Meta ${fdate(p.target_date)}` : ""}</span>
               </div>
-            </Link>
+              <div style={{ marginTop: 10 }}>
+                <Link href={`/execution?project=${p.id}`} className="btn-ghost btn-sm">
+                  {isSelected ? "✓ Viendo tareas" : "Ver tareas"}
+                </Link>
+              </div>
+            </Card>
           );
         })}
       </div>
 
-      <NewProjectForm />
-
-      {selectedProjectId && (
-        <Card className="bg-[var(--surface2)]">
-          {(() => {
-            const proj = projects?.find((p) => p.id === selectedProjectId);
-            if (!proj) return <EmptyState icon="❓" text="Proyecto no encontrado." />;
-            return (
-              <>
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <h3 className="font-bold">Tareas de: {proj.title}</h3>
-                  <SequenceButton projectId={proj.id} tasks={selectedTasks.map((t) => ({ id: t.id, title: t.title }))} />
+      {selectedProjectId &&
+        (() => {
+          const proj = projects?.find((p) => p.id === selectedProjectId);
+          if (!proj) return null;
+          return (
+            <Card style={{ background: "var(--surface2)" }}>
+              <div className="flex items-center justify-between wrap" style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                <h3>Tareas de: {proj.title}</h3>
+                <div className="flex items-center" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <ViewToggle projectId={proj.id} view={view} />
+                  <SequenceButton
+                    projectId={proj.id}
+                    tasks={selectedTasks.map((t) => ({ id: t.id, title: t.title }))}
+                  />
                 </div>
+              </div>
+              <div style={{ marginTop: 8 }}>
                 <NewTaskForm projectId={proj.id} />
-                <div className="mt-3 flex flex-col gap-1">
-                  {!selectedTasks.length && <EmptyState icon="🗒" text="Este proyecto no tiene tareas todavía." />}
+              </div>
+              {!selectedTasks.length && <EmptyState icon="✅" text="Este proyecto no tiene tareas todavía." />}
+
+              {selectedTasks.length > 0 && view === "list" && (
+                <>
                   {selectedTasks.map((t) => (
-                    <div key={t.id} className="flex items-center gap-3 py-2.5" style={{ borderBottom: "1px solid var(--line)" }}>
-                      <div className="grow min-w-0">
-                        <b className="block truncate">{t.title}</b>
-                        <div className="text-xs" style={{ color: "var(--muted)" }}>
-                          {t.priority} · {t.est} min{t.due ? ` · vence ${fdate(t.due)}` : ""}
-                        </div>
-                      </div>
-                      <span className={`badge-state s-${t.status}`}>{t.status}</span>
-                      <TaskStatusButtons taskId={t.id} status={t.status} />
-                    </div>
+                    <TaskDetailPanel key={t.id} taskId={t.id} taskTitle={t.title} />
                   ))}
-                </div>
-              </>
-            );
-          })()}
-        </Card>
-      )}
+                </>
+              )}
+
+              {selectedTasks.length > 0 && view === "kanban" && (
+                <KanbanBoard
+                  projectId={proj.id}
+                  initialTasks={selectedTasks.map((t) => ({
+                    id: t.id,
+                    title: t.title,
+                    status: t.status,
+                    priority: t.priority,
+                    urgent: t.urgent,
+                    due: t.due
+                  }))}
+                  assigneesByTask={assigneesByTask}
+                />
+              )}
+            </Card>
+          );
+        })()}
     </div>
   );
 }
