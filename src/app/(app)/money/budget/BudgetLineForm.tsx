@@ -12,7 +12,20 @@ interface BudgetLineLite {
   q2Amount: number;
 }
 
-export default function BudgetLineForm({ line, categories }: { line?: BudgetLineLite; categories: string[] }) {
+/**
+ * Diseño (16-ago-2026, decisión explícita del owner): las categorías de
+ * gasto NO se gestionan desde Configuración. `existingCategories` es solo
+ * una lista de sugerencias (datalist) tomada de conceptos ya creados
+ * anteriormente — el usuario puede escribir cualquier nombre nuevo, que se
+ * crea automáticamente al guardar (ver upsertBudgetLine en ./actions).
+ */
+export default function BudgetLineForm({
+  line,
+  existingCategories = []
+}: {
+  line?: BudgetLineLite;
+  existingCategories?: string[];
+}) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -57,11 +70,24 @@ export default function BudgetLineForm({ line, categories }: { line?: BudgetLine
         {line ? (
           <input name="category" value={line.category} disabled />
         ) : (
-          <select name="category" defaultValue={categories[0]}>
-            {categories.map((c) => (
-              <option key={c}>{c}</option>
-            ))}
-          </select>
+          <div className="field">
+            <label className="block text-xs font-bold mb-1">Concepto</label>
+            <input
+              name="category"
+              list="budget-categories-list"
+              placeholder="Ej. Alimentación, Renta, Gimnasio…"
+              required
+              autoFocus
+            />
+            <datalist id="budget-categories-list">
+              {existingCategories.map((c) => (
+                <option key={c} value={c} />
+              ))}
+            </datalist>
+            <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+              Escribe el nombre del concepto; si es nuevo, se crea automáticamente al guardar.
+            </p>
+          </div>
         )}
         <div className="field">
           <label className="block text-xs font-bold mb-1">Costo mensual</label>

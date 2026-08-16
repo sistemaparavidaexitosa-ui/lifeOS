@@ -6,13 +6,25 @@ import { createClient } from "@/lib/supabase/server";
 import { round2 } from "@/lib/domain/budget.ts";
 
 const lineSchema = z.object({
-  category: z.string().min(1),
+  category: z.string().min(1, "Escribe el nombre del concepto"),
   monthlyCost: z.coerce.number().min(0),
   q1Amount: z.coerce.number().min(0),
   q2Amount: z.coerce.number().min(0)
 });
 
-/** FR-MNY-018/019: crea o edita un concepto de la pestaña de presupuesto. Reutiliza `budgets` (ADR-...). */
+/**
+ * FR-MNY-018/019: crea o edita un concepto de la pestaña de presupuesto.
+ * Reutiliza `budgets` (ADR-...).
+ *
+ * Diseño (16-ago-2026, decisión explícita del owner): las categorías de
+ * gasto NO se gestionan desde Configuración. El nombre del concepto se
+ * escribe aquí mismo, al crear el presupuesto; si esa categoría no existe
+ * todavía en `public.categories`, se crea automáticamente (upsert
+ * idempotente vía el índice único `categories(user_id, name)`, ver
+ * 0005_money_ledger_budget.sql). Esto la deja disponible de inmediato para
+ * categorizar movimientos en Dashboard y Gastos (FR-MNY-005), sin
+ * necesidad de un paso previo en Configuración.
+ */
 export async function upsertBudgetLine(id: string | null, formData: FormData) {
   const parsed = lineSchema.parse({
     category: formData.get("category"),
@@ -21,6 +33,9 @@ export async function upsertBudgetLine(id: string | null, formData: FormData) {
     q2Amount: formData.get("q2Amount")
   });
   if (parsed.monthlyCost <= 0) throw new Error("Costo mensual inválido");
+
+  const category = parsed.category.trim();
+  if (!category) throw new Error("Escribe el nombre del concepto");
 
   const supabase = await createClient();
   const {
@@ -40,13 +55,35 @@ export async function upsertBudgetLine(id: string | null, formData: FormData) {
     const { error } = await supabase.from("budgets").update(payload).eq("id", id);
     if (error) throw new Error(error.message);
   } else {
+    // Evita sobrescribir en silencio un concepto ya existente para la misma
+    // categoría (el upsert de abajo usa onConflict user_id,period,category,
+    // que de otro modo actualizaría esa fila en vez de avisar al usuario).
+    const { data: existingLine } = await supabase
+      .from("budgets")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("period", "current")
+      .eq("category", category)
+      .maybeSingle();
+    if (existingLine) {
+      throw new Error(`Ya existe un concepto para "${category}". Edítalo directamente desde la lista.`);
+    }
+
+    // Único punto de entrada para categorías nuevas: se crea aquí, no en
+    // Configuración. ignoreDuplicates hace esto un no-op seguro si la
+    // categoría ya existía (p. ej. reutilizada de un concepto anterior).
+    const { error: catError } = await supabase
+      .from("categories")
+      .upsert({ user_id: user.id, name: category }, { onConflict: "user_id,name", ignoreDuplicates: true });
+    if (catError) throw new Error(catError.message);
+
     const { error } = await supabase
       .from("budgets")
-      .upsert({ user_id: user.id, period: "current", category: parsed.category, ...payload }, { onConflict: "user_id,period,category" });
+      .upsert({ user_id: user.id, period: "current", category, ...payload }, { onConflict: "user_id,period,category" });
     if (error) throw new Error(error.message);
   }
 
-  await supabase.from("audit_log").insert({ user_id: user.id, action: id ? "budget.update" : "budget.create", object: parsed.category });
+  await supabase.from("audit_log").insert({ user_id: user.id, action: id ? "budget.update" : "budget.create", object: category });
   revalidatePath("/money/budget");
   revalidatePath("/money");
   revalidatePath("/home");

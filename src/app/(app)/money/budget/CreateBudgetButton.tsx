@@ -11,18 +11,28 @@ import { defaultQuincenas, round2 } from "@/lib/domain/budget.ts";
  * (updateQuincenalIncome, upsertBudgetLine) — no crea ninguna acción ni
  * tabla paralela (ver /docs/DECISIONS.md D-003).
  *
+ * Diseño (16-ago-2026, decisión explícita del owner): las categorías de
+ * gasto NO se gestionan desde Configuración. El nombre del primer concepto
+ * se escribe aquí mismo como texto libre; se crea automáticamente al
+ * guardar (ver upsertBudgetLine en ./actions), así que este botón YA NO
+ * depende de que existan categorías previas para poder mostrarse.
+ *
  * Una vez que existe al menos un concepto, esta acción de "arranque" deja de
  * mostrarse; agregar más conceptos se hace con el "+ Concepto" habitual
  * (BudgetLineForm), y el ingreso quincenal se sigue pudiendo editar con
  * QuincenalIncomeForm.
  */
-export default function CreateBudgetButton({ categories, hasIncome }: { categories: string[]; hasIncome: boolean }) {
+export default function CreateBudgetButton({
+  existingCategories = [],
+  hasIncome
+}: {
+  existingCategories?: string[];
+  hasIncome: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [monthlyCost, setMonthlyCost] = useState(0);
-
-  if (!categories.length) return null;
 
   if (!open) {
     return (
@@ -72,11 +82,18 @@ export default function CreateBudgetButton({ categories, hasIncome }: { categori
         )}
         <div className="field">
           <label className="block text-xs font-bold mb-1">Primer concepto</label>
-          <select name="category" defaultValue={categories[0]}>
-            {categories.map((c) => (
-              <option key={c}>{c}</option>
+          <input
+            name="category"
+            list="create-budget-categories-list"
+            placeholder="Ej. Alimentación, Renta, Gimnasio…"
+            required
+            autoFocus
+          />
+          <datalist id="create-budget-categories-list">
+            {existingCategories.map((c) => (
+              <option key={c} value={c} />
             ))}
-          </select>
+          </datalist>
         </div>
         <div className="field">
           <label className="block text-xs font-bold mb-1">Costo mensual</label>

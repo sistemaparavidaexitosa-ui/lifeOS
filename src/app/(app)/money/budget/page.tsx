@@ -20,6 +20,10 @@ export default async function BudgetTabPage() {
     await Promise.all([
       supabase.from("profiles").select("currency, locale, quincenal_income").eq("user_id", user.id).single(),
       supabase.from("budgets").select("*").eq("period", "current"),
+      // Diseño (16-ago-2026): las categorías ya no se gestionan desde
+      // Configuración. Esta lectura solo alimenta el <datalist> de
+      // sugerencias en CreateBudgetButton/BudgetLineForm — nunca restringe
+      // qué se puede escribir como concepto nuevo (ver ./actions).
       supabase.from("categories").select("name"),
       supabase.from("journal_entries").select("*, journal_lines(*)").eq("type", "expense"),
       supabase.from("accounts").select("id, opening_balance"),
@@ -43,8 +47,7 @@ export default async function BudgetTabPage() {
   const rows = (budgets ?? []).map((b) =>
     budgetTabRow({ id: b.id, category: b.category, monthlyCost: b.monthly_cost, q1Amount: b.q1_amount, q2Amount: b.q2_amount }, entriesForDomain, from15)
   );
-  const usedCategories = new Set((budgets ?? []).map((b) => b.category));
-  const availableCategories = (categories ?? []).map((c) => c.name).filter((c) => !usedCategories.has(c));
+  const categoryNames = (categories ?? []).map((c) => c.name);
 
   const totals = rows.reduce(
     (acc, r) => ({
@@ -130,8 +133,11 @@ export default async function BudgetTabPage() {
       <div className="flex items-center justify-between" style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
         <h3 className="font-bold">Conceptos del presupuesto</h3>
         <div className="flex items-center gap-2" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {!rows.length && <CreateBudgetButton categories={availableCategories} hasIncome={income > 0} />}
-          {availableCategories.length > 0 && rows.length > 0 && <BudgetLineForm categories={availableCategories} />}
+          {/* Diseño 16-ago-2026: ya NO depende de que existan categorías
+              previas — el nombre del concepto se escribe libremente y se
+              crea automáticamente al guardar (ver ./actions). */}
+          {!rows.length && <CreateBudgetButton existingCategories={categoryNames} hasIncome={income > 0} />}
+          {rows.length > 0 && <BudgetLineForm existingCategories={categoryNames} />}
         </div>
       </div>
 
@@ -162,7 +168,7 @@ export default async function BudgetTabPage() {
                     <td>{money0(r.q2Amount, profile.currency, profile.locale)}</td>
                     <td style={{ color: r.balance < 0 ? "var(--danger)" : "var(--ok)" }}>{money0(r.balance, profile.currency, profile.locale)}</td>
                     <td>
-                      <BudgetLineForm line={r} categories={[r.category]} />
+                      <BudgetLineForm line={r} />
                     </td>
                   </tr>
                 ))}
