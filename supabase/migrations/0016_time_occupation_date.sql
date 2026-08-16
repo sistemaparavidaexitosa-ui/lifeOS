@@ -1,4 +1,5 @@
 -- 0016_time_occupation_date.sql
+<<<<<<< HEAD
 --
 -- Autogestión del Tiempo — soporta ocupaciones y tareas específicas de
 -- CUALQUIER día de la semana (no solo "hoy"), FR-TIM-001/003/008.
@@ -30,6 +31,13 @@ comment on column public.occupations.occ_date is
 -- fecha (columna nueva, todo empieza en NULL), pero si el owner ya tenía
 -- datos reales insertados antes de aplicar esta migración, se ancla a HOY
 -- en vez de dejar la fila en un estado que luego violaría el check de abajo.
+=======
+alter table public.occupations add column if not exists occ_date date;
+
+comment on column public.occupations.occ_date is
+  'Fecha especifica (YYYY-MM-DD) para ocupaciones NO recurrentes. Las recurrentes (recurring=true) ignoran esta columna.';
+
+>>>>>>> b1f9d76 (Add migration 0016: occ_date for time occupations)
 update public.occupations
 set occ_date = current_date
 where recurring = false and occ_date is null;
