@@ -19,7 +19,16 @@ export interface OnboardingState {
   error?: string;
 }
 
-/** FR-USR-001, FR-TIM-002: crea/actualiza el perfil real en Supabase (no mock). */
+/**
+ * FR-USR-001, FR-TIM-002: crea/actualiza el perfil real en Supabase (no mock).
+ *
+ * Nota (16-ago-2026): este onboarding NO crea categorías de gasto por
+ * defecto — decisión explícita del owner de que las categorías nunca se
+ * gestionan/siembran desde un flujo de configuración/onboarding. Se
+ * definen exclusivamente al crear el primer concepto en /money/budget (ver
+ * upsertBudgetLine en src/app/(app)/money/budget/actions.ts), que las crea
+ * automáticamente la primera vez que se escriben.
+ */
 export async function completeOnboarding(_prev: OnboardingState, formData: FormData): Promise<OnboardingState> {
   const parsed = onboardingSchema.safeParse({
     name: formData.get("name"),
@@ -31,9 +40,11 @@ export async function completeOnboarding(_prev: OnboardingState, formData: FormD
     activityEnd: formData.get("activityEnd"),
     aiConsent: formData.get("aiConsent") === "on"
   });
+
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
   }
+
   if (parsed.data.activityEnd <= parsed.data.activityStart) {
     return { error: "El fin del rango de actividad debe ser posterior al inicio (BR-017)." };
   }
@@ -57,7 +68,6 @@ export async function completeOnboarding(_prev: OnboardingState, formData: FormD
       onboarded: true
     })
     .eq("user_id", user.id);
-
   if (error) return { error: error.message };
 
   await supabase.from("consents").upsert(
