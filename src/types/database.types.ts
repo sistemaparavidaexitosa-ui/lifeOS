@@ -32,6 +32,12 @@
 // supabase/migrations/0012_fix_rls_recursion_structural.sql para restaurar
 // el roster completo de un workspace tras el fix de recursión de RLS).
 //
+// Rev. fix (soporte de ocupaciones/tareas por día específico, FR-TIM-001/008):
+// se agregó `occ_date` al Row de `occupations`, reflejando la columna nueva
+// de supabase/migrations/0016_time_occupation_date.sql (ocupaciones NO
+// recurrentes ahora declaran a qué día pertenecen; las recurrentes guardan
+// `null` y se muestran en los 7 días de la vista semanal).
+//
 // Este stub SÍ satisface la forma `GenericSchema` de @supabase/supabase-js
 // (Tables/Views/Functions/Enums/CompositeTypes con Row/Insert/Update), para
 // que el resto del código compile contra un contrato razonable mientras
@@ -232,7 +238,17 @@ export interface Database {
         Relationships: [];
       };
       occupations: {
-        Row: { id: string; user_id: string; title: string; start_time: string; end_time: string; category: string; recurring: boolean; created_at: Timestamptz };
+        Row: {
+          id: string;
+          user_id: string;
+          title: string;
+          start_time: string;
+          end_time: string;
+          category: string;
+          recurring: boolean;
+          occ_date: string | null; // <-- LÍNEA AGREGADA (migración 0016_time_occupation_date.sql)
+          created_at: Timestamptz;
+        };
         Insert: Partial<Database["public"]["Tables"]["occupations"]["Row"]> & { user_id: string; title: string; start_time: string; end_time: string };
         Update: Partial<Database["public"]["Tables"]["occupations"]["Row"]>;
         Relationships: [];
