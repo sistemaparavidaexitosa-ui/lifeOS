@@ -1,40 +1,37 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { Card, Chip, Progress, EmptyState } from "@/components/ui";
-import { money, money0, fdate } from "@/lib/format";
-import { accountBalance, periodStats } from "@/lib/domain/money.ts";
+import { Card, EmptyState } from "@/components/ui";
+import { money0 } from "@/lib/format";
+import { budgetTabRow } from "@/lib/domain/budget.ts";
+import { accountBalance } from "@/lib/domain/money.ts";
 import { addDaysISO, todayLocal } from "@/lib/data/dates";
-import NewTransactionForm from "./NewTransactionForm";
-import NewAccountForm from "./NewAccountForm";
-import TxnRowActions from "./TxnRowActions";
+import BudgetLineForm from "./BudgetLineForm";
+import QuincenalIncomeForm from "./QuincenalIncomeForm";
+import CreateBudgetButton from "./CreateBudgetButton";
 
-export default async function MoneyPage() {
+export default async function BudgetTabPage() {
   const supabase = await createClient();
   const {
     data: { user }
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const t0 = todayLocal();
-  const from15 = addDaysISO(t0, -15);
-
-  const [{ data: profile }, { data: accounts }, { data: entries }, { data: budgets }, { data: categories }, { data: debts }, { data: familyMembers }] =
+  const [{ data: profile }, { data: budgets }, { data: categories }, { data: expenseEntries }, { data: accounts }, { data: allEntries }] =
     await Promise.all([
-      supabase.from("profiles").select("currency, locale").eq("user_id", user.id).single(),
-      supabase.from("accounts").select("*").order("created_at"),
-      supabase.from("journal_entries").select("*, journal_lines(*)").order("entry_date", { ascending: false }),
+      supabase.from("profiles").select("currency, locale, quincenal_income").eq("user_id", user.id).single(),
       supabase.from("budgets").select("*").eq("period", "current"),
       supabase.from("categories").select("name"),
-      supabase.from("debts").select("id, name"),
-      supabase.from("family_members").select("id, name, relationship")
+      supabase.from("journal_entries").select("*, journal_lines(*)").eq("type", "expense"),
+      supabase.from("accounts").select("id, opening_balance"),
+      // Todos los tipos de movimiento (no solo gastos) — necesario para
+      // calcular la liquidez real disponible en cuentas (igual que en
+      // /money y /debt) y así conciliarla con el balance del presupuesto.
+      supabase.from("journal_entries").select("*, journal_lines(*)")
     ]);
-
   if (!profile) throw new Error("Perfil no encontrado.");
-  const currency = profile.currency;
-  const locale = profile.locale;
 
-  const entriesForDomain = (entries ?? []).map((e) => ({
+  const from15 = addDaysISO(todayLocal(), -15);
+  const entriesForDomain = (expenseEntries ?? []).map((e) => ({
     id: e.id,
     type: e.type as "income" | "expense" | "transfer",
     date: e.entry_date,
@@ -43,152 +40,199 @@ export default async function MoneyPage() {
     lines: (e.journal_lines ?? []).map((l) => ({ account: l.account_id, amount: l.amount }))
   }));
 
-  const liquidity = (accounts ?? []).reduce((sum, a) => sum + accountBalance(a.id, a.opening_balance, entriesForDomain), 0);
-  const stats = periodStats(entriesForDomain, from15);
+  const rows = (budgets ?? []).map((b) =>
+    budgetTabRow({ id: b.id, category: b.category, monthlyCost: b.monthly_cost, q1Amount: b.q1_amount, q2Amount: b.q2_amount }, entriesForDomain, from15)
+  );
+  const usedCategories = new Set((budgets ?? []).map((b) => b.category));
+  const availableCategories = (categories ?? []).map((c) => c.name).filter((c) => !usedCategories.has(c));
 
-  const budgetSpent = new Map<string, number>();
-  for (const e of entries ?? []) {
-    if (e.status === "Reversed" || e.type !== "expense" || e.entry_date < from15) continue;
-    const amt = (e.journal_lines ?? []).reduce((s, l) => s + Math.max(0, -l.amount), 0);
-    budgetSpent.set(e.category ?? "", (budgetSpent.get(e.category ?? "") ?? 0) + amt);
-  }
+  const totals = rows.reduce(
+    (acc, r) => ({
+      monthlyCost: acc.monthlyCost + r.monthlyCost,
+      q1: acc.q1 + r.q1Amount,
+      q2: acc.q2 + r.q2Amount,
+      balance: acc.balance + r.balance
+    }),
+    { monthlyCost: 0, q1: 0, q2: 0, balance: 0 }
+  );
 
-  const familyById = new Map((familyMembers ?? []).map((m) => [m.id, m.name]));
-  const debtById = new Map((debts ?? []).map((d) => [d.id, d.name]));
+  // Diferencia entre el ingreso quincenal declarado y lo comprometido en
+  // cada quincena. Un valor negativo indica que el presupuesto excede el
+  // ingreso disponible para esa quincena.
+  const income = profile.quincenal_income ?? 0;
+  const diffQ1 = income - totals.q1;
+  const diffQ2 = income - totals.q2;
+
+  // Conciliación: liquidez real disponible en cuentas (todas las
+  // transacciones, no solo gastos) vs. lo que el presupuesto asume
+  // disponible (balance total). Reutiliza accountBalance() — la misma
+  // función usada en /money y /debt — para no duplicar lógica de dominio.
+  const allEntriesForDomain = (allEntries ?? []).map((e) => ({
+    id: e.id,
+    type: e.type as "income" | "expense" | "transfer",
+    date: e.entry_date,
+    category: e.category,
+    status: e.status as "Posted" | "Reconciled" | "Reversed",
+    lines: (e.journal_lines ?? []).map((l) => ({ account: l.account_id, amount: l.amount }))
+  }));
+  const liquidity = (accounts ?? []).reduce((sum, a) => sum + accountBalance(a.id, a.opening_balance, allEntriesForDomain), 0);
+  const liquidityGap = liquidity - totals.balance;
 
   return (
     <div className="flex flex-col gap-3.5">
-      <div className="grid md:grid-cols-2 gap-3.5">
-        <Card hero>
-          <div className="text-xs" style={{ opacity: 0.85 }}>
-            Liquidez total · corte {fdate(new Date().toISOString())}
+      <div
+        className="text-sm p-2.5 rounded-r-xl"
+        style={{ background: "color-mix(in srgb, var(--accent) 8%, var(--surface))", borderLeft: "3px solid var(--accent)" }}
+      >
+        Pestaña dedicada de Presupuesto: concepto, costo mensual, aportación Quincena 1, aportación Quincena 2 y balance
+        (FR-MNY-018/019).
+      </div>
+
+      <Card>
+        <div className="flex items-center justify-between flex-wrap" style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          <div>
+            <h3 className="font-bold">Ingreso quincenal</h3>
+            <p className="text-xs" style={{ color: "var(--muted)" }}>
+              Se usa para calcular la diferencia si tus aportaciones Q1/Q2 exceden el ingreso disponible.
+            </p>
           </div>
-          <div className="text-3xl font-black">{money(liquidity, currency, locale)}</div>
-          <div className="text-xs p-2 rounded-lg mt-2" style={{ background: "rgba(255,255,255,.14)", border: "1px solid #fff", color: "#fff" }}>
-            Ledger de doble partida · las transferencias no cuentan como ingreso ni gasto (BR-002).
+          <b className="text-xl">{money0(income, profile.currency, profile.locale)}</b>
+        </div>
+        <QuincenalIncomeForm income={income} />
+        {income > 0 && (
+          <div className="grid grid-cols-2 gap-3 mt-3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div className="stat card" style={{ padding: 15 }}>
+              <span className="text-xs" style={{ color: "var(--muted)" }}>
+                Diferencia Quincena 1
+              </span>
+              <b className="block text-lg" style={{ color: diffQ1 < 0 ? "var(--danger)" : "var(--ok)" }}>
+                {money0(diffQ1, profile.currency, profile.locale)}
+              </b>
+              <span className="text-xs" style={{ color: "var(--muted)" }}>
+                {diffQ1 < 0 ? "Excede tu ingreso quincenal" : "Dentro de tu ingreso quincenal"}
+              </span>
+            </div>
+            <div className="stat card" style={{ padding: 15 }}>
+              <span className="text-xs" style={{ color: "var(--muted)" }}>
+                Diferencia Quincena 2
+              </span>
+              <b className="block text-lg" style={{ color: diffQ2 < 0 ? "var(--danger)" : "var(--ok)" }}>
+                {money0(diffQ2, profile.currency, profile.locale)}
+              </b>
+              <span className="text-xs" style={{ color: "var(--muted)" }}>
+                {diffQ2 < 0 ? "Excede tu ingreso quincenal" : "Dentro de tu ingreso quincenal"}
+              </span>
+            </div>
           </div>
-        </Card>
-        <div className="grid grid-cols-2 gap-3.5">
-          <div className="stat card" style={{ padding: 15 }}>
-            <span className="text-xs" style={{ color: "var(--muted)" }}>Ingreso (periodo)</span>
-            <b className="block text-xl">{money0(stats.income, currency, locale)}</b>
-          </div>
-          <div className="stat card" style={{ padding: 15 }}>
-            <span className="text-xs" style={{ color: "var(--muted)" }}>Gasto (periodo)</span>
-            <b className="block text-xl">{money0(stats.expense, currency, locale)}</b>
-          </div>
-          <div className="stat card" style={{ padding: 15 }}>
-            <span className="text-xs" style={{ color: "var(--muted)" }}>Disponible</span>
-            <b className="block text-xl">{money0(stats.available, currency, locale)}</b>
-          </div>
-          <div className="stat card" style={{ padding: 15 }}>
-            <span className="text-xs" style={{ color: "var(--muted)" }}>Transferencias</span>
-            <b className="block text-xl">{money0(stats.transfers, currency, locale)}</b>
-          </div>
+        )}
+      </Card>
+
+      <div className="flex items-center justify-between" style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+        <h3 className="font-bold">Conceptos del presupuesto</h3>
+        <div className="flex items-center gap-2" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {!rows.length && <CreateBudgetButton categories={availableCategories} hasIncome={income > 0} />}
+          {availableCategories.length > 0 && rows.length > 0 && <BudgetLineForm categories={availableCategories} />}
         </div>
       </div>
-
-      <div className="grid md:grid-cols-2 gap-3.5">
-        <Card>
-          <h3 className="font-bold mb-2">Cuentas</h3>
-          {(accounts ?? []).map((a) => (
-            <div key={a.id} className="flex items-center justify-between py-2" style={{ borderBottom: "1px solid var(--line)" }}>
-              <div>
-                <b>{a.name}</b>
-                <div className="text-xs" style={{ color: "var(--muted)" }}>
-                  {a.type} · {a.currency}
-                </div>
-              </div>
-              <b>{money(accountBalance(a.id, a.opening_balance, entriesForDomain), a.currency, locale)}</b>
-            </div>
-          ))}
-          <NewAccountForm />
-        </Card>
-
-        <Card>
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="font-bold">Resumen de presupuesto</h3>
-            <Link href="/money/budget" className="btn-ghost btn-sm">
-              Ver pestaña completa
-            </Link>
-          </div>
-          {!budgets?.length && <EmptyState icon="💰" text="Genera tu presupuesto quincenal desde la pestaña de Presupuesto." />}
-          {(budgets ?? []).slice(0, 4).map((b) => {
-            const spent = budgetSpent.get(b.category) ?? 0;
-            const pct = b.amount ? Math.round((spent / b.amount) * 100) : 0;
-            return (
-              <div key={b.id} className="my-2.5">
-                <div className="flex justify-between text-sm">
-                  <span>{b.category}</span>
-                  <span>
-                    {money0(spent, currency, locale)} / {money0(b.amount, currency, locale)}
-                  </span>
-                </div>
-                <Progress pct={pct} kind={pct >= 100 ? "bad" : pct >= 85 ? "warn" : undefined} />
-              </div>
-            );
-          })}
-        </Card>
-      </div>
-
-      <NewTransactionForm
-        accounts={accounts ?? []}
-        categories={(categories ?? []).map((c) => c.name)}
-        debts={debts ?? []}
-        familyMembers={familyMembers ?? []}
-      />
 
       <Card className="overflow-auto">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="font-bold">Movimientos</h3>
-          <Chip>{entries?.length ?? 0}</Chip>
-        </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr style={{ color: "var(--muted)" }} className="text-left">
-              <th className="pb-2">Fecha</th>
-              <th>Concepto</th>
-              <th>Categoría</th>
-              <th>Miembro</th>
-              <th>Deuda</th>
-              <th>Tipo</th>
-              <th>Monto</th>
-              <th>Estado</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {(entries ?? []).map((e) => {
-              const amt = (e.journal_lines ?? []).reduce((s, l) => s + (e.type === "transfer" ? Math.max(0, l.amount) : l.amount), 0);
-              return (
-                <tr key={e.id} style={{ borderTop: "1px solid var(--line)" }}>
-                  <td className="py-2" style={{ color: "var(--muted)" }}>
-                    {fdate(e.entry_date)}
-                  </td>
-                  <td>
-                    <b>{e.memo}</b>
-                  </td>
-                  <td style={{ color: "var(--muted)" }}>{e.category ?? "—"}</td>
-                  <td>{e.family_member_id ? <Chip kind="purple">{familyById.get(e.family_member_id)}</Chip> : <span className="text-xs" style={{ color: "var(--muted)" }}>—</span>}</td>
-                  <td>{e.debt_id ? <Chip kind="info">{debtById.get(e.debt_id)}</Chip> : <span className="text-xs" style={{ color: "var(--muted)" }}>—</span>}</td>
-                  <td>
-                    <Chip kind={e.type === "income" ? "ok" : e.type === "expense" ? "bad" : "info"}>
-                      {e.type === "income" ? "Ingreso" : e.type === "expense" ? "Gasto" : "Transfer."}
-                    </Chip>
-                  </td>
-                  <td style={{ color: amt < 0 ? "var(--danger)" : undefined }}>{money(amt, currency, locale)}</td>
-                  <td>
-                    <Chip kind={e.status === "Reconciled" ? "ok" : e.status === "Reversed" ? undefined : "warn"}>{e.status}</Chip>
-                  </td>
-                  <td>
-                    <TxnRowActions entryId={e.id} status={e.status} />
-                  </td>
+        {!rows.length ? (
+          <EmptyState icon="🧾" text="Crea tu presupuesto para empezar a llevar el control de tus conceptos." />
+        ) : (
+          <>
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ color: "var(--muted)" }} className="text-left">
+                  <th className="pb-2">Concepto</th>
+                  <th>Costo mensual</th>
+                  <th>Aportación Q1</th>
+                  <th>Aportación Q2</th>
+                  <th>Balance</th>
+                  <th />
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id} style={{ borderTop: "1px solid var(--line)" }}>
+                    <td className="py-2">
+                      <b>{r.category}</b>
+                    </td>
+                    <td>{money0(r.monthlyCost, profile.currency, profile.locale)}</td>
+                    <td>{money0(r.q1Amount, profile.currency, profile.locale)}</td>
+                    <td>{money0(r.q2Amount, profile.currency, profile.locale)}</td>
+                    <td style={{ color: r.balance < 0 ? "var(--danger)" : "var(--ok)" }}>{money0(r.balance, profile.currency, profile.locale)}</td>
+                    <td>
+                      <BudgetLineForm line={r} categories={[r.category]} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+              <div className="stat card" style={{ padding: 15 }}>
+                <span className="text-xs" style={{ color: "var(--muted)" }}>Total mensual</span>
+                <b className="block text-lg">{money0(totals.monthlyCost, profile.currency, profile.locale)}</b>
+              </div>
+              <div className="stat card" style={{ padding: 15 }}>
+                <span className="text-xs" style={{ color: "var(--muted)" }}>Total Q1</span>
+                <b className="block text-lg">{money0(totals.q1, profile.currency, profile.locale)}</b>
+              </div>
+              <div className="stat card" style={{ padding: 15 }}>
+                <span className="text-xs" style={{ color: "var(--muted)" }}>Total Q2</span>
+                <b className="block text-lg">{money0(totals.q2, profile.currency, profile.locale)}</b>
+              </div>
+              <div className="stat card" style={{ padding: 15 }}>
+                <span className="text-xs" style={{ color: "var(--muted)" }}>Balance total</span>
+                <b className="block text-lg" style={{ color: totals.balance < 0 ? "var(--warn)" : undefined }}>
+                  {money0(totals.balance, profile.currency, profile.locale)}
+                </b>
+              </div>
+            </div>
+          </>
+        )}
       </Card>
+
+      {rows.length > 0 && (
+        <Card>
+          <div className="flex items-center justify-between" style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+            <h3 className="font-bold">Conciliación con cuentas</h3>
+            <span className={`chip ${liquidityGap < 0 ? "bad" : "ok"}`}>{liquidityGap < 0 ? "Excede lo disponible" : "Conciliado"}</span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-2" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
+            <div className="stat card" style={{ padding: 15 }}>
+              <span className="text-xs" style={{ color: "var(--muted)" }}>Disponible en cuentas</span>
+              <b className="block text-lg">{money0(liquidity, profile.currency, profile.locale)}</b>
+            </div>
+            <div className="stat card" style={{ padding: 15 }}>
+              <span className="text-xs" style={{ color: "var(--muted)" }}>Balance del presupuesto</span>
+              <b className="block text-lg" style={{ color: totals.balance < 0 ? "var(--warn)" : undefined }}>
+                {money0(totals.balance, profile.currency, profile.locale)}
+              </b>
+            </div>
+            <div className="stat card" style={{ padding: 15 }}>
+              <span className="text-xs" style={{ color: "var(--muted)" }}>Diferencia</span>
+              <b className="block text-lg" style={{ color: liquidityGap < 0 ? "var(--danger)" : "var(--ok)" }}>
+                {money0(liquidityGap, profile.currency, profile.locale)}
+              </b>
+            </div>
+          </div>
+          {liquidityGap < 0 && (
+            <p className="text-xs mt-2" style={{ color: "var(--danger)" }}>
+              El balance de tu presupuesto asume más dinero del que tienes disponible en tus cuentas. Revisa tus
+              conceptos o registra los movimientos pendientes en Dashboard y Gastos.
+            </p>
+          )}
+        </Card>
+      )}
+
+      <div
+        className="text-xs p-2.5 rounded-r-xl"
+        style={{ background: "color-mix(in srgb, var(--info) 9%, var(--surface))", borderLeft: "3px solid var(--info)" }}
+      >
+        Balance = Costo mensual − gasto conciliado del concepto en el ciclo vigente (BR-028). Un balance negativo indica que
+        excediste el costo mensual planeado. Los movimientos que registres en Dashboard y Gastos deducen automáticamente
+        el concepto indicado en cuanto se concilian.
+      </div>
     </div>
   );
 }
