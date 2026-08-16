@@ -8,21 +8,26 @@ import NewTaskForm from "./NewTaskForm";
 import SequenceButton from "./SequenceButton";
 import TaskDetailPanel from "./TaskDetailPanel";
 import KanbanBoard, { type KanbanTask } from "./KanbanBoard";
-import ViewToggle from "./ViewToggle";
+import TaskTable, { type TableTask } from "./TaskTable";
+import ViewToggle, { type ExecutionView } from "./ViewToggle";
 import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
 
-// FIX (build de GitHub Actions, TS2322): el componente <Card> del repo solo
-// acepta { children, className, hero } — no acepta la prop `style`. Se quitó
-// `style={{ background: "var(--surface2)" }}` del bloque "Tareas de:
-// {proyecto}"; el fondo distintivo ahora se logra con un <div> interno en
-// vez de pasarle `style` directamente a <Card>.
+// FASE 3 — cambios respecto a la Fase 2:
+//   1. Se agrega la vista "table" (además de "list" y "kanban") vía
+//      searchParams.view.
+//   2. La consulta a task_assignees (antes solo para Kanban) ahora se
+//      dispara para Kanban O Tabla, ya que ambas vistas necesitan mostrar
+//      "Responsables" por tarea.
+//   3. Se importa y renderiza <TaskTable> cuando view === "table".
+// El bloque "Tareas de: {proyecto}" sigue sin usar `style` directo sobre
+// <Card> (fix ya aplicado en Fase 2 para el error TS2322).
 export default async function ExecutionPage({
   searchParams
 }: {
   searchParams: Promise<{ project?: string; view?: string }>;
 }) {
   const { project: selectedProjectId, view: rawView } = await searchParams;
-  const view: "list" | "kanban" = rawView === "kanban" ? "kanban" : "list";
+  const view: ExecutionView = rawView === "kanban" ? "kanban" : rawView === "table" ? "table" : "list";
 
   const supabase = await createClient();
   const {
@@ -55,10 +60,10 @@ export default async function ExecutionPage({
     const { data } = await supabase.from("tasks").select("*").eq("project_id", selectedProjectId).order("created_at");
     selectedTasks = (data ?? []) as typeof selectedTasks;
 
-    // Solo se necesitan los responsables cuando se pinta el Kanban (las
-    // tarjetas muestran "👤 nombre1, nombre2"); la vista de Lista no los usa
-    // directamente aquí (los muestra el propio TaskDetailPanel al abrir).
-    if (view === "kanban" && selectedTasks.length) {
+    // Responsables: se necesitan tanto en Kanban (chip "👤 nombre" en cada
+    // tarjeta) como en Tabla (columna "Responsables"). La vista de Lista no
+    // los precarga aquí — los muestra el propio TaskDetailPanel al abrir.
+    if ((view === "kanban" || view === "table") && selectedTasks.length) {
       const { data: assigneeRows } = await supabase
         .from("task_assignees")
         .select("task_id, user_name")
@@ -121,7 +126,7 @@ export default async function ExecutionPage({
               <div style={{ background: "var(--surface2)", margin: "-16px", padding: 16, borderRadius: "inherit" }}>
                 <div className="flex items-center justify-between wrap" style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                   <h3>Tareas de: {proj.title}</h3>
-                  <div className="flex items-center" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <div className="flex items-center" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                     <ViewToggle projectId={proj.id} view={view} />
                     <SequenceButton
                       projectId={proj.id}
@@ -142,17 +147,36 @@ export default async function ExecutionPage({
                   </>
                 )}
 
+                {selectedTasks.length > 0 && view === "table" && (
+                  <TaskTable
+                    projectTitle={proj.title}
+                    tasks={selectedTasks.map(
+                      (t): TableTask => ({
+                        id: t.id,
+                        title: t.title,
+                        status: t.status,
+                        priority: t.priority,
+                        due: t.due,
+                        est: t.est
+                      })
+                    )}
+                    assigneesByTask={assigneesByTask}
+                  />
+                )}
+
                 {selectedTasks.length > 0 && view === "kanban" && (
                   <KanbanBoard
                     projectId={proj.id}
-                    initialTasks={selectedTasks.map((t) => ({
-                      id: t.id,
-                      title: t.title,
-                      status: t.status,
-                      priority: t.priority,
-                      urgent: t.urgent,
-                      due: t.due
-                    }))}
+                    initialTasks={selectedTasks.map(
+                      (t): KanbanTask => ({
+                        id: t.id,
+                        title: t.title,
+                        status: t.status,
+                        priority: t.priority,
+                        urgent: t.urgent,
+                        due: t.due
+                      })
+                    )}
                     assigneesByTask={assigneesByTask}
                   />
                 )}
