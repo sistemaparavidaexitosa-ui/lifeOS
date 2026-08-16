@@ -10,17 +10,23 @@ import TaskDetailPanel from "./TaskDetailPanel";
 import KanbanBoard, { type KanbanTask } from "./KanbanBoard";
 import TaskTable, { type TableTask } from "./TaskTable";
 import ViewToggle, { type ExecutionView } from "./ViewToggle";
+import LogbookCard from "./LogbookCard";
+import KnowledgeCard from "./KnowledgeCard";
+import { getProjectLogAndKnowledge } from "./logbook-knowledge-actions";
 import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
 
-// FASE 3 — cambios respecto a la Fase 2:
-//   1. Se agrega la vista "table" (además de "list" y "kanban") vía
-//      searchParams.view.
-//   2. La consulta a task_assignees (antes solo para Kanban) ahora se
-//      dispara para Kanban O Tabla, ya que ambas vistas necesitan mostrar
-//      "Responsables" por tarea.
-//   3. Se importa y renderiza <TaskTable> cuando view === "table".
-// El bloque "Tareas de: {proyecto}" sigue sin usar `style` directo sobre
-// <Card> (fix ya aplicado en Fase 2 para el error TS2322).
+// FASE 4 — cambios respecto a la Fase 3:
+//   1. Se importa getProjectLogAndKnowledge() y se llama junto a la carga de
+//      tareas del proyecto seleccionado (una sola query adicional en
+//      paralelo, no bloquea nada existente).
+//   2. Se agregan <LogbookCard> y <KnowledgeCard> al final del bloque
+//      "Tareas de: {proyecto}", en un grid de 2 columnas — igual que
+//      viewExecution() en el HTML de referencia (grid g2: logbookCard(),
+//      knowledgeCard()). Se muestran SIEMPRE, sin importar la vista activa
+//      (list/table/kanban), porque son secciones independientes del
+//      selector de vistas de tareas.
+// El resto (selección de proyecto, progreso, vistas Lista/Tabla/Kanban,
+// SequenceButton, formularios) se conserva igual a la Fase 3.
 export default async function ExecutionPage({
   searchParams
 }: {
@@ -55,10 +61,17 @@ export default async function ExecutionPage({
     urgent: boolean;
   }[] = [];
   let assigneesByTask: Record<string, string[]> = {};
+  let logbookEntries: Awaited<ReturnType<typeof getProjectLogAndKnowledge>>["logbook"] = [];
+  let knowledgeItems: Awaited<ReturnType<typeof getProjectLogAndKnowledge>>["knowledge"] = [];
 
   if (selectedProjectId) {
-    const { data } = await supabase.from("tasks").select("*").eq("project_id", selectedProjectId).order("created_at");
+    const [{ data }, logAndKnowledge] = await Promise.all([
+      supabase.from("tasks").select("*").eq("project_id", selectedProjectId).order("created_at"),
+      getProjectLogAndKnowledge(selectedProjectId)
+    ]);
     selectedTasks = (data ?? []) as typeof selectedTasks;
+    logbookEntries = logAndKnowledge.logbook;
+    knowledgeItems = logAndKnowledge.knowledge;
 
     // Responsables: se necesitan tanto en Kanban (chip "👤 nombre" en cada
     // tarjeta) como en Tabla (columna "Responsables"). La vista de Lista no
@@ -180,6 +193,17 @@ export default async function ExecutionPage({
                     assigneesByTask={assigneesByTask}
                   />
                 )}
+
+                {/* FASE 4 — Bitácora + Base de conocimiento, siempre visibles
+                   al final del bloque, sin importar la vista activa (igual
+                   que viewExecution() en el HTML de referencia). */}
+                <div
+                  className="grid gap-3.5"
+                  style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14, marginTop: 14 }}
+                >
+                  <LogbookCard projectId={proj.id} entries={logbookEntries} />
+                  <KnowledgeCard projectId={proj.id} items={knowledgeItems} />
+                </div>
               </div>
             </Card>
           );
