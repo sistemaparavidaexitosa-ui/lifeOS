@@ -50,20 +50,43 @@ const taskSchema = z.object({
   title: z.string().min(1),
   priority: z.enum(["High", "Medium", "Low"]).default("Medium"),
   due: z.string().optional().nullable(),
+  startDate: z.string().optional().nullable(),
   est: z.coerce.number().int().min(0).default(30),
   impact: z.coerce.boolean().default(false),
-  urgent: z.coerce.boolean().default(false)
+  urgent: z.coerce.boolean().default(false),
+  parentTaskId: z.string().uuid().optional().nullable()
 });
 
-export async function createTask(formData: FormData) {
+/** Fila mínima devuelta al cliente tras crear una tarea/subtarea, para que
+ *  MondayBoard.tsx/QuickAddRow.tsx puedan insertarla de inmediato en el
+ *  estado local sin esperar una recarga completa de la página. */
+export interface CreatedTaskRow {
+  id: string;
+  projectId: string;
+  title: string;
+  status: TaskStatus;
+  priority: "High" | "Medium" | "Low";
+  urgent: boolean;
+  due: string | null;
+  startDate: string | null;
+  parentTaskId: string | null;
+}
+
+/** FR-EXE-001/002 + subtareas (Monday-style, migración 0018): si se envía
+ *  parentTaskId, la fila se crea como subtarea (parent_task_id) de otra
+ *  tarea del MISMO proyecto; el resto del flujo (historial, auditoría,
+ *  máquina de estados) es idéntico para tareas raíz y subtareas. */
+export async function createTask(formData: FormData): Promise<CreatedTaskRow> {
   const parsed = taskSchema.parse({
     projectId: formData.get("projectId"),
     title: formData.get("title"),
     priority: formData.get("priority") ?? "Medium",
     due: formData.get("due") || null,
+    startDate: formData.get("startDate") || null,
     est: formData.get("est") ?? 30,
     impact: formData.get("impact") === "on",
-    urgent: formData.get("urgent") === "on"
+    urgent: formData.get("urgent") === "on",
+    parentTaskId: formData.get("parentTaskId") || null
   });
 
   const supabase = await createClient();
@@ -79,17 +102,73 @@ export async function createTask(formData: FormData) {
       title: parsed.title,
       priority: parsed.priority,
       due: parsed.due,
+      start_date: parsed.startDate,
       est: parsed.est,
       impact: parsed.impact,
-      urgent: parsed.urgent
+      urgent: parsed.urgent,
+      parent_task_id: parsed.parentTaskId
     })
     .select()
     .single();
   if (error) throw new Error(error.message);
 
   await supabase.from("task_history").insert({ task_id: task.id, from_state: null, to_state: "Pending" });
-  await supabase.from("audit_log").insert({ user_id: user.id, action: "task.create", object: task.id });
+  await supabase
+    .from("audit_log")
+    .insert({ user_id: user.id, action: parsed.parentTaskId ? "task.subtask.create" : "task.create", object: task.id });
   revalidatePath("/execution");
+
+  return {
+    id: task.id,
+    projectId: task.project_id,
+    title: task.title,
+    status: task.status as TaskStatus,
+    priority: task.priority as "High" | "Medium" | "Low",
+    urgent: task.urgent,
+    due: task.due,
+    startDate: task.start_date ?? null,
+    parentTaskId: task.parent_task_id ?? null
+  };
+}
+
+/** Renombrado inline del título (edición directa en la fila del tablero). */
+export async function renameTask(taskId: string, title: string) {
+  const trimmed = title.trim();
+  if (!trimmed) return;
+
+  const supabase = await createClient();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  const { data: task } = await supabase.from("tasks").select("version").eq("id", taskId).single();
+  if (!task) throw new Error("Tarea no encontrada");
+
+  const { error } = await supabase.from("tasks").update({ title: trimmed, version: task.version + 1 }).eq("id", taskId);
+  if (error) throw new Error(error.message);
+
+  await supabase.from("audit_log").insert({ user_id: user.id, action: "task.rename", object: taskId });
+  revalidatePath("/execution");
+}
+
+/** Columna "Timeline" (migración 0018): actualiza el rango start_date/due de una tarea. */
+export async function updateTaskDates(taskId: string, startDate: string | null, due: string | null) {
+  const supabase = await createClient();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  const { data: task } = await supabase.from("tasks").select("version").eq("id", taskId).single();
+  if (!task) throw new Error("Tarea no encontrada");
+
+  const { error } = await supabase.from("tasks").update({ start_date: startDate, due, version: task.version + 1 }).eq("id", taskId);
+  if (error) throw new Error(error.message);
+
+  await supabase.from("audit_log").insert({ user_id: user.id, action: "task.dates", object: taskId, meta: { startDate, due } });
+  revalidatePath("/execution");
+  revalidatePath("/home");
 }
 
 /** FR-EXE-003/004/005: aplica la máquina de estados con validación real de dependencias. */

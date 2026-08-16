@@ -1488,8 +1488,10 @@ export type Database = {
           est: number
           id: string
           impact: boolean
+          parent_task_id: string | null
           priority: string
           project_id: string
+          start_date: string | null
           status: string
           title: string
           urgent: boolean
@@ -1503,8 +1505,10 @@ export type Database = {
           est?: number
           id?: string
           impact?: boolean
+          parent_task_id?: string | null
           priority?: string
           project_id: string
+          start_date?: string | null
           status?: string
           title: string
           urgent?: boolean
@@ -1518,8 +1522,10 @@ export type Database = {
           est?: number
           id?: string
           impact?: boolean
+          parent_task_id?: string | null
           priority?: string
           project_id?: string
+          start_date?: string | null
           status?: string
           title?: string
           urgent?: boolean
@@ -1531,6 +1537,13 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_parent_task_id_fkey"
+            columns: ["parent_task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
             referencedColumns: ["id"]
           },
         ]

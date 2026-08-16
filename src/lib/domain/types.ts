@@ -23,6 +23,8 @@ export interface TaskLike {
   due: string | null; // ISO date (yyyy-mm-dd)
   deps: string[];
   est: number; // minutos
+  parentTaskId?: string | null; // subtareas estilo Monday (auto-referencia)
+  startDate?: string | null; // inicio del rango para la columna Timeline
 }
 
 export type EisenhowerQuadrant = "do" | "plan" | "delegate" | "drop";

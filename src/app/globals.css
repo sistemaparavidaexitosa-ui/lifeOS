@@ -1,46 +1,97 @@
-/* Design tokens extraídos de LifeOS 4.html — ver /docs/UX_MAP.md */
+/* Design tokens — Rediseño "Monday-style" (colorido, moderno, sidebar con
+   íconos, mobile-first). Reemplaza la paleta plana original por acentos
+   vivos inspirados en monday.com/ClickUp, conservando TODAS las variables
+   y clases usadas en el resto del código (.card, .chip, .btn-*, .progress)
+   para no romper ninguna vista existente — solo se enriquecen sus valores. */
 :root {
-  --bg: #f3f6f6;
-  --surface: #fff;
-  --surface2: #eef3f2;
-  --surface3: #e4ecea;
-  --text: #0f1f1c;
-  --muted: #657672;
-  --accent: #0b8f75;
-  --accent-d: #087563;
-  --accent2: #75dec8;
-  --danger: #d33b46;
-  --warn: #c67d0c;
-  --ok: #178a5f;
-  --info: #2f6bd0;
-  --purple: #6b4dd6;
-  --line: rgba(15, 45, 40, 0.1);
-  --shadow: 0 16px 44px rgba(12, 48, 42, 0.12);
-  --r: 22px;
-  --r2: 16px;
+  --bg: #f4f5fb;
+  --surface: #ffffff;
+  --surface2: #f0f1fa;
+  --surface3: #e7e9f7;
+  --text: #14142b;
+  --muted: #6b7099;
+
+  /* Acento principal: violeta vívido estilo monday.com */
+  --accent: #6161ff;
+  --accent-d: #4b3fd6;
+  --accent2: #a99cff;
+
+  /* Semánticos */
+  --danger: #e2445c;
+  --warn: #fdab3d;
+  --ok: #00c875;
+  --info: #579bfc;
+  --purple: #a25ddc;
+
+  /* Acentos de sección (sidebar / grupos, estilo tablero multicolor) */
+  --c-purple: #6161ff;
+  --c-green: #00c875;
+  --c-orange: #fdab3d;
+  --c-pink: #ff5ac4;
+  --c-teal: #2dd4bf;
+  --c-blue: #579bfc;
+
+  /* Estados de tarea (paleta Monday: Done/Working/Stuck/Not started/Scheduled) */
+  --st-done: #00c875;
+  --st-done-bg: #d1f7e6;
+  --st-working: #fdab3d;
+  --st-working-bg: #ffefd7;
+  --st-stuck: #e2445c;
+  --st-stuck-bg: #ffe0e5;
+  --st-notstarted: #808cb0;
+  --st-notstarted-bg: #e6e8f5;
+  --st-scheduled: #579bfc;
+  --st-scheduled-bg: #dceafe;
+  --st-cancelled: #9aa0c3;
+  --st-cancelled-bg: #eceef7;
+
+  --line: rgba(20, 20, 43, 0.08);
+  --shadow: 0 16px 44px rgba(40, 40, 110, 0.12);
+  --shadow-sm: 0 4px 14px rgba(40, 40, 110, 0.08);
+  --r: 20px;
+  --r2: 14px;
+  --topbar-h: 60px;
 }
 
 html[data-theme="dark"] {
-  --bg: #060f0d;
-  --surface: #0f1d1a;
-  --surface2: #15201d;
-  --surface3: #1d2c28;
-  --text: #eef8f5;
-  --muted: #93a8a3;
-  --accent: #3fd6b3;
-  --accent-d: #2fae90;
-  --accent2: #1c7a68;
-  --danger: #ff8a90;
-  --warn: #ffc25e;
-  --ok: #5fd8a5;
-  --info: #7fb2ff;
-  --purple: #b9a6ff;
-  --line: rgba(255, 255, 255, 0.09);
-  --shadow: 0 20px 55px rgba(0, 0, 0, 0.42);
+  --bg: #0e0e1c;
+  --surface: #17172c;
+  --surface2: #1e1e38;
+  --surface3: #262646;
+  --text: #f1f1fb;
+  --muted: #9a9fc7;
+
+  --accent: #8b8bff;
+  --accent-d: #6f6ff0;
+  --accent2: #4b3fd6;
+
+  --danger: #ff8a97;
+  --warn: #ffc978;
+  --ok: #4fe3a8;
+  --info: #8ec1ff;
+  --purple: #c895ee;
+
+  --st-done: #4fe3a8;
+  --st-done-bg: rgba(79, 227, 168, 0.16);
+  --st-working: #ffc978;
+  --st-working-bg: rgba(255, 201, 120, 0.16);
+  --st-stuck: #ff8a97;
+  --st-stuck-bg: rgba(255, 138, 151, 0.16);
+  --st-notstarted: #a7abd6;
+  --st-notstarted-bg: rgba(167, 171, 214, 0.14);
+  --st-scheduled: #8ec1ff;
+  --st-scheduled-bg: rgba(142, 193, 255, 0.16);
+  --st-cancelled: #8489ad;
+  --st-cancelled-bg: rgba(132, 137, 173, 0.16);
+
+  --line: rgba(255, 255, 255, 0.08);
+  --shadow: 0 20px 55px rgba(0, 0, 0, 0.5);
+  --shadow-sm: 0 6px 18px rgba(0, 0, 0, 0.35);
 }
 
 * {
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 
 html,
@@ -48,10 +99,12 @@ body {
   margin: 0;
   /* F12: layout nativo en móvil, sin phone-frame flotante */
   height: 100dvh;
+  overflow-x: hidden;
 }
 
 body {
-  background: radial-gradient(1200px 400px at 15% -5%, rgba(63, 214, 179, 0.14), transparent 50%), var(--bg);
+  background: radial-gradient(1100px 380px at 12% -8%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 55%),
+    radial-gradient(900px 340px at 100% 0%, color-mix(in srgb, var(--c-green) 12%, transparent), transparent 55%), var(--bg);
   color: var(--text);
   font: 14.5px/1.5 Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -63,12 +116,16 @@ body {
 @tailwind components;
 @tailwind utilities;
 
+/* ---------------------------------------------------------------------- */
+/* Primitivas                                                              */
+/* ---------------------------------------------------------------------- */
+
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r);
   padding: 18px;
-  box-shadow: 0 6px 18px rgba(12, 48, 42, 0.05);
+  box-shadow: var(--shadow-sm);
 }
 
 .chip {
@@ -77,29 +134,29 @@ body {
   gap: 5px;
   background: var(--surface2);
   border-radius: 999px;
-  padding: 4px 10px;
+  padding: 4px 11px;
   font-size: 11.5px;
   font-weight: 750;
   white-space: nowrap;
 }
 .chip.ok {
-  background: color-mix(in srgb, var(--ok) 16%, transparent);
-  color: var(--ok);
+  background: var(--st-done-bg);
+  color: var(--st-done);
 }
 .chip.warn {
-  background: color-mix(in srgb, var(--warn) 18%, transparent);
-  color: var(--warn);
+  background: var(--st-working-bg);
+  color: color-mix(in srgb, var(--st-working) 75%, black 15%);
 }
 .chip.bad {
-  background: color-mix(in srgb, var(--danger) 16%, transparent);
-  color: var(--danger);
+  background: var(--st-stuck-bg);
+  color: var(--st-stuck);
 }
 .chip.info {
-  background: color-mix(in srgb, var(--info) 15%, transparent);
-  color: var(--info);
+  background: var(--st-scheduled-bg);
+  color: color-mix(in srgb, var(--st-scheduled) 70%, black 20%);
 }
 .chip.accent {
-  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--accent-d);
 }
 .chip.purple {
@@ -107,31 +164,46 @@ body {
   color: var(--purple);
 }
 
+.btn-primary,
+.btn-ghost,
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-weight: 700;
+  min-height: 44px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.15s ease;
+  touch-action: manipulation;
+}
 .btn-primary {
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent), var(--accent-d));
   color: #fff;
   border: 0;
-  border-radius: 999px;
-  padding: 9px 14px;
-  font-weight: 700;
-  min-height: 40px;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.btn-primary:active {
+  transform: translateY(1px) scale(0.99);
 }
 .btn-ghost {
-  background: transparent;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 9px 14px;
-  font-weight: 700;
-  min-height: 40px;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  color: var(--text);
+}
+.btn-ghost:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
 }
 .btn-danger {
   background: transparent;
   color: var(--danger);
-  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
-  border-radius: 999px;
-  padding: 9px 14px;
-  font-weight: 700;
-  min-height: 40px;
+  border: 1.5px solid color-mix(in srgb, var(--danger) 40%, transparent);
+}
+.btn-sm {
+  min-height: 38px;
+  padding: 6px 12px;
+  font-size: 13px;
 }
 
 .progress {
@@ -143,13 +215,345 @@ body {
 .progress i {
   display: block;
   height: 100%;
-  background: var(--accent);
+  background: linear-gradient(90deg, var(--accent), var(--c-teal));
   border-radius: inherit;
   transition: width 0.4s;
 }
 .progress.warn i {
-  background: var(--warn);
+  background: linear-gradient(90deg, var(--warn), var(--c-orange));
 }
 .progress.bad i {
-  background: var(--danger);
+  background: linear-gradient(90deg, var(--danger), #ff7b90);
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  min-height: 44px;
+  width: 100%;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Sidebar                                                                 */
+/* ---------------------------------------------------------------------- */
+
+.side-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border-radius: 12px;
+  padding: 9px 10px;
+  font-weight: 650;
+  font-size: 13.5px;
+  color: var(--text);
+  position: relative;
+  min-height: 44px;
+}
+.side-link:active {
+  transform: scale(0.99);
+}
+.side-link.active {
+  background: color-mix(in srgb, var(--item-color, var(--accent)) 14%, transparent);
+  color: color-mix(in srgb, var(--item-color, var(--accent)) 80%, black 15%);
+  font-weight: 800;
+}
+.side-link.active::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  top: 8px;
+  bottom: 8px;
+  width: 4px;
+  border-radius: 4px;
+  background: var(--item-color, var(--accent));
+}
+.side-icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  color: var(--item-color, var(--muted));
+  flex-shrink: 0;
+}
+.side-link.active .side-icon {
+  background: color-mix(in srgb, var(--item-color, var(--accent)) 20%, transparent);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Monday-style board (Execution OS)                                       */
+/* ---------------------------------------------------------------------- */
+
+.mb-group {
+  border-radius: var(--r2);
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  margin-bottom: 14px;
+}
+.mb-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  font-weight: 800;
+  color: var(--group-color, var(--accent));
+  border-left: 5px solid var(--group-color, var(--accent));
+  background: color-mix(in srgb, var(--group-color, var(--accent)) 7%, var(--surface));
+}
+.mb-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 104px 150px 178px 40px;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 11.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+}
+.mb-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 104px 150px 178px 40px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line);
+  transition: background 0.12s ease;
+}
+.mb-row:hover {
+  background: var(--surface2);
+}
+.mb-row-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+/* En desktop, .mb-row-meta (Personas + Estado) se "disuelve" para que sus 2
+   hijos ocupen directamente 2 columnas del grid de .mb-row (contents no
+   genera caja propia). En mobile se convierte en un mini-grid de 2 col
+   (ver el media query de abajo), porque .mb-row deja de ser grid ahí. */
+.mb-row-meta {
+  display: contents;
+}
+.mb-row-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: none;
+  background: transparent;
+  font-weight: 650;
+  font-size: 13.5px;
+  min-width: 0;
+  flex: 1;
+  min-height: auto;
+  padding: 4px 6px;
+  border-radius: 8px;
+}
+.mb-row-title:focus {
+  background: var(--surface2);
+  box-shadow: none;
+}
+.mb-avatars {
+  display: flex;
+  align-items: center;
+}
+.mb-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #fff;
+  border: 2px solid var(--surface);
+  margin-left: -8px;
+  flex-shrink: 0;
+}
+.mb-avatar:first-child {
+  margin-left: 0;
+}
+.mb-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 32px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 750;
+  color: #fff;
+  padding: 5px 8px;
+  border: none;
+  cursor: pointer;
+  text-align: center;
+}
+.mb-timeline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text);
+  background: var(--surface3);
+  padding: 5px 10px;
+  width: 100%;
+  border: none;
+  cursor: pointer;
+}
+.mb-expand {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.mb-expand:hover {
+  background: var(--surface3);
+}
+.mb-indent-1 {
+  margin-left: 26px;
+}
+.mb-indent-2 {
+  margin-left: 52px;
+}
+.mb-badge-count {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: var(--muted);
+  background: var(--surface3);
+  border-radius: 999px;
+  padding: 1px 7px;
+  flex-shrink: 0;
+}
+.mb-comment-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 4px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.mb-comment-btn:hover {
+  background: var(--surface3);
+  color: var(--accent-d);
+}
+.mb-quickadd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  color: var(--muted);
+  font-weight: 650;
+  font-size: 13px;
+  border-top: 1px solid var(--line);
+}
+.mb-quickadd input {
+  min-height: 36px;
+  padding: 6px 10px;
+  border-radius: 8px;
+}
+
+/* Mobile: la vista Monday se convierte en tarjetas apiladas (nunca tabla con
+   scroll horizontal, que era el principal problema reportado en celular). */
+@media (max-width: 760px) {
+  .mb-cols {
+    display: none;
+  }
+  .mb-row {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 12px;
+  }
+  .mb-row-item {
+    width: 100%;
+  }
+  .mb-row-meta {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+  }
+  .mb-avatars {
+    justify-content: flex-start;
+  }
+  .mb-indent-1,
+  .mb-indent-2 {
+    margin-left: 18px;
+  }
+}
+
+/* ---------------------------------------------------------------------- */
+/* Responsive general (mobile-first)                                      */
+/* ---------------------------------------------------------------------- */
+
+@media (max-width: 640px) {
+  body {
+    font-size: 15px;
+  }
+  h1 {
+    font-size: 1.3rem !important;
+  }
+  h2 {
+    font-size: 1.15rem !important;
+  }
+  h3 {
+    font-size: 1.02rem !important;
+  }
+  .card {
+    padding: 14px;
+    border-radius: 16px;
+  }
+  table {
+    font-size: 13px;
+  }
+  .btn-primary,
+  .btn-ghost,
+  .btn-danger {
+    min-height: 46px;
+    padding: 10px 16px;
+  }
+  input,
+  select,
+  textarea {
+    min-height: 46px;
+    font-size: 16px; /* evita el zoom automático de iOS Safari en focus */
+  }
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 35%, transparent);
+  border-radius: 999px;
 }

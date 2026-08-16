@@ -8,32 +8,33 @@ import NewTaskForm from "./NewTaskForm";
 import SequenceButton from "./SequenceButton";
 import TaskDetailPanel from "./TaskDetailPanel";
 import KanbanBoard, { type KanbanTask } from "./KanbanBoard";
-import TaskTable, { type TableTask } from "./TaskTable";
+import MondayBoard, { type MondayTask } from "./MondayBoard";
 import ViewToggle, { type ExecutionView } from "./ViewToggle";
 import LogbookCard from "./LogbookCard";
 import KnowledgeCard from "./KnowledgeCard";
 import { getProjectLogAndKnowledge } from "./logbook-knowledge-actions";
 import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
 
-// FASE 4 — cambios respecto a la Fase 3:
-//   1. Se importa getProjectLogAndKnowledge() y se llama junto a la carga de
-//      tareas del proyecto seleccionado (una sola query adicional en
-//      paralelo, no bloquea nada existente).
-//   2. Se agregan <LogbookCard> y <KnowledgeCard> al final del bloque
-//      "Tareas de: {proyecto}", en un grid de 2 columnas — igual que
-//      viewExecution() en el HTML de referencia (grid g2: logbookCard(),
-//      knowledgeCard()). Se muestran SIEMPRE, sin importar la vista activa
-//      (list/table/kanban), porque son secciones independientes del
-//      selector de vistas de tareas.
-// El resto (selección de proyecto, progreso, vistas Lista/Tabla/Kanban,
-// SequenceButton, formularios) se conserva igual a la Fase 3.
+// REDISEÑO Monday-style (ver /docs/CHANGES_MONDAY_UI.md):
+//   1. La vista por defecto ahora es "board" (MondayBoard.tsx): grupo con
+//      barra de color por proyecto, subtareas anidadas (parent_task_id,
+//      migración 0018), pills de estado, avatares y columna Timeline
+//      (start_date–due). Sustituye a la antigua vista "Tabla".
+//   2. Se agregan 2 queries en paralelo cuando la vista es "board":
+//      conteo de comentarios por tarea (para el badge 💬) y el roster de
+//      miembros del proyecto (workspace o solo el titular), reutilizando
+//      exactamente la misma lógica de getTaskDetail() en task-detail-actions.ts.
+//   3. Bitácora, Base de conocimiento, Kanban, Lista y Secuenciación IA se
+//      conservan sin cambios de comportamiento.
+const GROUP_COLORS = ["var(--c-purple)", "var(--c-green)", "var(--c-orange)", "var(--c-pink)", "var(--c-teal)", "var(--c-blue)"];
+
 export default async function ExecutionPage({
   searchParams
 }: {
   searchParams: Promise<{ project?: string; view?: string }>;
 }) {
   const { project: selectedProjectId, view: rawView } = await searchParams;
-  const view: ExecutionView = rawView === "kanban" ? "kanban" : rawView === "table" ? "table" : "list";
+  const view: ExecutionView = rawView === "kanban" ? "kanban" : rawView === "list" ? "list" : "board";
 
   const supabase = await createClient();
   const {
@@ -42,14 +43,18 @@ export default async function ExecutionPage({
   if (!user) redirect("/login");
 
   const { data: projects } = await supabase.from("projects").select("*").order("created_at", { ascending: false });
-  const { data: allTasks } = await supabase.from("tasks").select("id, project_id, status");
+  const { data: allTasks } = await supabase.from("tasks").select("id, project_id, status, parent_task_id");
 
   const progressByProject = (projectId: string) => {
-    const ts = (allTasks ?? []).filter((t) => t.project_id === projectId && t.status !== "Cancelled");
+    // El progreso siempre se calcula sobre TAREAS RAÍZ (sin parent_task_id):
+    // una subtarea completada ya "cuenta" indirectamente al completar su
+    // padre, y así no se infla artificialmente el % de un proyecto con
+    // muchas subtareas pequeñas.
+    const ts = (allTasks ?? []).filter((t) => t.project_id === projectId && t.status !== "Cancelled" && !t.parent_task_id);
     if (!ts.length) return 0;
     return Math.round((ts.filter((t) => t.status === "Completed").length / ts.length) * 100);
   };
-  const countByProject = (projectId: string) => (allTasks ?? []).filter((t) => t.project_id === projectId).length;
+  const countByProject = (projectId: string) => (allTasks ?? []).filter((t) => t.project_id === projectId && !t.parent_task_id).length;
 
   let selectedTasks: {
     id: string;
@@ -57,37 +62,71 @@ export default async function ExecutionPage({
     status: TaskStatus;
     priority: Priority;
     due: string | null;
+    startDate: string | null;
     est: number;
     urgent: boolean;
+    parentTaskId: string | null;
   }[] = [];
   let assigneesByTask: Record<string, string[]> = {};
+  let commentCountByTask: Record<string, number> = {};
+  let members: string[] = [];
   let logbookEntries: Awaited<ReturnType<typeof getProjectLogAndKnowledge>>["logbook"] = [];
   let knowledgeItems: Awaited<ReturnType<typeof getProjectLogAndKnowledge>>["knowledge"] = [];
 
   if (selectedProjectId) {
+    const selectedProject = projects?.find((p) => p.id === selectedProjectId);
+
     const [{ data }, logAndKnowledge] = await Promise.all([
-      supabase.from("tasks").select("*").eq("project_id", selectedProjectId).order("created_at"),
+      supabase
+        .from("tasks")
+        .select("id, title, status, priority, due, start_date, est, urgent, parent_task_id")
+        .eq("project_id", selectedProjectId)
+        .order("created_at"),
       getProjectLogAndKnowledge(selectedProjectId)
     ]);
-    selectedTasks = (data ?? []) as typeof selectedTasks;
+    selectedTasks = (data ?? []).map((t) => ({
+      id: t.id,
+      title: t.title,
+      status: t.status as TaskStatus,
+      priority: t.priority as Priority,
+      due: t.due,
+      startDate: t.start_date,
+      est: t.est,
+      urgent: t.urgent,
+      parentTaskId: t.parent_task_id
+    }));
     logbookEntries = logAndKnowledge.logbook;
     knowledgeItems = logAndKnowledge.knowledge;
 
-    // Responsables: se necesitan tanto en Kanban (chip "👤 nombre" en cada
-    // tarjeta) como en Tabla (columna "Responsables"). La vista de Lista no
-    // los precarga aquí — los muestra el propio TaskDetailPanel al abrir.
-    if ((view === "kanban" || view === "table") && selectedTasks.length) {
-      const { data: assigneeRows } = await supabase
-        .from("task_assignees")
-        .select("task_id, user_name")
-        .in(
-          "task_id",
-          selectedTasks.map((t) => t.id)
-        );
+    // Responsables: necesarios en Kanban, Tablero (Monday-style) y la propia
+    // columna "Personas". La vista de Lista no los precarga aquí — los
+    // muestra el propio TaskDetailPanel al abrir.
+    if ((view === "kanban" || view === "board") && selectedTasks.length) {
+      const taskIds = selectedTasks.map((t) => t.id);
+      const [{ data: assigneeRows }, { data: commentRows }] = await Promise.all([
+        supabase.from("task_assignees").select("task_id, user_name").in("task_id", taskIds),
+        view === "board"
+          ? supabase.from("comments").select("subject_id").eq("subject_type", "task").in("subject_id", taskIds)
+          : Promise.resolve({ data: [] as { subject_id: string }[] })
+      ]);
       assigneesByTask = (assigneeRows ?? []).reduce<Record<string, string[]>>((acc, row) => {
         (acc[row.task_id] ??= []).push(row.user_name);
         return acc;
       }, {});
+      commentCountByTask = (commentRows ?? []).reduce<Record<string, number>>((acc, row) => {
+        acc[row.subject_id] = (acc[row.subject_id] ?? 0) + 1;
+        return acc;
+      }, {});
+    }
+
+    if (view === "board" && selectedProject) {
+      if (selectedProject.workspace_id) {
+        const { data: rows } = await supabase.rpc("list_workspace_members", { p_workspace_id: selectedProject.workspace_id });
+        members = (rows ?? []).map((m: { user_name: string }) => m.user_name);
+      } else {
+        const { data: profile } = await supabase.from("profiles").select("name").eq("user_id", user.id).single();
+        if (profile?.name) members = [profile.name];
+      }
     }
   }
 
@@ -100,11 +139,13 @@ export default async function ExecutionPage({
 
       <div className="grid gap-3.5" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 14 }}>
         {!projects?.length && <EmptyState icon="📁" text="Crea tu primer proyecto." />}
-        {(projects ?? []).map((p) => {
+        {(projects ?? []).map((p, idx) => {
           const prog = progressByProject(p.id);
           const isSelected = selectedProjectId === p.id;
+          const color = GROUP_COLORS[idx % GROUP_COLORS.length];
           return (
-            <Card key={p.id}>
+            <Card key={p.id} className="relative overflow-hidden">
+              <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 4, background: color }} />
               <div className="flex items-center justify-between" style={{ display: "flex", justifyContent: "space-between" }}>
                 <Chip kind={p.status === "Active" ? "accent" : p.status === "Completed" ? "ok" : ""}>{p.status}</Chip>
                 <Chip>{p.workspace_id ? "Workspace" : "Personal"}</Chip>
@@ -132,8 +173,10 @@ export default async function ExecutionPage({
 
       {selectedProjectId &&
         (() => {
+          const projIdx = (projects ?? []).findIndex((p) => p.id === selectedProjectId);
           const proj = projects?.find((p) => p.id === selectedProjectId);
           if (!proj) return null;
+          const groupColor = GROUP_COLORS[Math.max(0, projIdx) % GROUP_COLORS.length];
           return (
             <Card>
               <div style={{ background: "var(--surface2)", margin: "-16px", padding: 16, borderRadius: "inherit" }}>
@@ -152,29 +195,36 @@ export default async function ExecutionPage({
                 </div>
                 {!selectedTasks.length && <EmptyState icon="✅" text="Este proyecto no tiene tareas todavía." />}
 
+                {selectedTasks.length > 0 && view === "board" && (
+                  <div style={{ marginTop: 10 }}>
+                    <MondayBoard
+                      projectId={proj.id}
+                      groupColor={groupColor}
+                      initialTasks={selectedTasks.map(
+                        (t): MondayTask => ({
+                          id: t.id,
+                          title: t.title,
+                          status: t.status,
+                          priority: t.priority,
+                          urgent: t.urgent,
+                          due: t.due,
+                          startDate: t.startDate,
+                          parentTaskId: t.parentTaskId
+                        })
+                      )}
+                      assigneesByTask={assigneesByTask}
+                      commentCountByTask={commentCountByTask}
+                      members={members}
+                    />
+                  </div>
+                )}
+
                 {selectedTasks.length > 0 && view === "list" && (
                   <>
                     {selectedTasks.map((t) => (
                       <TaskDetailPanel key={t.id} taskId={t.id} taskTitle={t.title} />
                     ))}
                   </>
-                )}
-
-                {selectedTasks.length > 0 && view === "table" && (
-                  <TaskTable
-                    projectTitle={proj.title}
-                    tasks={selectedTasks.map(
-                      (t): TableTask => ({
-                        id: t.id,
-                        title: t.title,
-                        status: t.status,
-                        priority: t.priority,
-                        due: t.due,
-                        est: t.est
-                      })
-                    )}
-                    assigneesByTask={assigneesByTask}
-                  />
                 )}
 
                 {selectedTasks.length > 0 && view === "kanban" && (
@@ -194,9 +244,8 @@ export default async function ExecutionPage({
                   />
                 )}
 
-                {/* FASE 4 — Bitácora + Base de conocimiento, siempre visibles
-                   al final del bloque, sin importar la vista activa (igual
-                   que viewExecution() en el HTML de referencia). */}
+                {/* Bitácora + Base de conocimiento, siempre visibles al final
+                   del bloque, sin importar la vista activa. */}
                 <div
                   className="grid gap-3.5"
                   style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14, marginTop: 14 }}
