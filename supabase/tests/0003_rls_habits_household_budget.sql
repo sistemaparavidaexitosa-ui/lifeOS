@@ -20,8 +20,8 @@ select set_config('request.jwt.claims', json_build_object('sub', '99999999-9999-
 set local role authenticated;
 
 -- Ocupación + hábito ligado
-insert into public.occupations (id, user_id, title, start_time, end_time, category)
-values ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '99999999-9999-4999-8999-999999999999', 'Lectura', '20:30', '21:00', 'Personal');
+insert into public.occupations (id, user_id, title, start_time, end_time, category, occ_date)
+values ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '99999999-9999-4999-8999-999999999999', 'Lectura', '20:30', '21:00', 'Personal', current_date);
 
 insert into public.habits (id, user_id, name, occupation_id)
 values ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', '99999999-9999-4999-8999-999999999999', 'Leer', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
