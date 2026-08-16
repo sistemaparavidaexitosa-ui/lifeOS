@@ -617,6 +617,41 @@ export type Database = {
           },
         ]
       }
+      folders: {
+        Row: {
+          id: string
+          workspace_id: string
+          name: string
+          color: string
+          position: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          workspace_id: string
+          name: string
+          color?: string
+          position?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          workspace_id?: string
+          name?: string
+          color?: string
+          position?: number
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "folders_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       habit_logs: {
         Row: {
           completed_at: string
@@ -1269,6 +1304,7 @@ export type Database = {
           created_at: string
           dependencies: string
           description: string
+          folder_id: string | null
           id: string
           notes: string
           objective: string
@@ -1290,6 +1326,7 @@ export type Database = {
           created_at?: string
           dependencies?: string
           description?: string
+          folder_id?: string | null
           id?: string
           notes?: string
           objective?: string
@@ -1311,6 +1348,7 @@ export type Database = {
           created_at?: string
           dependencies?: string
           description?: string
+          folder_id?: string | null
           id?: string
           notes?: string
           objective?: string
@@ -1333,6 +1371,13 @@ export type Database = {
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "projects_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "folders"
             referencedColumns: ["id"]
           },
         ]
@@ -1447,6 +1492,41 @@ export type Database = {
           },
         ]
       }
+      task_groups: {
+        Row: {
+          id: string
+          project_id: string
+          name: string
+          color: string
+          position: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          name?: string
+          color?: string
+          position?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          project_id?: string
+          name?: string
+          color?: string
+          position?: number
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_groups_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       task_history: {
         Row: {
           from_state: string | null
@@ -1484,8 +1564,10 @@ export type Database = {
           completed_at: string | null
           created_at: string
           deps: string[]
+          description: string
           due: string | null
           est: number
+          group_id: string | null
           id: string
           impact: boolean
           parent_task_id: string | null
@@ -1501,8 +1583,10 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           deps?: string[]
+          description?: string
           due?: string | null
           est?: number
+          group_id?: string | null
           id?: string
           impact?: boolean
           parent_task_id?: string | null
@@ -1518,8 +1602,10 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           deps?: string[]
+          description?: string
           due?: string | null
           est?: number
+          group_id?: string | null
           id?: string
           impact?: boolean
           parent_task_id?: string | null
@@ -1544,6 +1630,13 @@ export type Database = {
             columns: ["parent_task_id"]
             isOneToOne: false
             referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "task_groups"
             referencedColumns: ["id"]
           },
         ]
