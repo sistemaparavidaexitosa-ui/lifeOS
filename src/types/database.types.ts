@@ -38,6 +38,12 @@
 // recurrentes ahora declaran a qué día pertenecen; las recurrentes guardan
 // `null` y se muestran en los 7 días de la vista semanal).
 //
+// Rev. fix (Presupuesto — ingreso quincenal + conciliación con cuentas): se
+// agregó `quincenal_income` al Row de `profiles`, reflejando la columna
+// nueva de supabase/migrations/0017_budget_quincenal_income.sql. Se usa en
+// /money/budget para calcular la diferencia (excedente/déficit) entre el
+// ingreso quincenal declarado y las aportaciones Q1/Q2 del presupuesto.
+//
 // Este stub SÍ satisface la forma `GenericSchema` de @supabase/supabase-js
 // (Tables/Views/Functions/Enums/CompositeTypes con Row/Insert/Update), para
 // que el resto del código compile contra un contrato razonable mientras
@@ -63,6 +69,7 @@ export interface Database {
           activity_window_start: string;
           activity_window_end: string;
           theme: string;
+          quincenal_income: number;
           created_at: Timestamptz;
           updated_at: Timestamptz;
         };
