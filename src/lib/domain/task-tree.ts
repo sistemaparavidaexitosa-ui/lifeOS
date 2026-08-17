@@ -16,12 +16,12 @@ export interface TreeTaskLike {
 
 /**
  * Ajusta esta condición si tu estado "completado" usa otro string distinto
- * de "Done" (revisa las opciones reales de src/lib/domain/status-meta.ts o
- * el enum de TaskStatus). Se centraliza aquí a propósito para que sea un
- * único punto de ajuste si el nombre difiere.
+ * de "Completed" — revisa src/lib/domain/status-meta.ts para confirmar el
+ * valor real (page.tsx ya usa t.status === "Completed" en progressByProject,
+ * así que se alinea con esa misma convención).
  */
 export function isDoneStatus(status: string): boolean {
-  return status.toLowerCase() === "done";
+  return status === "Completed";
 }
 
 /** Agrupa tareas por parent_task_id (null = raíz). Reutilizable por cualquier vista en árbol. */
@@ -59,7 +59,7 @@ export interface ProgressCount {
   done: number;
 }
 
-/** Cuenta TODOS los descendientes (no incluye el nodo mismo) y cuántos están "Done". */
+/** Cuenta TODOS los descendientes (no incluye el nodo mismo) y cuántos están "Completed". */
 export function countDescendantProgress<T extends TreeTaskLike>(
   childrenMap: Record<string, T[]>,
   taskId: string
@@ -76,7 +76,7 @@ export function countDescendantProgress<T extends TreeTaskLike>(
   return { total, done };
 }
 
-/** Cuenta TODAS las tareas de un grupo (todas las profundidades) y cuántas están "Done". */
+/** Cuenta TODAS las tareas de un grupo (todas las profundidades) y cuántas están "Completed". */
 export function countGroupProgress<T extends TreeTaskLike>(tasks: T[], groupId: string): ProgressCount {
   const inGroup = tasks.filter((t) => t.group_id === groupId);
   return {
