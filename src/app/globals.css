@@ -557,3 +557,104 @@ textarea:focus {
   background: color-mix(in srgb, var(--muted) 35%, transparent);
   border-radius: 999px;
 }
+/* ----------------------------------------------------------------------- */
+/* Execution — Lista de proyectos en FILAS estilo Monday (acordeón).       */
+/* Los proyectos son filas, y al seleccionar una fila sus tareas se        */
+/* despliegan INMEDIATAMENTE debajo de esa misma fila (no en un panel      */
+/* aparte, no al final del listado).                                       */
+/* Reutiliza tokens ya existentes — cero colores nuevos.                   */
+/* ----------------------------------------------------------------------- */
+.project-rows-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.project-row-wrap {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  overflow: hidden;
+  transition: border-color 0.12s ease;
+}
+.project-row-wrap.expanded {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+}
+.project-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 90px 140px 130px 120px;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  color: var(--text);
+}
+.project-row:hover {
+  background: var(--surface2);
+}
+.project-row.active {
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+  font-weight: 700;
+}
+.project-row-expand {
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+.project-row.active .project-row-expand {
+  color: var(--accent-d);
+}
+.project-row-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 650;
+}
+.project-row-progress {
+  min-width: 90px;
+}
+.project-row-meta {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.project-row-date {
+  text-align: right;
+}
+
+.project-row-expansion {
+  padding: 14px;
+  border-top: 1px solid var(--line);
+  background: var(--surface2);
+}
+
+/* Mobile: colapsa la fila a 2 líneas (título+estado arriba, progreso+meta
+   abajo), evitando scroll horizontal — mismo criterio que .mb-row mobile. */
+@media (max-width: 760px) {
+  .project-row {
+    grid-template-columns: 20px 1fr auto;
+    grid-template-areas:
+      "expand title status"
+      "expand progress meta";
+    row-gap: 6px;
+  }
+  .project-row-expand {
+    grid-area: expand;
+  }
+  .project-row-title {
+    grid-area: title;
+  }
+  .project-row > .chip {
+    grid-area: status;
+    justify-self: end;
+  }
+  .project-row-progress {
+    grid-area: progress;
+    min-width: 0;
+  }
+  .project-row-meta:not(.project-row-date) {
+    grid-area: meta;
+  }
+  .project-row-date {
+    display: none;
+  }
+}
+
