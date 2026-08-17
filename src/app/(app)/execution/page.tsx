@@ -8,7 +8,7 @@ import NewTaskForm from "./NewTaskForm";
 import SequenceButton from "./SequenceButton";
 import TaskDetailPanel from "./TaskDetailPanel";
 import KanbanBoard, { type KanbanTask } from "./KanbanBoard";
-import MondayBoard, { type MondayTask } from "./MondayBoard";
+import MondayBoard, { type MondayTask, type MondayGroup } from "./MondayBoard";
 import TreeView, { type TreeGroup } from "./TreeView";
 import type { TreeNodeTask } from "./TreeItemNode";
 import ViewToggle, { type ExecutionView } from "./ViewToggle";
@@ -30,9 +30,14 @@ import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
 //      conservan sin cambios de comportamiento.
 //   4. FASE 4: se agrega la vista "tree" (TreeView.tsx) — Group -> Item ->
 //      Subitem, sobre el MISMO modelo de datos (tasks + task_groups, migración
-//      0019). TreeView es autosuficiente (como MondayBoard/KanbanBoard): solo
-//      recibe initialTasks/initialGroups, sin callbacks desde este Server
-//      Component.
+//      0019).
+//   5. FIX (retrofit de Groups en el Tablero): antes, "groups" solo se
+//      cargaba para view === "tree" — MondayBoard.tsx nunca recibía los
+//      Groups del proyecto y por eso renderizaba un único bloque de color
+//      con TODAS las tareas juntas (no lucía como Monday). Ahora "groups" se
+//      carga también para view === "board" y se le pasa a MondayBoard como
+//      initialGroups, para que renderice una sección de color POR CADA
+//      Group real (ver comentario detallado en MondayBoard.tsx).
 const GROUP_COLORS = ["var(--c-purple)", "var(--c-green)", "var(--c-orange)", "var(--c-pink)", "var(--c-teal)", "var(--c-blue)"];
 
 export default async function ExecutionPage({
@@ -140,10 +145,11 @@ export default async function ExecutionPage({
       }
     }
 
-    // FASE 4 (Tree View): task_groups del proyecto. Gracias al backfill
-    // idempotente de la migración 0019, todo proyecto ya tiene al menos el
-    // grupo "General" — nunca vendrá vacío.
-    if (view === "tree") {
+    // FIX (retrofit de Groups): se carga para "board" Y "tree" — antes solo
+    // se cargaba para "tree", dejando a MondayBoard sin ningún Group.
+    // Gracias al backfill idempotente de la migración 0019, todo proyecto ya
+    // tiene al menos el grupo "General" — nunca vendrá vacío.
+    if (view === "board" || view === "tree") {
       const { data: groupRows } = await supabase
         .from("task_groups")
         .select("id, name, color, position")
@@ -196,10 +202,8 @@ export default async function ExecutionPage({
 
       {selectedProjectId &&
         (() => {
-          const projIdx = (projects ?? []).findIndex((p) => p.id === selectedProjectId);
           const proj = projects?.find((p) => p.id === selectedProjectId);
           if (!proj) return null;
-          const groupColor = GROUP_COLORS[Math.max(0, projIdx) % GROUP_COLORS.length];
           return (
             <Card>
               <div style={{ background: "var(--surface2)", margin: "-16px", padding: 16, borderRadius: "inherit" }}>
@@ -222,7 +226,6 @@ export default async function ExecutionPage({
                   <div style={{ marginTop: 10 }}>
                     <MondayBoard
                       projectId={proj.id}
-                      groupColor={groupColor}
                       initialTasks={selectedTasks.map(
                         (t): MondayTask => ({
                           id: t.id,
@@ -232,9 +235,11 @@ export default async function ExecutionPage({
                           urgent: t.urgent,
                           due: t.due,
                           startDate: t.startDate,
-                          parentTaskId: t.parentTaskId
+                          parentTaskId: t.parentTaskId,
+                          groupId: t.groupId
                         })
                       )}
+                      initialGroups={groups as MondayGroup[]}
                       assigneesByTask={assigneesByTask}
                       commentCountByTask={commentCountByTask}
                       members={members}

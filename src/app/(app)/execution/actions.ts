@@ -1,5 +1,4 @@
 "use server";
-
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
@@ -54,12 +53,13 @@ const taskSchema = z.object({
   est: z.coerce.number().int().min(0).default(30),
   impact: z.coerce.boolean().default(false),
   urgent: z.coerce.boolean().default(false),
-  parentTaskId: z.string().uuid().optional().nullable()
+  parentTaskId: z.string().uuid().optional().nullable(),
+  groupId: z.string().uuid().optional().nullable()
 });
 
 /** Fila mínima devuelta al cliente tras crear una tarea/subtarea, para que
- *  MondayBoard.tsx/QuickAddRow.tsx puedan insertarla de inmediato en el
- *  estado local sin esperar una recarga completa de la página. */
+ * MondayBoard.tsx/QuickAddRow.tsx puedan insertarla de inmediato en el
+ * estado local sin esperar una recarga completa de la página. */
 export interface CreatedTaskRow {
   id: string;
   projectId: string;
@@ -70,12 +70,26 @@ export interface CreatedTaskRow {
   due: string | null;
   startDate: string | null;
   parentTaskId: string | null;
+  groupId: string | null;
 }
 
-/** FR-EXE-001/002 + subtareas (Monday-style, migración 0018): si se envía
- *  parentTaskId, la fila se crea como subtarea (parent_task_id) de otra
- *  tarea del MISMO proyecto; el resto del flujo (historial, auditoría,
- *  máquina de estados) es idéntico para tareas raíz y subtareas. */
+/**
+ * FR-EXE-001/002 + subtareas (Monday-style, migración 0018) + Groups
+ * (migración 0019, FASE 2 — retrofit de asignación de grupo, ver
+ * MondayBoard.tsx §Groups):
+ * - Si se envía parentTaskId, la tarea se crea como subtarea y SIEMPRE
+ *   hereda el group_id de su padre (nunca el groupId explícito recibido),
+ *   igual que setTaskParent en tree-actions.ts — un Subitem siempre vive
+ *   visualmente dentro del mismo Group que su Item padre.
+ * - Si es una tarea raíz y se envía groupId, se usa tal cual (viene del
+ *   Group en el que el usuario dio clic en "+ Agregar tarea" dentro de
+ *   MondayBoard).
+ * - Si es una tarea raíz SIN groupId explícito (p. ej. flujos antiguos),
+ *   se asigna automáticamente al primer Group del proyecto (por
+ *   position), para que NINGUNA tarea nueva quede huérfana/sin grupo
+ *   (gracias al backfill idempotente de la migración 0019, todo proyecto
+ *   ya tiene al menos el grupo "General").
+ */
 export async function createTask(formData: FormData): Promise<CreatedTaskRow> {
   const parsed = taskSchema.parse({
     projectId: formData.get("projectId"),
@@ -86,7 +100,8 @@ export async function createTask(formData: FormData): Promise<CreatedTaskRow> {
     est: formData.get("est") ?? 30,
     impact: formData.get("impact") === "on",
     urgent: formData.get("urgent") === "on",
-    parentTaskId: formData.get("parentTaskId") || null
+    parentTaskId: formData.get("parentTaskId") || null,
+    groupId: formData.get("groupId") || null
   });
 
   const supabase = await createClient();
@@ -94,6 +109,25 @@ export async function createTask(formData: FormData): Promise<CreatedTaskRow> {
     data: { user }
   } = await supabase.auth.getUser();
   if (!user) throw new Error("No autenticado");
+
+  let resolvedGroupId: string | null = parsed.groupId;
+
+  if (parsed.parentTaskId) {
+    // Subtarea: SIEMPRE hereda el group_id del padre, ignora cualquier
+    // groupId explícito recibido.
+    const { data: parentTask } = await supabase.from("tasks").select("group_id").eq("id", parsed.parentTaskId).single();
+    resolvedGroupId = parentTask?.group_id ?? null;
+  } else if (!resolvedGroupId) {
+    // Tarea raíz sin grupo explícito: cae en el primer grupo del proyecto.
+    const { data: firstGroup } = await supabase
+      .from("task_groups")
+      .select("id")
+      .eq("project_id", parsed.projectId)
+      .order("position", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    resolvedGroupId = firstGroup?.id ?? null;
+  }
 
   const { data: task, error } = await supabase
     .from("tasks")
@@ -106,7 +140,8 @@ export async function createTask(formData: FormData): Promise<CreatedTaskRow> {
       est: parsed.est,
       impact: parsed.impact,
       urgent: parsed.urgent,
-      parent_task_id: parsed.parentTaskId
+      parent_task_id: parsed.parentTaskId,
+      group_id: resolvedGroupId
     })
     .select()
     .single();
@@ -127,7 +162,8 @@ export async function createTask(formData: FormData): Promise<CreatedTaskRow> {
     urgent: task.urgent,
     due: task.due,
     startDate: task.start_date ?? null,
-    parentTaskId: task.parent_task_id ?? null
+    parentTaskId: task.parent_task_id ?? null,
+    groupId: task.group_id ?? null
   };
 }
 
@@ -206,7 +242,7 @@ export async function setTaskStatus(taskId: string, to: TaskStatus) {
 /**
  * FR-INT-011, BR-022: heurística determinista de secuenciación. Devuelve la
  * sugerencia SIN aplicarla; requiere confirmación explícita del usuario vía
- * `applyProjectSequence`.
+ * applyProjectSequence.
  */
 export async function requestProjectSequence(projectId: string) {
   const supabase = await createClient();

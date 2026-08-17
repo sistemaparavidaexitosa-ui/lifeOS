@@ -14,6 +14,12 @@
 // false). Ahora TaskDetailPanel se mantiene SIEMPRE montado y se controla
 // en modo controlado (open/onOpenChange) — un solo clic abre el Drawer
 // lateral real (ver TaskDetailPanel.tsx).
+//
+// FIX (retrofit de Groups): la fila raíz ahora es draggable (HTML5 nativo,
+// sin librerías) — permite arrastrarla hacia el encabezado de otra sección
+// .mb-group en MondayBoard.tsx para moverla de grupo (setTaskGroup, ya
+// construido en tree-actions.ts desde Fase 4). Las subtareas NO son
+// draggable entre grupos (siempre viven dentro del grupo de su padre).
 import { useState } from "react";
 import { IconChevronRight, IconChevronDown, IconComment, IconPlus } from "@/components/icons";
 import StatusMenu from "./StatusMenu";
@@ -71,7 +77,12 @@ export default function MondayRow({
 
   return (
     <>
-      <div className={`mb-row${indentClass}`}>
+      <div
+        className={`mb-row${indentClass}`}
+        draggable={depth === 0}
+        onDragStart={depth === 0 ? (e) => e.dataTransfer.setData("text/task-id", task.id) : undefined}
+        style={depth === 0 ? { cursor: "grab" } : undefined}
+      >
         <div className="mb-row-item">
           {children.length > 0 ? (
             <button className="mb-expand" onClick={() => setExpanded((v) => !v)} aria-label="Subtareas">
