@@ -1,0 +1,87 @@
+/* ----------------------------------------------------------------------- */
+/* Task Drawer (FASE 3 — Drawer lateral real para el detalle de Item)       */
+/* Reutiliza los tokens de diseño ya existentes (--surface, --line,        */
+/* --shadow, --muted, etc.) — cero colores nuevos, mismo Design System.    */
+/* ----------------------------------------------------------------------- */
+.td-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 15, 35, 0.45);
+  z-index: 60;
+  animation: td-fade-in 0.15s ease;
+}
+.td-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100dvh;
+  width: min(480px, 100vw);
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  z-index: 61;
+  display: flex;
+  flex-direction: column;
+  animation: td-slide-in 0.18s ease;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.td-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.td-drawer-title {
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.td-drawer-close {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.td-drawer-close:hover {
+  background: var(--surface2);
+  color: var(--text);
+}
+.td-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+@keyframes td-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes td-slide-in {
+  from {
+    transform: translateX(16px);
+    opacity: 0.6;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+@media (max-width: 640px) {
+  .td-drawer {
+    width: 100vw;
+  }
+}
