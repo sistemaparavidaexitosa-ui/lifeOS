@@ -9,6 +9,8 @@ import SequenceButton from "./SequenceButton";
 import TaskDetailPanel from "./TaskDetailPanel";
 import KanbanBoard, { type KanbanTask } from "./KanbanBoard";
 import MondayBoard, { type MondayTask } from "./MondayBoard";
+import TreeView, { type TreeGroup } from "./TreeView";
+import type { TreeNodeTask } from "./TreeItemNode";
 import ViewToggle, { type ExecutionView } from "./ViewToggle";
 import LogbookCard from "./LogbookCard";
 import KnowledgeCard from "./KnowledgeCard";
@@ -26,6 +28,11 @@ import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
 //      exactamente la misma lógica de getTaskDetail() en task-detail-actions.ts.
 //   3. Bitácora, Base de conocimiento, Kanban, Lista y Secuenciación IA se
 //      conservan sin cambios de comportamiento.
+//   4. FASE 4: se agrega la vista "tree" (TreeView.tsx) — Group -> Item ->
+//      Subitem, sobre el MISMO modelo de datos (tasks + task_groups, migración
+//      0019). TreeView es autosuficiente (como MondayBoard/KanbanBoard): solo
+//      recibe initialTasks/initialGroups, sin callbacks desde este Server
+//      Component.
 const GROUP_COLORS = ["var(--c-purple)", "var(--c-green)", "var(--c-orange)", "var(--c-pink)", "var(--c-teal)", "var(--c-blue)"];
 
 export default async function ExecutionPage({
@@ -34,7 +41,8 @@ export default async function ExecutionPage({
   searchParams: Promise<{ project?: string; view?: string }>;
 }) {
   const { project: selectedProjectId, view: rawView } = await searchParams;
-  const view: ExecutionView = rawView === "kanban" ? "kanban" : rawView === "list" ? "list" : "board";
+  const view: ExecutionView =
+    rawView === "kanban" ? "kanban" : rawView === "list" ? "list" : rawView === "tree" ? "tree" : "board";
 
   const supabase = await createClient();
   const {
@@ -66,10 +74,12 @@ export default async function ExecutionPage({
     est: number;
     urgent: boolean;
     parentTaskId: string | null;
+    groupId: string | null;
   }[] = [];
   let assigneesByTask: Record<string, string[]> = {};
   let commentCountByTask: Record<string, number> = {};
   let members: string[] = [];
+  let groups: TreeGroup[] = [];
   let logbookEntries: Awaited<ReturnType<typeof getProjectLogAndKnowledge>>["logbook"] = [];
   let knowledgeItems: Awaited<ReturnType<typeof getProjectLogAndKnowledge>>["knowledge"] = [];
 
@@ -79,7 +89,7 @@ export default async function ExecutionPage({
     const [{ data }, logAndKnowledge] = await Promise.all([
       supabase
         .from("tasks")
-        .select("id, title, status, priority, due, start_date, est, urgent, parent_task_id")
+        .select("id, title, status, priority, due, start_date, est, urgent, parent_task_id, group_id")
         .eq("project_id", selectedProjectId)
         .order("created_at"),
       getProjectLogAndKnowledge(selectedProjectId)
@@ -93,7 +103,8 @@ export default async function ExecutionPage({
       startDate: t.start_date,
       est: t.est,
       urgent: t.urgent,
-      parentTaskId: t.parent_task_id
+      parentTaskId: t.parent_task_id,
+      groupId: t.group_id
     }));
     logbookEntries = logAndKnowledge.logbook;
     knowledgeItems = logAndKnowledge.knowledge;
@@ -127,6 +138,18 @@ export default async function ExecutionPage({
         const { data: profile } = await supabase.from("profiles").select("name").eq("user_id", user.id).single();
         if (profile?.name) members = [profile.name];
       }
+    }
+
+    // FASE 4 (Tree View): task_groups del proyecto. Gracias al backfill
+    // idempotente de la migración 0019, todo proyecto ya tiene al menos el
+    // grupo "General" — nunca vendrá vacío.
+    if (view === "tree") {
+      const { data: groupRows } = await supabase
+        .from("task_groups")
+        .select("id, name, color, position")
+        .eq("project_id", selectedProjectId)
+        .order("position");
+      groups = groupRows ?? [];
     }
   }
 
@@ -241,6 +264,22 @@ export default async function ExecutionPage({
                       })
                     )}
                     assigneesByTask={assigneesByTask}
+                  />
+                )}
+
+                {selectedTasks.length > 0 && view === "tree" && (
+                  <TreeView
+                    projectId={proj.id}
+                    initialTasks={selectedTasks.map(
+                      (t): TreeNodeTask => ({
+                        id: t.id,
+                        title: t.title,
+                        status: t.status,
+                        parent_task_id: t.parentTaskId,
+                        group_id: t.groupId
+                      })
+                    )}
+                    initialGroups={groups}
                   />
                 )}
 

@@ -4,10 +4,13 @@
 // inline. Se conservan "Lista" y "Kanban" como vistas alternas. Server
 // Component puro, usa <Link> con query params, mismo patrón que "?project="
 // y "?period=" ya usados en el repo.
+//
+// FASE 4: se agrega "Árbol" (Tree View) — explorador Group -> Item ->
+// Subitem, mismo patrón de <Link> que las 3 vistas existentes.
 
 import Link from "next/link";
 
-export type ExecutionView = "board" | "list" | "kanban";
+export type ExecutionView = "board" | "list" | "kanban" | "tree";
 
 export default function ViewToggle({ projectId, view }: { projectId: string; view: ExecutionView }) {
   const base = `/execution?project=${projectId}`;
@@ -21,6 +24,9 @@ export default function ViewToggle({ projectId, view }: { projectId: string; vie
       </Link>
       <Link href={`${base}&view=kanban`} className={view === "kanban" ? "btn-primary btn-sm" : "btn-ghost btn-sm"}>
         Kanban
+      </Link>
+      <Link href={`${base}&view=tree`} className={view === "tree" ? "btn-primary btn-sm" : "btn-ghost btn-sm"}>
+        🌳 Árbol
       </Link>
     </div>
   );

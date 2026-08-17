@@ -1,13 +1,15 @@
 "use server";
 // FASE 4 (Tree View). Server Actions para reparentar tareas (drag&drop en
-// el árbol), mover tareas entre Groups, y CRUD de task_groups (migración
-// 0019_execution_groups_folders.sql, Fase 2). Reutiliza has_project_access/
+// el árbol), mover tareas entre Groups, CRUD de task_groups (migración
+// 0019_execution_groups_folders.sql, Fase 2), y cambio de estado desde el
+// StatusMenu embebido en cada nodo del árbol. Reutiliza has_project_access/
 // can_edit_project vía RLS — ninguna Action valida permisos aquí, RLS lo
 // hace en la base de datos (mismo patrón que task-detail-actions.ts).
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import type { TaskStatus } from "@/lib/domain/types.ts";
 
 const setParentSchema = z.object({
   taskId: z.string().uuid(),
@@ -88,6 +90,46 @@ export async function setTaskGroup(taskId: string, groupId: string) {
   if (error) throw new Error(error.message);
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "task.group.move", object: parsed.taskId, meta: { groupId: parsed.groupId } });
+  revalidatePath("/execution");
+}
+
+const statusSchema = z.object({
+  taskId: z.string().uuid(),
+  status: z.enum(["Not Started", "In Progress", "Blocked", "Completed", "Cancelled"])
+});
+
+/**
+ * Cambia el estado de una tarea desde el StatusMenu embebido en un nodo del
+ * Tree View. Sigue el MISMO patrón que updateTaskDetails en
+ * task-detail-actions.ts (version increment) y además registra la
+ * transición en task_history — igual que el resto del proyecto hace en
+ * cualquier cambio de status (ver comentario en TreeItemNode.tsx).
+ *
+ * NOTA: si tu enum real de TaskStatus (src/lib/domain/types.ts) usa otros
+ * literales distintos a los de arriba, ajusta el z.enum() aquí para que
+ * coincida exactamente — Zod rechazará cualquier valor fuera de esa lista.
+ */
+export async function updateTaskStatusFromTree(taskId: string, status: TaskStatus) {
+  const parsed = statusSchema.parse({ taskId, status });
+
+  const supabase = await createClient();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  const { data: task } = await supabase.from("tasks").select("version, status").eq("id", parsed.taskId).single();
+  if (!task) throw new Error("Tarea no encontrada");
+  if (task.status === parsed.status) return;
+
+  const { error } = await supabase
+    .from("tasks")
+    .update({ status: parsed.status, version: task.version + 1 })
+    .eq("id", parsed.taskId);
+  if (error) throw new Error(error.message);
+
+  await supabase.from("task_history").insert({ task_id: parsed.taskId, from_state: task.status, to_state: parsed.status });
+  await supabase.from("audit_log").insert({ user_id: user.id, action: "task.status", object: parsed.taskId, meta: { from: task.status, to: parsed.status } });
   revalidatePath("/execution");
 }
 

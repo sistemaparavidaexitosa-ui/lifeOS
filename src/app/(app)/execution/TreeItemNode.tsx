@@ -5,11 +5,16 @@
 // Fase 3) para abrir el Drawer lateral al hacer clic en el título. El
 // drag&drop usa la API HTML5 nativa (draggable + onDragOver/onDrop), sin
 // agregar ninguna librería nueva al proyecto.
+//
+// Recibe onStatusChange/onMoved como callbacks de su padre DIRECTO
+// (TreeView.tsx, un Client Component) — esto es válido en Next.js (solo
+// está restringido pasar callbacks desde un Server Component). TreeView es
+// quien realmente llama a las Server Actions (updateTaskStatusFromTree,
+// setTaskParent) y mantiene el estado local, igual que MondayBoard.tsx.
 import { useState } from "react";
 import { IconChevronRight, IconChevronDown } from "@/components/icons";
 import StatusMenu from "./StatusMenu";
 import TaskDetailPanel from "./TaskDetailPanel";
-import { setTaskParent } from "./tree-actions";
 import { isDescendant, countDescendantProgress, type TreeTaskLike } from "@/lib/domain/task-tree";
 import type { TaskStatus } from "@/lib/domain/types.ts";
 
@@ -23,13 +28,13 @@ export default function TreeItemNode({
   depth,
   childrenMap,
   onStatusChange,
-  onMoved
+  onMove
 }: {
   task: TreeNodeTask;
   depth: number;
   childrenMap: Record<string, TreeNodeTask[]>;
   onStatusChange: (id: string, status: TaskStatus) => void;
-  onMoved: () => void;
+  onMove: (draggedId: string, newParentId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -44,15 +49,9 @@ export default function TreeItemNode({
     const draggedId = e.dataTransfer.getData("text/task-id");
     if (!draggedId || draggedId === task.id) return;
     // Guarda de ciclos: no permitir soltar un ancestro dentro de su propio
-    // descendiente (ver task-tree.ts). childrenMap se recalcula del lado
-    // del padre (TreeView) tras cada onMoved, así que aquí usamos el mismo
-    // childrenMap recibido por props para la verificación previa.
+    // descendiente (ver task-tree.ts).
     if (isDescendant(childrenMap, draggedId, task.id)) return;
-    setTaskParent(draggedId, task.id)
-      .then(onMoved)
-      .catch(() => {
-        /* revertido implícitamente: revalidatePath refresca desde el servidor */
-      });
+    onMove(draggedId, task.id);
   }
 
   return (
@@ -96,7 +95,7 @@ export default function TreeItemNode({
             depth={depth + 1}
             childrenMap={childrenMap}
             onStatusChange={onStatusChange}
-            onMoved={onMoved}
+            onMove={onMove}
           />
         ))}
     </div>
