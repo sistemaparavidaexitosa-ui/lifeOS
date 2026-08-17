@@ -619,28 +619,28 @@ export type Database = {
       }
       folders: {
         Row: {
-          id: string
-          workspace_id: string
-          name: string
           color: string
-          position: number
           created_at: string
+          id: string
+          name: string
+          position: number
+          workspace_id: string
         }
         Insert: {
-          id?: string
-          workspace_id: string
-          name: string
           color?: string
-          position?: number
           created_at?: string
+          id?: string
+          name: string
+          position?: number
+          workspace_id: string
         }
         Update: {
-          id?: string
-          workspace_id?: string
-          name?: string
           color?: string
-          position?: number
           created_at?: string
+          id?: string
+          name?: string
+          position?: number
+          workspace_id?: string
         }
         Relationships: [
           {
@@ -1367,17 +1367,17 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "projects_workspace_id_fkey"
-            columns: ["workspace_id"]
-            isOneToOne: false
-            referencedRelation: "workspaces"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "projects_folder_id_fkey"
             columns: ["folder_id"]
             isOneToOne: false
             referencedRelation: "folders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "projects_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
         ]
@@ -1492,30 +1492,71 @@ export type Database = {
           },
         ]
       }
-      task_groups: {
+      task_files: {
         Row: {
-          id: string
-          project_id: string
-          name: string
-          color: string
-          position: number
+          content_type: string
           created_at: string
+          file_name: string
+          id: string
+          size_bytes: number
+          storage_path: string
+          task_id: string
+          uploaded_by: string
         }
         Insert: {
-          id?: string
-          project_id: string
-          name?: string
-          color?: string
-          position?: number
+          content_type?: string
           created_at?: string
+          file_name: string
+          id?: string
+          size_bytes?: number
+          storage_path: string
+          task_id: string
+          uploaded_by: string
         }
         Update: {
-          id?: string
-          project_id?: string
-          name?: string
-          color?: string
-          position?: number
+          content_type?: string
           created_at?: string
+          file_name?: string
+          id?: string
+          size_bytes?: number
+          storage_path?: string
+          task_id?: string
+          uploaded_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_files_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      task_groups: {
+        Row: {
+          color: string
+          created_at: string
+          id: string
+          name: string
+          position: number
+          project_id: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          id?: string
+          name?: string
+          position?: number
+          project_id: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          id?: string
+          name?: string
+          position?: number
+          project_id?: string
         }
         Relationships: [
           {
@@ -1619,10 +1660,10 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "tasks_project_id_fkey"
-            columns: ["project_id"]
+            foreignKeyName: "tasks_group_id_fkey"
+            columns: ["group_id"]
             isOneToOne: false
-            referencedRelation: "projects"
+            referencedRelation: "task_groups"
             referencedColumns: ["id"]
           },
           {
@@ -1633,10 +1674,10 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "tasks_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: "tasks_project_id_fkey"
+            columns: ["project_id"]
             isOneToOne: false
-            referencedRelation: "task_groups"
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
         ]
