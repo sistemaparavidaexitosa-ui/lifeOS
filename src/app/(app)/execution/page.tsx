@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { Card, Chip, Progress, EmptyState } from "@/components/ui";
+import { Card, EmptyState } from "@/components/ui";
 import { fdate } from "@/lib/format";
+import NewProjectForm from "./NewProjectForm";
 import NewTaskForm from "./NewTaskForm";
 import SequenceButton from "./SequenceButton";
 import TaskDetailPanel from "./TaskDetailPanel";
@@ -12,7 +13,7 @@ import type { TreeNodeTask } from "./TreeItemNode";
 import ViewToggle, { type ExecutionView } from "./ViewToggle";
 import LogbookCard from "./LogbookCard";
 import KnowledgeCard from "./KnowledgeCard";
-import ProjectsPanel, { type PanelProject } from "./ProjectsPanel";
+import ProjectRow, { type ProjectRowData } from "./ProjectRow";
 import { getProjectLogAndKnowledge } from "./logbook-knowledge-actions";
 import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
 
@@ -34,13 +35,14 @@ import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
 //      para view === "board" (no solo "tree") y se pasa a MondayBoard como
 //      initialGroups, para que renderice una sección de color POR CADA
 //      Group real.
-//   6. FIX (este cambio): la cuadrícula de tarjetas de proyectos se
-//      reemplaza por ProjectsPanel.tsx — un panel angosto tipo sidebar a la
-//      izquierda, estilo Monday.com (Workspace -> Boards). Seleccionar un
-//      board ahí navega a ?project=ID y muestra sus tareas a la derecha,
-//      sin cuadrícula. NewProjectForm/NewTaskForm ahora son botones "+ ..."
-//      que abren/cierran el formulario (antes se quedaban siempre abiertos,
-//      inconsistente con el resto de formularios del proyecto).
+//   6. FIX (este cambio, v2): los proyectos ya NO son una cuadrícula de
+//      tarjetas ni un panel lateral — son una LISTA DE FILAS estilo Monday
+//      (ProjectRow.tsx). Al seleccionar una fila, sus tareas se despliegan
+//      en modo ACORDEÓN, INMEDIATAMENTE DEBAJO de esa misma fila (no en un
+//      panel aparte, no al final del listado de proyectos). Las demás filas
+//      de proyecto siguen visibles arriba y abajo del proyecto expandido.
+//      NewProjectForm/NewTaskForm son botones "+ ..." que abren/cierran el
+//      formulario (antes se quedaban siempre abiertos).
 export default async function ExecutionPage({
   searchParams
 }: {
@@ -159,65 +161,53 @@ export default async function ExecutionPage({
     }
   }
 
-  const panelProjects: PanelProject[] = (projects ?? []).map((p) => ({
-    id: p.id,
-    title: p.title,
-    status: p.status,
-    priority: p.priority,
-    progress: progressByProject(p.id),
-    taskCount: countByProject(p.id)
-  }));
-
   return (
-    <div className="execution-layout">
-      <ProjectsPanel projects={panelProjects} selectedProjectId={selectedProjectId ?? null} />
+    <div className="flex flex-col gap-3.5">
+      <div className="flex items-center justify-between wrap" style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+        <h2 className="font-bold text-lg">Proyectos y Tareas</h2>
+        <NewProjectForm />
+      </div>
 
-      <div className="execution-main">
-        {!selectedProjectId && (
+      <div className="project-rows-list">
+        {!projects?.length && (
           <Card>
-            <EmptyState icon="📋" text="Selecciona un proyecto del panel izquierdo o crea uno nuevo para empezar." />
+            <EmptyState icon="📁" text="Crea tu primer proyecto." />
           </Card>
         )}
 
-        {selectedProjectId &&
-          (() => {
-            const proj = projects?.find((p) => p.id === selectedProjectId);
-            if (!proj) return null;
-            const prog = progressByProject(proj.id);
-            return (
-              <Card>
-                <div style={{ background: "var(--surface2)", margin: "-16px", padding: 16, borderRadius: "inherit" }}>
+        {(projects ?? []).map((p) => {
+          const isSelected = selectedProjectId === p.id;
+          const rowData: ProjectRowData = {
+            id: p.id,
+            title: p.title,
+            status: p.status,
+            taskCount: countByProject(p.id),
+            progress: progressByProject(p.id),
+            targetDate: p.target_date
+          };
+          return (
+            <div key={p.id} className={`project-row-wrap${isSelected ? " expanded" : ""}`}>
+              <ProjectRow project={rowData} active={isSelected} formattedTargetDate={p.target_date ? fdate(p.target_date) : ""} />
+
+              {/* ACORDEÓN: las tareas de este proyecto se despliegan AQUÍ,
+                  inmediatamente debajo de su propia fila — no en un panel
+                  aparte, no al final del listado de proyectos. */}
+              {isSelected && (
+                <div className="project-row-expansion">
                   <div className="flex items-center justify-between wrap" style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                    <div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <h3 style={{ margin: 0 }}>{proj.title}</h3>
-                        <Chip kind={proj.status === "Active" ? "accent" : proj.status === "Completed" ? "ok" : ""}>{proj.status}</Chip>
-                      </div>
-                      <div className="text-xs" style={{ color: "var(--muted)", marginTop: 4 }}>
-                        {prog}% · {countByProject(proj.id)} tareas
-                        {proj.target_date ? ` · Meta ${fdate(proj.target_date)}` : ""}
-                      </div>
-                    </div>
                     <div className="flex items-center" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                      <ViewToggle projectId={proj.id} view={view} />
-                      <SequenceButton
-                        projectId={proj.id}
-                        tasks={selectedTasks.map((t) => ({ id: t.id, title: t.title }))}
-                      />
+                      <ViewToggle projectId={p.id} view={view} />
+                      <SequenceButton projectId={p.id} tasks={selectedTasks.map((t) => ({ id: t.id, title: t.title }))} />
                     </div>
+                    <NewTaskForm projectId={p.id} />
                   </div>
-                  <div style={{ marginTop: 8 }}>
-                    <Progress pct={prog} kind={prog < 40 ? undefined : prog < 80 ? "warn" : undefined} />
-                  </div>
-                  <div style={{ marginTop: 8 }}>
-                    <NewTaskForm projectId={proj.id} />
-                  </div>
+
                   {!selectedTasks.length && <EmptyState icon="✅" text="Este proyecto no tiene tareas todavía." />}
 
                   {selectedTasks.length > 0 && view === "board" && (
                     <div style={{ marginTop: 10 }}>
                       <MondayBoard
-                        projectId={proj.id}
+                        projectId={p.id}
                         initialTasks={selectedTasks.map(
                           (t): MondayTask => ({
                             id: t.id,
@@ -249,7 +239,7 @@ export default async function ExecutionPage({
 
                   {selectedTasks.length > 0 && view === "kanban" && (
                     <KanbanBoard
-                      projectId={proj.id}
+                      projectId={p.id}
                       initialTasks={selectedTasks.map(
                         (t): KanbanTask => ({
                           id: t.id,
@@ -266,7 +256,7 @@ export default async function ExecutionPage({
 
                   {selectedTasks.length > 0 && view === "tree" && (
                     <TreeView
-                      projectId={proj.id}
+                      projectId={p.id}
                       initialTasks={selectedTasks.map(
                         (t): TreeNodeTask => ({
                           id: t.id,
@@ -280,19 +270,20 @@ export default async function ExecutionPage({
                     />
                   )}
 
-                  {/* Bitácora + Base de conocimiento, siempre visibles al final
-                     del bloque, sin importar la vista activa. */}
+                  {/* Bitácora + Base de conocimiento, siempre visibles al
+                      final de la expansión, sin importar la vista activa. */}
                   <div
                     className="grid gap-3.5"
                     style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14, marginTop: 14 }}
                   >
-                    <LogbookCard projectId={proj.id} entries={logbookEntries} />
-                    <KnowledgeCard projectId={proj.id} items={knowledgeItems} />
+                    <LogbookCard projectId={p.id} entries={logbookEntries} />
+                    <KnowledgeCard projectId={p.id} items={knowledgeItems} />
                   </div>
                 </div>
-              </Card>
-            );
-          })()}
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
