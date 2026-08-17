@@ -1,13 +1,19 @@
 "use client";
-
 // Fila recursiva del tablero Monday-style (equivalente a "renderTaskRow()" +
 // "renderSubitem()" en la referencia de monday.com). Cada tarea puede tener
 // N subtareas (parent_task_id, migración 0018), renderizadas indentadas de
 // forma recursiva — igual que "Subitem Level 1 / Subitem Level 2" en la
 // imagen de referencia. Reutiliza TaskDetailPanel (ya existente) para el
 // detalle completo (comentarios, dependencias, historial) sin duplicar
-// código: el ícono de comentario simplemente lo abre/cierra en modo compact.
-
+// código: el ícono de comentario simplemente lo abre/cierra.
+//
+// FASE 3 — FIX: antes, el ícono de comentario montaba/desmontaba
+// TaskDetailPanel por completo ({detailOpen && <TaskDetailPanel .../>}),
+// lo que obligaba a un SEGUNDO clic para ver el contenido (el componente
+// recién montado siempre arrancaba con su propio estado interno `open` en
+// false). Ahora TaskDetailPanel se mantiene SIEMPRE montado y se controla
+// en modo controlado (open/onOpenChange) — un solo clic abre el Drawer
+// lateral real (ver TaskDetailPanel.tsx).
 import { useState } from "react";
 import { IconChevronRight, IconChevronDown, IconComment, IconPlus } from "@/components/icons";
 import StatusMenu from "./StatusMenu";
@@ -48,7 +54,6 @@ export default function MondayRow({
   const [detailOpen, setDetailOpen] = useState(false);
   const [addingSub, setAddingSub] = useState(false);
   const [title, setTitle] = useState(task.title);
-
   const children = childrenMap[task.id] ?? [];
   const commentCount = commentCountByTask[task.id] ?? 0;
   const assignees = assigneesByTask[task.id] ?? [];
@@ -69,11 +74,11 @@ export default function MondayRow({
       <div className={`mb-row${indentClass}`}>
         <div className="mb-row-item">
           {children.length > 0 ? (
-            <button type="button" className="mb-expand" onClick={() => setExpanded((v) => !v)} aria-label="Subtareas">
-              {expanded ? <IconChevronDown width={16} height={16} /> : <IconChevronRight width={16} height={16} />}
+            <button className="mb-expand" onClick={() => setExpanded((v) => !v)} aria-label="Subtareas">
+              {expanded ? <IconChevronDown /> : <IconChevronRight />}
             </button>
           ) : (
-            <span style={{ width: 22, flexShrink: 0 }} />
+            <span className="mb-expand" />
           )}
           <input
             className="mb-row-title"
@@ -83,30 +88,37 @@ export default function MondayRow({
             onKeyDown={(e) => e.key === "Enter" && (e.currentTarget as HTMLInputElement).blur()}
           />
           {children.length > 0 && <span className="mb-badge-count">{children.length}</span>}
-          <button type="button" className="mb-comment-btn" onClick={() => setDetailOpen((v) => !v)} title="Comentarios y detalle">
-            <IconComment width={14} height={14} />
-            {commentCount > 0 && <span>{commentCount}</span>}
+          <button className="mb-comment-btn" onClick={() => setDetailOpen((v) => !v)} title="Comentarios y detalle">
+            <IconComment />
+            {commentCount > 0 && <span className="mb-badge-count">{commentCount}</span>}
           </button>
-          <button type="button" className="mb-comment-btn" onClick={() => setAddingSub((v) => !v)} title="Agregar subtarea">
-            <IconPlus width={14} height={14} />
+          <button className="mb-comment-btn" onClick={() => setAddingSub((v) => !v)} title="Agregar subtarea">
+            <IconPlus />
           </button>
         </div>
-
         <div className="mb-row-meta">
-          <AssigneePopover taskId={task.id} members={members} selected={assignees} onChange={(names) => onAssigneesChange(task.id, names)} />
+          <AssigneePopover
+            taskId={task.id}
+            members={members}
+            selected={assignees}
+            onChange={(names) => onAssigneesChange(task.id, names)}
+          />
           <StatusMenu taskId={task.id} status={task.status} onChange={(s) => onStatusChange(task.id, s)} />
         </div>
-
-        <TimelineEditor taskId={task.id} start={task.startDate} due={task.due} onChange={(s, d) => onDatesChange(task.id, s, d)} />
+        <TimelineEditor
+          taskId={task.id}
+          start={task.startDate}
+          due={task.due}
+          onChange={(s, d) => onDatesChange(task.id, s, d)}
+        />
         <span />
       </div>
-
       {addingSub && (
         <QuickAddRow
           projectId={projectId}
           parentTaskId={task.id}
           placeholder="+ Agregar subtarea"
-          indent={Math.min(depth + 1, 2)}
+          indent={depth + 1}
           onCreated={(t) => {
             onSubtaskCreated(t);
             setAddingSub(false);
@@ -114,13 +126,9 @@ export default function MondayRow({
           }}
         />
       )}
-
-      {detailOpen && (
-        <div className={`mb-indent-${Math.min(depth + 1, 2)}`} style={{ padding: "0 12px 10px" }}>
-          <TaskDetailPanel taskId={task.id} taskTitle={task.title} compact />
-        </div>
-      )}
-
+      {/* FASE 3: siempre montado, controlado por detailOpen — un solo clic
+          en el ícono de comentario abre el Drawer lateral (ver arriba). */}
+      <TaskDetailPanel taskId={task.id} taskTitle={task.title} compact open={detailOpen} onOpenChange={setDetailOpen} />
       {expanded &&
         children.map((child) => (
           <MondayRow

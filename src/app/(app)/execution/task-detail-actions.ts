@@ -1,8 +1,8 @@
 "use server";
-
 // Server Actions del modal de tarea completo (assignees + deps + comentarios
-// + historial). Reutiliza el esquema ya existente (task_assignees, comments,
-// task_history) — sin migraciones SQL nuevas.
+// + historial + descripción + archivos). Reutiliza el esquema ya existente
+// (task_assignees, comments, task_history) y las extensiones de Fase 2/3
+// (tasks.description, task_files) — sin duplicar ninguna tabla.
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -20,6 +20,7 @@ export interface TaskDetailTask {
   est: number;
   deps: string[];
   impact: boolean;
+  description: string;
   version: number;
 }
 
@@ -44,6 +45,16 @@ export interface TaskDetailDepCandidate {
   status: string;
 }
 
+/** FASE 3 (Drawer — Archivos): metadato de un archivo adjunto a la tarea. */
+export interface TaskDetailFile {
+  id: string;
+  file_name: string;
+  storage_path: string;
+  size_bytes: number;
+  content_type: string;
+  created_at: string;
+}
+
 export interface TaskDetailResult {
   task: TaskDetailTask;
   projectTitle: string;
@@ -52,6 +63,7 @@ export interface TaskDetailResult {
   assignees: string[];
   comments: TaskDetailComment[];
   history: TaskDetailHistoryRow[];
+  files: TaskDetailFile[];
 }
 
 export async function getTaskDetail(taskId: string): Promise<TaskDetailResult> {
@@ -100,6 +112,13 @@ export async function getTaskDetail(taskId: string): Promise<TaskDetailResult> {
     .eq("task_id", taskId)
     .order("ts", { ascending: false });
 
+  // FASE 3: metadatos de archivos adjuntos (migración 0020_task_files.sql).
+  const { data: fileRows } = await supabase
+    .from("task_files")
+    .select("id, file_name, storage_path, size_bytes, content_type, created_at")
+    .eq("task_id", taskId)
+    .order("created_at", { ascending: false });
+
   return {
     task: {
       id: task.id,
@@ -112,6 +131,7 @@ export async function getTaskDetail(taskId: string): Promise<TaskDetailResult> {
       est: task.est,
       deps: task.deps ?? [],
       impact: task.impact,
+      description: task.description ?? "",
       version: task.version
     },
     projectTitle: project?.title ?? "",
@@ -119,7 +139,8 @@ export async function getTaskDetail(taskId: string): Promise<TaskDetailResult> {
     depCandidates: (allTasks ?? []).map((t) => ({ id: t.id, title: t.title, status: t.status })),
     assignees: (assigneeRows ?? []).map((a) => a.user_name),
     comments: commentRows ?? [],
-    history: historyRows ?? []
+    history: historyRows ?? [],
+    files: fileRows ?? []
   };
 }
 
@@ -168,6 +189,40 @@ export async function updateTaskDetails(formData: FormData) {
   if (error) throw new Error(error.message);
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "task.update", object: parsed.taskId });
+  revalidatePath("/execution");
+}
+
+const updateDescriptionSchema = z.object({
+  taskId: z.string().uuid(),
+  description: z.string().max(10000).default("")
+});
+
+/**
+ * FASE 3 (Drawer — Descripción): guarda la descripción larga del Item.
+ * Se mantiene como una Server Action separada de updateTaskDetails (en vez
+ * de agregarle un campo más a ese schema estricto) para no tener que exigir
+ * title/priority/due/est cada vez que el usuario solo edita la descripción
+ * (autosave al perder foco, ver TaskDescriptionField.tsx).
+ */
+export async function updateTaskDescription(taskId: string, description: string) {
+  const parsed = updateDescriptionSchema.parse({ taskId, description });
+
+  const supabase = await createClient();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  const { data: task } = await supabase.from("tasks").select("version").eq("id", parsed.taskId).single();
+  if (!task) throw new Error("Tarea no encontrada");
+
+  const { error } = await supabase
+    .from("tasks")
+    .update({ description: parsed.description, version: task.version + 1 })
+    .eq("id", parsed.taskId);
+  if (error) throw new Error(error.message);
+
+  await supabase.from("audit_log").insert({ user_id: user.id, action: "task.description.update", object: parsed.taskId });
   revalidatePath("/execution");
 }
 
@@ -222,7 +277,6 @@ export async function setTaskDeps(taskId: string, depIds: string[]) {
   if (!task) throw new Error("Tarea no encontrada");
 
   const cleanDeps = Array.from(new Set(depIds.filter((id) => id !== taskId)));
-
   const { error } = await supabase.from("tasks").update({ deps: cleanDeps, version: task.version + 1 }).eq("id", taskId);
   if (error) throw new Error(error.message);
 
