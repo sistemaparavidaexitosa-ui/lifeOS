@@ -1,9 +1,7 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Card, Chip, Progress, EmptyState } from "@/components/ui";
 import { fdate } from "@/lib/format";
-import NewProjectForm from "./NewProjectForm";
 import NewTaskForm from "./NewTaskForm";
 import SequenceButton from "./SequenceButton";
 import TaskDetailPanel from "./TaskDetailPanel";
@@ -14,6 +12,7 @@ import type { TreeNodeTask } from "./TreeItemNode";
 import ViewToggle, { type ExecutionView } from "./ViewToggle";
 import LogbookCard from "./LogbookCard";
 import KnowledgeCard from "./KnowledgeCard";
+import ProjectsPanel, { type PanelProject } from "./ProjectsPanel";
 import { getProjectLogAndKnowledge } from "./logbook-knowledge-actions";
 import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
 
@@ -31,15 +30,17 @@ import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
 //   4. FASE 4: se agrega la vista "tree" (TreeView.tsx) — Group -> Item ->
 //      Subitem, sobre el MISMO modelo de datos (tasks + task_groups, migración
 //      0019).
-//   5. FIX (retrofit de Groups en el Tablero): antes, "groups" solo se
-//      cargaba para view === "tree" — MondayBoard.tsx nunca recibía los
-//      Groups del proyecto y por eso renderizaba un único bloque de color
-//      con TODAS las tareas juntas (no lucía como Monday). Ahora "groups" se
-//      carga también para view === "board" y se le pasa a MondayBoard como
+//   5. FIX (retrofit de Groups en el Tablero): "groups" se carga también
+//      para view === "board" (no solo "tree") y se pasa a MondayBoard como
 //      initialGroups, para que renderice una sección de color POR CADA
-//      Group real (ver comentario detallado en MondayBoard.tsx).
-const GROUP_COLORS = ["var(--c-purple)", "var(--c-green)", "var(--c-orange)", "var(--c-pink)", "var(--c-teal)", "var(--c-blue)"];
-
+//      Group real.
+//   6. FIX (este cambio): la cuadrícula de tarjetas de proyectos se
+//      reemplaza por ProjectsPanel.tsx — un panel angosto tipo sidebar a la
+//      izquierda, estilo Monday.com (Workspace -> Boards). Seleccionar un
+//      board ahí navega a ?project=ID y muestra sus tareas a la derecha,
+//      sin cuadrícula. NewProjectForm/NewTaskForm ahora son botones "+ ..."
+//      que abren/cierran el formulario (antes se quedaban siempre abiertos,
+//      inconsistente con el resto de formularios del proyecto).
 export default async function ExecutionPage({
   searchParams
 }: {
@@ -145,10 +146,9 @@ export default async function ExecutionPage({
       }
     }
 
-    // FIX (retrofit de Groups): se carga para "board" Y "tree" — antes solo
-    // se cargaba para "tree", dejando a MondayBoard sin ningún Group.
-    // Gracias al backfill idempotente de la migración 0019, todo proyecto ya
-    // tiene al menos el grupo "General" — nunca vendrá vacío.
+    // task_groups del proyecto. Gracias al backfill idempotente de la
+    // migración 0019, todo proyecto ya tiene al menos el grupo "General" —
+    // nunca vendrá vacío.
     if (view === "board" || view === "tree") {
       const { data: groupRows } = await supabase
         .from("task_groups")
@@ -159,148 +159,141 @@ export default async function ExecutionPage({
     }
   }
 
+  const panelProjects: PanelProject[] = (projects ?? []).map((p) => ({
+    id: p.id,
+    title: p.title,
+    status: p.status,
+    priority: p.priority,
+    progress: progressByProject(p.id),
+    taskCount: countByProject(p.id)
+  }));
+
   return (
-    <div className="flex flex-col gap-3.5">
-      <div className="flex items-center justify-between wrap" style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-        <h2 className="font-bold text-lg">Proyectos</h2>
-        <NewProjectForm />
-      </div>
+    <div className="execution-layout">
+      <ProjectsPanel projects={panelProjects} selectedProjectId={selectedProjectId ?? null} />
 
-      <div className="grid gap-3.5" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 14 }}>
-        {!projects?.length && <EmptyState icon="📁" text="Crea tu primer proyecto." />}
-        {(projects ?? []).map((p, idx) => {
-          const prog = progressByProject(p.id);
-          const isSelected = selectedProjectId === p.id;
-          const color = GROUP_COLORS[idx % GROUP_COLORS.length];
-          return (
-            <Card key={p.id} className="relative overflow-hidden">
-              <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 4, background: color }} />
-              <div className="flex items-center justify-between" style={{ display: "flex", justifyContent: "space-between" }}>
-                <Chip kind={p.status === "Active" ? "accent" : p.status === "Completed" ? "ok" : ""}>{p.status}</Chip>
-                <Chip>{p.workspace_id ? "Workspace" : "Personal"}</Chip>
-              </div>
-              <h3 style={{ margin: "8px 0 2px" }}>{p.title}</h3>
-              <p className="text-sm" style={{ color: "var(--muted)" }}>
-                {p.objective || "—"}
-              </p>
-              <Progress pct={prog} kind={prog < 40 ? undefined : prog < 80 ? "warn" : undefined} />
-              <div className="flex items-center justify-between text-xs" style={{ display: "flex", justifyContent: "space-between", color: "var(--muted)", marginTop: 6 }}>
-                <span>
-                  {prog}% · {countByProject(p.id)} tareas
-                </span>
-                <span>{p.target_date ? `Meta ${fdate(p.target_date)}` : ""}</span>
-              </div>
-              <div style={{ marginTop: 10 }}>
-                <Link href={`/execution?project=${p.id}`} className="btn-ghost btn-sm">
-                  {isSelected ? "✓ Viendo tareas" : "Ver tareas"}
-                </Link>
-              </div>
-            </Card>
-          );
-        })}
-      </div>
+      <div className="execution-main">
+        {!selectedProjectId && (
+          <Card>
+            <EmptyState icon="📋" text="Selecciona un proyecto del panel izquierdo o crea uno nuevo para empezar." />
+          </Card>
+        )}
 
-      {selectedProjectId &&
-        (() => {
-          const proj = projects?.find((p) => p.id === selectedProjectId);
-          if (!proj) return null;
-          return (
-            <Card>
-              <div style={{ background: "var(--surface2)", margin: "-16px", padding: 16, borderRadius: "inherit" }}>
-                <div className="flex items-center justify-between wrap" style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                  <h3>Tareas de: {proj.title}</h3>
-                  <div className="flex items-center" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                    <ViewToggle projectId={proj.id} view={view} />
-                    <SequenceButton
-                      projectId={proj.id}
-                      tasks={selectedTasks.map((t) => ({ id: t.id, title: t.title }))}
-                    />
+        {selectedProjectId &&
+          (() => {
+            const proj = projects?.find((p) => p.id === selectedProjectId);
+            if (!proj) return null;
+            const prog = progressByProject(proj.id);
+            return (
+              <Card>
+                <div style={{ background: "var(--surface2)", margin: "-16px", padding: 16, borderRadius: "inherit" }}>
+                  <div className="flex items-center justify-between wrap" style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <h3 style={{ margin: 0 }}>{proj.title}</h3>
+                        <Chip kind={proj.status === "Active" ? "accent" : proj.status === "Completed" ? "ok" : ""}>{proj.status}</Chip>
+                      </div>
+                      <div className="text-xs" style={{ color: "var(--muted)", marginTop: 4 }}>
+                        {prog}% · {countByProject(proj.id)} tareas
+                        {proj.target_date ? ` · Meta ${fdate(proj.target_date)}` : ""}
+                      </div>
+                    </div>
+                    <div className="flex items-center" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <ViewToggle projectId={proj.id} view={view} />
+                      <SequenceButton
+                        projectId={proj.id}
+                        tasks={selectedTasks.map((t) => ({ id: t.id, title: t.title }))}
+                      />
+                    </div>
                   </div>
-                </div>
-                <div style={{ marginTop: 8 }}>
-                  <NewTaskForm projectId={proj.id} />
-                </div>
-                {!selectedTasks.length && <EmptyState icon="✅" text="Este proyecto no tiene tareas todavía." />}
+                  <div style={{ marginTop: 8 }}>
+                    <Progress pct={prog} kind={prog < 40 ? undefined : prog < 80 ? "warn" : undefined} />
+                  </div>
+                  <div style={{ marginTop: 8 }}>
+                    <NewTaskForm projectId={proj.id} />
+                  </div>
+                  {!selectedTasks.length && <EmptyState icon="✅" text="Este proyecto no tiene tareas todavía." />}
 
-                {selectedTasks.length > 0 && view === "board" && (
-                  <div style={{ marginTop: 10 }}>
-                    <MondayBoard
+                  {selectedTasks.length > 0 && view === "board" && (
+                    <div style={{ marginTop: 10 }}>
+                      <MondayBoard
+                        projectId={proj.id}
+                        initialTasks={selectedTasks.map(
+                          (t): MondayTask => ({
+                            id: t.id,
+                            title: t.title,
+                            status: t.status,
+                            priority: t.priority,
+                            urgent: t.urgent,
+                            due: t.due,
+                            startDate: t.startDate,
+                            parentTaskId: t.parentTaskId,
+                            groupId: t.groupId
+                          })
+                        )}
+                        initialGroups={groups as MondayGroup[]}
+                        assigneesByTask={assigneesByTask}
+                        commentCountByTask={commentCountByTask}
+                        members={members}
+                      />
+                    </div>
+                  )}
+
+                  {selectedTasks.length > 0 && view === "list" && (
+                    <>
+                      {selectedTasks.map((t) => (
+                        <TaskDetailPanel key={t.id} taskId={t.id} taskTitle={t.title} />
+                      ))}
+                    </>
+                  )}
+
+                  {selectedTasks.length > 0 && view === "kanban" && (
+                    <KanbanBoard
                       projectId={proj.id}
                       initialTasks={selectedTasks.map(
-                        (t): MondayTask => ({
+                        (t): KanbanTask => ({
                           id: t.id,
                           title: t.title,
                           status: t.status,
                           priority: t.priority,
                           urgent: t.urgent,
-                          due: t.due,
-                          startDate: t.startDate,
-                          parentTaskId: t.parentTaskId,
-                          groupId: t.groupId
+                          due: t.due
                         })
                       )}
-                      initialGroups={groups as MondayGroup[]}
                       assigneesByTask={assigneesByTask}
-                      commentCountByTask={commentCountByTask}
-                      members={members}
                     />
+                  )}
+
+                  {selectedTasks.length > 0 && view === "tree" && (
+                    <TreeView
+                      projectId={proj.id}
+                      initialTasks={selectedTasks.map(
+                        (t): TreeNodeTask => ({
+                          id: t.id,
+                          title: t.title,
+                          status: t.status,
+                          parent_task_id: t.parentTaskId,
+                          group_id: t.groupId
+                        })
+                      )}
+                      initialGroups={groups}
+                    />
+                  )}
+
+                  {/* Bitácora + Base de conocimiento, siempre visibles al final
+                     del bloque, sin importar la vista activa. */}
+                  <div
+                    className="grid gap-3.5"
+                    style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14, marginTop: 14 }}
+                  >
+                    <LogbookCard projectId={proj.id} entries={logbookEntries} />
+                    <KnowledgeCard projectId={proj.id} items={knowledgeItems} />
                   </div>
-                )}
-
-                {selectedTasks.length > 0 && view === "list" && (
-                  <>
-                    {selectedTasks.map((t) => (
-                      <TaskDetailPanel key={t.id} taskId={t.id} taskTitle={t.title} />
-                    ))}
-                  </>
-                )}
-
-                {selectedTasks.length > 0 && view === "kanban" && (
-                  <KanbanBoard
-                    projectId={proj.id}
-                    initialTasks={selectedTasks.map(
-                      (t): KanbanTask => ({
-                        id: t.id,
-                        title: t.title,
-                        status: t.status,
-                        priority: t.priority,
-                        urgent: t.urgent,
-                        due: t.due
-                      })
-                    )}
-                    assigneesByTask={assigneesByTask}
-                  />
-                )}
-
-                {selectedTasks.length > 0 && view === "tree" && (
-                  <TreeView
-                    projectId={proj.id}
-                    initialTasks={selectedTasks.map(
-                      (t): TreeNodeTask => ({
-                        id: t.id,
-                        title: t.title,
-                        status: t.status,
-                        parent_task_id: t.parentTaskId,
-                        group_id: t.groupId
-                      })
-                    )}
-                    initialGroups={groups}
-                  />
-                )}
-
-                {/* Bitácora + Base de conocimiento, siempre visibles al final
-                   del bloque, sin importar la vista activa. */}
-                <div
-                  className="grid gap-3.5"
-                  style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14, marginTop: 14 }}
-                >
-                  <LogbookCard projectId={proj.id} entries={logbookEntries} />
-                  <KnowledgeCard projectId={proj.id} items={knowledgeItems} />
                 </div>
-              </div>
-            </Card>
-          );
-        })()}
+              </Card>
+            );
+          })()}
+      </div>
     </div>
   );
 }
