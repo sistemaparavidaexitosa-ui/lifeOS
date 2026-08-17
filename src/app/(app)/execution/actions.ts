@@ -110,7 +110,7 @@ export async function createTask(formData: FormData): Promise<CreatedTaskRow> {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("No autenticado");
 
-  let resolvedGroupId: string | null = parsed.groupId;
+  let resolvedGroupId: string | null = parsed.groupId ?? null;
 
   if (parsed.parentTaskId) {
     // Subtarea: SIEMPRE hereda el group_id del padre, ignora cualquier
