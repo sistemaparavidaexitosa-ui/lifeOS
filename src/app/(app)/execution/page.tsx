@@ -3,7 +3,6 @@ import { createClient } from "@/lib/supabase/server";
 import { Card, EmptyState } from "@/components/ui";
 import { fdate } from "@/lib/format";
 import NewProjectForm from "./NewProjectForm";
-import NewTaskForm from "./NewTaskForm";
 import SequenceButton from "./SequenceButton";
 import TaskDetailPanel from "./TaskDetailPanel";
 import KanbanBoard, { type KanbanTask } from "./KanbanBoard";
@@ -11,38 +10,24 @@ import MondayBoard, { type MondayTask, type MondayGroup } from "./MondayBoard";
 import TreeView, { type TreeGroup } from "./TreeView";
 import type { TreeNodeTask } from "./TreeItemNode";
 import ViewToggle, { type ExecutionView } from "./ViewToggle";
-import LogbookCard from "./LogbookCard";
-import KnowledgeCard from "./KnowledgeCard";
+import ProjectMenu from "./ProjectMenu";
 import ProjectRow, { type ProjectRowData } from "./ProjectRow";
 import { getProjectLogAndKnowledge } from "./logbook-knowledge-actions";
 import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
 
-// REDISEÑO Monday-style (ver /docs/CHANGES_MONDAY_UI.md):
-//   1. La vista por defecto ahora es "board" (MondayBoard.tsx): grupo con
-//      barra de color por proyecto, subtareas anidadas (parent_task_id,
-//      migración 0018), pills de estado, avatares y columna Timeline
-//      (start_date–due). Sustituye a la antigua vista "Tabla".
-//   2. Se agregan 2 queries en paralelo cuando la vista es "board":
-//      conteo de comentarios por tarea (para el badge 💬) y el roster de
-//      miembros del proyecto (workspace o solo el titular), reutilizando
-//      exactamente la misma lógica de getTaskDetail() en task-detail-actions.ts.
-//   3. Bitácora, Base de conocimiento, Kanban, Lista y Secuenciación IA se
-//      conservan sin cambios de comportamiento.
-//   4. FASE 4: se agrega la vista "tree" (TreeView.tsx) — Group -> Item ->
-//      Subitem, sobre el MISMO modelo de datos (tasks + task_groups, migración
-//      0019).
-//   5. FIX (retrofit de Groups en el Tablero): "groups" se carga también
-//      para view === "board" (no solo "tree") y se pasa a MondayBoard como
-//      initialGroups, para que renderice una sección de color POR CADA
-//      Group real.
-//   6. FIX (este cambio, v2): los proyectos ya NO son una cuadrícula de
-//      tarjetas ni un panel lateral — son una LISTA DE FILAS estilo Monday
-//      (ProjectRow.tsx). Al seleccionar una fila, sus tareas se despliegan
-//      en modo ACORDEÓN, INMEDIATAMENTE DEBAJO de esa misma fila (no en un
-//      panel aparte, no al final del listado de proyectos). Las demás filas
-//      de proyecto siguen visibles arriba y abajo del proyecto expandido.
-//      NewProjectForm/NewTaskForm son botones "+ ..." que abren/cierran el
-//      formulario (antes se quedaban siempre abiertos).
+// REDISEÑO Monday-style. Cambios de esta iteración:
+//   PUNTO 2: LogbookCard y KnowledgeCard ya NO se muestran siempre al final de
+//     la expansión. Junto con "Editar proyecto", ahora viven detrás de un
+//     menú de tres puntitos (ProjectMenu.tsx) en el encabezado de cada
+//     proyecto seleccionado, y se abren bajo demanda en un Drawer lateral.
+//   PUNTO 3: se eliminó NewTaskForm (el botón "+ Tarea" que abría un
+//     formulario). Ahora las tareas se agregan estilo Monday, en una fila tipo
+//     hoja de cálculo dentro de cada grupo del Tablero (QuickAddRow, ya
+//     existente en MondayBoard). Por eso, en la vista "board" el tablero se
+//     renderiza SIEMPRE (incluso con 0 tareas): gracias al backfill de la
+//     migración 0019 todo proyecto tiene al menos el grupo "General" con su
+//     fila "+ Agregar tarea", así que un proyecto nuevo puede recibir su
+//     primera tarea sin ningún formulario.
 export default async function ExecutionPage({
   searchParams
 }: {
@@ -62,10 +47,6 @@ export default async function ExecutionPage({
   const { data: allTasks } = await supabase.from("tasks").select("id, project_id, status, parent_task_id");
 
   const progressByProject = (projectId: string) => {
-    // El progreso siempre se calcula sobre TAREAS RAÍZ (sin parent_task_id):
-    // una subtarea completada ya "cuenta" indirectamente al completar su
-    // padre, y así no se infla artificialmente el % de un proyecto con
-    // muchas subtareas pequeñas.
     const ts = (allTasks ?? []).filter((t) => t.project_id === projectId && t.status !== "Cancelled" && !t.parent_task_id);
     if (!ts.length) return 0;
     return Math.round((ts.filter((t) => t.status === "Completed").length / ts.length) * 100);
@@ -93,7 +74,6 @@ export default async function ExecutionPage({
 
   if (selectedProjectId) {
     const selectedProject = projects?.find((p) => p.id === selectedProjectId);
-
     const [{ data }, logAndKnowledge] = await Promise.all([
       supabase
         .from("tasks")
@@ -117,9 +97,6 @@ export default async function ExecutionPage({
     logbookEntries = logAndKnowledge.logbook;
     knowledgeItems = logAndKnowledge.knowledge;
 
-    // Responsables: necesarios en Kanban, Tablero (Monday-style) y la propia
-    // columna "Personas". La vista de Lista no los precarga aquí — los
-    // muestra el propio TaskDetailPanel al abrir.
     if ((view === "kanban" || view === "board") && selectedTasks.length) {
       const taskIds = selectedTasks.map((t) => t.id);
       const [{ data: assigneeRows }, { data: commentRows }] = await Promise.all([
@@ -148,9 +125,6 @@ export default async function ExecutionPage({
       }
     }
 
-    // task_groups del proyecto. Gracias al backfill idempotente de la
-    // migración 0019, todo proyecto ya tiene al menos el grupo "General" —
-    // nunca vendrá vacío.
     if (view === "board" || view === "tree") {
       const { data: groupRows } = await supabase
         .from("task_groups")
@@ -167,14 +141,12 @@ export default async function ExecutionPage({
         <h2 className="font-bold text-lg">Proyectos y Tareas</h2>
         <NewProjectForm />
       </div>
-
       <div className="project-rows-list">
         {!projects?.length && (
           <Card>
             <EmptyState icon="📁" text="Crea tu primer proyecto." />
           </Card>
         )}
-
         {(projects ?? []).map((p) => {
           const isSelected = selectedProjectId === p.id;
           const rowData: ProjectRowData = {
@@ -188,10 +160,6 @@ export default async function ExecutionPage({
           return (
             <div key={p.id} className={`project-row-wrap${isSelected ? " expanded" : ""}`}>
               <ProjectRow project={rowData} active={isSelected} formattedTargetDate={p.target_date ? fdate(p.target_date) : ""} />
-
-              {/* ACORDEÓN: las tareas de este proyecto se despliegan AQUÍ,
-                  inmediatamente debajo de su propia fila — no en un panel
-                  aparte, no al final del listado de proyectos. */}
               {isSelected && (
                 <div className="project-row-expansion">
                   <div className="flex items-center justify-between wrap" style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
@@ -199,12 +167,26 @@ export default async function ExecutionPage({
                       <ViewToggle projectId={p.id} view={view} />
                       <SequenceButton projectId={p.id} tasks={selectedTasks.map((t) => ({ id: t.id, title: t.title }))} />
                     </div>
-                    <NewTaskForm projectId={p.id} />
+                    {/* PUNTO 2: menú de tres puntitos (Editar proyecto / Bitácora /
+                        Base de conocimiento). Reemplaza al botón "+ Tarea" (Punto 3),
+                        cuya función ahora vive inline en el Tablero. */}
+                    <ProjectMenu
+                      project={{
+                        id: p.id,
+                        title: p.title,
+                        objective: p.objective ?? "",
+                        status: p.status,
+                        priority: p.priority,
+                        targetDate: p.target_date
+                      }}
+                      logbookEntries={logbookEntries}
+                      knowledgeItems={knowledgeItems}
+                    />
                   </div>
 
-                  {!selectedTasks.length && <EmptyState icon="✅" text="Este proyecto no tiene tareas todavía." />}
-
-                  {selectedTasks.length > 0 && view === "board" && (
+                  {/* PUNTO 3: la vista Tablero se renderiza SIEMPRE (incluso con 0
+                      tareas) para exponer la fila "+ Agregar tarea" por grupo. */}
+                  {view === "board" && (
                     <div style={{ marginTop: 10 }}>
                       <MondayBoard
                         projectId={p.id}
@@ -229,6 +211,10 @@ export default async function ExecutionPage({
                     </div>
                   )}
 
+                  {view !== "board" && !selectedTasks.length && (
+                    <EmptyState icon="✅" text="Este proyecto no tiene tareas todavía. Cambia a la vista Tablero para agregar una." />
+                  )}
+
                   {selectedTasks.length > 0 && view === "list" && (
                     <>
                       {selectedTasks.map((t) => (
@@ -236,7 +222,6 @@ export default async function ExecutionPage({
                       ))}
                     </>
                   )}
-
                   {selectedTasks.length > 0 && view === "kanban" && (
                     <KanbanBoard
                       projectId={p.id}
@@ -253,7 +238,6 @@ export default async function ExecutionPage({
                       assigneesByTask={assigneesByTask}
                     />
                   )}
-
                   {selectedTasks.length > 0 && view === "tree" && (
                     <TreeView
                       projectId={p.id}
@@ -269,16 +253,6 @@ export default async function ExecutionPage({
                       initialGroups={groups}
                     />
                   )}
-
-                  {/* Bitácora + Base de conocimiento, siempre visibles al
-                      final de la expansión, sin importar la vista activa. */}
-                  <div
-                    className="grid gap-3.5"
-                    style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14, marginTop: 14 }}
-                  >
-                    <LogbookCard projectId={p.id} entries={logbookEntries} />
-                    <KnowledgeCard projectId={p.id} items={knowledgeItems} />
-                  </div>
                 </div>
               )}
             </div>

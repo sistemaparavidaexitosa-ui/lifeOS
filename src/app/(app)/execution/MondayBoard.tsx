@@ -1,37 +1,23 @@
 "use client";
-// Tablero principal "Proyectos y Tareas", rediseñado estilo monday.com.
+// Tablero principal "Proyectos y Tareas", estilo monday.com.
 //
-// FIX (retrofit de Groups, post-Fase-2/Fase-4): ANTES este componente
-// renderizaba UN SOLO bloque .mb-group con TODAS las tareas del proyecto,
-// coloreado con un único color derivado del índice del proyecto — nunca
-// llegó a consumir task_groups (agregado en la migración 0019, Fase 2).
-// Solo TreeView.tsx (Fase 4) usaba Groups, dejando al Tablero (la vista
-// POR DEFECTO) sin el rasgo visual más distintivo de Monday: múltiples
-// secciones de color, cada una con su propio grupo, nombre editable y
-// contador.
+// Renderiza UNA sección .mb-group POR CADA task_group del proyecto
+// (createTaskGroup/renameTaskGroup/deleteTaskGroup/setTaskGroup de
+// tree-actions.ts), con nombre editable, contador, color, "+ Agregar tarea"
+// por grupo (fila tipo hoja de cálculo, NO un formulario — Punto 3) y drag&drop
+// nativo entre grupos.
 //
-// Ahora MondayBoard renderiza UNA sección .mb-group POR CADA task_group
-// del proyecto (reutilizando 100% las Server Actions de tree-actions.ts ya
-// construidas en Fase 4: createTaskGroup/renameTaskGroup/deleteTaskGroup/
-// setTaskGroup — cero funciones nuevas, cero tablas nuevas), con:
-//   - Barra de color propia por grupo (group.color).
-//   - Nombre de grupo editable inline (blur-to-save, mismo patrón que el
-//     título de una tarea).
-//   - Contador de tareas del grupo.
-//   - Botón eliminar grupo (si hay más de uno).
-//   - "+ Agregar tarea" dentro de cada grupo (crea la tarea YA asignada a
-//     ese grupo).
-//   - "+ Nuevo grupo" al final del tablero.
-//   - Drag & drop nativo (HTML5) de una fila hacia el encabezado de otro
-//     grupo, para mover la tarea de grupo (igual que arrastrar una fila
-//     entre secciones de color en monday.com real).
+// PUNTO 1 (NUEVO): handleDeleteTask elimina la tarea y TODOS sus descendientes
+// del estado local (optimista) y llama a la Server Action deleteTask. En la
+// base de datos, ON DELETE CASCADE (migración 0018) ya borra las subtareas;
+// aquí solo se replica ese efecto en el cliente para no tener que recargar.
 import { useMemo, useState } from "react";
 import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
 import MondayRow from "./MondayRow";
 import QuickAddRow from "./QuickAddRow";
 import { createTaskGroup, deleteTaskGroup, renameTaskGroup, setTaskGroup } from "./tree-actions";
+import { deleteTask, type CreatedTaskRow } from "./actions";
 import { IconPlus, IconTrash } from "@/components/icons";
-import type { CreatedTaskRow } from "./actions";
 
 export interface MondayTask {
   id: string;
@@ -121,6 +107,29 @@ export default function MondayBoard({
         groupId: created.groupId
       }
     ]);
+  }
+
+  // Punto 1: elimina la tarea + todos sus descendientes del estado local
+  // (mismo efecto que el ON DELETE CASCADE del backend) y persiste el borrado.
+  function handleDeleteTask(id: string) {
+    const toRemove = new Set<string>([id]);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const t of tasks) {
+        if (t.parentTaskId && toRemove.has(t.parentTaskId) && !toRemove.has(t.id)) {
+          toRemove.add(t.id);
+          grew = true;
+        }
+      }
+    }
+    const prev = tasks;
+    setTasks((cur) => cur.filter((t) => !toRemove.has(t.id)));
+    setError(null);
+    deleteTask(id).catch((err) => {
+      setTasks(prev); // revierte si el servidor rechaza el borrado
+      setError(err instanceof Error ? err.message : "No se pudo eliminar la tarea");
+    });
   }
 
   function handleDropOnGroup(e: React.DragEvent, groupId: string) {
@@ -218,6 +227,7 @@ export default function MondayBoard({
                 onDatesChange={handleDatesChange}
                 onAssigneesChange={handleAssigneesChange}
                 onSubtaskCreated={handleTaskCreated}
+                onDelete={handleDeleteTask}
               />
             ))}
             {!rootTasks.length && (
@@ -245,7 +255,6 @@ export default function MondayBoard({
 
 function EditableGroupName({ name, onRename }: { name: string; onRename: (name: string) => void }) {
   const [value, setValue] = useState(name);
-
   function save() {
     const trimmed = value.trim();
     if (!trimmed || trimmed === name) {
@@ -254,7 +263,6 @@ function EditableGroupName({ name, onRename }: { name: string; onRename: (name: 
     }
     onRename(trimmed);
   }
-
   return (
     <input
       value={value}

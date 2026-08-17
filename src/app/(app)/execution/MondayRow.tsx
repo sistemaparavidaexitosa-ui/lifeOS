@@ -7,21 +7,19 @@
 // detalle completo (comentarios, dependencias, historial) sin duplicar
 // código: el ícono de comentario simplemente lo abre/cierra.
 //
-// FASE 3 — FIX: antes, el ícono de comentario montaba/desmontaba
-// TaskDetailPanel por completo ({detailOpen && <TaskDetailPanel .../>}),
-// lo que obligaba a un SEGUNDO clic para ver el contenido (el componente
-// recién montado siempre arrancaba con su propio estado interno `open` en
-// false). Ahora TaskDetailPanel se mantiene SIEMPRE montado y se controla
-// en modo controlado (open/onOpenChange) — un solo clic abre el Drawer
-// lateral real (ver TaskDetailPanel.tsx).
+// PUNTO 1 (NUEVO): botón de eliminar (ícono de bote) por fila, tanto en tareas
+// raíz como en subtareas. Pide confirmación y avisa si la tarea tiene
+// subtareas (que se borran en cascada, ON DELETE CASCADE de la migración
+// 0018). Delega en onDelete, que MondayBoard implementa llamando a la Server
+// Action deleteTask y removiendo la tarea + sus descendientes del estado local.
 //
-// FIX (retrofit de Groups): la fila raíz ahora es draggable (HTML5 nativo,
-// sin librerías) — permite arrastrarla hacia el encabezado de otra sección
-// .mb-group en MondayBoard.tsx para moverla de grupo (setTaskGroup, ya
-// construido en tree-actions.ts desde Fase 4). Las subtareas NO son
-// draggable entre grupos (siempre viven dentro del grupo de su padre).
+// FASE 3 — FIX: TaskDetailPanel se mantiene SIEMPRE montado y se controla en
+// modo controlado (open/onOpenChange) — un solo clic abre el Drawer lateral.
+//
+// FIX (retrofit de Groups): la fila raíz es draggable (HTML5 nativo) para
+// moverla de grupo. Las subtareas NO son draggable entre grupos.
 import { useState } from "react";
-import { IconChevronRight, IconChevronDown, IconComment, IconPlus } from "@/components/icons";
+import { IconChevronRight, IconChevronDown, IconComment, IconPlus, IconTrash } from "@/components/icons";
 import StatusMenu from "./StatusMenu";
 import TimelineEditor from "./TimelineEditor";
 import AssigneePopover from "./AssigneePopover";
@@ -42,7 +40,8 @@ export default function MondayRow({
   onStatusChange,
   onDatesChange,
   onAssigneesChange,
-  onSubtaskCreated
+  onSubtaskCreated,
+  onDelete
 }: {
   task: MondayTask;
   depth: number;
@@ -55,11 +54,13 @@ export default function MondayRow({
   onDatesChange: (id: string, start: string | null, due: string | null) => void;
   onAssigneesChange: (id: string, names: string[]) => void;
   onSubtaskCreated: (task: CreatedTaskRow) => void;
+  onDelete: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState(depth === 0);
   const [detailOpen, setDetailOpen] = useState(false);
   const [addingSub, setAddingSub] = useState(false);
   const [title, setTitle] = useState(task.title);
+
   const children = childrenMap[task.id] ?? [];
   const commentCount = commentCountByTask[task.id] ?? 0;
   const assignees = assigneesByTask[task.id] ?? [];
@@ -73,6 +74,17 @@ export default function MondayRow({
     }
     if (trimmed === task.title) return;
     renameTask(task.id, trimmed).catch(() => setTitle(task.title));
+  }
+
+  function confirmDelete() {
+    const suffix = children.length
+      ? ` y sus ${children.length} subtarea(s)`
+      : depth > 0
+        ? " (subtarea)"
+        : "";
+    if (window.confirm(`¿Eliminar "${task.title}"${suffix}? Esta acción no se puede deshacer.`)) {
+      onDelete(task.id);
+    }
   }
 
   return (
@@ -106,6 +118,15 @@ export default function MondayRow({
           <button className="mb-comment-btn" onClick={() => setAddingSub((v) => !v)} title="Agregar subtarea">
             <IconPlus />
           </button>
+          <button
+            className="mb-comment-btn"
+            onClick={confirmDelete}
+            title={depth > 0 ? "Eliminar subtarea" : "Eliminar tarea"}
+            aria-label={depth > 0 ? "Eliminar subtarea" : "Eliminar tarea"}
+            style={{ color: "var(--danger)" }}
+          >
+            <IconTrash />
+          </button>
         </div>
         <div className="mb-row-meta">
           <AssigneePopover
@@ -138,7 +159,7 @@ export default function MondayRow({
         />
       )}
       {/* FASE 3: siempre montado, controlado por detailOpen — un solo clic
-          en el ícono de comentario abre el Drawer lateral (ver arriba). */}
+          en el ícono de comentario abre el Drawer lateral. */}
       <TaskDetailPanel taskId={task.id} taskTitle={task.title} compact open={detailOpen} onOpenChange={setDetailOpen} />
       {expanded &&
         children.map((child) => (
@@ -155,6 +176,7 @@ export default function MondayRow({
             onDatesChange={onDatesChange}
             onAssigneesChange={onAssigneesChange}
             onSubtaskCreated={onSubtaskCreated}
+            onDelete={onDelete}
           />
         ))}
     </>
