@@ -264,3 +264,66 @@ export async function applyProjectSequence(projectId: string, order: string[]) {
   await supabase.from("audit_log").insert({ user_id: user.id, action: "project.sequence.apply", object: projectId, meta: { order } });
   revalidatePath("/execution");
 }
+export async function deleteTask(taskId: string) {
+  const supabase = await createClient();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  const { error } = await supabase.from("tasks").delete().eq("id", taskId);
+  if (error) throw new Error(error.message);
+
+  await supabase.from("audit_log").insert({ user_id: user.id, action: "task.delete", object: taskId });
+  revalidatePath("/execution");
+  revalidatePath("/home");
+}
+// ============================================================================
+// Editar proyecto (Punto 2 — opción del menú de tres puntitos)
+// ============================================================================
+const updateProjectSchema = z.object({
+  projectId: z.string().uuid(),
+  title: z.string().min(1),
+  objective: z.string().optional().default(""),
+  status: z.enum(["Draft", "Active", "OnHold", "Completed", "Cancelled", "Archived"]),
+  priority: z.enum(["High", "Medium", "Low"]),
+  targetDate: z.string().optional().nullable()
+});
+
+export async function updateProject(formData: FormData) {
+  const parsed = updateProjectSchema.parse({
+    projectId: formData.get("projectId"),
+    title: formData.get("title"),
+    objective: formData.get("objective") ?? "",
+    status: formData.get("status"),
+    priority: formData.get("priority"),
+    targetDate: formData.get("targetDate") || null
+  });
+
+  const supabase = await createClient();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  const { data: project } = await supabase.from("projects").select("version").eq("id", parsed.projectId).single();
+  if (!project) throw new Error("Proyecto no encontrado");
+
+  const { error } = await supabase
+    .from("projects")
+    .update({
+      title: parsed.title,
+      objective: parsed.objective,
+      status: parsed.status,
+      priority: parsed.priority,
+      target_date: parsed.targetDate,
+      version: project.version + 1
+    })
+    .eq("id", parsed.projectId);
+  if (error) throw new Error(error.message);
+
+  await supabase.from("audit_log").insert({ user_id: user.id, action: "project.update", object: parsed.projectId });
+  revalidatePath("/execution");
+  revalidatePath("/home");
+}
+
