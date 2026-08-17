@@ -104,4 +104,3 @@ create policy task_files_storage_delete on storage.objects for delete
     )
   );
 
-comment on policy task_files_storage_select on storage.objects is 'FASE 3: acceso al binario del archivo, condicionado al acceso a la tarea (mismo patrón RLS que el resto del proyecto). (storage.foldername(name))[1] extrae el primer segmento de la ruta (el task_id), por convención de storage_path.';
