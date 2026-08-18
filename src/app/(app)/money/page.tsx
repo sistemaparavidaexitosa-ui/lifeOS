@@ -113,21 +113,24 @@ export default async function MoneyPage() {
             </Link>
           </div>
           {!budgets?.length && <EmptyState icon="💰" text="Genera tu presupuesto quincenal desde la pestaña de Presupuesto." />}
-          {(budgets ?? []).slice(0, 4).map((b) => {
-            const spent = budgetSpent.get(b.category) ?? 0;
-            const pct = b.amount ? Math.round((spent / b.amount) * 100) : 0;
-            return (
-              <div key={b.id} className="my-2.5">
-                <div className="flex justify-between text-sm">
-                  <span>{b.category}</span>
-                  <span>
-                    {money0(spent, currency, locale)} / {money0(b.amount, currency, locale)}
-                  </span>
+          {/* PUNTO 3: el resumen de presupuesto ahora es scrollable (no crece indefinidamente). */}
+          <div style={{ maxHeight: 260, overflowY: "auto", paddingRight: 4 }}>
+            {(budgets ?? []).map((b) => {
+              const spent = budgetSpent.get(b.category) ?? 0;
+              const pct = b.amount ? Math.round((spent / b.amount) * 100) : 0;
+              return (
+                <div key={b.id} className="my-2.5">
+                  <div className="flex justify-between text-sm">
+                    <span>{b.category}</span>
+                    <span>
+                      {money0(spent, currency, locale)} / {money0(b.amount, currency, locale)}
+                    </span>
+                  </div>
+                  <Progress pct={pct} kind={pct >= 100 ? "bad" : pct >= 85 ? "warn" : undefined} />
                 </div>
-                <Progress pct={pct} kind={pct >= 100 ? "bad" : pct >= 85 ? "warn" : undefined} />
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </Card>
       </div>
 
