@@ -8,7 +8,7 @@ test("defaultQuincenas: divide el costo mensual en dos mitades iguales (A-010)",
   assert.strictEqual(r.q2Amount, 2500);
 });
 
-test("budgetTabRow: balance = monthlyCost - gasto conciliado del ciclo (BR-028)", () => {
+test("budgetTabRow: expenseVsBudget = gasto - costo mensual; balance (restante) = costo mensual - gasto", () => {
   const line = { id: "b1", category: "Alimentación", monthlyCost: 5000, q1Amount: 2500, q2Amount: 2500 };
   const entries = [
     {
@@ -21,11 +21,12 @@ test("budgetTabRow: balance = monthlyCost - gasto conciliado del ciclo (BR-028)"
     }
   ];
   const row = budgetTabRow(line, entries, "2026-08-01");
-  assert.strictEqual(row.reconciledSpent, 1200);
-  assert.strictEqual(row.balance, 3800);
+  assert.strictEqual(row.spent, 1200);
+  assert.strictEqual(row.expenseVsBudget, -3800); // 1200 - 5000 (columna de la pestaña)
+  assert.strictEqual(row.balance, 3800); // restante (Home)
 });
 
-test("budgetTabRow: ignora gastos NO conciliados (solo status=Reconciled cuenta)", () => {
+test("budgetTabRow: cuenta gastos Posted además de Reconciled (fix punto 4: antes solo contaba Reconciled)", () => {
   const line = { id: "b1", category: "Ocio", monthlyCost: 1000, q1Amount: 500, q2Amount: 500 };
   const entries = [
     {
@@ -38,11 +39,12 @@ test("budgetTabRow: ignora gastos NO conciliados (solo status=Reconciled cuenta)
     }
   ];
   const row = budgetTabRow(line, entries, "2026-08-01");
-  assert.strictEqual(row.reconciledSpent, 0);
-  assert.strictEqual(row.balance, 1000);
+  assert.strictEqual(row.spent, 900);
+  assert.strictEqual(row.expenseVsBudget, -100);
+  assert.strictEqual(row.balance, 100);
 });
 
-test("budgetTabRow: balance negativo cuando se excede el costo mensual", () => {
+test("budgetTabRow: expenseVsBudget positivo cuando el gasto excede el costo mensual", () => {
   const line = { id: "b1", category: "Transporte", monthlyCost: 500, q1Amount: 250, q2Amount: 250 };
   const entries = [
     {
@@ -55,7 +57,8 @@ test("budgetTabRow: balance negativo cuando se excede el costo mensual", () => {
     }
   ];
   const row = budgetTabRow(line, entries, "2026-08-01");
-  assert.ok(row.balance < 0, "balance debe ser negativo cuando se excede lo planeado");
+  assert.strictEqual(row.spent, 900);
+  assert.strictEqual(row.expenseVsBudget, 400); // gasto - costo mensual, excedido
   assert.strictEqual(row.balance, -400);
 });
 
@@ -72,5 +75,6 @@ test("budgetTabRow: ignora entradas Reversed", () => {
     }
   ];
   const row = budgetTabRow(line, entries, "2026-08-01");
-  assert.strictEqual(row.reconciledSpent, 0);
+  assert.strictEqual(row.spent, 0);
+  assert.strictEqual(row.expenseVsBudget, -800);
 });
