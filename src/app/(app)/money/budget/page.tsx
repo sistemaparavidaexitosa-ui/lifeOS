@@ -9,6 +9,11 @@ import BudgetLineForm from "./BudgetLineForm";
 import QuincenalIncomeForm from "./QuincenalIncomeForm";
 import CreateBudgetButton from "./CreateBudgetButton";
 
+// PUNTO 4: la columna "Balance" ahora es GASTO − COSTO MENSUAL por ítem
+// (row.expenseVsBudget). Antes reflejaba de facto solo las aportaciones porque
+// el gasto no se contabilizaba (solo se contaba status='Reconciled', y los
+// movimientos se registran como 'Posted'). Ahora budgetTabRow cuenta
+// Posted + Reconciled y expone expenseVsBudget para esta columna.
 export default async function BudgetTabPage() {
   const supabase = await createClient();
   const {
@@ -20,21 +25,16 @@ export default async function BudgetTabPage() {
     await Promise.all([
       supabase.from("profiles").select("currency, locale, quincenal_income").eq("user_id", user.id).single(),
       supabase.from("budgets").select("*").eq("period", "current"),
-      // Diseño (16-ago-2026): las categorías ya no se gestionan desde
-      // Configuración. Esta lectura solo alimenta el <datalist> de
-      // sugerencias en CreateBudgetButton/BudgetLineForm — nunca restringe
-      // qué se puede escribir como concepto nuevo (ver ./actions).
       supabase.from("categories").select("name"),
       supabase.from("journal_entries").select("*, journal_lines(*)").eq("type", "expense"),
       supabase.from("accounts").select("id, opening_balance"),
-      // Todos los tipos de movimiento (no solo gastos) — necesario para
-      // calcular la liquidez real disponible en cuentas (igual que en
-      // /money y /debt) y así conciliarla con el balance del presupuesto.
       supabase.from("journal_entries").select("*, journal_lines(*)")
     ]);
+
   if (!profile) throw new Error("Perfil no encontrado.");
 
   const from15 = addDaysISO(todayLocal(), -15);
+
   const entriesForDomain = (expenseEntries ?? []).map((e) => ({
     id: e.id,
     type: e.type as "income" | "expense" | "transfer",
@@ -47,6 +47,7 @@ export default async function BudgetTabPage() {
   const rows = (budgets ?? []).map((b) =>
     budgetTabRow({ id: b.id, category: b.category, monthlyCost: b.monthly_cost, q1Amount: b.q1_amount, q2Amount: b.q2_amount }, entriesForDomain, from15)
   );
+
   const categoryNames = (categories ?? []).map((c) => c.name);
 
   const totals = rows.reduce(
@@ -54,22 +55,19 @@ export default async function BudgetTabPage() {
       monthlyCost: acc.monthlyCost + r.monthlyCost,
       q1: acc.q1 + r.q1Amount,
       q2: acc.q2 + r.q2Amount,
-      balance: acc.balance + r.balance
+      spent: acc.spent + r.spent,
+      balanceCol: acc.balanceCol + r.expenseVsBudget
     }),
-    { monthlyCost: 0, q1: 0, q2: 0, balance: 0 }
+    { monthlyCost: 0, q1: 0, q2: 0, spent: 0, balanceCol: 0 }
   );
 
-  // Diferencia entre el ingreso quincenal declarado y lo comprometido en
-  // cada quincena. Un valor negativo indica que el presupuesto excede el
-  // ingreso disponible para esa quincena.
   const income = profile.quincenal_income ?? 0;
   const diffQ1 = income - totals.q1;
   const diffQ2 = income - totals.q2;
 
-  // Conciliación: liquidez real disponible en cuentas (todas las
-  // transacciones, no solo gastos) vs. lo que el presupuesto asume
-  // disponible (balance total). Reutiliza accountBalance() — la misma
-  // función usada en /money y /debt — para no duplicar lógica de dominio.
+  // Conciliación: ¿la liquidez real disponible en cuentas alcanza para cubrir
+  // el costo mensual total del presupuesto? Reutiliza accountBalance() (misma
+  // función usada en /money y /debt).
   const allEntriesForDomain = (allEntries ?? []).map((e) => ({
     id: e.id,
     type: e.type as "income" | "expense" | "transfer",
@@ -79,7 +77,7 @@ export default async function BudgetTabPage() {
     lines: (e.journal_lines ?? []).map((l) => ({ account: l.account_id, amount: l.amount }))
   }));
   const liquidity = (accounts ?? []).reduce((sum, a) => sum + accountBalance(a.id, a.opening_balance, allEntriesForDomain), 0);
-  const liquidityGap = liquidity - totals.balance;
+  const liquidityGap = liquidity - totals.monthlyCost;
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -133,9 +131,6 @@ export default async function BudgetTabPage() {
       <div className="flex items-center justify-between" style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
         <h3 className="font-bold">Conceptos del presupuesto</h3>
         <div className="flex items-center gap-2" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {/* Diseño 16-ago-2026: ya NO depende de que existan categorías
-              previas — el nombre del concepto se escribe libremente y se
-              crea automáticamente al guardar (ver ./actions). */}
           {!rows.length && <CreateBudgetButton existingCategories={categoryNames} hasIncome={income > 0} />}
           {rows.length > 0 && <BudgetLineForm existingCategories={categoryNames} />}
         </div>
@@ -153,6 +148,7 @@ export default async function BudgetTabPage() {
                   <th>Costo mensual</th>
                   <th>Aportación Q1</th>
                   <th>Aportación Q2</th>
+                  <th>Gasto</th>
                   <th>Balance</th>
                   <th />
                 </tr>
@@ -166,7 +162,11 @@ export default async function BudgetTabPage() {
                     <td>{money0(r.monthlyCost, profile.currency, profile.locale)}</td>
                     <td>{money0(r.q1Amount, profile.currency, profile.locale)}</td>
                     <td>{money0(r.q2Amount, profile.currency, profile.locale)}</td>
-                    <td style={{ color: r.balance < 0 ? "var(--danger)" : "var(--ok)" }}>{money0(r.balance, profile.currency, profile.locale)}</td>
+                    <td>{money0(r.spent, profile.currency, profile.locale)}</td>
+                    {/* PUNTO 4: Balance = gasto − costo mensual. Positivo = excediste el costo mensual (rojo). */}
+                    <td style={{ color: r.expenseVsBudget > 0 ? "var(--danger)" : "var(--ok)" }}>
+                      {money0(r.expenseVsBudget, profile.currency, profile.locale)}
+                    </td>
                     <td>
                       <BudgetLineForm line={r} />
                     </td>
@@ -180,17 +180,17 @@ export default async function BudgetTabPage() {
                 <b className="block text-lg">{money0(totals.monthlyCost, profile.currency, profile.locale)}</b>
               </div>
               <div className="stat card" style={{ padding: 15 }}>
+                <span className="text-xs" style={{ color: "var(--muted)" }}>Total gastado</span>
+                <b className="block text-lg">{money0(totals.spent, profile.currency, profile.locale)}</b>
+              </div>
+              <div className="stat card" style={{ padding: 15 }}>
                 <span className="text-xs" style={{ color: "var(--muted)" }}>Total Q1</span>
                 <b className="block text-lg">{money0(totals.q1, profile.currency, profile.locale)}</b>
               </div>
               <div className="stat card" style={{ padding: 15 }}>
-                <span className="text-xs" style={{ color: "var(--muted)" }}>Total Q2</span>
-                <b className="block text-lg">{money0(totals.q2, profile.currency, profile.locale)}</b>
-              </div>
-              <div className="stat card" style={{ padding: 15 }}>
                 <span className="text-xs" style={{ color: "var(--muted)" }}>Balance total</span>
-                <b className="block text-lg" style={{ color: totals.balance < 0 ? "var(--warn)" : undefined }}>
-                  {money0(totals.balance, profile.currency, profile.locale)}
+                <b className="block text-lg" style={{ color: totals.balanceCol > 0 ? "var(--danger)" : "var(--ok)" }}>
+                  {money0(totals.balanceCol, profile.currency, profile.locale)}
                 </b>
               </div>
             </div>
@@ -210,10 +210,8 @@ export default async function BudgetTabPage() {
               <b className="block text-lg">{money0(liquidity, profile.currency, profile.locale)}</b>
             </div>
             <div className="stat card" style={{ padding: 15 }}>
-              <span className="text-xs" style={{ color: "var(--muted)" }}>Balance del presupuesto</span>
-              <b className="block text-lg" style={{ color: totals.balance < 0 ? "var(--warn)" : undefined }}>
-                {money0(totals.balance, profile.currency, profile.locale)}
-              </b>
+              <span className="text-xs" style={{ color: "var(--muted)" }}>Costo mensual total</span>
+              <b className="block text-lg">{money0(totals.monthlyCost, profile.currency, profile.locale)}</b>
             </div>
             <div className="stat card" style={{ padding: 15 }}>
               <span className="text-xs" style={{ color: "var(--muted)" }}>Diferencia</span>
@@ -224,8 +222,8 @@ export default async function BudgetTabPage() {
           </div>
           {liquidityGap < 0 && (
             <p className="text-xs mt-2" style={{ color: "var(--danger)" }}>
-              El balance de tu presupuesto asume más dinero del que tienes disponible en tus cuentas. Revisa tus
-              conceptos o registra los movimientos pendientes en Dashboard y Gastos.
+              El costo mensual de tu presupuesto supera el dinero disponible en tus cuentas. Revisa tus conceptos o
+              registra los movimientos pendientes en Dashboard y Gastos.
             </p>
           )}
         </Card>
@@ -235,9 +233,9 @@ export default async function BudgetTabPage() {
         className="text-xs p-2.5 rounded-r-xl"
         style={{ background: "color-mix(in srgb, var(--info) 9%, var(--surface))", borderLeft: "3px solid var(--info)" }}
       >
-        Balance = Costo mensual − gasto conciliado del concepto en el ciclo vigente (BR-028). Un balance negativo indica que
-        excediste el costo mensual planeado. Los movimientos que registres en Dashboard y Gastos deducen automáticamente
-        el concepto indicado en cuanto se concilian.
+        Balance = gasto del concepto en el ciclo vigente − costo mensual planeado (PUNTO 4). Un balance positivo indica que
+        ya excediste el costo mensual; uno negativo, que aún te queda margen. Se cuentan los movimientos de gasto Posted y
+        Reconciled de ese concepto (se excluyen los revertidos).
       </div>
     </div>
   );
