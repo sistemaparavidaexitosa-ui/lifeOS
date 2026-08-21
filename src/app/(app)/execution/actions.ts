@@ -71,6 +71,8 @@ export interface CreatedTaskRow {
   startDate: string | null;
   parentTaskId: string | null;
   groupId: string | null;
+  position: number;
+  est: number;
 }
 
 /**
@@ -129,11 +131,28 @@ export async function createTask(formData: FormData): Promise<CreatedTaskRow> {
     resolvedGroupId = firstGroup?.id ?? null;
   }
 
+  // Orden manual (migración 0021): la tarea nueva se agrega AL FINAL de su
+  // lista de hermanos — raíz del grupo, o subtareas del mismo padre.
+  const siblingsQuery = supabase
+    .from("tasks")
+    .select("position")
+    .eq("project_id", parsed.projectId)
+    .order("position", { ascending: false })
+    .limit(1);
+  const scopedQuery = parsed.parentTaskId
+    ? siblingsQuery.eq("parent_task_id", parsed.parentTaskId)
+    : resolvedGroupId
+      ? siblingsQuery.is("parent_task_id", null).eq("group_id", resolvedGroupId)
+      : siblingsQuery.is("parent_task_id", null).is("group_id", null);
+  const { data: lastSibling } = await scopedQuery.maybeSingle();
+  const position = (lastSibling?.position ?? -1) + 1;
+
   const { data: task, error } = await supabase
     .from("tasks")
     .insert({
       project_id: parsed.projectId,
       title: parsed.title,
+      position,
       priority: parsed.priority,
       due: parsed.due,
       start_date: parsed.startDate,
@@ -163,7 +182,9 @@ export async function createTask(formData: FormData): Promise<CreatedTaskRow> {
     due: task.due,
     startDate: task.start_date ?? null,
     parentTaskId: task.parent_task_id ?? null,
-    groupId: task.group_id ?? null
+    groupId: task.group_id ?? null,
+    position: task.position,
+    est: task.est
   };
 }
 

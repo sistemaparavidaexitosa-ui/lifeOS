@@ -1,70 +1,62 @@
 "use client";
-// Fila recursiva del tablero Monday-style (equivalente a "renderTaskRow()" +
-// "renderSubitem()" en la referencia de monday.com). Cada tarea puede tener
-// N subtareas (parent_task_id, migración 0018), renderizadas indentadas de
-// forma recursiva — igual que "Subitem Level 1 / Subitem Level 2" en la
-// imagen de referencia. Reutiliza TaskDetailPanel (ya existente) para el
-// detalle completo (comentarios, dependencias, historial) sin duplicar
-// código: el ícono de comentario simplemente lo abre/cierra.
+// Fila recursiva del tablero (Tarea → Subtarea → …).
 //
-// PUNTO 1 (NUEVO): botón de eliminar (ícono de bote) por fila, tanto en tareas
-// raíz como en subtareas. Pide confirmación y avisa si la tarea tiene
-// subtareas (que se borran en cascada, ON DELETE CASCADE de la migración
-// 0018). Delega en onDelete, que MondayBoard implementa llamando a la Server
-// Action deleteTask y removiendo la tarea + sus descendientes del estado local.
-//
-// FASE 3 — FIX: TaskDetailPanel se mantiene SIEMPRE montado y se controla en
-// modo controlado (open/onOpenChange) — un solo clic abre el Drawer lateral.
-//
-// FIX (retrofit de Groups): la fila raíz es draggable (HTML5 nativo) para
-// moverla de grupo. Las subtareas NO son draggable entre grupos.
+// Novedades del rediseño:
+//   - Casilla de selección (acciones masivas) y asa de arrastre visible.
+//   - Zonas de soltado de 3 modos: mitad superior = insertar antes, mitad
+//     inferior = insertar después, centro = anidar como subtarea. La línea
+//     azul / el resaltado indican en todo momento qué va a pasar.
+//   - Columna de Prioridad inline y chip de fecha que se pinta en rojo
+//     cuando la tarea está vencida (antes había que abrir el detalle para
+//     enterarse).
+//   - Barra de avance de subtareas en la fila padre.
+//   - El detalle ya no monta un Drawer por fila: llama a api.openDetail y
+//     BoardShell monta UNO solo.
 import { useState } from "react";
+import { computeStats, isOverdue, todayISO } from "@/lib/domain/board.ts";
 import { IconChevronRight, IconChevronDown, IconComment, IconPlus, IconTrash } from "@/components/icons";
 import StatusMenu from "./StatusMenu";
+import PriorityMenu from "./PriorityMenu";
 import TimelineEditor from "./TimelineEditor";
 import AssigneePopover from "./AssigneePopover";
 import QuickAddRow from "./QuickAddRow";
-import TaskDetailPanel from "./TaskDetailPanel";
-import { renameTask, type CreatedTaskRow } from "./actions";
-import type { TaskStatus } from "@/lib/domain/types.ts";
-import type { MondayTask } from "./MondayBoard";
+import { renameTask } from "./actions";
+import type { BoardApi, BoardTask } from "./board-types";
+import type { DropHint, DropMode } from "./MondayBoard";
 
 export default function MondayRow({
+  api,
   task,
   depth,
   childrenMap,
-  assigneesByTask,
-  commentCountByTask,
-  members,
-  projectId,
-  onStatusChange,
-  onDatesChange,
-  onAssigneesChange,
-  onSubtaskCreated,
-  onDelete
+  dragTaskId,
+  dropHint,
+  onDragStart,
+  onDragHint,
+  onDropOnRow
 }: {
-  task: MondayTask;
+  api: BoardApi;
+  task: BoardTask;
   depth: number;
-  childrenMap: Record<string, MondayTask[]>;
-  assigneesByTask: Record<string, string[]>;
-  commentCountByTask: Record<string, number>;
-  members: string[];
-  projectId: string;
-  onStatusChange: (id: string, status: TaskStatus) => void;
-  onDatesChange: (id: string, start: string | null, due: string | null) => void;
-  onAssigneesChange: (id: string, names: string[]) => void;
-  onSubtaskCreated: (task: CreatedTaskRow) => void;
-  onDelete: (id: string) => void;
+  childrenMap: Record<string, BoardTask[]>;
+  dragTaskId: string | null;
+  dropHint: DropHint | null;
+  onDragStart: (id: string | null) => void;
+  onDragHint: (hint: DropHint | null) => void;
+  onDropOnRow: (task: BoardTask, mode: DropMode) => void;
 }) {
-  const [expanded, setExpanded] = useState(depth === 0);
-  const [detailOpen, setDetailOpen] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const [addingSub, setAddingSub] = useState(false);
   const [title, setTitle] = useState(task.title);
 
   const children = childrenMap[task.id] ?? [];
-  const commentCount = commentCountByTask[task.id] ?? 0;
-  const assignees = assigneesByTask[task.id] ?? [];
-  const indentClass = depth ? ` mb-indent-${Math.min(depth, 2)}` : "";
+  const commentCount = api.commentCountByTask[task.id] ?? 0;
+  const assignees = api.assigneesByTask[task.id] ?? [];
+  const isSelected = api.selected.has(task.id);
+  const overdue = isOverdue(task, todayISO());
+  const subStats = children.length ? computeStats(children, todayISO()) : null;
+  const hint = dropHint?.taskId === task.id ? dropHint.mode : null;
+  const dragging = dragTaskId === task.id;
 
   function saveTitle() {
     const trimmed = title.trim();
@@ -73,110 +65,198 @@ export default function MondayRow({
       return;
     }
     if (trimmed === task.title) return;
-    renameTask(task.id, trimmed).catch(() => setTitle(task.title));
+    api.patchTask(task.id, { title: trimmed });
+    renameTask(task.id, trimmed).catch((e) => {
+      setTitle(task.title);
+      api.patchTask(task.id, { title: task.title });
+      api.reportError(e instanceof Error ? e.message : "No se pudo renombrar la tarea");
+    });
   }
 
   function confirmDelete() {
-    const suffix = children.length
-      ? ` y sus ${children.length} subtarea(s)`
-      : depth > 0
-        ? " (subtarea)"
-        : "";
+    const suffix = children.length ? ` y sus ${children.length} subtarea(s)` : "";
     if (window.confirm(`¿Eliminar "${task.title}"${suffix}? Esta acción no se puede deshacer.`)) {
-      onDelete(task.id);
+      api.deleteTask(task.id);
     }
+  }
+
+  /** Zona vertical bajo el cursor → modo de soltado (ClickUp-style). */
+  function hintFromPointer(e: React.DragEvent<HTMLDivElement>): DropMode {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ratio = (e.clientY - rect.top) / rect.height;
+    if (ratio < 0.3) return "before";
+    if (ratio > 0.7) return "after";
+    return "child";
   }
 
   return (
     <>
       <div
-        className={`mb-row${indentClass}`}
-        draggable={depth === 0}
-        onDragStart={depth === 0 ? (e) => e.dataTransfer.setData("text/task-id", task.id) : undefined}
-        style={depth === 0 ? { cursor: "grab" } : undefined}
+        className={[
+          "mb-row",
+          depth ? `mb-indent-${Math.min(depth, 3)}` : "",
+          isSelected ? "selected" : "",
+          dragging ? "dragging" : "",
+          hint ? `drop-${hint}` : ""
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        draggable={api.orderingEnabled}
+        onDragStart={(e) => {
+          if (!api.orderingEnabled) return;
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/task-id", task.id);
+          onDragStart(task.id);
+        }}
+        onDragEnd={() => onDragStart(null)}
+        onDragOver={(e) => {
+          if (!dragTaskId || dragTaskId === task.id) return;
+          e.preventDefault();
+          e.stopPropagation();
+          onDragHint({ taskId: task.id, mode: hintFromPointer(e) });
+        }}
+        onDragLeave={() => onDragHint(null)}
+        onDrop={(e) => {
+          if (!dragTaskId || dragTaskId === task.id) return;
+          e.preventDefault();
+          e.stopPropagation();
+          onDropOnRow(task, hintFromPointer(e));
+        }}
       >
         <div className="mb-row-item">
+          <input
+            type="checkbox"
+            className="mb-check"
+            checked={isSelected}
+            onChange={(e) => api.toggleSelected(task.id, e.target.checked)}
+            aria-label={`Seleccionar ${task.title}`}
+          />
+          {api.orderingEnabled && (
+            <span className="mb-drag" aria-hidden title="Arrastrar para reordenar o anidar">
+              ⠿
+            </span>
+          )}
           {children.length > 0 ? (
-            <button className="mb-expand" onClick={() => setExpanded((v) => !v)} aria-label="Subtareas">
+            <button
+              type="button"
+              className="mb-expand"
+              onClick={() => setExpanded((v) => !v)}
+              aria-expanded={expanded}
+              aria-label={expanded ? "Ocultar subtareas" : "Ver subtareas"}
+            >
               {expanded ? <IconChevronDown /> : <IconChevronRight />}
             </button>
           ) : (
             <span className="mb-expand" />
           )}
+
           <input
             className="mb-row-title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onBlur={saveTitle}
             onKeyDown={(e) => e.key === "Enter" && (e.currentTarget as HTMLInputElement).blur()}
+            aria-label="Título de la tarea"
           />
-          {children.length > 0 && <span className="mb-badge-count">{children.length}</span>}
-          <button className="mb-comment-btn" onClick={() => setDetailOpen((v) => !v)} title="Comentarios y detalle">
-            <IconComment />
-            {commentCount > 0 && <span className="mb-badge-count">{commentCount}</span>}
-          </button>
-          <button className="mb-comment-btn" onClick={() => setAddingSub((v) => !v)} title="Agregar subtarea">
-            <IconPlus />
-          </button>
-          <button
-            className="mb-comment-btn"
-            onClick={confirmDelete}
-            title={depth > 0 ? "Eliminar subtarea" : "Eliminar tarea"}
-            aria-label={depth > 0 ? "Eliminar subtarea" : "Eliminar tarea"}
-            style={{ color: "var(--danger)" }}
-          >
-            <IconTrash />
-          </button>
+
+          {subStats && (
+            <span className="mb-substats" title={`${subStats.done} de ${subStats.total} subtareas completadas`}>
+              <i style={{ width: `${subStats.pct}%` }} />
+              <b>
+                {subStats.done}/{subStats.total}
+              </b>
+            </span>
+          )}
+          {task.urgent && <span className="chip bad mb-urgent">Urgente</span>}
+
+          <span className="mb-row-tools">
+            <button
+              type="button"
+              className="mb-icon-btn"
+              onClick={() => api.openDetail(task.id)}
+              title="Abrir detalle (descripción, dependencias, archivos, comentarios)"
+              aria-label="Abrir detalle"
+            >
+              <IconComment />
+              {commentCount > 0 && <span className="mb-badge-count">{commentCount}</span>}
+            </button>
+            <button
+              type="button"
+              className="mb-icon-btn"
+              onClick={() => setAddingSub((v) => !v)}
+              title="Agregar subtarea"
+              aria-label="Agregar subtarea"
+            >
+              <IconPlus />
+            </button>
+            <button
+              type="button"
+              className="mb-icon-btn danger"
+              onClick={confirmDelete}
+              title={depth > 0 ? "Eliminar subtarea" : "Eliminar tarea"}
+              aria-label={depth > 0 ? "Eliminar subtarea" : "Eliminar tarea"}
+            >
+              <IconTrash />
+            </button>
+          </span>
         </div>
-        <div className="mb-row-meta">
+
+        <div className="mb-cell mb-cell-people">
           <AssigneePopover
             taskId={task.id}
-            members={members}
+            members={api.members}
             selected={assignees}
-            onChange={(names) => onAssigneesChange(task.id, names)}
+            onChange={(names) => api.setAssignees(task.id, names)}
           />
-          <StatusMenu taskId={task.id} status={task.status} onChange={(s) => onStatusChange(task.id, s)} />
         </div>
-        <TimelineEditor
-          taskId={task.id}
-          start={task.startDate}
-          due={task.due}
-          onChange={(s, d) => onDatesChange(task.id, s, d)}
-        />
-        <span />
+        <div className="mb-cell">
+          <StatusMenu taskId={task.id} status={task.status} onChange={(s) => api.setStatus(task.id, s)} />
+        </div>
+        <div className="mb-cell">
+          <PriorityMenu
+            priority={task.priority}
+            urgent={task.urgent}
+            onChange={(priority, urgent) => api.setPriority(task.id, priority, urgent)}
+          />
+        </div>
+        <div className="mb-cell">
+          <TimelineEditor
+            taskId={task.id}
+            start={task.startDate}
+            due={task.due}
+            overdue={overdue}
+            onChange={(startDate, due) => api.patchTask(task.id, { startDate, due })}
+          />
+        </div>
       </div>
+
       {addingSub && (
         <QuickAddRow
-          projectId={projectId}
+          projectId={api.projectId}
           parentTaskId={task.id}
           placeholder="+ Agregar subtarea"
           indent={depth + 1}
           onCreated={(t) => {
-            onSubtaskCreated(t);
+            api.taskCreated(t);
             setAddingSub(false);
             setExpanded(true);
           }}
         />
       )}
-      {/* FASE 3: siempre montado, controlado por detailOpen — un solo clic
-          en el ícono de comentario abre el Drawer lateral. */}
-      <TaskDetailPanel taskId={task.id} taskTitle={task.title} compact open={detailOpen} onOpenChange={setDetailOpen} />
+
       {expanded &&
         children.map((child) => (
           <MondayRow
             key={child.id}
+            api={api}
             task={child}
             depth={depth + 1}
             childrenMap={childrenMap}
-            assigneesByTask={assigneesByTask}
-            commentCountByTask={commentCountByTask}
-            members={members}
-            projectId={projectId}
-            onStatusChange={onStatusChange}
-            onDatesChange={onDatesChange}
-            onAssigneesChange={onAssigneesChange}
-            onSubtaskCreated={onSubtaskCreated}
-            onDelete={onDelete}
+            dragTaskId={dragTaskId}
+            dropHint={dropHint}
+            onDragStart={onDragStart}
+            onDragHint={onDragHint}
+            onDropOnRow={onDropOnRow}
           />
         ))}
     </>

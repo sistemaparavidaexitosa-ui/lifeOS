@@ -35,6 +35,44 @@
   auditoría: Propia limitada"), por eso usa RLS por `user_id` en vez de
   aislarse completamente al `service_role`.
 
+### Rediseño del flujo de proyectos (Execution OS, agosto 2026)
+- **D-012 Un solo estado de tablero en el cliente (`BoardShell`)**: antes cada
+  vista de `/execution` (Tablero, Kanban, Lista, Árbol) era un Client
+  Component autosuficiente con su propia copia de las tareas, y cambiar de
+  vista era una navegación (`?view=`) que volvía a consultar la base y
+  reiniciaba filtros/selección/scroll. Peor: cada vista pedía un subconjunto
+  DISTINTO de datos (responsables solo en Kanban, miembros y grupos solo en
+  Tablero), así que la misma tarea se veía distinta según la vista. Ahora
+  `page.tsx` consulta una sola vez todo el tablero y `BoardShell` mantiene el
+  estado; las vistas son presentación pura sobre ese estado. La URL sigue
+  llevando `?view=` (enlace compartible), sincronizada con
+  `history.replaceState`. *(Recommended default, subject to owner approval.)*
+- **D-013 Orden manual en `tasks.position` (migración 0021)**: el tablero
+  ordenaba siempre por `created_at`, así que no existía la interacción más
+  básica de monday/ClickUp — arrastrar para priorizar. `position` ordena
+  DENTRO de la lista de hermanos (raíces de un grupo, o subtareas de un
+  padre), no globalmente. El cálculo del nuevo orden es puro (`reorderIds` en
+  `src/lib/domain/board.ts`) y el cliente manda al servidor exactamente el
+  mismo arreglo que aplicó de forma optimista, así no pueden divergir. Si la
+  migración todavía no está aplicada, `page.tsx` degrada explícitamente al
+  orden histórico por `created_at` y desactiva el arrastre en vez de romper
+  la página.
+- **D-014 La vista "Árbol" se absorbe en el Tablero**: `TreeView`/
+  `TreeItemNode` mostraban Group → Item → Subitem, exactamente la jerarquía
+  que el Tablero ya renderiza. Su única capacidad propia era reparentar por
+  arrastre, que ahora vive en el Tablero (soltar una fila sobre el centro de
+  otra la convierte en subtarea, con guarda anti-ciclos `isDescendantOf`).
+  Se eliminaron ambos archivos junto con `updateTaskStatusFromTree`, un
+  segundo camino de cambio de estado que escribía `status` SIN validar la
+  transición — hoy todo pasa por `setTaskStatus`. La vista "Lista" (que
+  apilaba un Drawer por tarea) se reemplazó por "Tabla" (rejilla ordenable
+  con edición inline) y se agregó "Timeline" (Gantt ligero).
+- **D-015 Toda la lógica de tablero es dominio puro y testeado**: filtros,
+  orden, estadísticas, rango/barras del timeline y guardas de jerarquía
+  viven en `src/lib/domain/board.ts` (sin React ni Supabase) con
+  `tests/domain/board.test.ts`. La regla "¿está vencida?" o "¿cuánto avanzó
+  este grupo?" existe UNA vez y se ve igual en las 4 vistas.
+
 ## Decisiones técnicas (§7, ERESOLVE)
 
 - **D-008 Dependencias de runtime mínimas**: solo `next`, `react`,
