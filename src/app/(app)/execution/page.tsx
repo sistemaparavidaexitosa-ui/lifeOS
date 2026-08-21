@@ -1,41 +1,44 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { Card, EmptyState } from "@/components/ui";
 import { fdate } from "@/lib/format";
-import NewProjectForm from "./NewProjectForm";
-import SequenceButton from "./SequenceButton";
-import TaskDetailPanel from "./TaskDetailPanel";
-import KanbanBoard, { type KanbanTask } from "./KanbanBoard";
-import MondayBoard, { type MondayTask, type MondayGroup } from "./MondayBoard";
-import TreeView, { type TreeGroup } from "./TreeView";
-import type { TreeNodeTask } from "./TreeItemNode";
-import ViewToggle, { type ExecutionView } from "./ViewToggle";
-import ProjectMenu from "./ProjectMenu";
-import ProjectRow, { type ProjectRowData } from "./ProjectRow";
-import { getProjectLogAndKnowledge } from "./logbook-knowledge-actions";
+import { isOverdue, isOpen, todayISO, type BoardTaskLike } from "@/lib/domain/board.ts";
 import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
+import NewProjectForm from "./NewProjectForm";
+import ProjectSidebar, { type SidebarProject } from "./ProjectSidebar";
+import ProjectsOverview from "./ProjectsOverview";
+import BoardHeader from "./BoardHeader";
+import BoardShell from "./BoardShell";
+import { isExecutionView, type BoardGroup, type BoardTask, type ExecutionView } from "./board-types";
+import { getProjectLogAndKnowledge } from "./logbook-knowledge-actions";
 
-// REDISEÑO Monday-style. Cambios de esta iteración:
-//   PUNTO 2: LogbookCard y KnowledgeCard ya NO se muestran siempre al final de
-//     la expansión. Junto con "Editar proyecto", ahora viven detrás de un
-//     menú de tres puntitos (ProjectMenu.tsx) en el encabezado de cada
-//     proyecto seleccionado, y se abren bajo demanda en un Drawer lateral.
-//   PUNTO 3: se eliminó NewTaskForm (el botón "+ Tarea" que abría un
-//     formulario). Ahora las tareas se agregan estilo Monday, en una fila tipo
-//     hoja de cálculo dentro de cada grupo del Tablero (QuickAddRow, ya
-//     existente en MondayBoard). Por eso, en la vista "board" el tablero se
-//     renderiza SIEMPRE (incluso con 0 tareas): gracias al backfill de la
-//     migración 0019 todo proyecto tiene al menos el grupo "General" con su
-//     fila "+ Agregar tarea", así que un proyecto nuevo puede recibir su
-//     primera tarea sin ningún formulario.
+// REDISEÑO DEL FLUJO DE PROYECTOS (estilo monday.com / ClickUp)
+//
+// Antes: lista-acordeón de proyectos; abrir uno lo expandía in situ y cada
+// vista (?view=) era una navegación completa que volvía a consultar la base
+// y reiniciaba filtros/scroll. Cada vista además pedía SUS propios datos
+// (responsables solo en Kanban, miembros solo en Tablero, grupos solo en
+// Tablero/Árbol), así que cambiar de vista podía mostrar información
+// distinta del mismo proyecto.
+//
+// Ahora:
+//   1. Layout de 2 paneles: navegador de tableros fijo a la izquierda
+//      (ProjectSidebar) + área de trabajo a la derecha. Sin proyecto
+//      seleccionado se muestra el portafolio (ProjectsOverview).
+//   2. Este Server Component consulta UNA sola vez TODO lo que el tablero
+//      necesita (tareas, grupos, responsables, comentarios, miembros) y se
+//      lo entrega a BoardShell, que mantiene el estado en el cliente. Las 4
+//      vistas (Tablero, Kanban, Tabla, Timeline) son funciones de ese mismo
+//      estado: cambiar de vista ya no recarga ni pierde contexto.
+//   3. `view` sigue viviendo en la URL para que el enlace sea compartible;
+//      BoardShell la sincroniza con history.replaceState.
 export default async function ExecutionPage({
   searchParams
 }: {
   searchParams: Promise<{ project?: string; view?: string }>;
 }) {
   const { project: selectedProjectId, view: rawView } = await searchParams;
-  const view: ExecutionView =
-    rawView === "kanban" ? "kanban" : rawView === "list" ? "list" : rawView === "tree" ? "tree" : "board";
+  const view: ExecutionView = isExecutionView(rawView) ? rawView : "board";
+  const today = todayISO();
 
   const supabase = await createClient();
   const {
@@ -44,221 +47,163 @@ export default async function ExecutionPage({
   if (!user) redirect("/login");
 
   const { data: projects } = await supabase.from("projects").select("*").order("created_at", { ascending: false });
-  const { data: allTasks } = await supabase.from("tasks").select("id, project_id, status, parent_task_id");
+  const { data: allTasks } = await supabase.from("tasks").select("id, project_id, status, due, parent_task_id");
 
-  const progressByProject = (projectId: string) => {
-    const ts = (allTasks ?? []).filter((t) => t.project_id === projectId && t.status !== "Cancelled" && !t.parent_task_id);
-    if (!ts.length) return 0;
-    return Math.round((ts.filter((t) => t.status === "Completed").length / ts.length) * 100);
-  };
-  const countByProject = (projectId: string) => (allTasks ?? []).filter((t) => t.project_id === projectId && !t.parent_task_id).length;
+  const sidebarProjects: SidebarProject[] = (projects ?? []).map((p) => {
+    const rootTasks = (allTasks ?? []).filter((t) => t.project_id === p.id && !t.parent_task_id);
+    const countable = rootTasks.filter((t) => t.status !== "Cancelled");
+    const done = countable.filter((t) => t.status === "Completed").length;
+    return {
+      id: p.id,
+      title: p.title,
+      status: p.status,
+      priority: p.priority,
+      progress: countable.length ? Math.round((done / countable.length) * 100) : 0,
+      taskCount: rootTasks.length,
+      openCount: rootTasks.filter((t) => isOpen(t.status as TaskStatus)).length,
+      overdueCount: rootTasks.filter((t) => isOverdue({ due: t.due, status: t.status as TaskStatus }, today)).length,
+      targetDate: p.target_date,
+      targetDateLabel: p.target_date ? fdate(p.target_date) : ""
+    };
+  });
 
-  let selectedTasks: {
-    id: string;
-    title: string;
-    status: TaskStatus;
-    priority: Priority;
-    due: string | null;
-    startDate: string | null;
-    est: number;
-    urgent: boolean;
-    parentTaskId: string | null;
-    groupId: string | null;
-  }[] = [];
-  let assigneesByTask: Record<string, string[]> = {};
-  let commentCountByTask: Record<string, number> = {};
-  let members: string[] = [];
-  let groups: TreeGroup[] = [];
-  let logbookEntries: Awaited<ReturnType<typeof getProjectLogAndKnowledge>>["logbook"] = [];
-  let knowledgeItems: Awaited<ReturnType<typeof getProjectLogAndKnowledge>>["knowledge"] = [];
-
-  if (selectedProjectId) {
-    const selectedProject = projects?.find((p) => p.id === selectedProjectId);
-    const [{ data }, logAndKnowledge] = await Promise.all([
-      supabase
-        .from("tasks")
-        .select("id, title, status, priority, due, start_date, est, urgent, parent_task_id, group_id")
-        .eq("project_id", selectedProjectId)
-        .order("created_at"),
-      getProjectLogAndKnowledge(selectedProjectId)
-    ]);
-    selectedTasks = (data ?? []).map((t) => ({
-      id: t.id,
-      title: t.title,
-      status: t.status as TaskStatus,
-      priority: t.priority as Priority,
-      due: t.due,
-      startDate: t.start_date,
-      est: t.est,
-      urgent: t.urgent,
-      parentTaskId: t.parent_task_id,
-      groupId: t.group_id
-    }));
-    logbookEntries = logAndKnowledge.logbook;
-    knowledgeItems = logAndKnowledge.knowledge;
-
-    if ((view === "kanban" || view === "board") && selectedTasks.length) {
-      const taskIds = selectedTasks.map((t) => t.id);
-      const [{ data: assigneeRows }, { data: commentRows }] = await Promise.all([
-        supabase.from("task_assignees").select("task_id, user_name").in("task_id", taskIds),
-        view === "board"
-          ? supabase.from("comments").select("subject_id").eq("subject_type", "task").in("subject_id", taskIds)
-          : Promise.resolve({ data: [] as { subject_id: string }[] })
-      ]);
-      assigneesByTask = (assigneeRows ?? []).reduce<Record<string, string[]>>((acc, row) => {
-        (acc[row.task_id] ??= []).push(row.user_name);
-        return acc;
-      }, {});
-      commentCountByTask = (commentRows ?? []).reduce<Record<string, number>>((acc, row) => {
-        acc[row.subject_id] = (acc[row.subject_id] ?? 0) + 1;
-        return acc;
-      }, {});
-    }
-
-    if (view === "board" && selectedProject) {
-      if (selectedProject.workspace_id) {
-        const { data: rows } = await supabase.rpc("list_workspace_members", { p_workspace_id: selectedProject.workspace_id });
-        members = (rows ?? []).map((m: { user_name: string }) => m.user_name);
-      } else {
-        const { data: profile } = await supabase.from("profiles").select("name").eq("user_id", user.id).single();
-        if (profile?.name) members = [profile.name];
-      }
-    }
-
-    if (view === "board" || view === "tree") {
-      const { data: groupRows } = await supabase
-        .from("task_groups")
-        .select("id, name, color, position")
-        .eq("project_id", selectedProjectId)
-        .order("position");
-      groups = groupRows ?? [];
-    }
-  }
+  const selectedProject = selectedProjectId ? projects?.find((p) => p.id === selectedProjectId) : undefined;
 
   return (
-    <div className="flex flex-col gap-3.5">
-      <div className="flex items-center justify-between wrap" style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-        <h2 className="font-bold text-lg">Proyectos y Tareas</h2>
+    <div className="ex-workspace">
+      <ProjectSidebar projects={sidebarProjects} selectedId={selectedProject?.id ?? null} view={view}>
         <NewProjectForm />
-      </div>
-      <div className="project-rows-list">
-        {!projects?.length && (
-          <Card>
-            <EmptyState icon="📁" text="Crea tu primer proyecto." />
-          </Card>
+      </ProjectSidebar>
+
+      <main className="ex-main">
+        {!selectedProject ? (
+          <ProjectsOverview projects={sidebarProjects} view={view} />
+        ) : (
+          <BoardWorkspace projectRow={selectedProject} view={view} userId={user.id} />
         )}
-        {(projects ?? []).map((p) => {
-          const isSelected = selectedProjectId === p.id;
-          const rowData: ProjectRowData = {
-            id: p.id,
-            title: p.title,
-            status: p.status,
-            taskCount: countByProject(p.id),
-            progress: progressByProject(p.id),
-            targetDate: p.target_date
-          };
-          return (
-            <div key={p.id} className={`project-row-wrap${isSelected ? " expanded" : ""}`}>
-              <ProjectRow project={rowData} active={isSelected} formattedTargetDate={p.target_date ? fdate(p.target_date) : ""} />
-              {isSelected && (
-                <div className="project-row-expansion">
-                  <div className="flex items-center justify-between wrap" style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                    <div className="flex items-center" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                      <ViewToggle projectId={p.id} view={view} />
-                      <SequenceButton projectId={p.id} tasks={selectedTasks.map((t) => ({ id: t.id, title: t.title }))} />
-                    </div>
-                    {/* PUNTO 2: menú de tres puntitos (Editar proyecto / Bitácora /
-                        Base de conocimiento). Reemplaza al botón "+ Tarea" (Punto 3),
-                        cuya función ahora vive inline en el Tablero. */}
-                    <ProjectMenu
-                      project={{
-                        id: p.id,
-                        title: p.title,
-                        objective: p.objective ?? "",
-                        status: p.status,
-                        priority: p.priority,
-                        targetDate: p.target_date
-                      }}
-                      logbookEntries={logbookEntries}
-                      knowledgeItems={knowledgeItems}
-                    />
-                  </div>
-
-                  {/* PUNTO 3: la vista Tablero se renderiza SIEMPRE (incluso con 0
-                      tareas) para exponer la fila "+ Agregar tarea" por grupo. */}
-                  {view === "board" && (
-                    <div style={{ marginTop: 10 }}>
-                      <MondayBoard
-                        projectId={p.id}
-                        initialTasks={selectedTasks.map(
-                          (t): MondayTask => ({
-                            id: t.id,
-                            title: t.title,
-                            status: t.status,
-                            priority: t.priority,
-                            urgent: t.urgent,
-                            due: t.due,
-                            startDate: t.startDate,
-                            parentTaskId: t.parentTaskId,
-                            groupId: t.groupId
-                          })
-                        )}
-                        initialGroups={groups as MondayGroup[]}
-                        assigneesByTask={assigneesByTask}
-                        commentCountByTask={commentCountByTask}
-                        members={members}
-                      />
-                    </div>
-                  )}
-
-                  {view !== "board" && !selectedTasks.length && (
-                    <EmptyState icon="✅" text="Este proyecto no tiene tareas todavía. Cambia a la vista Tablero para agregar una." />
-                  )}
-
-                  {selectedTasks.length > 0 && view === "list" && (
-                    <>
-                      {selectedTasks.map((t) => (
-                        <TaskDetailPanel key={t.id} taskId={t.id} taskTitle={t.title} />
-                      ))}
-                    </>
-                  )}
-                  {selectedTasks.length > 0 && view === "kanban" && (
-                    <KanbanBoard
-                      projectId={p.id}
-                      initialTasks={selectedTasks.map(
-                        (t): KanbanTask => ({
-                          id: t.id,
-                          title: t.title,
-                          status: t.status,
-                          priority: t.priority,
-                          urgent: t.urgent,
-                          due: t.due
-                        })
-                      )}
-                      assigneesByTask={assigneesByTask}
-                    />
-                  )}
-                  {selectedTasks.length > 0 && view === "tree" && (
-                    <TreeView
-                      projectId={p.id}
-                      initialTasks={selectedTasks.map(
-                        (t): TreeNodeTask => ({
-                          id: t.id,
-                          title: t.title,
-                          status: t.status,
-                          parent_task_id: t.parentTaskId,
-                          group_id: t.groupId
-                        })
-                      )}
-                      initialGroups={groups}
-                    />
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+      </main>
     </div>
+  );
+}
+
+/**
+ * Carga y arma el tablero de UN proyecto. Se separa de la página para que
+ * Next pueda hacer streaming del panel izquierdo mientras se resuelven estas
+ * consultas.
+ */
+async function BoardWorkspace({
+  projectRow,
+  view,
+  userId
+}: {
+  projectRow: { id: string; title: string; objective: string | null; status: string; priority: string; target_date: string | null; workspace_id: string | null };
+  view: ExecutionView;
+  userId: string;
+}) {
+  const supabase = await createClient();
+  const today = todayISO();
+  const projectId = projectRow.id;
+
+  const TASK_COLUMNS = "id, title, status, priority, due, start_date, est, urgent, parent_task_id, group_id, position";
+  let orderingEnabled = true;
+  let taskRows: Record<string, unknown>[] = [];
+
+  const { data, error } = await supabase.from("tasks").select(TASK_COLUMNS).eq("project_id", projectId).order("position");
+  if (error) {
+    // Degradación explícita: si la migración 0021 (tasks.position) todavía no
+    // está aplicada, el tablero sigue funcionando con el orden histórico por
+    // created_at y BoardShell desactiva el arrastre en vez de romperse.
+    orderingEnabled = false;
+    const { data: legacy } = await supabase
+      .from("tasks")
+      .select("id, title, status, priority, due, start_date, est, urgent, parent_task_id, group_id")
+      .eq("project_id", projectId)
+      .order("created_at");
+    taskRows = (legacy ?? []) as Record<string, unknown>[];
+  } else {
+    taskRows = (data ?? []) as Record<string, unknown>[];
+  }
+
+  const tasks: BoardTask[] = taskRows.map((t, index) => ({
+    id: t.id as string,
+    title: t.title as string,
+    status: t.status as TaskStatus,
+    priority: t.priority as Priority,
+    due: (t.due as string | null) ?? null,
+    startDate: (t.start_date as string | null) ?? null,
+    est: (t.est as number) ?? 0,
+    urgent: Boolean(t.urgent),
+    parentTaskId: (t.parent_task_id as string | null) ?? null,
+    groupId: (t.group_id as string | null) ?? null,
+    position: (t.position as number | undefined) ?? index
+  }));
+
+  const taskIds = tasks.map((t) => t.id);
+  const [{ data: groupRows }, { data: assigneeRows }, { data: commentRows }, logAndKnowledge] = await Promise.all([
+    supabase.from("task_groups").select("id, name, color, position").eq("project_id", projectId).order("position"),
+    taskIds.length
+      ? supabase.from("task_assignees").select("task_id, user_name").in("task_id", taskIds)
+      : Promise.resolve({ data: [] as { task_id: string; user_name: string }[] }),
+    taskIds.length
+      ? supabase.from("comments").select("subject_id").eq("subject_type", "task").in("subject_id", taskIds)
+      : Promise.resolve({ data: [] as { subject_id: string }[] }),
+    getProjectLogAndKnowledge(projectId)
+  ]);
+
+  const assigneesByTask = (assigneeRows ?? []).reduce<Record<string, string[]>>((acc, row) => {
+    (acc[row.task_id] ??= []).push(row.user_name);
+    return acc;
+  }, {});
+  const commentCountByTask = (commentRows ?? []).reduce<Record<string, number>>((acc, row) => {
+    acc[row.subject_id] = (acc[row.subject_id] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  let members: string[] = [];
+  if (projectRow.workspace_id) {
+    const { data: rows } = await supabase.rpc("list_workspace_members", { p_workspace_id: projectRow.workspace_id });
+    members = (rows ?? []).map((m: { user_name: string }) => m.user_name);
+  } else {
+    const { data: profile } = await supabase.from("profiles").select("name").eq("user_id", userId).single();
+    if (profile?.name) members = [profile.name];
+  }
+
+  const rootTasks: BoardTaskLike[] = tasks.filter((t) => !t.parentTaskId);
+  const countable = rootTasks.filter((t) => t.status !== "Cancelled");
+  const done = countable.filter((t) => t.status === "Completed").length;
+
+  return (
+    <>
+      <BoardHeader
+        project={{
+          id: projectRow.id,
+          title: projectRow.title,
+          objective: projectRow.objective ?? "",
+          status: projectRow.status,
+          priority: projectRow.priority,
+          targetDate: projectRow.target_date
+        }}
+        progress={countable.length ? Math.round((done / countable.length) * 100) : 0}
+        taskCount={rootTasks.length}
+        openCount={rootTasks.filter((t) => isOpen(t.status)).length}
+        overdueCount={tasks.filter((t) => isOverdue(t, today)).length}
+        targetDateLabel={projectRow.target_date ? fdate(projectRow.target_date) : ""}
+        sequenceTasks={tasks.map((t) => ({ id: t.id, title: t.title }))}
+        logbookEntries={logAndKnowledge.logbook}
+        knowledgeItems={logAndKnowledge.knowledge}
+      />
+
+      <BoardShell
+        key={projectId}
+        projectId={projectId}
+        initialTasks={tasks}
+        initialGroups={(groupRows ?? []) as BoardGroup[]}
+        initialAssignees={assigneesByTask}
+        commentCountByTask={commentCountByTask}
+        members={members}
+        initialView={view}
+        orderingEnabled={orderingEnabled}
+      />
+    </>
   );
 }

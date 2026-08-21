@@ -43,3 +43,81 @@ pnpm lint
 pnpm build
 ```
 No hay `db reset` ni migraciones nuevas en esta entrega.
+
+---
+
+# Rediseño del flujo de proyectos (Execution OS) — monday.com / ClickUp
+
+Entrega enfocada en **cómo se trabajan los proyectos**: flujo (navegación),
+lógica (qué se puede hacer y con qué reglas) y visualización.
+
+## 1) Flujo
+- `/execution` deja de ser una **lista-acordeón** y pasa a un **workspace de 2
+  paneles**: navegador de tableros a la izquierda (búsqueda, filtro En
+  curso/Todos, avance y vencidas por tablero) y área de trabajo a la derecha.
+  En móvil el navegador se pliega en "▸ Tableros".
+- Sin tablero seleccionado se muestra el **portafolio** (`ProjectsOverview`):
+  activos, tareas abiertas, vencidas y avance promedio + tarjetas por proyecto.
+- **Cambiar de vista ya no navega**: Tablero / Kanban / Tabla / Timeline
+  comparten estado, filtros y selección (`BoardShell`). La URL (`?view=`) se
+  mantiene sincronizada para poder compartir el enlace.
+
+## 2) Lógica
+- **Orden manual** de tareas (migración `0021_execution_board_order.sql`,
+  columna `tasks.position`): arrastrar una fila la reordena; soltarla sobre el
+  **centro** de otra la convierte en **subtarea** (con guarda anti-ciclos);
+  soltarla sobre un grupo la mueve de grupo.
+- **Filtros compartidos**: texto, estado, prioridad, personas, fechas
+  (vencidas / hoy / próximos 7 días / sin fecha) y "solo trabajo vivo". El
+  filtro conserva la jerarquía: si coincide una subtarea, se muestran sus
+  padres como contexto.
+- **Acciones masivas** sobre la selección: cambiar estado, mover de grupo y
+  eliminar. El cambio masivo de estado **valida cada transición** con la misma
+  máquina de estados del servidor (FR-EXE-003/004/005, BR-014) y reporta las
+  tareas rechazadas en vez de forzarlas.
+- **Prioridad y urgencia inline** (`PriorityMenu`), que alimentan la matriz
+  Eisenhower sin salir del tablero.
+- **Grupos**: colapsables (preferencia guardada por proyecto en
+  `localStorage`), con color editable, reordenables, con progreso y
+  distribución de estados.
+- Se eliminó `updateTaskStatusFromTree`, que escribía `status` sin validar la
+  transición: hoy **todo** cambio de estado pasa por `setTaskStatus`.
+
+## 3) Visualización
+- Filas con casilla de selección, asa de arrastre, indicadores de destino
+  (línea azul arriba/abajo = insertar, borde = anidar), avance de subtareas,
+  chip de fechas en rojo cuando la tarea está vencida y chip "Urgente".
+- **Kanban** con color por estado, límite WIP, grupo, prioridad, responsables
+  y vencimiento.
+- **Tabla**: rejilla plana ordenable con edición inline (reemplaza la vista
+  "Lista", que apilaba un Drawer por tarea, y la antigua `TaskTable`).
+- **Timeline**: Gantt ligero con barras por tarea, línea de HOY, escala
+  semanal y bandeja de tareas sin fechas.
+
+## 4) Archivos
+| Nuevos | |
+|---|---|
+| `src/lib/domain/board.ts` + `tests/domain/board.test.ts` | Filtros, orden, estadísticas, timeline y guardas de jerarquía (puro y testeado) |
+| `execution/board-types.ts` | Modelo único de tarea de tablero y contrato `BoardApi` |
+| `execution/board-actions.ts` | Reordenar, mover de grupo, color/orden de grupos, prioridad y acciones masivas |
+| `execution/BoardShell.tsx` | Estado del tablero (dueño único) |
+| `execution/BoardToolbar.tsx`, `BulkActionBar.tsx`, `GroupHeader.tsx`, `PriorityMenu.tsx` | Barra de vistas/filtros, acciones masivas, encabezado de grupo, prioridad |
+| `execution/ProjectSidebar.tsx`, `ProjectsOverview.tsx`, `BoardHeader.tsx` | Navegador de tableros, portafolio y encabezado del tablero |
+| `execution/TableView.tsx`, `TimelineView.tsx` | Vistas Tabla y Timeline |
+| `supabase/migrations/0021_execution_board_order.sql` | `tasks.position` + backfill idempotente por `created_at` |
+
+| Eliminados | Motivo |
+|---|---|
+| `TreeView.tsx`, `TreeItemNode.tsx` | La jerarquía Group → Item → Subitem y el reparentado por arrastre ya viven en el Tablero |
+| `ProjectRow.tsx` | Sustituido por `ProjectSidebar` |
+| `TaskTable.tsx`, `NewTaskForm.tsx` | Ya eran código muerto; su función la cubre `TableView` / `QuickAddRow` |
+| `ViewToggle.tsx` | Las vistas son pestañas dentro de `BoardToolbar` (sin navegación) |
+
+## 5) Verificación
+```bash
+pnpm typecheck && pnpm lint && pnpm test:unit && pnpm build
+supabase db reset   # aplica 0021_execution_board_order.sql
+```
+> Si `0021` aún no está aplicada, el tablero sigue funcionando con el orden
+> histórico por `created_at` y muestra un aviso: el arrastre queda desactivado
+> hasta correr la migración.

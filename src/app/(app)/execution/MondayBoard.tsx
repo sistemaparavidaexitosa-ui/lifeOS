@@ -1,285 +1,299 @@
 "use client";
-// Tablero principal "Proyectos y Tareas", estilo monday.com.
+// Vista "Tablero" (monday.com): Grupo → Tarea → Subtarea, con columnas
+// editables inline, arrastre para reordenar/mover/anidar y alta rápida por
+// grupo.
 //
-// Renderiza UNA sección .mb-group POR CADA task_group del proyecto
-// (createTaskGroup/renameTaskGroup/deleteTaskGroup/setTaskGroup de
-// tree-actions.ts), con nombre editable, contador, color, "+ Agregar tarea"
-// por grupo (fila tipo hoja de cálculo, NO un formulario — Punto 3) y drag&drop
-// nativo entre grupos.
-//
-// PUNTO 1 (NUEVO): handleDeleteTask elimina la tarea y TODOS sus descendientes
-// del estado local (optimista) y llama a la Server Action deleteTask. En la
-// base de datos, ON DELETE CASCADE (migración 0018) ya borra las subtareas;
-// aquí solo se replica ese efecto en el cliente para no tener que recargar.
-import { useMemo, useState } from "react";
-import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
+// Cambios de este rediseño respecto a la versión anterior:
+//   1. Ya NO tiene estado propio: recibe `tasks` (ya filtradas y ordenadas
+//      por BoardShell) y muta a través de `api`. Antes cada vista mantenía
+//      una copia divergente de las mismas tareas.
+//   2. Grupos colapsables, con barra de progreso, distribución de estados y
+//      color editable — antes el encabezado solo mostraba nombre y conteo.
+//   3. Arrastre real de 3 modos, como ClickUp: soltar en la mitad superior
+//      de una fila = insertar antes, mitad inferior = insertar después,
+//      centro = convertir en subtarea (con guarda anti-ciclos).
+//   4. Selección múltiple con casilla por fila y por grupo, que alimenta la
+//      barra de acciones masivas (BulkActionBar).
+import { useEffect, useMemo, useState } from "react";
+import { reorderIds, sortTasks, isDescendantOf, type SortKey } from "@/lib/domain/board.ts";
+import type { BoardApi, BoardGroup, BoardTask, MoveTarget } from "./board-types";
+import GroupHeader from "./GroupHeader";
 import MondayRow from "./MondayRow";
 import QuickAddRow from "./QuickAddRow";
-import { createTaskGroup, deleteTaskGroup, renameTaskGroup, setTaskGroup } from "./tree-actions";
-import { deleteTask, type CreatedTaskRow } from "./actions";
-import { IconPlus, IconTrash } from "@/components/icons";
+import { createTaskGroup, deleteTaskGroup, renameTaskGroup } from "./tree-actions";
+import { reorderGroups, setGroupColor } from "./board-actions";
+import { IconPlus } from "@/components/icons";
 
-export interface MondayTask {
-  id: string;
-  title: string;
-  status: TaskStatus;
-  priority: Priority;
-  urgent: boolean;
-  due: string | null;
-  startDate: string | null;
-  parentTaskId: string | null;
-  groupId: string | null;
-}
+export type DropMode = "before" | "after" | "child";
 
-export interface MondayGroup {
-  id: string;
-  name: string;
-  color: string;
-  position: number;
+export interface DropHint {
+  taskId: string;
+  mode: DropMode;
 }
 
 export default function MondayBoard({
-  projectId,
-  initialTasks,
-  initialGroups,
-  assigneesByTask: initialAssignees,
-  commentCountByTask,
-  members
+  api,
+  tasks,
+  sort,
+  onGroupsChange,
+  siblingsOf
 }: {
-  projectId: string;
-  initialTasks: MondayTask[];
-  initialGroups: MondayGroup[];
-  assigneesByTask: Record<string, string[]>;
-  commentCountByTask: Record<string, number>;
-  members: string[];
+  api: BoardApi;
+  tasks: BoardTask[];
+  sort: SortKey;
+  onGroupsChange: (updater: (prev: BoardGroup[]) => BoardGroup[]) => void;
+  siblingsOf: (target: MoveTarget) => BoardTask[];
 }) {
-  const [tasks, setTasks] = useState<MondayTask[]>(initialTasks);
-  const [groups, setGroups] = useState<MondayGroup[]>(initialGroups);
-  const [assigneesByTask, setAssigneesByTask] = useState<Record<string, string[]>>(initialAssignees);
   const [newGroupName, setNewGroupName] = useState("");
-  const [dragOverGroup, setDragOverGroup] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [dragTaskId, setDragTaskId] = useState<string | null>(null);
+  const [dropHint, setDropHint] = useState<DropHint | null>(null);
+  const [dropGroupId, setDropGroupId] = useState<string | null>(null);
+
+  // El colapso de grupos es preferencia de lectura del usuario, no dato del
+  // proyecto: vive en localStorage por proyecto, no en la base.
+  const storageKey = `lifeos.board.collapsed.${api.projectId}`;
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      if (raw) setCollapsed(new Set(JSON.parse(raw) as string[]));
+    } catch {
+      // localStorage puede estar bloqueado (modo privado): no es crítico.
+    }
+  }, [storageKey]);
+
+  function toggleCollapsed(groupId: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      try {
+        window.localStorage.setItem(storageKey, JSON.stringify([...next]));
+      } catch {
+        // idem
+      }
+      return next;
+    });
+  }
 
   const childrenMap = useMemo(() => {
-    const map: Record<string, MondayTask[]> = {};
+    const map: Record<string, BoardTask[]> = {};
     for (const t of tasks) {
-      if (t.parentTaskId) (map[t.parentTaskId] ??= []).push(t);
+      if (!t.parentTaskId) continue;
+      (map[t.parentTaskId] ??= []).push(t);
     }
+    for (const key of Object.keys(map)) map[key] = sortTasks(map[key]!, sort);
     return map;
-  }, [tasks]);
+  }, [tasks, sort]);
 
   const rootsByGroup = useMemo(() => {
-    const map: Record<string, MondayTask[]> = {};
+    const map: Record<string, BoardTask[]> = {};
     for (const t of tasks) {
       if (t.parentTaskId) continue;
-      const key = t.groupId ?? "__ungrouped__";
-      (map[key] ??= []).push(t);
+      (map[t.groupId ?? "__ungrouped__"] ??= []).push(t);
     }
+    for (const key of Object.keys(map)) map[key] = sortTasks(map[key]!, sort);
     return map;
-  }, [tasks]);
+  }, [tasks, sort]);
 
-  const sortedGroups = useMemo(() => [...groups].sort((a, b) => a.position - b.position), [groups]);
+  const sortedGroups = useMemo(() => [...api.groups].sort((a, b) => a.position - b.position), [api.groups]);
 
-  function handleStatusChange(id: string, status: TaskStatus) {
-    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status } : t)));
+  // -------------------------------------------------------------------------
+  // Arrastre de tareas
+  // -------------------------------------------------------------------------
+
+  function endDrag() {
+    setDragTaskId(null);
+    setDropHint(null);
+    setDropGroupId(null);
   }
 
-  function handleDatesChange(id: string, startDate: string | null, due: string | null) {
-    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, startDate, due } : t)));
-  }
+  function handleDropOnRow(target: BoardTask, mode: DropMode) {
+    const movedId = dragTaskId;
+    endDrag();
+    if (!movedId || movedId === target.id) return;
 
-  function handleAssigneesChange(id: string, names: string[]) {
-    setAssigneesByTask((prev) => ({ ...prev, [id]: names }));
-  }
-
-  function handleTaskCreated(created: CreatedTaskRow) {
-    setTasks((prev) => [
-      ...prev,
-      {
-        id: created.id,
-        title: created.title,
-        status: created.status,
-        priority: created.priority,
-        urgent: created.urgent,
-        due: created.due,
-        startDate: created.startDate,
-        parentTaskId: created.parentTaskId,
-        groupId: created.groupId
+    if (mode === "child") {
+      if (isDescendantOf(tasks, movedId, target.id)) {
+        api.reportError("No puedes anidar una tarea dentro de una de sus propias subtareas.");
+        return;
       }
-    ]);
-  }
-
-  // Punto 1: elimina la tarea + todos sus descendientes del estado local
-  // (mismo efecto que el ON DELETE CASCADE del backend) y persiste el borrado.
-  function handleDeleteTask(id: string) {
-    const toRemove = new Set<string>([id]);
-    let grew = true;
-    while (grew) {
-      grew = false;
-      for (const t of tasks) {
-        if (t.parentTaskId && toRemove.has(t.parentTaskId) && !toRemove.has(t.id)) {
-          toRemove.add(t.id);
-          grew = true;
-        }
-      }
+      const siblings = siblingsOf({ groupId: target.groupId, parentTaskId: target.id });
+      const ordered = [...siblings.map((t) => t.id).filter((id) => id !== movedId), movedId];
+      api.moveTask(movedId, { groupId: target.groupId, parentTaskId: target.id }, ordered);
+      return;
     }
-    const prev = tasks;
-    setTasks((cur) => cur.filter((t) => !toRemove.has(t.id)));
-    setError(null);
-    deleteTask(id).catch((err) => {
-      setTasks(prev); // revierte si el servidor rechaza el borrado
-      setError(err instanceof Error ? err.message : "No se pudo eliminar la tarea");
-    });
+
+    if (isDescendantOf(tasks, movedId, target.id)) {
+      api.reportError("No puedes mover una tarea dentro de su propio subárbol.");
+      return;
+    }
+    const destination: MoveTarget = { groupId: target.groupId, parentTaskId: target.parentTaskId };
+    const siblings = siblingsOf(destination);
+    const ordered = reorderIds(siblings.map((t) => t.id), movedId, target.id, mode);
+    api.moveTask(movedId, destination, ordered);
   }
 
-  function handleDropOnGroup(e: React.DragEvent, groupId: string) {
-    e.preventDefault();
-    setDragOverGroup(null);
-    const draggedId = e.dataTransfer.getData("text/task-id");
-    if (!draggedId) return;
-    setTasks((prev) => prev.map((t) => (t.id === draggedId ? { ...t, groupId } : t)));
-    setTaskGroup(draggedId, groupId).catch((err) => {
-      setError(err instanceof Error ? err.message : "No se pudo mover la tarea de grupo");
-    });
+  function handleDropOnGroup(groupId: string) {
+    const movedId = dragTaskId;
+    endDrag();
+    if (!movedId) return;
+    const destination: MoveTarget = { groupId, parentTaskId: null };
+    const siblings = siblingsOf(destination);
+    const ordered = [...siblings.map((t) => t.id).filter((id) => id !== movedId), movedId];
+    api.moveTask(movedId, destination, ordered);
   }
+
+  // -------------------------------------------------------------------------
+  // Grupos
+  // -------------------------------------------------------------------------
 
   function handleCreateGroup() {
     const name = newGroupName.trim();
     if (!name) return;
-    createTaskGroup({ projectId, name })
+    createTaskGroup({ projectId: api.projectId, name })
       .then((created) => {
-        setGroups((prev) => [...prev, created]);
+        onGroupsChange((prev) => [...prev, created]);
         setNewGroupName("");
       })
-      .catch((err) => setError(err instanceof Error ? err.message : "No se pudo crear el grupo"));
+      .catch((e) => api.reportError(e instanceof Error ? e.message : "No se pudo crear el grupo"));
   }
 
   function handleRenameGroup(groupId: string, name: string) {
-    setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, name } : g)));
-    renameTaskGroup(groupId, name).catch((err) => setError(err instanceof Error ? err.message : "No se pudo renombrar el grupo"));
+    onGroupsChange((prev) => prev.map((g) => (g.id === groupId ? { ...g, name } : g)));
+    renameTaskGroup(groupId, name).catch((e) =>
+      api.reportError(e instanceof Error ? e.message : "No se pudo renombrar el grupo")
+    );
+  }
+
+  function handleColorGroup(groupId: string, color: string) {
+    onGroupsChange((prev) => prev.map((g) => (g.id === groupId ? { ...g, color } : g)));
+    setGroupColor(groupId, color).catch((e) =>
+      api.reportError(e instanceof Error ? e.message : "No se pudo cambiar el color del grupo")
+    );
   }
 
   function handleDeleteGroup(groupId: string) {
     const fallback = sortedGroups.find((g) => g.id !== groupId);
-    if (!fallback) return; // no se permite eliminar el último grupo del Board
-    setGroups((prev) => prev.filter((g) => g.id !== groupId));
-    setTasks((prev) => prev.map((t) => (t.groupId === groupId ? { ...t, groupId: fallback.id } : t)));
-    deleteTaskGroup(groupId, fallback.id).catch((err) => setError(err instanceof Error ? err.message : "No se pudo eliminar el grupo"));
+    if (!fallback) return; // nunca se elimina el último grupo del tablero
+    const count = (rootsByGroup[groupId] ?? []).length;
+    const message = count
+      ? `¿Eliminar el grupo? Sus ${count} tarea(s) se moverán a "${fallback.name}".`
+      : "¿Eliminar el grupo?";
+    if (!window.confirm(message)) return;
+    onGroupsChange((prev) => prev.filter((g) => g.id !== groupId));
+    for (const t of tasks) {
+      if (t.groupId === groupId) api.patchTask(t.id, { groupId: fallback.id });
+    }
+    deleteTaskGroup(groupId, fallback.id).catch((e) =>
+      api.reportError(e instanceof Error ? e.message : "No se pudo eliminar el grupo")
+    );
+  }
+
+  function handleMoveGroup(groupId: string, direction: -1 | 1) {
+    const index = sortedGroups.findIndex((g) => g.id === groupId);
+    const swapWith = index + direction;
+    if (index === -1 || swapWith < 0 || swapWith >= sortedGroups.length) return;
+    const next = [...sortedGroups];
+    const [moved] = next.splice(index, 1);
+    next.splice(swapWith, 0, moved!);
+    const repositioned = next.map((g, i) => ({ ...g, position: i }));
+    onGroupsChange(() => repositioned);
+    reorderGroups(api.projectId, repositioned.map((g) => g.id)).catch((e) =>
+      api.reportError(e instanceof Error ? e.message : "No se pudo reordenar los grupos")
+    );
   }
 
   return (
-    <div>
-      {error && (
-        <div className="chip danger" style={{ marginBottom: 8 }}>
-          {error}
-        </div>
-      )}
-      {sortedGroups.map((group) => {
+    <div className="mb-board" onDragEnd={endDrag}>
+      {sortedGroups.map((group, index) => {
         const rootTasks = rootsByGroup[group.id] ?? [];
+        const groupTasks = tasks.filter((t) => t.groupId === group.id);
+        const isCollapsed = collapsed.has(group.id);
+        const allSelected = groupTasks.length > 0 && groupTasks.every((t) => api.selected.has(t.id));
         return (
-          <div
+          <section
             key={group.id}
-            className="mb-group"
+            className={`mb-group${dropGroupId === group.id ? " dragover" : ""}`}
             style={{ "--group-color": group.color } as React.CSSProperties}
             onDragOver={(e) => {
+              if (!dragTaskId) return;
               e.preventDefault();
-              setDragOverGroup(group.id);
+              setDropGroupId(group.id);
             }}
-            onDragLeave={() => setDragOverGroup((cur) => (cur === group.id ? null : cur))}
-            onDrop={(e) => handleDropOnGroup(e, group.id)}
+            onDragLeave={() => setDropGroupId((cur) => (cur === group.id ? null : cur))}
+            onDrop={(e) => {
+              e.preventDefault();
+              handleDropOnGroup(group.id);
+            }}
           >
-            <div
-              className="mb-group-head"
-              style={dragOverGroup === group.id ? { outline: "2px dashed var(--group-color, var(--accent))", outlineOffset: -2 } : undefined}
-            >
-              <EditableGroupName name={group.name} onRename={(name) => handleRenameGroup(group.id, name)} />
-              <span className="mb-badge-count">{rootTasks.length}</span>
-              {sortedGroups.length > 1 && (
-                <button
-                  type="button"
-                  className="mb-comment-btn"
-                  style={{ marginLeft: "auto", color: "var(--danger)" }}
-                  onClick={() => handleDeleteGroup(group.id)}
-                  aria-label={`Eliminar grupo ${group.name}`}
-                >
-                  <IconTrash />
-                </button>
-              )}
-            </div>
-            <div className="mb-cols">
-              <span>Tarea</span>
-              <span style={{ textAlign: "center" }}>Personas</span>
-              <span style={{ textAlign: "center" }}>Estado</span>
-              <span style={{ textAlign: "center" }}>Fechas</span>
-              <span />
-            </div>
-            {rootTasks.map((t) => (
-              <MondayRow
-                key={t.id}
-                task={t}
-                depth={0}
-                childrenMap={childrenMap}
-                assigneesByTask={assigneesByTask}
-                commentCountByTask={commentCountByTask}
-                members={members}
-                projectId={projectId}
-                onStatusChange={handleStatusChange}
-                onDatesChange={handleDatesChange}
-                onAssigneesChange={handleAssigneesChange}
-                onSubtaskCreated={handleTaskCreated}
-                onDelete={handleDeleteTask}
-              />
-            ))}
-            {!rootTasks.length && (
-              <div className="text-sm" style={{ padding: "12px", color: "var(--muted)" }}>
-                Sin tareas en este grupo — arrastra una tarea aquí o agrega una nueva abajo. ✨
-              </div>
+            <GroupHeader
+              group={group}
+              tasks={groupTasks}
+              rootCount={rootTasks.length}
+              collapsed={isCollapsed}
+              allSelected={allSelected}
+              canDelete={sortedGroups.length > 1}
+              canMoveUp={index > 0}
+              canMoveDown={index < sortedGroups.length - 1}
+              onToggleCollapsed={() => toggleCollapsed(group.id)}
+              onRename={(name) => handleRenameGroup(group.id, name)}
+              onColor={(color) => handleColorGroup(group.id, color)}
+              onDelete={() => handleDeleteGroup(group.id)}
+              onMove={(direction) => handleMoveGroup(group.id, direction)}
+              onSelectAll={(next) => api.selectMany(groupTasks.map((t) => t.id), next)}
+            />
+
+            {!isCollapsed && (
+              <>
+                <div className="mb-cols">
+                  <span>Tarea</span>
+                  <span className="mb-col-center">Personas</span>
+                  <span className="mb-col-center">Estado</span>
+                  <span className="mb-col-center">Prioridad</span>
+                  <span className="mb-col-center">Fechas</span>
+                </div>
+                {rootTasks.map((t) => (
+                  <MondayRow
+                    key={t.id}
+                    api={api}
+                    task={t}
+                    depth={0}
+                    childrenMap={childrenMap}
+                    dragTaskId={dragTaskId}
+                    dropHint={dropHint}
+                    onDragStart={setDragTaskId}
+                    onDragHint={setDropHint}
+                    onDropOnRow={handleDropOnRow}
+                  />
+                ))}
+                {!rootTasks.length && (
+                  <p className="mb-empty text-sm">
+                    Sin tareas en este grupo — arrastra una aquí o escribe abajo para crear la primera. ✨
+                  </p>
+                )}
+                <QuickAddRow
+                  projectId={api.projectId}
+                  groupId={group.id}
+                  placeholder="+ Agregar tarea"
+                  onCreated={api.taskCreated}
+                />
+              </>
             )}
-            <QuickAddRow projectId={projectId} groupId={group.id} placeholder="+ Agregar tarea" onCreated={handleTaskCreated} />
-          </div>
+          </section>
         );
       })}
-      <div className="mb-quickadd" style={{ border: "1px dashed var(--line)", borderRadius: 12, marginTop: 6 }}>
+
+      <div className="mb-newgroup">
         <IconPlus />
         <input
           value={newGroupName}
           onChange={(e) => setNewGroupName(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleCreateGroup()}
-          placeholder="+ Nuevo grupo"
-          style={{ border: "none", background: "transparent", minHeight: "auto", padding: "4px 6px", width: "100%" }}
+          placeholder="Nuevo grupo (Enter para crear)"
+          aria-label="Nuevo grupo"
         />
       </div>
     </div>
-  );
-}
-
-function EditableGroupName({ name, onRename }: { name: string; onRename: (name: string) => void }) {
-  const [value, setValue] = useState(name);
-  function save() {
-    const trimmed = value.trim();
-    if (!trimmed || trimmed === name) {
-      setValue(name);
-      return;
-    }
-    onRename(trimmed);
-  }
-  return (
-    <input
-      value={value}
-      onChange={(e) => setValue(e.target.value)}
-      onBlur={save}
-      onKeyDown={(e) => e.key === "Enter" && (e.currentTarget as HTMLInputElement).blur()}
-      style={{
-        background: "transparent",
-        border: "none",
-        font: "inherit",
-        fontWeight: 800,
-        color: "inherit",
-        minHeight: "auto",
-        padding: "2px 4px",
-        width: "auto",
-        maxWidth: 220
-      }}
-    />
   );
 }

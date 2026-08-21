@@ -1,200 +1,150 @@
 "use client";
-
-// FASE 2 — Vista Kanban (drag&drop + límite WIP). Equivalente a
-// execKanban()/renderKanbanCard() en LifeOS 4.html.
+// Vista Kanban: una columna por estado, con límite WIP y arrastre entre
+// columnas. Ahora comparte estado, filtros y selección con el resto de las
+// vistas (recibe `api` y las tareas ya filtradas por BoardShell) y muestra
+// las mismas señales visuales que el tablero: color de grupo, prioridad,
+// responsables, vencimiento en rojo y conteo de subtareas.
 //
-// Reutiliza:
-//   - setTaskStatus (execution/actions.ts, YA EXISTENTE) para persistir el
-//     cambio de columna — la misma acción que usa TaskStatusButtons.tsx, así
-//     que la validación de "no completar con dependencias abiertas"
-//     (evaluateTransition / FR-EXE-005) se aplica igual aquí.
-//   - TaskDetailPanel (FASE 1) dentro de cada tarjeta para abrir el detalle
-//     completo (responsables, dependencias, comentarios, historial) sin
-//     duplicar código.
-//
-// FIX (build de GitHub Actions, TS2739): TaskStatus tiene 6 miembros
-// (Pending, InProgress, Blocked, Completed, Rescheduled, Cancelled), no 4.
-// El objeto `map` que satisface Record<TaskStatus, KanbanTask[]> debe
-// inicializar las 6 claves aunque el Kanban solo muestre 4 columnas — las
-// tareas Rescheduled/Cancelled simplemente no se listan en ninguna columna
-// visible (mismo criterio que progressByProject en page.tsx, que también
-// excluye Cancelled de los cálculos).
-//
-// Patrón de optimistic update: igual que eisenhower/Board.tsx (BR-023) — se
-// actualiza el estado local inmediatamente al soltar la tarjeta y, si el
-// servidor rechaza la transición (por ejemplo BR-014: no completar con deps
-// abiertas), se revierte y se muestra el mensaje de error.
-
+// La persistencia sigue pasando por setTaskStatus, así que la máquina de
+// estados (FR-EXE-003/004/005) y la regla de dependencias abiertas
+// (BR-014) se aplican igual que en el resto de la app: si el servidor
+// rechaza el movimiento, la tarjeta vuelve a su columna.
 import { useMemo, useState, useTransition } from "react";
+import { isOverdue, sortTasks } from "@/lib/domain/board.ts";
 import { setTaskStatus } from "./actions";
-import TaskDetailPanel from "./TaskDetailPanel";
-import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
+import { STATUS_META, STATUS_ORDER, PRIORITY_META } from "./status-meta";
+import { AvatarStack } from "@/components/ui";
+import type { TaskStatus } from "@/lib/domain/types.ts";
+import type { BoardApi, BoardTask } from "./board-types";
 
-export interface KanbanTask {
-  id: string;
-  title: string;
-  status: TaskStatus;
-  priority: Priority;
-  urgent: boolean;
-  due: string | null;
-}
-
-const COLUMNS: { key: TaskStatus; label: string }[] = [
-  { key: "Pending", label: "Pendiente" },
-  { key: "InProgress", label: "En progreso" },
-  { key: "Blocked", label: "Bloqueada" },
-  { key: "Completed", label: "Completada" }
-];
-
-// Límite WIP por columna, igual que WIP={InProgress:4} en el HTML de
-// referencia. Solo advierte (chip rojo), no bloquea el drop — mismo
-// comportamiento que el original.
+/** Límite WIP por columna: solo advierte (chip rojo), nunca bloquea el drop. */
 const WIP_LIMIT: Partial<Record<TaskStatus, number>> = { InProgress: 4 };
 
-const PRIORITY_CHIP: Record<Priority, string> = {
-  High: "chip danger",
-  Medium: "chip warn",
-  Low: "chip"
-};
-
-export default function KanbanBoard({
-  projectId,
-  initialTasks,
-  assigneesByTask
-}: {
-  projectId: string;
-  initialTasks: KanbanTask[];
-  assigneesByTask: Record<string, string[]>;
-}) {
-  const [tasks, setTasks] = useState<KanbanTask[]>(initialTasks);
+export default function KanbanBoard({ api, tasks, today }: { api: BoardApi; tasks: BoardTask[]; today: string }) {
   const [dragId, setDragId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [dropColumn, setDropColumn] = useState<TaskStatus | null>(null);
   const [, startTransition] = useTransition();
 
+  const groupById = useMemo(() => new Map(api.groups.map((g) => [g.id, g])), [api.groups]);
+
   const byColumn = useMemo(() => {
-    const map: Record<TaskStatus, KanbanTask[]> = {
-      Pending: [],
-      InProgress: [],
-      Blocked: [],
-      Completed: [],
-      Rescheduled: [],
-      Cancelled: []
-    };
-    for (const t of tasks) map[t.status]?.push(t);
+    const map = new Map<TaskStatus, BoardTask[]>(STATUS_ORDER.map((s) => [s, []]));
+    for (const t of sortTasks(tasks, "manual")) map.get(t.status)?.push(t);
     return map;
   }, [tasks]);
 
+  const childCount = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const t of tasks) {
+      if (t.parentTaskId) counts[t.parentTaskId] = (counts[t.parentTaskId] ?? 0) + 1;
+    }
+    return counts;
+  }, [tasks]);
+
   function handleDrop(newStatus: TaskStatus) {
-    if (!dragId) return;
     const taskId = dragId;
     setDragId(null);
-    const prev = tasks;
+    setDropColumn(null);
+    if (!taskId) return;
     const task = tasks.find((t) => t.id === taskId);
     if (!task || task.status === newStatus) return;
 
-    // Optimistic update.
-    setTasks((cur) => cur.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t)));
-    setError(null);
-
+    const previous = task.status;
+    api.setStatus(taskId, newStatus);
+    api.reportError(null);
     startTransition(async () => {
       try {
         await setTaskStatus(taskId, newStatus);
       } catch (e) {
-        // Revierte si el servidor rechaza la transición (p.ej. dependencias
-        // abiertas al intentar mover a Completed — FR-EXE-005/BR-014).
-        setTasks(prev);
-        setError(e instanceof Error ? e.message : "No se pudo mover la tarea");
+        api.setStatus(taskId, previous);
+        api.reportError(e instanceof Error ? e.message : "No se pudo mover la tarea");
       }
     });
   }
 
   return (
-    <div style={{ marginTop: 10 }}>
-      {error && (
-        <div className="chip danger" style={{ marginBottom: 8 }}>
-          {error}
-        </div>
-      )}
-      <div
-        className="grid"
-        style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(220px, 1fr))", gap: 10, overflowX: "auto" }}
-      >
-        {COLUMNS.map((col) => {
-          const list = byColumn[col.key] ?? [];
-          const limit = WIP_LIMIT[col.key];
-          const overLimit = limit != null && list.length > limit;
-          return (
-            <div
-              key={col.key}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={() => handleDrop(col.key)}
-              className="card"
-              style={{ background: "var(--surface)", minHeight: 160, padding: 8 }}
-            >
-              <div className="flex items-center justify-between" style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                <b className="text-sm">{col.label}</b>
-                <span className={overLimit ? "chip danger" : "chip"} style={{ fontSize: 11 }}>
-                  {list.length}
-                  {limit != null ? ` / ${limit}` : ""}
-                </span>
-              </div>
-              {overLimit && (
-                <div className="text-xs" style={{ color: "var(--danger)", marginBottom: 6 }}>
-                  Límite WIP superado
-                </div>
-              )}
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {list.map((t) => (
-                  <div
+    <div className="kb-board">
+      {STATUS_ORDER.map((status) => {
+        const list = byColumn.get(status) ?? [];
+        const limit = WIP_LIMIT[status];
+        const overLimit = limit != null && list.length > limit;
+        const meta = STATUS_META[status];
+        return (
+          <section
+            key={status}
+            className={`kb-col${dropColumn === status ? " dragover" : ""}`}
+            style={{ "--col-color": meta.color } as React.CSSProperties}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDropColumn(status);
+            }}
+            onDragLeave={() => setDropColumn((cur) => (cur === status ? null : cur))}
+            onDrop={(e) => {
+              e.preventDefault();
+              handleDrop(status);
+            }}
+          >
+            <header className="kb-col-head">
+              <b>{meta.label}</b>
+              <span className={overLimit ? "chip bad" : "chip"}>
+                {list.length}
+                {limit != null ? ` / ${limit}` : ""}
+              </span>
+            </header>
+            {overLimit && <p className="kb-wip text-xs">Límite WIP superado</p>}
+
+            <div className="kb-cards">
+              {list.map((t) => {
+                const group = t.groupId ? groupById.get(t.groupId) : undefined;
+                const late = isOverdue(t, today);
+                const subs = childCount[t.id] ?? 0;
+                return (
+                  <article
                     key={t.id}
+                    className={`kb-card${dragId === t.id ? " dragging" : ""}${api.selected.has(t.id) ? " selected" : ""}`}
                     draggable
                     onDragStart={() => setDragId(t.id)}
-                    style={{
-                      background: "var(--surface2)",
-                      borderRadius: 12,
-                      padding: "8px 10px",
-                      cursor: "grab",
-                      opacity: dragId === t.id ? 0.5 : 1
-                    }}
+                    onDragEnd={() => setDragId(null)}
                   >
-                    <div className="flex items-center justify-between" style={{ display: "flex", justifyContent: "space-between", gap: 6 }}>
-                      <span className="text-sm" style={{ fontWeight: 700 }}>
+                    <div className="kb-card-top">
+                      <input
+                        type="checkbox"
+                        className="mb-check"
+                        checked={api.selected.has(t.id)}
+                        onChange={(e) => api.toggleSelected(t.id, e.target.checked)}
+                        aria-label={`Seleccionar ${t.title}`}
+                      />
+                      <button type="button" className="kb-card-title" onClick={() => api.openDetail(t.id)}>
                         {t.title}
-                      </span>
-                      {t.urgent && (
-                        <span className="chip danger" style={{ fontSize: 10 }}>
-                          Urgente
-                        </span>
-                      )}
+                      </button>
                     </div>
-                    <div className="flex items-center justify-between" style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
-                      <span className={PRIORITY_CHIP[t.priority]} style={{ fontSize: 10 }}>
-                        {t.priority}
+                    {group && (
+                      <span className="kb-group" style={{ color: group.color }}>
+                        ● {group.name}
                       </span>
-                      <span className="text-xs" style={{ color: "var(--muted)" }}>
-                        {t.due ? new Date(t.due).toLocaleDateString() : "sin fecha"}
-                      </span>
-                    </div>
-                    {(assigneesByTask[t.id] ?? []).length > 0 && (
-                      <div className="text-xs" style={{ color: "var(--muted)", marginTop: 4 }}>
-                        👤 {(assigneesByTask[t.id] ?? []).join(", ")}
-                      </div>
                     )}
-                    <div style={{ marginTop: 6 }}>
-                      <TaskDetailPanel taskId={t.id} taskTitle={t.title} compact />
+                    <div className="kb-card-meta">
+                      <span
+                        className="mb-pill soft kb-pill"
+                        style={{ background: PRIORITY_META[t.priority].soft, color: PRIORITY_META[t.priority].color }}
+                      >
+                        {t.urgent ? "⚡ " : ""}
+                        {PRIORITY_META[t.priority].label}
+                      </span>
+                      {subs > 0 && <span className="mb-badge-count">{subs} sub</span>}
+                      <span className={`kb-due${late ? " overdue" : ""}`}>
+                        {t.due ? new Date(`${t.due}T00:00:00`).toLocaleDateString("es-MX", { day: "2-digit", month: "short" }) : "sin fecha"}
+                      </span>
                     </div>
-                  </div>
-                ))}
-                {!list.length && (
-                  <div className="text-xs" style={{ color: "var(--muted)" }}>
-                    Sin tareas
-                  </div>
-                )}
-              </div>
+                    <AvatarStack names={api.assigneesByTask[t.id] ?? []} />
+                  </article>
+                );
+              })}
+              {!list.length && <p className="kb-empty text-xs">Sin tareas</p>}
             </div>
-          );
-        })}
-      </div>
+          </section>
+        );
+      })}
     </div>
   );
 }

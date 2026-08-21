@@ -1,11 +1,10 @@
 "use client";
-
-// Pill de estado coloreado (estilo monday.com: Sin empezar/Trabajando/
-// Bloqueada/Reprogramada/Hecho/Cancelada). Reutiliza setTaskStatus, la MISMA
-// Server Action de TaskStatusButtons.tsx/KanbanBoard.tsx — así la máquina de
-// estados y la validación de dependencias abiertas (FR-EXE-005) se respetan
-// también aquí. Solo muestra las transiciones permitidas por TASK_TRANSITIONS.
-
+// Pill de estado (Sin empezar / Trabajando / Bloqueada / Reprogramada /
+// Hecho / Cancelada). Reutiliza setTaskStatus — la MISMA Server Action que
+// usan Kanban, tabla y el panel de detalle — así la máquina de estados y la
+// validación de dependencias abiertas (FR-EXE-005) se respetan en todas las
+// vistas. Solo ofrece las transiciones permitidas por TASK_TRANSITIONS, que
+// ahora se importan directamente del dominio (una sola tabla, no una copia).
 import { useState, useTransition } from "react";
 import { setTaskStatus } from "./actions";
 import { STATUS_META, TASK_TRANSITIONS } from "./status-meta";
@@ -14,11 +13,13 @@ import type { TaskStatus } from "@/lib/domain/types.ts";
 export default function StatusMenu({
   taskId,
   status,
-  onChange
+  onChange,
+  onError
 }: {
   taskId: string;
   status: TaskStatus;
   onChange: (s: TaskStatus) => void;
+  onError?: (message: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -28,49 +29,54 @@ export default function StatusMenu({
 
   function choose(to: TaskStatus) {
     setOpen(false);
-    const prevStatus = status;
+    const previous = status;
     onChange(to);
     startTransition(async () => {
       try {
         await setTaskStatus(taskId, to);
         setError(null);
       } catch (e) {
-        onChange(prevStatus);
-        setError(e instanceof Error ? e.message : "No se pudo cambiar el estado");
+        const message = e instanceof Error ? e.message : "No se pudo cambiar el estado";
+        onChange(previous);
+        if (onError) onError(message);
+        else setError(message);
       }
     });
   }
 
   return (
-    <div style={{ position: "relative", display: "flex", justifyContent: "center" }}>
+    <div className="mb-menu-wrap">
       <button
         type="button"
         className="mb-pill"
         style={{ background: meta.color, opacity: pending ? 0.7 : 1, cursor: allowed.length ? "pointer" : "default" }}
         onClick={() => allowed.length > 0 && setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={allowed.length ? "Cambiar estado" : "Estado final: no admite más transiciones"}
       >
         {meta.label}
       </button>
       {open && (
-        <div className="card" style={{ position: "absolute", zIndex: 45, top: 36, left: 0, minWidth: 170, padding: 6, boxShadow: "var(--shadow)" }}>
-          {allowed.map((to) => (
-            <button
-              key={to}
-              type="button"
-              onClick={() => choose(to)}
-              className="mb-pill"
-              style={{ background: STATUS_META[to].color, width: "100%", marginBottom: 4 }}
-            >
-              {STATUS_META[to].label}
-            </button>
-          ))}
-        </div>
+        <>
+          <div className="ex-backdrop" onClick={() => setOpen(false)} />
+          <div className="mb-menu card" role="menu">
+            {allowed.map((to) => (
+              <button
+                key={to}
+                type="button"
+                role="menuitem"
+                onClick={() => choose(to)}
+                className="mb-pill"
+                style={{ background: STATUS_META[to].color }}
+              >
+                {STATUS_META[to].label}
+              </button>
+            ))}
+          </div>
+        </>
       )}
-      {error && (
-        <div className="text-xs" style={{ color: "var(--danger)", position: "absolute", top: 36, whiteSpace: "nowrap" }}>
-          {error}
-        </div>
-      )}
+      {error && <span className="mb-inline-error text-xs">{error}</span>}
     </div>
   );
 }

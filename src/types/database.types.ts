@@ -1612,6 +1612,7 @@ export type Database = {
           id: string
           impact: boolean
           parent_task_id: string | null
+          position: number
           priority: string
           project_id: string
           start_date: string | null
@@ -1631,6 +1632,7 @@ export type Database = {
           id?: string
           impact?: boolean
           parent_task_id?: string | null
+          position?: number
           priority?: string
           project_id: string
           start_date?: string | null
@@ -1650,6 +1652,7 @@ export type Database = {
           id?: string
           impact?: boolean
           parent_task_id?: string | null
+          position?: number
           priority?: string
           project_id?: string
           start_date?: string | null
