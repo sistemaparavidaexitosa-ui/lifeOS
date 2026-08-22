@@ -21,6 +21,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { todayLocal } from "@/lib/data/dates";
+import { getUserTimeZone } from "@/lib/data/profile";
 
 const windowSchema = z.object({
   start: z.string().regex(/^\d{2}:\d{2}$/),
@@ -151,7 +152,7 @@ export async function assignTaskToDate(taskId: string, date: string) {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("No autenticado");
 
-  const isToday = parsedDate === todayLocal();
+  const isToday = parsedDate === todayLocal(await getUserTimeZone());
   const { error } = await supabase
     .from("tasks")
     .update(isToday ? { impact: true, due: parsedDate } : { due: parsedDate })
@@ -165,7 +166,7 @@ export async function assignTaskToDate(taskId: string, date: string) {
 
 /** Wrapper de compatibilidad: asigna al día de HOY (mismo contrato que antes de esta actualización). */
 export async function assignTaskToSlot(taskId: string) {
-  return assignTaskToDate(taskId, todayLocal());
+  return assignTaskToDate(taskId, todayLocal(await getUserTimeZone()));
 }
 
 /**

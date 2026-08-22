@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { todayLocal } from "@/lib/data/dates";
+import { getUserTimeZone } from "@/lib/data/profile";
 
 const habitSchema = z.object({
   name: z.string().min(1),
@@ -55,7 +56,7 @@ export async function toggleHabitToday(habitId: string) {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("No autenticado");
 
-  const t0 = todayLocal();
+  const t0 = todayLocal(await getUserTimeZone());
   const { data: existing } = await supabase.from("habit_logs").select("id").eq("habit_id", habitId).eq("log_date", t0).maybeSingle();
 
   if (existing) {
@@ -109,7 +110,7 @@ export async function upsertBook(id: string | null, formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("No autenticado");
 
-  const t0 = todayLocal();
+  const t0 = todayLocal(await getUserTimeZone());
   const payload: BookUpsertPayload = {
     title: parsed.title,
     author: parsed.author,

@@ -73,6 +73,35 @@
   `tests/domain/board.test.ts`. La regla "¿está vencida?" o "¿cuánto avanzó
   este grupo?" existe UNA vez y se ve igual en las 4 vistas.
 
+### Zona horaria del usuario (agosto 2026)
+- **D-016 "Hoy" se calcula con `profiles.timezone`, nunca con el reloj del
+  proceso**: `todayLocal()` usaba `new Date()` + `getTimezoneOffset()`, es
+  decir la zona del SERVIDOR. En local funciona (la laptop está en México),
+  pero en Vercel el proceso corre en UTC, así que entre las 18:00 y la
+  medianoche hora de México el backend ya estaba en el día siguiente: los
+  hábitos marcados de noche caían en la fecha de mañana, el plan diario se
+  guardaba con `local_date` equivocada, los rangos de /reports se corrían un
+  día y /home saludaba "Buenas noches" a la 1 pm. La columna
+  `profiles.timezone` existía desde la migración 0002 y no se usaba para
+  calcular nada. Ahora la lógica pura vive en `src/lib/domain/datetime.ts`
+  (con `Intl.DateTimeFormat`, probada en `tests/domain/datetime.test.ts`) y
+  cada vista/Action obtiene la zona con `getUserTimeZone()`
+  (`src/lib/data/profile.ts`, envuelto en React `cache()` para no repetir la
+  consulta dentro del mismo request). No se requirió migración.
+- **D-017 La zona horaria se valida al escribir y se degrada al leer**:
+  `profiles.timezone` es un `<input>` de texto libre en /settings, así que un
+  typo tumbaba cualquier página que formateara fechas (Intl lanza
+  `RangeError`). Ahora settings/onboarding la rechazan con Zod
+  (`isValidTimeZone`) y, si aun así llegara un valor inválido a la base,
+  `getUserTimeZone()` cae a `America/Mexico_City` en vez de reventar: una
+  fecha equivocada es un bug, una app caída por un typo es peor.
+- **D-018 El tablero recibe "hoy" del servidor**: las vistas de /execution son
+  Client Components y calculaban su propio `todayISO()` con la zona del
+  NAVEGADOR, mientras la barra lateral lo hacía en el servidor — con zonas
+  distintas, el conteo de vencidas del proyecto podía contradecir a los chips
+  rojos del tablero. Ahora `page.tsx` calcula el día una vez y lo pasa por
+  `BoardApi.today`.
+
 ## Decisiones técnicas (§7, ERESOLVE)
 
 - **D-008 Dependencias de runtime mínimas**: solo `next`, `react`,

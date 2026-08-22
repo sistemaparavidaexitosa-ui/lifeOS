@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getUserTimeZone } from "@/lib/data/profile";
+import { todayInTimeZone } from "@/lib/domain/datetime.ts";
 import { Card, EmptyState } from "@/components/ui";
 import { money, money0, fdate } from "@/lib/format";
 import { accountBalance, netWorth } from "@/lib/domain/money.ts";
@@ -46,7 +48,7 @@ export default async function WealthPage() {
       <Card hero>
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-xs" style={{ opacity: 0.85 }}>Patrimonio neto · {fdate(new Date().toISOString())}</div>
+            <div className="text-xs" style={{ opacity: 0.85 }}>Patrimonio neto · {fdate(todayInTimeZone(await getUserTimeZone()))}</div>
             <div className="text-3xl font-black">{money(net, profile.currency, profile.locale)}</div>
           </div>
           <SnapshotButton />

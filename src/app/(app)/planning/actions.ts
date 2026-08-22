@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { todayLocal } from "@/lib/data/dates";
+import { getUserTimeZone } from "@/lib/data/profile";
 
 const planSchema = z.object({
   projectId: z.string().uuid().optional().or(z.literal("")),
@@ -29,7 +30,7 @@ export async function approveDailyPlan(formData: FormData) {
   if (oneTaskErr || !oneTask) throw new Error("Selecciona una tarea válida para tu Única Cosa");
 
   const ids = Array.from(new Set([oneTask.id, ...parsed.impactTaskIds])).slice(0, 3);
-  const t0 = todayLocal();
+  const t0 = todayLocal(await getUserTimeZone());
 
   const { error: upsertErr } = await supabase.from("daily_plans").upsert(
     {

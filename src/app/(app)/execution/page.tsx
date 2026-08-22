@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { fdate } from "@/lib/format";
-import { isOverdue, isOpen, todayISO, type BoardTaskLike } from "@/lib/domain/board.ts";
+import { isOverdue, isOpen, type BoardTaskLike } from "@/lib/domain/board.ts";
+import { todayInTimeZone } from "@/lib/domain/datetime.ts";
+import { getUserTimeZone } from "@/lib/data/profile";
 import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
 import NewProjectForm from "./NewProjectForm";
 import ProjectSidebar, { type SidebarProject } from "./ProjectSidebar";
@@ -38,7 +40,11 @@ export default async function ExecutionPage({
 }) {
   const { project: selectedProjectId, view: rawView } = await searchParams;
   const view: ExecutionView = isExecutionView(rawView) ? rawView : "board";
-  const today = todayISO();
+  // "Hoy" sale de profiles.timezone, no del reloj del servidor (UTC en
+  // Vercel): de lo contrario el conteo de vencidas se corría un día cada
+  // tarde. El mismo valor viaja al cliente para que tablero y barra lateral
+  // nunca se contradigan. Ver src/lib/domain/datetime.ts.
+  const today = todayInTimeZone(await getUserTimeZone());
 
   const supabase = await createClient();
   const {
@@ -79,7 +85,7 @@ export default async function ExecutionPage({
         {!selectedProject ? (
           <ProjectsOverview projects={sidebarProjects} view={view} />
         ) : (
-          <BoardWorkspace projectRow={selectedProject} view={view} userId={user.id} />
+          <BoardWorkspace projectRow={selectedProject} view={view} userId={user.id} today={today} />
         )}
       </main>
     </div>
@@ -94,14 +100,15 @@ export default async function ExecutionPage({
 async function BoardWorkspace({
   projectRow,
   view,
-  userId
+  userId,
+  today
 }: {
   projectRow: { id: string; title: string; objective: string | null; status: string; priority: string; target_date: string | null; workspace_id: string | null };
   view: ExecutionView;
   userId: string;
+  today: string;
 }) {
   const supabase = await createClient();
-  const today = todayISO();
   const projectId = projectRow.id;
 
   const TASK_COLUMNS = "id, title, status, priority, due, start_date, est, urgent, parent_task_id, group_id, position";
@@ -203,6 +210,7 @@ async function BoardWorkspace({
         members={members}
         initialView={view}
         orderingEnabled={orderingEnabled}
+        today={today}
       />
     </>
   );

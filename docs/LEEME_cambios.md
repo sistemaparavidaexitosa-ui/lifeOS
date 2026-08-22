@@ -121,3 +121,38 @@ supabase db reset   # aplica 0021_execution_board_order.sql
 > Si `0021` aún no está aplicada, el tablero sigue funcionando con el orden
 > histórico por `created_at` y muestra un aviso: el arrastre queda desactivado
 > hasta correr la migración.
+
+---
+
+# Fix: la app usaba el reloj del servidor, no el del usuario
+
+**Síntoma reportado:** `/home` saludaba "Buenas noches" a la 1 de la tarde en
+México.
+
+**Causa real (más amplia que el saludo):** `todayLocal()` calculaba el día con
+la zona horaria del proceso. En Vercel el servidor corre en UTC, así que entre
+las 18:00 y la medianoche hora de México todo el backend ya estaba en el día
+siguiente. Eso afectaba:
+
+| Dónde | Qué pasaba mal |
+|---|---|
+| `/habits` | Un hábito marcado a las 8 pm se registraba con la fecha de mañana (y rompía la racha) |
+| `/planning` | El plan diario se leía/guardaba con `local_date` de mañana |
+| `/time` | "Asignar a hoy" mandaba la tarea al día siguiente |
+| `/reports`, `/money`, `/money/budget` | Los rangos del periodo se corrían un día |
+| `/execution` | El conteo de vencidas de la barra lateral (servidor) podía contradecir los chips del tablero (navegador) |
+| `/home` | Saludo y fecha de corte equivocados |
+
+**Solución:** `profiles.timezone` (existe desde la migración 0002 y no se usaba
+para calcular) ahora manda. La lógica pura está en
+`src/lib/domain/datetime.ts` con 8 pruebas en `tests/domain/datetime.test.ts`,
+incluida la regresión exacta del bug reportado. Cada vista y Server Action
+obtiene la zona con `getUserTimeZone()` (`src/lib/data/profile.ts`), y el
+tablero recibe el "hoy" ya calculado desde el servidor para que todas las
+vistas coincidan.
+
+Además, la zona horaria se valida al guardarla en Configuración/onboarding: un
+valor que `Intl` no reconozca se rechaza con mensaje, y si alguno ya estuviera
+guardado, la app cae a `America/Mexico_City` en vez de tronar.
+
+**No requiere migración ni cambios en la base.**

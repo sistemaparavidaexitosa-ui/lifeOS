@@ -24,7 +24,6 @@ import {
   filterTaskTree,
   sortTasks,
   subtreeIds,
-  todayISO,
   type BoardFilters,
   type SortKey
 } from "@/lib/domain/board.ts";
@@ -50,7 +49,8 @@ export default function BoardShell({
   commentCountByTask,
   members,
   initialView,
-  orderingEnabled
+  orderingEnabled,
+  today
 }: {
   projectId: string;
   initialTasks: BoardTask[];
@@ -60,6 +60,8 @@ export default function BoardShell({
   members: string[];
   initialView: ExecutionView;
   orderingEnabled: boolean;
+  /** "Hoy" en la zona horaria del PERFIL, calculado en el servidor. */
+  today: string;
 }) {
   const [tasks, setTasks] = useState<BoardTask[]>(initialTasks);
   const [groups, setGroups] = useState<BoardGroup[]>(initialGroups);
@@ -74,8 +76,6 @@ export default function BoardShell({
   // Nota: page.tsx monta este componente con key={projectId}, así que cambiar
   // de tablero lo remonta con estado limpio — no hace falta ningún efecto de
   // sincronización (que además pisaría los updates optimistas en curso).
-
-  const today = todayISO();
 
   function changeView(next: ExecutionView) {
     setView(next);
@@ -197,6 +197,7 @@ export default function BoardShell({
   const api: BoardApi = useMemo(
     () => ({
       projectId,
+      today,
       members,
       assigneesByTask,
       commentCountByTask,
@@ -225,6 +226,7 @@ export default function BoardShell({
     }),
     [
       projectId,
+      today,
       members,
       assigneesByTask,
       commentCountByTask,
