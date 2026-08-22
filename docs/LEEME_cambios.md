@@ -237,3 +237,31 @@ se reprodujo el error con la 0022 y se confirmaron los 13 casos con la 0023,
 incluidos dos nuevos en `supabase/tests/0006_invitations_accept.sql`: que un
 miembro existente pueda aceptar sin error, y que aceptar una invitación de
 `Viewer` **no degrade** a un `Owner`.
+
+---
+
+# Fix: `EMAIL_FROM` con comillas rompía el envío (422 de Resend)
+
+```
+El proveedor rechazó el envío (422): {"name":"validation_error",
+"message":"Invalid `from` field. The email address needs to follow the
+`email@example.com` or `Name <email@example.com>` format."}
+```
+
+**Causa:** en un archivo `.env` se escribe `EMAIL_FROM="LifeOS <no-reply@…>"`
+y las comillas son sintaxis de shell — pero al pegar ese mismo valor en el
+panel de Vercel **se guardan literales**, y `"LifeOS <no-reply@…>"` no es un
+remitente válido. La documentación (`docs/DEPLOY.md`) mostraba el valor con
+comillas, así que inducía el error.
+
+**Solución:** `normalizeFrom()` (`src/lib/email/from.ts`, puro y probado en
+`tests/domain/email-from.test.ts`) quita comillas envolventes y espacios, y si
+el valor no tiene forma de correo usa el default en vez de mandar algo que el
+proveedor va a rechazar igual. Además, ante un 422 que mencione `from`, el
+mensaje que ve el usuario ahora dice exactamente qué revisar. La doc ya no
+lleva comillas y advierte que Vercel solo aplica variables nuevas en
+despliegues nuevos.
+
+**Nota:** esto hace tolerante al sistema, pero el remitente sigue teniendo que
+ser real. Con `onboarding@resend.dev` Resend solo entrega a la dirección con
+la que te registraste; para invitar a terceros hay que verificar un dominio.

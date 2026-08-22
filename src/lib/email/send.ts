@@ -1,5 +1,6 @@
 import "server-only";
 import { publicEnv } from "@/config/env";
+import { normalizeFrom } from "./from";
 
 /**
  * Envío de correo transaccional vía Resend, con `fetch` directo a su API REST
@@ -29,9 +30,12 @@ export interface EmailMessage {
  * Remitente. Resend exige un dominio verificado: mientras no lo configures,
  * `onboarding@resend.dev` solo entrega a TU propia dirección de registro, así
  * que en producción hay que definir EMAIL_FROM.
+ *
+ * La normalización (comillas envolventes, espacios, formato) vive en
+ * ./from.ts, que es puro y está probado en tests/domain/email-from.test.ts.
  */
 function fromAddress(): string {
-  return process.env.EMAIL_FROM || "LifeOS <onboarding@resend.dev>";
+  return normalizeFrom(process.env.EMAIL_FROM);
 }
 
 export async function sendEmail(message: EmailMessage): Promise<EmailResult> {
@@ -64,7 +68,10 @@ export async function sendEmail(message: EmailMessage): Promise<EmailResult> {
       // verificado, destinatario inválido, cuota). Se propaga tal cual a la
       // UI: un "no se pudo enviar" a secas no le sirve a nadie.
       const detail = await response.text();
-      return { sent: false, reason: `El proveedor rechazó el envío (${response.status}): ${detail.slice(0, 200)}` };
+      const hint = detail.includes("`from`")
+        ? " — revisa EMAIL_FROM en las variables de entorno: debe ser `Nombre <correo@dominio.com>` SIN comillas, y el dominio debe estar verificado en Resend."
+        : "";
+      return { sent: false, reason: `El proveedor rechazó el envío (${response.status}): ${detail.slice(0, 200)}${hint}` };
     }
 
     const data = (await response.json()) as { id?: string };

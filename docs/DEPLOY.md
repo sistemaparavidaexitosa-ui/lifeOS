@@ -45,9 +45,14 @@ enlace para copiarlo y compartirlo a mano (ver `InviteMemberForm.tsx`).
 
 ```bash
 RESEND_API_KEY=re_xxxxxxxx        # https://resend.com → API Keys
-EMAIL_FROM="LifeOS <no-reply@tudominio.com>"
+EMAIL_FROM=LifeOS <no-reply@tudominio.com>
 NEXT_PUBLIC_APP_URL=https://tu-dominio.vercel.app   # base de los enlaces del correo
 ```
+
+⚠️ En el panel de Vercel escribe los valores **sin comillas**. Arriba se
+muestran como en un archivo `.env`; si copias las comillas a la UI, se guardan
+literales y Resend responde `422 Invalid \`from\` field`. Recuerda además que
+Vercel solo aplica variables nuevas en despliegues nuevos: hay que redesplegar.
 
 ⚠️ Resend solo entrega desde un **dominio verificado** (Domains → Add Domain →
 registros DNS). Mientras no lo verifiques, el remitente de prueba
