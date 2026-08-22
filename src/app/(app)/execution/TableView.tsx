@@ -131,6 +131,7 @@ export default function TableView({
                     start={t.startDate}
                     due={t.due}
                     overdue={isOverdue(t, today)}
+                    today={today}
                     onChange={(startDate, due) => api.patchTask(t.id, { startDate, due })}
                   />
                 </td>

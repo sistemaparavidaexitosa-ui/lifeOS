@@ -13,7 +13,7 @@
 //   - El detalle ya no monta un Drawer por fila: llama a api.openDetail y
 //     BoardShell monta UNO solo.
 import { useState } from "react";
-import { computeStats, isOverdue, todayISO } from "@/lib/domain/board.ts";
+import { computeStats, isOverdue } from "@/lib/domain/board.ts";
 import { IconChevronRight, IconChevronDown, IconComment, IconPlus, IconTrash } from "@/components/icons";
 import StatusMenu from "./StatusMenu";
 import PriorityMenu from "./PriorityMenu";
@@ -53,8 +53,8 @@ export default function MondayRow({
   const commentCount = api.commentCountByTask[task.id] ?? 0;
   const assignees = api.assigneesByTask[task.id] ?? [];
   const isSelected = api.selected.has(task.id);
-  const overdue = isOverdue(task, todayISO());
-  const subStats = children.length ? computeStats(children, todayISO()) : null;
+  const overdue = isOverdue(task, api.today);
+  const subStats = children.length ? computeStats(children, api.today) : null;
   const hint = dropHint?.taskId === task.id ? dropHint.mode : null;
   const dragging = dragTaskId === task.id;
 
@@ -225,6 +225,7 @@ export default function MondayRow({
             start={task.startDate}
             due={task.due}
             overdue={overdue}
+            today={api.today}
             onChange={(startDate, due) => api.patchTask(task.id, { startDate, due })}
           />
         </div>

@@ -8,7 +8,7 @@
 // más frecuentes.
 import { useState, useTransition } from "react";
 import { IconCalendar } from "@/components/icons";
-import { addDaysISO, todayISO } from "@/lib/domain/board.ts";
+import { addDaysISO } from "@/lib/domain/board.ts";
 import { updateTaskDates } from "./actions";
 
 function fmt(d: string | null): string | null {
@@ -21,12 +21,15 @@ export default function TimelineEditor({
   start,
   due,
   overdue = false,
+  today,
   onChange
 }: {
   taskId: string;
   start: string | null;
   due: string | null;
   overdue?: boolean;
+  /** "Hoy" del perfil: los atajos de fecha deben usar el día del usuario. */
+  today: string;
   onChange: (start: string | null, due: string | null) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -67,10 +70,10 @@ export default function TimelineEditor({
             <label className="text-xs">Fin / vence</label>
             <input type="date" value={d} onChange={(e) => setD(e.target.value)} />
             <div className="mb-dates-quick">
-              <button type="button" className="btn-ghost btn-sm" onClick={() => persist(s || null, todayISO())}>
+              <button type="button" className="btn-ghost btn-sm" onClick={() => persist(s || null, today)}>
                 Vence hoy
               </button>
-              <button type="button" className="btn-ghost btn-sm" onClick={() => persist(s || null, addDaysISO(todayISO(), 7))}>
+              <button type="button" className="btn-ghost btn-sm" onClick={() => persist(s || null, addDaysISO(today, 7))}>
                 +1 semana
               </button>
               <button type="button" className="btn-ghost btn-sm" onClick={() => persist(null, null)}>

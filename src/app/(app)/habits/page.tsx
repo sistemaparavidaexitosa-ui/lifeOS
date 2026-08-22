@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Card, EmptyState } from "@/components/ui";
 import { habitStreak, habitDoneToday } from "@/lib/domain/habits.ts";
 import { todayLocal } from "@/lib/data/dates";
+import { getUserTimeZone } from "@/lib/data/profile";
 import HabitRow from "./HabitRow";
 import HabitForm from "./HabitForm";
 import BookForm from "./BookForm";
@@ -22,7 +23,7 @@ export default async function HabitsPage() {
     supabase.from("book_notes").select("*").order("created_at", { ascending: false })
   ]);
 
-  const t0 = todayLocal();
+  const t0 = todayLocal(await getUserTimeZone());
   const logs = (habitLogs ?? []).map((l) => ({ habitId: l.habit_id, date: l.log_date }));
   const occById = new Map((occupations ?? []).map((o) => [o.id, { id: o.id, title: o.title }]));
 

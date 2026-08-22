@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getHomeData } from "@/lib/data/home";
 import { Card, Chip, Stat, Progress, EmptyState } from "@/components/ui";
 import { money0, fdate } from "@/lib/format";
+import { greetingFor, hourInTimeZone, todayInTimeZone } from "@/lib/domain/datetime.ts";
 
 export default async function HomePage() {
   const supabase = await createClient();
@@ -15,8 +16,12 @@ export default async function HomePage() {
   // NO-MOCK (F8): si esto falla (BD desconectada), la página muestra el error
   // de Next.js — NUNCA datos de relleno.
   const data = await getHomeData(user.id);
-  const hour = new Date().getHours();
-  const greet = hour < 12 ? "Buenos días" : hour < 19 ? "Buenas tardes" : "Buenas noches";
+  // El saludo y la fecha de corte usan la zona del PERFIL, no la del servidor
+  // (en Vercel el proceso corre en UTC: a la 1 pm en México decía "Buenas
+  // noches"). Ver src/lib/domain/datetime.ts.
+  const timeZone = data.profile.timezone;
+  const today = todayInTimeZone(timeZone);
+  const greet = greetingFor(hourInTimeZone(timeZone));
   const sat = data.saturation;
   const satKind = sat.status === "saturated" ? "bad" : sat.status === "warn" ? "warn" : "ok";
 
@@ -25,7 +30,7 @@ export default async function HomePage() {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <div className="text-xs" style={{ color: "var(--muted)" }}>
-            {fdate(new Date().toISOString())} · {data.profile.timezone}
+            {fdate(today)} · {timeZone}
           </div>
           <h2 className="text-2xl font-black" style={{ letterSpacing: "-0.03em" }}>
             {greet}, {data.profile.name.split(" ")[0]}
@@ -62,7 +67,7 @@ export default async function HomePage() {
 
         <Card hero>
           <div className="text-xs" style={{ opacity: 0.85 }}>
-            Dinero disponible (periodo) · corte {fdate(new Date().toISOString())}
+            Dinero disponible (periodo) · corte {fdate(today)}
           </div>
           <div className="text-3xl font-black" style={{ letterSpacing: "-0.03em" }}>
             {money0(data.periodStats.available, data.profile.currency, data.profile.locale)}

@@ -5,6 +5,7 @@ import { money0 } from "@/lib/format";
 import { budgetTabRow } from "@/lib/domain/budget.ts";
 import { accountBalance } from "@/lib/domain/money.ts";
 import { addDaysISO, todayLocal } from "@/lib/data/dates";
+import { getUserTimeZone } from "@/lib/data/profile";
 import BudgetLineForm from "./BudgetLineForm";
 import QuincenalIncomeForm from "./QuincenalIncomeForm";
 import CreateBudgetButton from "./CreateBudgetButton";
@@ -33,7 +34,7 @@ export default async function BudgetTabPage() {
 
   if (!profile) throw new Error("Perfil no encontrado.");
 
-  const from15 = addDaysISO(todayLocal(), -15);
+  const from15 = addDaysISO(todayLocal(await getUserTimeZone()), -15);
 
   const entriesForDomain = (expenseEntries ?? []).map((e) => ({
     id: e.id,

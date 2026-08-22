@@ -4,13 +4,14 @@
 // grupo: colapsar, seleccionar todo, progreso real, distribución de estados,
 // color y reordenar el grupo.
 import { useState } from "react";
-import { computeStats, todayISO } from "@/lib/domain/board.ts";
+import { computeStats } from "@/lib/domain/board.ts";
 import { STATUS_META, STATUS_ORDER, GROUP_COLORS } from "./status-meta";
 import type { BoardGroup, BoardTask } from "./board-types";
 import { IconChevronDown, IconChevronRight, IconTrash } from "@/components/icons";
 
 export default function GroupHeader({
   group,
+  today,
   tasks,
   rootCount,
   collapsed,
@@ -26,6 +27,8 @@ export default function GroupHeader({
   onSelectAll
 }: {
   group: BoardGroup;
+  /** "Hoy" del perfil — mismo valor en todas las vistas. */
+  today: string;
   tasks: BoardTask[];
   rootCount: number;
   collapsed: boolean;
@@ -42,7 +45,7 @@ export default function GroupHeader({
 }) {
   const [name, setName] = useState(group.name);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const stats = computeStats(tasks, todayISO());
+  const stats = computeStats(tasks, today);
 
   function saveName() {
     const trimmed = name.trim();

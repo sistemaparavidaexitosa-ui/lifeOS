@@ -73,6 +73,71 @@
   `tests/domain/board.test.ts`. La regla "¿está vencida?" o "¿cuánto avanzó
   este grupo?" existe UNA vez y se ve igual en las 4 vistas.
 
+### Zona horaria del usuario (agosto 2026)
+- **D-016 "Hoy" se calcula con `profiles.timezone`, nunca con el reloj del
+  proceso**: `todayLocal()` usaba `new Date()` + `getTimezoneOffset()`, es
+  decir la zona del SERVIDOR. En local funciona (la laptop está en México),
+  pero en Vercel el proceso corre en UTC, así que entre las 18:00 y la
+  medianoche hora de México el backend ya estaba en el día siguiente: los
+  hábitos marcados de noche caían en la fecha de mañana, el plan diario se
+  guardaba con `local_date` equivocada, los rangos de /reports se corrían un
+  día y /home saludaba "Buenas noches" a la 1 pm. La columna
+  `profiles.timezone` existía desde la migración 0002 y no se usaba para
+  calcular nada. Ahora la lógica pura vive en `src/lib/domain/datetime.ts`
+  (con `Intl.DateTimeFormat`, probada en `tests/domain/datetime.test.ts`) y
+  cada vista/Action obtiene la zona con `getUserTimeZone()`
+  (`src/lib/data/profile.ts`, envuelto en React `cache()` para no repetir la
+  consulta dentro del mismo request). No se requirió migración.
+- **D-017 La zona horaria se valida al escribir y se degrada al leer**:
+  `profiles.timezone` es un `<input>` de texto libre en /settings, así que un
+  typo tumbaba cualquier página que formateara fechas (Intl lanza
+  `RangeError`). Ahora settings/onboarding la rechazan con Zod
+  (`isValidTimeZone`) y, si aun así llegara un valor inválido a la base,
+  `getUserTimeZone()` cae a `America/Mexico_City` en vez de reventar: una
+  fecha equivocada es un bug, una app caída por un typo es peor.
+- **D-018 El tablero recibe "hoy" del servidor**: las vistas de /execution son
+  Client Components y calculaban su propio `todayISO()` con la zona del
+  NAVEGADOR, mientras la barra lateral lo hacía en el servidor — con zonas
+  distintas, el conteo de vencidas del proyecto podía contradecir a los chips
+  rojos del tablero. Ahora `page.tsx` calcula el día una vez y lo pasa por
+  `BoardApi.today`.
+
+### Invitaciones a workspaces (agosto 2026)
+- **D-019 El canje vive en dos RPC `SECURITY DEFINER`, no en el cliente
+  service_role**: aceptar una invitación era imposible por diseño —
+  `invitations_all_admin` (FOR ALL, Owner/Admin) impide que el invitado lea su
+  propia invitación, y `memberships_insert_admin` impide que cree su
+  membresía; el invitado necesitaba un permiso que solo tendría DESPUÉS de
+  aceptar. Se resolvió con `invitation_preview(token)` y
+  `accept_invitation(token)` (migración 0022) en vez de usar
+  `SUPABASE_SERVICE_ROLE_KEY` desde una Server Action: no exige un secreto
+  nuevo en el despliegue, valida todo de forma atómica (`SELECT ... FOR
+  UPDATE`, así dos clics simultáneos no canjean el mismo token) y se puede
+  probar con pgTAP como el resto (`supabase/tests/0006_invitations_accept.sql`).
+  Esto NO reintroduce el problema de recursión de 0011-0015: aquel venía de
+  funciones invocadas DESDE una política, y estas dos no se referencian en
+  ninguna — la app las llama por RPC. Ninguna política existente se tocó.
+- **D-020 El token no basta: el correo debe coincidir**: `accept_invitation`
+  exige que `auth.email()` sea igual (sin distinguir mayúsculas) al correo
+  invitado. Un token filtrado o reenviado no alcanza para entrar al workspace,
+  que es justo lo que un enlace "mágico" por sí solo no garantiza.
+- **D-021 Enviar correo NUNCA rompe la acción**: `sendEmail()`
+  (`src/lib/email/send.ts`) jamás lanza; devuelve `{sent, reason}`. Si falta
+  `RESEND_API_KEY`, el dominio no está verificado o el proveedor falla, la
+  invitación se crea igual y la UI muestra el enlace para compartirlo a mano,
+  diciendo explícitamente que el correo NO salió. El antipatrón a evitar era
+  el estado anterior: la UI daba a entender que se había invitado a alguien
+  cuando en realidad no se mandaba nada.
+- **D-022 Resend por `fetch`, sin SDK**: mantiene el set de dependencias de
+  runtime intacto (D-008) — la API REST son ~15 líneas.
+- **D-023 `/invite/[token]` es una ruta pública**: el invitado llega desde el
+  correo normalmente SIN cuenta. Si viviera bajo `(app)`, el middleware lo
+  mandaría a `/login` perdiendo el token y sin decirle a qué lo invitaron. La
+  página solo muestra nombre del workspace, rol y vigencia, y el correo
+  invitado enmascarado (`lu***@gmail.com`). Se agregó `?next=` a login y
+  onboarding para volver a la invitación tras autenticarse, validando que el
+  destino sea una ruta relativa (evita convertir el login en un open redirect).
+
 ## Decisiones técnicas (§7, ERESOLVE)
 
 - **D-008 Dependencias de runtime mínimas**: solo `next`, `react`,

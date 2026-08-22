@@ -5,6 +5,7 @@ import { saturationStatus } from "@/lib/domain/time.ts";
 import { effectiveStatus } from "@/lib/domain/task-state.ts";
 import { budgetTabRow } from "@/lib/domain/budget.ts";
 import { todayLocal, addDaysISO } from "./dates";
+import { getUserTimeZone } from "./profile";
 import type { TaskStatus } from "@/lib/domain/types.ts";
 
 /**
@@ -24,7 +25,9 @@ import type { TaskStatus } from "@/lib/domain/types.ts";
  */
 export async function getHomeData(userId: string) {
   const supabase = await createClient();
-  const t0 = todayLocal();
+  // "Hoy" en la zona del perfil, no la del servidor: el plan diario se busca
+  // por local_date y con UTC se pedía el del día siguiente cada tarde.
+  const t0 = todayLocal(await getUserTimeZone());
   const from15 = addDaysISO(t0, -15);
 
   const [

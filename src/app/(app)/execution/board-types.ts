@@ -45,6 +45,8 @@ export interface MoveTarget {
  */
 export interface BoardApi {
   projectId: string;
+  /** "Hoy" en la zona horaria del perfil (viene del servidor, ver page.tsx). */
+  today: string;
   members: string[];
   assigneesByTask: Record<string, string[]>;
   commentCountByTask: Record<string, number>;

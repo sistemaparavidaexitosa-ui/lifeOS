@@ -37,6 +37,28 @@ pnpm gen:types
      habilitado. En Authentication → URL Configuration, agrega tu dominio de
      Vercel a **Redirect URLs** (`https://tu-dominio.vercel.app/auth/callback`).
 
+## 1bis) Correo transaccional (invitaciones a workspaces)
+
+Las invitaciones a workspaces envían un correo con el enlace de aceptación.
+Sin estas variables la app **no falla**: crea la invitación igual y muestra el
+enlace para copiarlo y compartirlo a mano (ver `InviteMemberForm.tsx`).
+
+```bash
+RESEND_API_KEY=re_xxxxxxxx        # https://resend.com → API Keys
+EMAIL_FROM="LifeOS <no-reply@tudominio.com>"
+NEXT_PUBLIC_APP_URL=https://tu-dominio.vercel.app   # base de los enlaces del correo
+```
+
+⚠️ Resend solo entrega desde un **dominio verificado** (Domains → Add Domain →
+registros DNS). Mientras no lo verifiques, el remitente de prueba
+`onboarding@resend.dev` únicamente entrega a la dirección con la que te
+registraste en Resend: a cualquier otro destinatario el envío se rechaza y la
+UI mostrará el motivo devuelto por el proveedor.
+
+⚠️ `NEXT_PUBLIC_APP_URL` debe apuntar al dominio real. Si se queda en
+`http://localhost:3000` (el default), los enlaces del correo no funcionarán
+para nadie más.
+
 ## 2) GitHub
 
 ```bash

@@ -2,12 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { isValidTimeZone } from "@/lib/domain/datetime.ts";
 import { createClient } from "@/lib/supabase/server";
 
 const profileSchema = z.object({
   name: z.string().min(1),
   currency: z.enum(["MXN", "USD", "EUR"]),
-  timezone: z.string().min(1),
+  // La zona horaria alimenta TODO cálculo de "hoy" (plan diario, hábitos,
+  // vencidas, reportes). Guardar un valor que Intl no reconoce rompería esas
+  // vistas, así que se valida aquí y no solo al leerla.
+  timezone: z.string().min(1).refine(isValidTimeZone, { message: "Zona horaria no reconocida (ej. America/Mexico_City)" }),
   locale: z.enum(["es-MX", "es-ES", "en-US"]),
   cycle: z.enum(["Quincenal", "Mensual", "Semanal"])
 });

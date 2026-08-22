@@ -4,6 +4,17 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 
+/**
+ * Solo se acepta una ruta RELATIVA de la propia app. Sin esta validación,
+ * `?next=https://sitio-malicioso.com` convertiría el login en un open
+ * redirect: un correo de "invitación" falso mandaría al usuario a otro lado
+ * después de autenticarse legítimamente.
+ */
+function safeNext(value: FormDataEntryValue | null): string | null {
+  if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//")) return null;
+  return value;
+}
+
 const credentialsSchema = z.object({
   email: z.string().email("Correo inválido"),
   password: z.string().min(8, "La contraseña debe tener al menos 8 caracteres")
@@ -25,7 +36,7 @@ export async function signIn(_prevState: AuthActionState, formData: FormData): P
   if (error) {
     return { error: error.message };
   }
-  redirect("/home");
+  redirect(safeNext(formData.get("next")) ?? "/home");
 }
 
 export async function signUp(_prevState: AuthActionState, formData: FormData): Promise<AuthActionState> {
@@ -43,7 +54,10 @@ export async function signUp(_prevState: AuthActionState, formData: FormData): P
     return { error: error.message };
   }
   if (data.session) {
-    redirect("/onboarding");
+    // El onboarding conserva el destino para que, al terminarlo, el invitado
+    // regrese a la invitación en vez de perderla.
+    const next = safeNext(formData.get("next"));
+    redirect(next ? `/onboarding?next=${encodeURIComponent(next)}` : "/onboarding");
   }
   return { error: "Revisa tu correo para confirmar tu cuenta antes de iniciar sesión." };
 }

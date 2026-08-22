@@ -37,25 +37,20 @@ export function isOpen(status: TaskStatus): boolean {
   return !CLOSED_STATUSES.includes(status);
 }
 
-/** Fecha ISO (yyyy-mm-dd) local de hoy, sin depender de la zona UTC. */
+/**
+ * Fechas: la fuente única es src/lib/domain/datetime.ts. `todayISO()` aquí
+ * sigue existiendo para el CLIENTE (usa la zona del navegador), pero el
+ * servidor debe pasar el "hoy" del perfil — ver getUserTimeZone().
+ */
+export { addDaysISO, diffDays } from "./datetime.ts";
+import { addDaysISO, diffDays } from "./datetime.ts";
+
+/** "Hoy" según el navegador. En servidor usa todayInTimeZone(profile.timezone). */
 export function todayISO(now: Date = new Date()): string {
   const y = now.getFullYear();
   const m = `${now.getMonth() + 1}`.padStart(2, "0");
   const d = `${now.getDate()}`.padStart(2, "0");
   return `${y}-${m}-${d}`;
-}
-
-/** Días de diferencia entre dos fechas ISO (b - a). Negativo = b antes que a. */
-export function diffDays(a: string, b: string): number {
-  const da = Date.parse(`${a}T00:00:00Z`);
-  const db = Date.parse(`${b}T00:00:00Z`);
-  return Math.round((db - da) / 86_400_000);
-}
-
-export function addDaysISO(iso: string, days: number): string {
-  const base = new Date(`${iso}T00:00:00Z`);
-  base.setUTCDate(base.getUTCDate() + days);
-  return base.toISOString().slice(0, 10);
 }
 
 /** Una tarea abierta con `due` anterior a hoy está vencida (BR: Overdue). */

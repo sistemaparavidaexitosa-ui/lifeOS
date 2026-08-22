@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getUserTimeZone } from "@/lib/data/profile";
+import { todayInTimeZone } from "@/lib/domain/datetime.ts";
 import { Card, Chip, EmptyState } from "@/components/ui";
 import { money, money0, fdate } from "@/lib/format";
 import { investmentReturnPct } from "@/lib/domain/money.ts";
@@ -31,7 +33,7 @@ export default async function InvestmentsPage() {
     <div className="flex flex-col gap-3.5">
       <div className="grid md:grid-cols-2 gap-3.5">
         <Card hero>
-          <div className="text-xs" style={{ opacity: 0.85 }}>Capital invertido · corte {fdate(new Date().toISOString())}</div>
+          <div className="text-xs" style={{ opacity: 0.85 }}>Capital invertido · corte {fdate(todayInTimeZone(await getUserTimeZone()))}</div>
           <div className="text-3xl font-black">{money(total, profile.currency, profile.locale)}</div>
           <div className="flex justify-between mt-1.5 text-sm">
             <span>Rendimiento acumulado</span>

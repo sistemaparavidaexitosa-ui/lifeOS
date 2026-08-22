@@ -5,6 +5,8 @@ import { Card, Chip, Progress, EmptyState } from "@/components/ui";
 import { money, money0, fdate } from "@/lib/format";
 import { accountBalance, periodStats } from "@/lib/domain/money.ts";
 import { addDaysISO, todayLocal } from "@/lib/data/dates";
+import { getUserTimeZone } from "@/lib/data/profile";
+import { todayInTimeZone } from "@/lib/domain/datetime.ts";
 import NewTransactionForm from "./NewTransactionForm";
 import NewAccountForm from "./NewAccountForm";
 import TxnRowActions from "./TxnRowActions";
@@ -16,7 +18,7 @@ export default async function MoneyPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const t0 = todayLocal();
+  const t0 = todayLocal(await getUserTimeZone());
   const from15 = addDaysISO(t0, -15);
 
   const [{ data: profile }, { data: accounts }, { data: entries }, { data: budgets }, { data: categories }, { data: debts }, { data: familyMembers }] =
@@ -61,7 +63,7 @@ export default async function MoneyPage() {
       <div className="grid md:grid-cols-2 gap-3.5">
         <Card hero>
           <div className="text-xs" style={{ opacity: 0.85 }}>
-            Liquidez total · corte {fdate(new Date().toISOString())}
+            Liquidez total · corte {fdate(todayInTimeZone(await getUserTimeZone()))}
           </div>
           <div className="text-3xl font-black">{money(liquidity, currency, locale)}</div>
           <div className="text-xs p-2 rounded-lg mt-2" style={{ background: "rgba(255,255,255,.14)", border: "1px solid #fff", color: "#fff" }}>

@@ -4,6 +4,7 @@ import { Card, Stat } from "@/components/ui";
 import { money0, fdate } from "@/lib/format";
 import { periodStats, accountBalance, netWorth } from "@/lib/domain/money.ts";
 import { addDaysISO, todayLocal } from "@/lib/data/dates";
+import { getUserTimeZone } from "@/lib/data/profile";
 
 const PERIODS = [
   { key: "daily", label: "Diario", days: 1 },
@@ -21,7 +22,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   if (!user) redirect("/login");
 
   const activePeriod = PERIODS.find((p) => p.key === period) ?? PERIODS[1];
-  const t0 = todayLocal();
+  const t0 = todayLocal(await getUserTimeZone());
   const from = addDaysISO(t0, -activePeriod.days);
 
   const [{ data: profile }, { data: tasks }, { data: projects }, { data: accounts }, { data: entries }, { data: investments }, { data: assets }, { data: debts }] = await Promise.all([

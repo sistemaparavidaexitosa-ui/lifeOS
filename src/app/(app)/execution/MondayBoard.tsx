@@ -229,6 +229,7 @@ export default function MondayBoard({
           >
             <GroupHeader
               group={group}
+              today={api.today}
               tasks={groupTasks}
               rootCount={rootTasks.length}
               collapsed={isCollapsed}

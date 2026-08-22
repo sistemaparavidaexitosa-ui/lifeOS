@@ -121,3 +121,88 @@ supabase db reset   # aplica 0021_execution_board_order.sql
 > Si `0021` aún no está aplicada, el tablero sigue funcionando con el orden
 > histórico por `created_at` y muestra un aviso: el arrastre queda desactivado
 > hasta correr la migración.
+
+---
+
+# Fix: la app usaba el reloj del servidor, no el del usuario
+
+**Síntoma reportado:** `/home` saludaba "Buenas noches" a la 1 de la tarde en
+México.
+
+**Causa real (más amplia que el saludo):** `todayLocal()` calculaba el día con
+la zona horaria del proceso. En Vercel el servidor corre en UTC, así que entre
+las 18:00 y la medianoche hora de México todo el backend ya estaba en el día
+siguiente. Eso afectaba:
+
+| Dónde | Qué pasaba mal |
+|---|---|
+| `/habits` | Un hábito marcado a las 8 pm se registraba con la fecha de mañana (y rompía la racha) |
+| `/planning` | El plan diario se leía/guardaba con `local_date` de mañana |
+| `/time` | "Asignar a hoy" mandaba la tarea al día siguiente |
+| `/reports`, `/money`, `/money/budget` | Los rangos del periodo se corrían un día |
+| `/execution` | El conteo de vencidas de la barra lateral (servidor) podía contradecir los chips del tablero (navegador) |
+| `/home` | Saludo y fecha de corte equivocados |
+
+**Solución:** `profiles.timezone` (existe desde la migración 0002 y no se usaba
+para calcular) ahora manda. La lógica pura está en
+`src/lib/domain/datetime.ts` con 8 pruebas en `tests/domain/datetime.test.ts`,
+incluida la regresión exacta del bug reportado. Cada vista y Server Action
+obtiene la zona con `getUserTimeZone()` (`src/lib/data/profile.ts`), y el
+tablero recibe el "hoy" ya calculado desde el servidor para que todas las
+vistas coincidan.
+
+Además, la zona horaria se valida al guardarla en Configuración/onboarding: un
+valor que `Intl` no reconozca se rechaza con mensaje, y si alguno ya estuviera
+guardado, la app cae a `America/Mexico_City` en vez de tronar.
+
+**No requiere migración ni cambios en la base.**
+
+---
+
+# Fix: invitar a un workspace no invitaba a nadie
+
+**Síntoma reportado:** no llegan los correos de invitación.
+
+**Lo que encontré fue peor:** el flujo estaba a medias de punta a punta.
+`inviteMember` insertaba una fila en `invitations` y ahí terminaba todo.
+
+| Pieza | Estado anterior |
+|---|---|
+| Envío de correo | No existía. `requireResendApiKey()` estaba definido en `env.ts` y **nadie lo llamaba**; no había ningún proveedor cableado |
+| Token | Se generaba en la base (`gen_random_uuid()`) y **ninguna línea de la app lo usaba** |
+| Pantalla para aceptar | No existía ninguna ruta |
+| Permisos | Aunque existiera, RLS lo impedía: `invitations_all_admin` (Owner/Admin) no deja al invitado leer su propia invitación, y `memberships_insert_admin` no lo deja crear su membresía. El invitado necesitaba un permiso que solo tendría después de aceptar |
+| `status` / `expires_at` | Decorativos: nada los validaba ni actualizaba. Una invitación seguía "Pending" para siempre, incluso vencida |
+
+En resumen: invitar solo escribía una fila que nadie podía usar.
+
+## Lo que ahora funciona
+
+1. **Correo real** (Resend por `fetch`, sin dependencias nuevas) con plantilla
+   HTML + texto plano. Si no está configurado, **la invitación se crea igual**
+   y la UI muestra el enlace para copiarlo, diciendo claramente que el correo
+   no salió — nunca se dice "enviado" si no se envió.
+2. **`/invite/[token]`**: pantalla pública que muestra a qué workspace te
+   invitan, con qué rol y hasta cuándo. Si no hay sesión, manda a login y
+   **regresa a la invitación** al terminar (`?next=`, validado para que sea
+   ruta relativa y no se preste a un open redirect).
+3. **Canje seguro** (migración `0022`): valida vigencia, un solo uso
+   (`SELECT ... FOR UPDATE`) y **que el correo de la sesión sea el invitado** —
+   tener el enlace no basta. Crea la membresía de forma idempotente y registra
+   la actividad y la auditoría.
+4. **Gestión**: reenviar (reutiliza la invitación pendiente y renueva la
+   vigencia), cancelar, y estado real en pantalla — una Pending vencida ahora
+   se muestra como `Expired` en vez de seguir diciendo Pending.
+5. **Pruebas** pgTAP en `supabase/tests/0006_invitations_accept.sql`: token
+   inexistente, correo distinto, vencida, doble canje y camino feliz.
+
+## Qué tienes que configurar
+
+```bash
+RESEND_API_KEY=re_xxxxxxxx
+EMAIL_FROM="LifeOS <no-reply@tudominio.com>"
+NEXT_PUBLIC_APP_URL=https://tu-dominio.vercel.app
+```
+
+Detalles y advertencias (dominio verificado en Resend) en `docs/DEPLOY.md §1bis`.
+**Requiere aplicar la migración `0022_workspace_invitations_accept.sql`.**
