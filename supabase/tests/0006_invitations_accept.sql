@@ -7,7 +7,7 @@
 -- doble canje (un solo uso) y el camino feliz creando la membresía.
 
 begin;
-select plan(11);
+select plan(13);
 
 insert into auth.users (id, instance_id, aud, role, email) values
   ('c1111111-1111-4111-8111-111111111111', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'owner-inv@test.local'),
@@ -117,6 +117,31 @@ select is(
   (select ok from public.accept_invitation('c0000000-0000-4000-8000-000000000001')),
   false,
   'accept: el mismo token no sirve dos veces (un solo uso)'
+);
+
+-- =========================================================================
+-- Regresiones de la migración 0023
+-- =========================================================================
+-- Aceptar una invitación de rol MENOR no debe degradar a un miembro que ya
+-- tiene un rol mayor (el upsert conserva el rol existente).
+insert into public.invitations (workspace_id, email, role, token)
+values ('c9999999-9999-4999-8999-999999999999', 'owner-inv@test.local', 'Viewer',
+        'c0000000-0000-4000-8000-000000000003');
+
+set local request.jwt.claims = '{"sub":"c1111111-1111-4111-8111-111111111111","email":"owner-inv@test.local","role":"authenticated"}';
+
+select is(
+  (select ok from public.accept_invitation('c0000000-0000-4000-8000-000000000003')),
+  true,
+  'accept: un miembro existente puede aceptar sin error (upsert aliasado, fix 0023)'
+);
+
+select is(
+  (select role from public.memberships
+    where workspace_id = 'c9999999-9999-4999-8999-999999999999'
+      and user_id = 'c1111111-1111-4111-8111-111111111111'),
+  'Owner',
+  'accept: aceptar una invitación de Viewer NO degrada a un Owner existente'
 );
 
 select * from finish();

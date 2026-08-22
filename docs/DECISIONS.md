@@ -138,6 +138,24 @@
   onboarding para volver a la invitación tras autenticarse, validando que el
   destino sea una ruta relativa (evita convertir el login en un open redirect).
 
+- **D-024 Las columnas de `RETURNS TABLE` son variables PL/pgSQL, y eso rompió
+  `accept_invitation`**: `supabase db test` en CI falló con `column reference
+  "workspace_id" is ambiguous` en el `ON CONFLICT (workspace_id, user_id)`.
+  La causa: la función declara `returns table (ok, message, workspace_id)` y en
+  PL/pgSQL cada columna de salida es TAMBIÉN una variable, así que
+  `workspace_id` a secas resolvía a la variable, no a la columna. La función se
+  CREA sin error — solo revienta al ejecutarse, por eso `db reset` pasaba
+  limpio y solo la prueba del camino feliz lo detectó. Se corrigió en la
+  migración 0023 sustituyendo el `ON CONFLICT` por un upsert explícito con la
+  tabla ALIASADA (`update public.memberships m ... where m.workspace_id = ...`):
+  un alias no puede confundirse con una variable. Se descartaron dos
+  alternativas: el pragma `#variable_conflict use_column` (cambia la
+  resolución en TODO el cuerpo, efecto demasiado amplio para un bug puntual) y
+  `on conflict on constraint <nombre>` (depende del nombre autogenerado de la
+  restricción). Como la firma no cambia, bastó `CREATE OR REPLACE`: sirve
+  igual para una base nueva y para una donde 0022 ya se aplicó, sin tocar la
+  app ni los tipos generados.
+
 ## Decisiones técnicas (§7, ERESOLVE)
 
 - **D-008 Dependencias de runtime mínimas**: solo `next`, `react`,

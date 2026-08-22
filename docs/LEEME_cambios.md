@@ -206,3 +206,34 @@ NEXT_PUBLIC_APP_URL=https://tu-dominio.vercel.app
 
 Detalles y advertencias (dominio verificado en Resend) en `docs/DEPLOY.md §1bis`.
 **Requiere aplicar la migración `0022_workspace_invitations_accept.sql`.**
+
+---
+
+# Fix de la migración 0022 (lo detectó `supabase db test` en CI)
+
+```
+ERROR: column reference "workspace_id" is ambiguous
+QUERY: ... on conflict (workspace_id, user_id) do update ...
+```
+
+`accept_invitation` devuelve `returns table (ok, message, workspace_id)`, y en
+PL/pgSQL **cada columna de RETURNS TABLE es también una variable**. Dentro del
+cuerpo, `workspace_id` resolvía a esa variable en vez de a la columna de
+`memberships`, así que el destino del `ON CONFLICT` quedaba ambiguo.
+
+Lo insidioso: la función **se crea sin error**; falla solo al ejecutarse. Por
+eso `supabase db reset` aplicaba la 0022 limpia y únicamente la prueba del
+camino feliz lo destapó.
+
+**Migración `0023_fix_accept_invitation_ambiguity.sql`**: reemplaza el
+`ON CONFLICT` por un upsert explícito con la tabla aliasada
+(`update public.memberships m ... where m.workspace_id = ...`) — un alias no
+puede confundirse con una variable. La firma no cambia, así que es un
+`CREATE OR REPLACE`: **no requiere DROP y no cambia la app ni los tipos**.
+Aplica igual sobre una base nueva o sobre una donde la 0022 ya corrió.
+
+Verificado ejecutando la función en un PostgreSQL 16 real (no solo creándola):
+se reprodujo el error con la 0022 y se confirmaron los 13 casos con la 0023,
+incluidos dos nuevos en `supabase/tests/0006_invitations_accept.sql`: que un
+miembro existente pueda aceptar sin error, y que aceptar una invitación de
+`Viewer` **no degrade** a un `Owner`.
