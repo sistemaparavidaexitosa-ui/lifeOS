@@ -9,12 +9,16 @@ const initialState: AuthActionState = {};
 export default function LoginForm() {
   const searchParams = useSearchParams();
   const message = searchParams.get("message");
+  // ?next= permite volver a donde el usuario iba (p. ej. /invite/[token] desde
+  // el correo de invitación) en vez de caer siempre en /home.
+  const next = searchParams.get("next");
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const action = mode === "signin" ? signIn : signUp;
   const [state, formAction, pending] = useActionState<AuthActionState, FormData>(action, initialState);
 
   return (
     <form action={formAction} className="flex flex-col gap-3">
+      {next && <input type="hidden" name="next" value={next} />}
       {message && (
         <div className="text-xs p-2 rounded-lg" style={{ background: "var(--surface2)", color: "var(--muted)" }}>
           {message}

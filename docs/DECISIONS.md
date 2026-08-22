@@ -102,6 +102,42 @@
   rojos del tablero. Ahora `page.tsx` calcula el día una vez y lo pasa por
   `BoardApi.today`.
 
+### Invitaciones a workspaces (agosto 2026)
+- **D-019 El canje vive en dos RPC `SECURITY DEFINER`, no en el cliente
+  service_role**: aceptar una invitación era imposible por diseño —
+  `invitations_all_admin` (FOR ALL, Owner/Admin) impide que el invitado lea su
+  propia invitación, y `memberships_insert_admin` impide que cree su
+  membresía; el invitado necesitaba un permiso que solo tendría DESPUÉS de
+  aceptar. Se resolvió con `invitation_preview(token)` y
+  `accept_invitation(token)` (migración 0022) en vez de usar
+  `SUPABASE_SERVICE_ROLE_KEY` desde una Server Action: no exige un secreto
+  nuevo en el despliegue, valida todo de forma atómica (`SELECT ... FOR
+  UPDATE`, así dos clics simultáneos no canjean el mismo token) y se puede
+  probar con pgTAP como el resto (`supabase/tests/0006_invitations_accept.sql`).
+  Esto NO reintroduce el problema de recursión de 0011-0015: aquel venía de
+  funciones invocadas DESDE una política, y estas dos no se referencian en
+  ninguna — la app las llama por RPC. Ninguna política existente se tocó.
+- **D-020 El token no basta: el correo debe coincidir**: `accept_invitation`
+  exige que `auth.email()` sea igual (sin distinguir mayúsculas) al correo
+  invitado. Un token filtrado o reenviado no alcanza para entrar al workspace,
+  que es justo lo que un enlace "mágico" por sí solo no garantiza.
+- **D-021 Enviar correo NUNCA rompe la acción**: `sendEmail()`
+  (`src/lib/email/send.ts`) jamás lanza; devuelve `{sent, reason}`. Si falta
+  `RESEND_API_KEY`, el dominio no está verificado o el proveedor falla, la
+  invitación se crea igual y la UI muestra el enlace para compartirlo a mano,
+  diciendo explícitamente que el correo NO salió. El antipatrón a evitar era
+  el estado anterior: la UI daba a entender que se había invitado a alguien
+  cuando en realidad no se mandaba nada.
+- **D-022 Resend por `fetch`, sin SDK**: mantiene el set de dependencias de
+  runtime intacto (D-008) — la API REST son ~15 líneas.
+- **D-023 `/invite/[token]` es una ruta pública**: el invitado llega desde el
+  correo normalmente SIN cuenta. Si viviera bajo `(app)`, el middleware lo
+  mandaría a `/login` perdiendo el token y sin decirle a qué lo invitaron. La
+  página solo muestra nombre del workspace, rol y vigencia, y el correo
+  invitado enmascarado (`lu***@gmail.com`). Se agregó `?next=` a login y
+  onboarding para volver a la invitación tras autenticarse, validando que el
+  destino sea una ruta relativa (evita convertir el login en un open redirect).
+
 ## Decisiones técnicas (§7, ERESOLVE)
 
 - **D-008 Dependencias de runtime mínimas**: solo `next`, `react`,

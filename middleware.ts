@@ -60,8 +60,13 @@ export async function middleware(request: NextRequest) {
 
   const isAuthRoute = request.nextUrl.pathname.startsWith("/login") || request.nextUrl.pathname.startsWith("/auth");
   const isPublicAsset = request.nextUrl.pathname.startsWith("/_next") || request.nextUrl.pathname.startsWith("/favicon");
+  // /invite/[token] es pública a propósito: el invitado llega desde el correo
+  // SIN cuenta todavía. Si se redirigiera a /login, perdería el token y no
+  // sabría siquiera a qué lo invitaron. La página no expone datos del
+  // workspace más allá del nombre y el rol (ver invitation_preview, 0022).
+  const isInvite = request.nextUrl.pathname.startsWith("/invite/");
 
-  if (!user && !isAuthRoute && !isPublicAsset && request.nextUrl.pathname !== "/") {
+  if (!user && !isAuthRoute && !isPublicAsset && !isInvite && request.nextUrl.pathname !== "/") {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);

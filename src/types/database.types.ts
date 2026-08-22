@@ -1805,6 +1805,24 @@ export type Database = {
         Args: { p_workspace_id: string }
         Returns: boolean
       }
+      accept_invitation: {
+        Args: { p_token: string }
+        Returns: {
+          ok: boolean
+          message: string
+          workspace_id: string | null
+        }[]
+      }
+      invitation_preview: {
+        Args: { p_token: string }
+        Returns: {
+          workspace_name: string | null
+          role: string | null
+          state: string
+          expires_at: string | null
+          email_hint: string | null
+        }[]
+      }
       list_workspace_members: {
         Args: { p_workspace_id: string }
         Returns: {

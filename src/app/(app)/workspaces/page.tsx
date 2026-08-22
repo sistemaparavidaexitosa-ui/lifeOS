@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Card, Chip, EmptyState } from "@/components/ui";
 import { fdate } from "@/lib/format";
-import { createWorkspace, inviteMember, removeMember, deleteWorkspace, shareProject } from "./actions";
+import { createWorkspace, removeMember, deleteWorkspace, shareProject, revokeInvitation } from "./actions";
+import InviteMemberForm from "./InviteMemberForm";
 
 export default async function WorkspacesPage({ searchParams }: { searchParams: Promise<{ ws?: string }> }) {
   const { ws: selectedWs } = await searchParams;
@@ -131,36 +132,36 @@ export default async function WorkspacesPage({ searchParams }: { searchParams: P
                 </div>
               ))}
 
-              {canManage && (
-                <form action={inviteMember} className="flex gap-2 mt-3">
-                  <input type="hidden" name="workspaceId" value={ws.id} />
-                  <input name="email" type="email" placeholder="colega@empresa.com" required />
-                  <select name="role" defaultValue="Member">
-                    <option>Member</option>
-                    <option>Admin</option>
-                    <option>Guest</option>
-                    <option>Viewer</option>
-                  </select>
-                  <button className="btn-primary btn-sm" type="submit">
-                    Invitar
-                  </button>
-                </form>
-              )}
+              {canManage && <InviteMemberForm workspaceId={ws.id} />}
 
               {wsInvitations.length > 0 && (
                 <>
                   <h4 className="font-bold mt-3 mb-1 text-sm">Invitaciones</h4>
-                  {wsInvitations.map((i) => (
-                    <div key={i.id} className="flex items-center justify-between py-2 text-sm" style={{ borderBottom: "1px solid var(--line)" }}>
-                      <span>{i.email}</span>
-                      <div className="flex items-center gap-2">
-                        <span style={{ color: "var(--muted)" }}>
-                          {i.role} · expira {fdate(i.expires_at)}
-                        </span>
-                        <Chip kind={i.status === "Pending" ? "warn" : "ok"}>{i.status}</Chip>
+                  {wsInvitations.map((i) => {
+                    // `status` en la base solo cambia al aceptar/revocar; una
+                    // Pending vencida seguía mostrándose como Pending y el
+                    // admin no entendía por qué el invitado no podía entrar.
+                    const expired = i.status === "Pending" && new Date(i.expires_at) < new Date();
+                    const state = expired ? "Expired" : i.status;
+                    return (
+                      <div key={i.id} className="flex items-center justify-between py-2 text-sm flex-wrap gap-2" style={{ borderBottom: "1px solid var(--line)" }}>
+                        <span>{i.email}</span>
+                        <div className="flex items-center gap-2">
+                          <span style={{ color: "var(--muted)" }}>
+                            {i.role} · {expired ? "venció" : "expira"} {fdate(i.expires_at)}
+                          </span>
+                          <Chip kind={state === "Accepted" ? "ok" : state === "Pending" ? "warn" : ""}>{state}</Chip>
+                          {canManage && i.status === "Pending" && (
+                            <form action={async () => { "use server"; await revokeInvitation(i.id); }}>
+                              <button className="btn-ghost btn-sm" type="submit">
+                                Cancelar
+                              </button>
+                            </form>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </>
               )}
 

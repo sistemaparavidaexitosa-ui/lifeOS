@@ -5,11 +5,12 @@ import { completeOnboarding, type OnboardingState } from "./actions";
 
 const initialState: OnboardingState = {};
 
-export default function OnboardingForm() {
+export default function OnboardingForm({ next }: { next?: string }) {
   const [state, formAction, pending] = useActionState<OnboardingState, FormData>(completeOnboarding, initialState);
 
   return (
     <form action={formAction} className="flex flex-col gap-3">
+      {next && <input type="hidden" name="next" value={next} />}
       <div className="field">
         <label className="block text-xs font-bold mb-1">Nombre</label>
         <input name="name" required defaultValue="" placeholder="Tu nombre" />

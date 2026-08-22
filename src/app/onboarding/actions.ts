@@ -82,5 +82,9 @@ export async function completeOnboarding(_prev: OnboardingState, formData: FormD
     { onConflict: "user_id,purpose" }
   );
 
-  redirect("/home");
+  // Si el usuario venía de un enlace (p. ej. /invite/[token]), vuelve ahí.
+  // Solo rutas relativas: ver safeNext en (auth)/login/actions.ts.
+  const next = formData.get("next");
+  const target = typeof next === "string" && next.startsWith("/") && !next.startsWith("//") ? next : "/home";
+  redirect(target);
 }
