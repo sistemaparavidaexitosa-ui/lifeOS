@@ -157,3 +157,25 @@ Se agregó `supabase/migrations/0017_budget_quincenal_income.sql` (columna
 - Ningún ítem fue marcado ✅ sin haberse ejecutado realmente en este
   entorno. Los ítems que dependen de `npm install`, `next build`, o un
   proyecto Supabase real están honestamente marcados ⚠️.
+
+---
+
+## Personal Development OS — Fase 1 (0024)
+
+Verificación corrida el 2026-08-23 en la máquina del owner (WSL2, Node 24.19.0,
+pnpm 9.15.4 vía corepack). A diferencia del entorno original del asistente,
+aquí **sí** hubo registro npm y `node_modules` reales; lo que siguió faltando
+fue **Docker**, así que todo lo que necesita una base Postgres local quedó sin
+ejecutar y lo cubre el job `db` de `.github/workflows/ci.yml`.
+
+| Ítem | Estado | Evidencia |
+|---|---|---|
+| `pnpm install --frozen-lockfile` | ✅ EJECUTADO OK | Instalación limpia contra `pnpm-lock.yaml` commiteado |
+| `pnpm typecheck` (`tsc --noEmit`) | ✅ EJECUTADO OK | Sin errores, después de cada una de las 7 tareas |
+| `pnpm lint` | ✅ EJECUTADO OK | `✔ No ESLint warnings or errors` |
+| `pnpm test:unit` | ✅ EJECUTADO OK | 114/114 (86 previos + 12 de `development-goals` + 16 de `development-routines`) |
+| `pnpm build` | ✅ EJECUTADO OK | 30 rutas, incluidas `/development`, `/development/goals`, `/development/routines`, `/development/habits`, `/development/library` |
+| `supabase db reset` (migración `0024`) | ⚠️ NO EJECUTADO en el entorno del asistente | Sin Docker en esta máquina — lo corre el job `db` de CI |
+| `supabase test db` (`0007_rls_development.sql`, 5 assertions) | ⚠️ NO EJECUTADO en el entorno del asistente | Sin Docker en esta máquina — lo corre el job `db` de CI |
+| `pnpm gen:types` | ⚠️ NO EJECUTADO en el entorno del asistente | Las cinco tablas nuevas se añadieron **a mano** a `src/types/database.types.ts`; ver `/docs/PATCH_database_types_development.md` |
+| Recorrido manual en `pnpm dev` | ⚠️ NO EJECUTADO | Requiere sesión de Supabase real con datos del owner. Los pasos exactos están en el plan (Task 6, Step 6: el puente rutina → `habit_logs`) |

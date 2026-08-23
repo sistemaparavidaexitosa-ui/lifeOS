@@ -54,7 +54,7 @@ Componente → Fuente de datos → Acción real.
 
 Money OS (cuentas, presupuesto, deudas, cashback, inversiones, patrimonio,
 metas y Hogar) y la planeación personal (Hoy, ocupaciones, rango de
-actividad, hábitos y lectura) son **siempre privados** y nunca accesibles
-desde un Workspace de colaboración. Esto se aplica en RLS (base de datos) y
-en la capa de Server Actions/Route Handlers (aplicación) — defensa en
-profundidad.
+actividad, hábitos, lectura, **metas personales y rutinas**) son **siempre
+privados** y nunca accesibles desde un Workspace de colaboración. Esto se
+aplica en RLS (base de datos) y en la capa de Server Actions/Route Handlers
+(aplicación) — defensa en profundidad.

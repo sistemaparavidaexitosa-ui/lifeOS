@@ -23,6 +23,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/planning", label: "Planeación", group: "Execution OS", icon: "planning", color: "var(--c-purple)" },
   { href: "/time", label: "Autogestión del Tiempo", group: "Execution OS", icon: "time", color: "var(--c-purple)" },
   { href: "/workspaces", label: "Equipos y Colaboración", group: "Execution OS", icon: "workspaces", color: "var(--c-purple)" },
+  { href: "/development", label: "Panel", group: "Personal Development OS", icon: "development", color: "var(--c-orange)" },
   { href: "/development/goals", label: "Metas Personales", group: "Personal Development OS", icon: "personalGoals", color: "var(--c-orange)" },
   { href: "/development/routines", label: "Rutinas", group: "Personal Development OS", icon: "routines", color: "var(--c-orange)" },
   { href: "/development/habits", label: "Hábitos", group: "Personal Development OS", icon: "habits", color: "var(--c-orange)" },

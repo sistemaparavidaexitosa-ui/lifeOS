@@ -15,6 +15,7 @@ Server Action real que escribe en Postgres (guardrail NO-MOCK, F8).
 | Planeación | `/planning` | `planning/page.tsx` | `daily_plans`,`weekly_reviews`,`tasks`,`projects` | `approveDailyPlan`,`closeoutTask`,`saveDailyLearning`,`approveWeeklyReview` |
 | Autogestión del Tiempo | `/time` | `time/page.tsx` | `profiles` (ventana),`occupations`,`tasks` | `updateActivityWindow`,`upsertOccupation`,`deleteOccupation`,`assignTaskToSlot` |
 | Vista semanal (7 días) | `/time?view=week` | `time/WeekView.tsx` | `occupations` (solo lectura) | — (edición redirige a `/time`) |
+| Panel de Desarrollo Personal | `/development` | `development/page.tsx` | `personal_goals`,`key_results`,`routines`,`routine_steps`,`routine_runs` | Lectura agregada |
 | Metas Personales | `/development/goals` | `development/goals/page.tsx` | `personal_goals`,`key_results` + fuentes (`habits`,`habit_logs`,`projects`,`tasks`,`books`,`financial_goals`) | `upsertPersonalGoal`,`deletePersonalGoal`,`upsertKeyResult`,`deleteKeyResult` |
 | Rutinas | `/development/routines` | `development/routines/page.tsx` | `routines`,`routine_steps`,`routine_runs`,`occupations`,`habits` | `upsertRoutine`,`deleteRoutine`,`upsertRoutineStep`,`deleteRoutineStep`,`toggleRoutineStep` |
 | Hábitos | `/development/habits` | `development/habits/page.tsx` | `habits`,`habit_logs`,`occupations` | `upsertHabit`,`toggleHabitToday`,`deleteHabit` |
