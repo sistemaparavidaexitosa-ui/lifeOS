@@ -1,6 +1,6 @@
 -- 0005_rls_task_files.sql — pgTAP: RLS de task_files (FASE 3, Drawer/Archivos).
--- ⚠️ NO EJECUTADO en el entorno del asistente (sin supabase CLI/Docker aquí,
--- igual que 0001-0004 — ver /docs/CHECKS.md). Correr con: `supabase test db`.
+-- Se corre con `supabase test db` (local, sobre Docker) y en el job `db` de CI.
+-- Verde en ambos desde el 2026-08-23 — ver /docs/CHECKS.md.
 --
 -- ⚠️ Cobertura parcial declarada con honestidad: esta suite solo prueba la
 -- tabla de METADATOS (public.task_files) vía pgTAP. Las políticas de

@@ -175,15 +175,23 @@ Docker**: la pila local de Supabase (`npx supabase start`) estuvo levantada, as�
 que las migraciones, las pruebas pgTAP, la generación de tipos y el recorrido
 manual en `pnpm dev` se ejecutaron de verdad. No queda ningún ⚠️ en esta fase.
 
+La revisión contra el spec del módulo
+(`docs/superpowers/specs/2026-08-22-personal-development-os-design.md`, añadido
+al repo el 2026-08-23) cerró además los dos huecos de su §9 que no estaban
+cubiertos: la equivalencia de la racha entre los dos caminos de marcado, y que
+las tres tablas de rutinas también queden vacías para otro usuario. Las
+desviaciones de forma respecto del spec, todas deliberadas, están en D-024 de
+`/docs/DECISIONS.md`.
+
 | Ítem | Estado | Evidencia |
 |---|---|---|
 | `pnpm install --frozen-lockfile` | ✅ EJECUTADO OK | Instalación limpia contra `pnpm-lock.yaml` commiteado |
 | `pnpm typecheck` (`tsc --noEmit`) | ✅ EJECUTADO OK | Sin errores, ya con `database.types.ts` regenerado desde la base real |
 | `pnpm lint` | ✅ EJECUTADO OK | `✔ No ESLint warnings or errors` |
-| `pnpm test:unit` | ✅ EJECUTADO OK | 114/114 (86 previos + 12 de `development-goals` + 16 de `development-routines`) |
+| `pnpm test:unit` | ✅ EJECUTADO OK | 116/116 (86 previos + 12 de `development-goals` + 18 de `development-routines`, incluidas las 2 del puente rutina → racha que pedía el §9 del spec) |
 | `pnpm build` | ✅ EJECUTADO OK | 30 rutas, incluidas `/development`, `/development/goals`, `/development/routines`, `/development/habits`, `/development/library` |
 | `supabase db reset` (migraciones `0002`→`0025`) | ✅ EJECUTADO OK | Las 24 migraciones aplican de cero sin error, incluidas `0024_personal_development.sql` y `0025_fix_accept_invitation_ambiguity.sql`; el seed corre después |
-| `supabase test db` | ✅ EJECUTADO OK | **7 archivos, 49 assertions, 0 fallos.** `0007_rls_development.sql` en verde y `0006_invitations_accept.sql` ya completo (era el que abortaba con el plan de 11/8) |
+| `supabase test db` | ✅ EJECUTADO OK | **7 archivos, 52 assertions, 0 fallos.** `0007_rls_development.sql` en verde y `0006_invitations_accept.sql` ya completo (era el que abortaba con el plan de 11/8) |
 | Tipos de base de datos | ✅ EJECUTADO OK | `supabase gen types typescript --local` regeneró `src/types/database.types.ts` desde el esquema real. Sustituye el parche manual de `/docs/PATCH_database_types_development.md`. La regeneración también corrigió deriva previa: sobraba `occupations.days` (columna que ninguna migración crea) y faltaba la firma de `accept_invitation` |
 
 ### Recorrido manual en `pnpm dev` (los pasos "verificar en la app real" del plan)

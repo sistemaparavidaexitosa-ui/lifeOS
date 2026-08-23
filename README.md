@@ -7,8 +7,8 @@ e Intelligence OS, construido a partir de:
 - **HTML de referencia** (`LifeOS 4.html`) — fuente de verdad para UX, vistas, flujos y estados.
 
 > **Estado de verificación:** el 2026-08-23 se corrió la cadena completa
-> (`install`, `typecheck`, `lint`, 114 pruebas unitarias, `build`,
-> `supabase db reset` y las 49 assertions pgTAP) contra una pila local de
+> (`install`, `typecheck`, `lint`, 116 pruebas unitarias, `build`,
+> `supabase db reset` y las 52 assertions pgTAP) contra una pila local de
 > Supabase en Docker, en verde. La evidencia paso a paso está en
 > `/docs/CHECKS.md`, que sigue siendo la única fuente de verdad sobre qué se
 > ejecutó realmente y qué no.

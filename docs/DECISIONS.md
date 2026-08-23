@@ -137,6 +137,26 @@
   invitado enmascarado (`lu***@gmail.com`). Se agregó `?next=` a login y
   onboarding para volver a la invitación tras autenticarse, validando que el
   destino sea una ruta relativa (evita convertir el login en un open redirect).
+- **D-024 Desviaciones deliberadas del spec de Personal Development OS**
+  (`docs/superpowers/specs/2026-08-22-personal-development-os-design.md`).
+  Se revisaron una por una el 2026-08-23 contra la Fase 1 ya implementada;
+  ninguna cambia el comportamiento descrito, pero quedan escritas para que la
+  Fase 2 no las tome por error:
+  - `goalAtRisk` recibe `(startISO, horizonISO, pct, todayISO, threshold = 20)`,
+    no `(horizonISO, pct, todayISO)` como dibuja el §3.3. Sin fecha de inicio no
+    hay "porcentaje de horizonte transcurrido" que calcular, y el umbral
+    explícito hace la regla comprobable en un test en vez de esconderla.
+  - Las pruebas de dominio viven en `tests/domain/development-*.test.ts`, planas,
+    no en `tests/domain/development/*.test.ts`. El script `test:unit` usa el glob
+    `tests/domain/*.test.ts`, de un solo nivel; una subcarpeta habría quedado
+    fuera de `pnpm verify` sin que nadie lo notara.
+  - La clave del ícono es `personalGoals` (camelCase), no `personal-goals`:
+    `NAV_ICONS` se indexa como propiedad de objeto en el resto del archivo.
+  - El puente a `habit_logs` no hace `upsert ... on conflict do nothing` como
+    sugiere el §4.2: consulta si ya existe la fila del día y decide con
+    `habitLogEffect`, una función pura y probada. El efecto observable es el
+    mismo y el índice único `(habit_id, log_date)` sigue siendo la garantía
+    última, pero la decisión queda testeable sin base de datos.
 
 ## Decisiones técnicas (§7, ERESOLVE)
 
@@ -179,7 +199,7 @@ implementa:
 |---|---|
 | F1 (ERESOLVE) | `package.json` (versiones exactas), `.npmrc` |
 | F2 (tsc en serie) | `package.json` script `typecheck` separado de `build` |
-| F3 (tipos DB stub) | `src/types/database.types.ts` (comentario explícito ⚠️) |
+| F3 (tipos DB) | `src/types/database.types.ts`, generado con `supabase gen types` (`pnpm gen:types:local` / `pnpm gen:types`). Dejó de ser un stub escrito a mano el 2026-08-23 |
 | F4 (env a nivel de módulo) | `src/config/env.ts` (`safeParse` + defaults, validación lazy) |
 | F5 (CSP sin nonce) | `middleware.ts` |
 | F6 (typedRoutes) | `next.config.ts` (`experimental.typedRoutes: false`) |

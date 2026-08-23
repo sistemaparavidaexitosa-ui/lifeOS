@@ -15,7 +15,9 @@ mergeadas (PR #3), y las 46 casillas están marcadas. La verificación que
 faltaba —la que exigía Docker: `supabase db reset`, `supabase test db`,
 regeneración de tipos y el recorrido manual en `pnpm dev`— se corrió el
 2026-08-23 y quedó en verde; la evidencia está en `docs/CHECKS.md`, sección
-"Personal Development OS — Fase 1 (0024)".
+"Personal Development OS — Fase 1 (0024)". El spec que este plan referencia ya
+está en el repo, y las desviaciones de forma respecto de él están en D-024 de
+`docs/DECISIONS.md`.
 
 ## Global Constraints
 

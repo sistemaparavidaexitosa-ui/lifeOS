@@ -1,5 +1,6 @@
 -- 0002_rls_execution_collaboration.sql — pgTAP: RLS de Execution/Collaboration.
--- ⚠️ NO EJECUTADO en el entorno del asistente. Correr con: `supabase test db`.
+-- Se corre con `supabase test db` (local, sobre Docker) y en el job `db` de CI.
+-- Verde en ambos desde el 2026-08-23 — ver /docs/CHECKS.md.
 --
 -- Rev. fix 2 (post segunda corrida real en CI):
 --   1) "infinite recursion detected in policy for relation projects": bug de

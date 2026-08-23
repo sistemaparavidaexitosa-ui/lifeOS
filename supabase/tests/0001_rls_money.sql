@@ -1,6 +1,6 @@
 -- 0001_rls_money.sql — pgTAP: RLS de Money OS (accounts, journal_entries).
--- ⚠️ NO EJECUTADO en el entorno del asistente (sin supabase CLI/psql
--- disponibles aquí — ver /docs/CHECKS.md). Correr con: `supabase test db`.
+-- Se corre con `supabase test db` (local, sobre Docker) y en el job `db` de CI.
+-- Verde en ambos desde el 2026-08-23 — ver /docs/CHECKS.md.
 --
 -- Rev. fix 2 (post segunda corrida real en CI): el error de Postgres fue
 -- "WITH clause containing a data-modifying statement must be at the top
