@@ -6,29 +6,41 @@ e Intelligence OS, construido a partir de:
 - **Master Spec** (`MASTER_PRODUCT_SOFTWARE_ARCHITECTURE_SPECIFICATION_v0.4.md`) — fuente de verdad para dominio, entidades, RLS, roles y trazabilidad de IDs.
 - **HTML de referencia** (`LifeOS 4.html`) — fuente de verdad para UX, vistas, flujos y estados.
 
-> ⚠️ **Lee primero `/docs/CHECKS.md`**. Este proyecto se construyó en un entorno
-> sin acceso a un registro npm real, sin CLI de Supabase y sin proyecto Supabase
-> real disponible (ver evidencia en `/docs/CHECKS.md`). El código es completo y
-> real (no hay mocks ni lógica de relleno), pero **tú, el owner, debes ejecutar
-> `pnpm verify` localmente** para obtener instalación, build y pruebas de base
-> de datos verdes antes del primer deploy. Este README no afirma nada que no
-> se haya verificado.
+> **Estado de verificación:** el 2026-08-23 se corrió la cadena completa
+> (`install`, `typecheck`, `lint`, 114 pruebas unitarias, `build`,
+> `supabase db reset` y las 49 assertions pgTAP) contra una pila local de
+> Supabase en Docker, en verde. La evidencia paso a paso está en
+> `/docs/CHECKS.md`, que sigue siendo la única fuente de verdad sobre qué se
+> ejecutó realmente y qué no.
 
 ## Quickstart
 
 ```bash
-cp .env.example .env.local   # rellena tus valores (ver /docs/DEPLOY.md)
-pnpm install                 # genera pnpm-lock.yaml (NO incluido en esta entrega — ver /docs/CHECKS.md)
-git add pnpm-lock.yaml && git commit -m "chore: add lockfile"
+cp .env.example .env.local   # para desarrollo local sirve tal cual (ver abajo)
+pnpm install --frozen-lockfile
 pnpm verify                  # install + typecheck + lint + tests + build + db reset + db test
 pnpm dev
 ```
 
-> ⚠️ **`pnpm-lock.yaml` no viene en esta entrega**: este entorno de
-> construcción no tuvo acceso a un registro npm real para generarlo (ver
-> `/docs/CHECKS.md`). La primera vez que corras `pnpm install` se creará;
-> commítealo de inmediato para que las instalaciones futuras (incluida la de
-> Vercel) sean reproducibles con `--frozen-lockfile`.
+### Desarrollo local con Docker
+
+`pnpm verify` necesita una base Postgres: la levanta el CLI de Supabase sobre
+Docker, no hace falta un proyecto en la nube.
+
+```bash
+npx supabase start           # Postgres + Auth + PostgREST + Studio en Docker
+pnpm db:reset                # aplica las migraciones de cero y corre el seed
+pnpm db:test                 # pruebas pgTAP de RLS
+pnpm gen:types:local         # regenera src/types/database.types.ts desde la base local
+```
+
+`.env.example` ya trae la URL y las llaves por defecto de la pila local (son
+las mismas en cualquier máquina y **no son secretas**). Para apuntar a un
+proyecto real, sustitúyelas por las de Supabase → Project Settings → API, y usa
+`pnpm gen:types` (`--linked`) en lugar de `gen:types:local`.
+
+Studio queda en <http://127.0.0.1:54323> y los correos de prueba (invitaciones,
+magic links) en Mailpit, <http://127.0.0.1:54324>.
 
 ## Estructura
 
