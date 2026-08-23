@@ -7,11 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.15"
-  }
   graphql_public: {
     Tables: {
       [_ in never]: never
@@ -1223,7 +1218,6 @@ export type Database = {
         Row: {
           category: string
           created_at: string
-          days: number[]
           end_time: string
           id: string
           occ_date: string | null
@@ -1235,7 +1229,6 @@ export type Database = {
         Insert: {
           category?: string
           created_at?: string
-          days?: number[]
           end_time: string
           id?: string
           occ_date?: string | null
@@ -1247,7 +1240,6 @@ export type Database = {
         Update: {
           category?: string
           created_at?: string
-          days?: number[]
           end_time?: string
           id?: string
           occ_date?: string | null
@@ -1990,6 +1982,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_invitation: {
+        Args: { p_token: string }
+        Returns: {
+          message: string
+          ok: boolean
+          workspace_id: string
+        }[]
+      }
       can_edit_project: { Args: { p_project_id: string }; Returns: boolean }
       debug_rls_policies: {
         Args: never
@@ -2002,27 +2002,19 @@ export type Database = {
         }[]
       }
       has_project_access: { Args: { p_project_id: string }; Returns: boolean }
-      is_workspace_member: {
-        Args: { p_workspace_id: string }
-        Returns: boolean
-      }
-      accept_invitation: {
-        Args: { p_token: string }
-        Returns: {
-          ok: boolean
-          message: string
-          workspace_id: string | null
-        }[]
-      }
       invitation_preview: {
         Args: { p_token: string }
         Returns: {
-          workspace_name: string | null
-          role: string | null
+          email_hint: string
+          expires_at: string
+          role: string
           state: string
-          expires_at: string | null
-          email_hint: string | null
+          workspace_name: string
         }[]
+      }
+      is_workspace_member: {
+        Args: { p_workspace_id: string }
+        Returns: boolean
       }
       list_workspace_members: {
         Args: { p_workspace_id: string }
@@ -2145,6 +2137,101 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      iceberg_namespaces: {
+        Row: {
+          bucket_name: string
+          catalog_id: string
+          created_at: string
+          id: string
+          metadata: Json
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          bucket_name: string
+          catalog_id: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          bucket_name?: string
+          catalog_id?: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "iceberg_namespaces_catalog_id_fkey"
+            columns: ["catalog_id"]
+            isOneToOne: false
+            referencedRelation: "buckets_analytics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      iceberg_tables: {
+        Row: {
+          bucket_name: string
+          catalog_id: string
+          created_at: string
+          id: string
+          location: string
+          name: string
+          namespace_id: string
+          remote_table_id: string | null
+          shard_id: string | null
+          shard_key: string | null
+          updated_at: string
+        }
+        Insert: {
+          bucket_name: string
+          catalog_id: string
+          created_at?: string
+          id?: string
+          location: string
+          name: string
+          namespace_id: string
+          remote_table_id?: string | null
+          shard_id?: string | null
+          shard_key?: string | null
+          updated_at?: string
+        }
+        Update: {
+          bucket_name?: string
+          catalog_id?: string
+          created_at?: string
+          id?: string
+          location?: string
+          name?: string
+          namespace_id?: string
+          remote_table_id?: string | null
+          shard_id?: string | null
+          shard_key?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "iceberg_tables_catalog_id_fkey"
+            columns: ["catalog_id"]
+            isOneToOne: false
+            referencedRelation: "buckets_analytics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "iceberg_tables_namespace_id_fkey"
+            columns: ["namespace_id"]
+            isOneToOne: false
+            referencedRelation: "iceberg_namespaces"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       migrations: {
         Row: {
@@ -2633,3 +2720,4 @@ export const Constants = {
     },
   },
 } as const
+

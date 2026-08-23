@@ -10,6 +10,13 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-22-personal-development-os-design.md`
 
+**Estado: completado el 2026-08-23.** Las 7 tareas están implementadas y
+mergeadas (PR #3), y las 46 casillas están marcadas. La verificación que
+faltaba —la que exigía Docker: `supabase db reset`, `supabase test db`,
+regeneración de tipos y el recorrido manual en `pnpm dev`— se corrió el
+2026-08-23 y quedó en verde; la evidencia está en `docs/CHECKS.md`, sección
+"Personal Development OS — Fase 1 (0024)".
+
 ## Global Constraints
 
 Aplican a **todas** las tareas. No se repiten en cada una.
@@ -42,7 +49,7 @@ Crea el grupo de navegación y separa las dos mitades que hoy conviven en `/habi
 - Consumes: nada de tareas previas.
 - Produces: las rutas `/development/habits` y `/development/library`; el grupo `"Personal Development OS"` en `NAV_ITEMS`; las claves `development`, `personalGoals`, `routines`, `library` en `NAV_ICONS`.
 
-- [ ] **Step 1: Mover la carpeta con `git mv` para conservar historial**
+- [x] **Step 1: Mover la carpeta con `git mv` para conservar historial**
 
 ```bash
 mkdir -p "src/app/(app)/development"
@@ -51,7 +58,7 @@ mkdir -p "src/app/(app)/development/library"
 git mv "src/app/(app)/development/habits/BookForm.tsx" "src/app/(app)/development/library/BookForm.tsx"
 ```
 
-- [ ] **Step 2: Extraer las Server Actions de libros a la biblioteca**
+- [x] **Step 2: Extraer las Server Actions de libros a la biblioteca**
 
 Crear `src/app/(app)/development/library/actions.ts` moviendo **tal cual** `upsertBook`, `deleteBook` y `addBookNote` desde `src/app/(app)/development/habits/actions.ts` (incluida la interfaz `BookUpsertPayload` y su comentario sobre TS2769 — explica por qué el payload no es `Record<string, unknown>`; perder ese comentario reintroduce el bug).
 
@@ -64,13 +71,13 @@ revalidatePath("/home");
 
 Borrar esas tres funciones y `BookUpsertPayload` de `habits/actions.ts`, y cambiar sus `revalidatePath("/habits")` por `revalidatePath("/development/habits")`.
 
-- [ ] **Step 3: Partir la página en dos**
+- [x] **Step 3: Partir la página en dos**
 
 `src/app/(app)/development/habits/page.tsx` conserva solo la mitad de hábitos: la nota superior, el encabezado "Hábitos", el `<Card>` con los `HabitRow` y sus `HabitForm`. Se eliminan las consultas de `books` y `book_notes` y todo el bloque de agrupación `grouped`.
 
 `src/app/(app)/development/library/page.tsx` es nuevo y contiene la mitad de lectura, movida sin cambios de lógica: consulta `books` y `book_notes`, agrupa por estado y renderiza las tarjetas con `BookForm`. Importa `Card` y `EmptyState` de `@/components/ui`.
 
-- [ ] **Step 4: Dejar la ruta vieja como redirección**
+- [x] **Step 4: Dejar la ruta vieja como redirección**
 
 ```tsx
 // src/app/(app)/habits/page.tsx
@@ -84,7 +91,7 @@ export default function HabitsRedirect() {
 }
 ```
 
-- [ ] **Step 5: Añadir los íconos**
+- [x] **Step 5: Añadir los íconos**
 
 En `src/components/icons.tsx`, cuatro íconos nuevos con el helper `base()` ya existente (stroke 1.8, viewBox 24x24), y sus claves en `NAV_ICONS`:
 
@@ -110,7 +117,7 @@ export const IconLibrary = (p: IconProps) =>
   library: IconLibrary,
 ```
 
-- [ ] **Step 6: Reorganizar la navegación**
+- [x] **Step 6: Reorganizar la navegación**
 
 En `src/components/nav-items.ts`, **borrar** la línea de `/habits` del grupo Execution OS (`:29`) e insertar, después del bloque de Execution OS y antes de Money OS:
 
@@ -121,7 +128,7 @@ En `src/components/nav-items.ts`, **borrar** la línea de `/habits` del grupo Ex
 
 Las rutas `/development`, `/development/goals` y `/development/routines` se agregan en sus propias tareas, cuando ya existan — un item de navegación que apunta a un 404 es peor que un item ausente.
 
-- [ ] **Step 7: Verificar que compila y que nada quedó apuntando a `/habits`**
+- [x] **Step 7: Verificar que compila y que nada quedó apuntando a `/habits`**
 
 ```bash
 grep -rn '"/habits"' src/ ; pnpm typecheck && pnpm lint
@@ -129,7 +136,7 @@ grep -rn '"/habits"' src/ ; pnpm typecheck && pnpm lint
 
 Esperado: el único resultado del `grep` es el `redirect` del Step 4. Typecheck y lint en verde.
 
-- [ ] **Step 8: Verificar en la app real**
+- [x] **Step 8: Verificar en la app real**
 
 ```bash
 pnpm dev
@@ -137,7 +144,7 @@ pnpm dev
 
 Abrir `http://localhost:3000/habits` → debe redirigir a `/development/habits`. Comprobar que la sidebar muestra el grupo "Personal Development OS" en naranja, que marcar un hábito sigue actualizando su racha, y que `/development/library` lista los libros con sus notas.
 
-- [ ] **Step 9: Actualizar el UX_MAP**
+- [x] **Step 9: Actualizar el UX_MAP**
 
 En `docs/UX_MAP.md`, sustituir la fila `Hábitos y Lectura` por dos filas:
 
@@ -146,7 +153,7 @@ En `docs/UX_MAP.md`, sustituir la fila `Hábitos y Lectura` por dos filas:
 | Biblioteca | `/development/library` | `development/library/page.tsx` | `books`,`book_notes` | `upsertBook`,`addBookNote`,`deleteBook` |
 ```
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add -A
@@ -170,7 +177,7 @@ marcadores. Sin cambios de lógica: las Server Actions se movieron tal cual."
 - Consumes: `public.occupations`, `public.habits` (`0004`).
 - Produces: tablas `personal_goals`, `key_results`, `routines`, `routine_steps`, `routine_runs` con RLS activa.
 
-- [ ] **Step 1: Escribir el test pgTAP primero**
+- [x] **Step 1: Escribir el test pgTAP primero**
 
 ```sql
 -- supabase/tests/0007_rls_development.sql — pgTAP: Personal Development OS.
@@ -251,7 +258,7 @@ select * from finish();
 rollback;
 ```
 
-- [ ] **Step 2: Correr el test y verificar que falla**
+- [x] **Step 2: Correr el test y verificar que falla**
 
 ```bash
 supabase db reset && supabase test db
@@ -259,7 +266,7 @@ supabase db reset && supabase test db
 
 Esperado: FALLA con `relation "public.personal_goals" does not exist`.
 
-- [ ] **Step 3: Escribir la migración**
+- [x] **Step 3: Escribir la migración**
 
 ```sql
 -- 0024_personal_development.sql
@@ -393,7 +400,7 @@ grant all privileges on public.personal_goals, public.key_results, public.routin
   public.routine_steps, public.routine_runs to service_role;
 ```
 
-- [ ] **Step 4: Correr el test y verificar que pasa**
+- [x] **Step 4: Correr el test y verificar que pasa**
 
 ```bash
 supabase db reset && supabase test db
@@ -401,7 +408,7 @@ supabase db reset && supabase test db
 
 Esperado: `0007_rls_development.sql` con 5 assertions en verde, y los seis archivos de test previos sin regresiones.
 
-- [ ] **Step 5: Regenerar los tipos de TypeScript**
+- [x] **Step 5: Regenerar los tipos de TypeScript**
 
 ```bash
 pnpm gen:types && pnpm typecheck
@@ -409,7 +416,7 @@ pnpm gen:types && pnpm typecheck
 
 `src/types/database.types.ts` se **genera**, nunca se edita a mano. Esperado: el archivo gana las cinco tablas y `pnpm typecheck` pasa.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add supabase/migrations/0024_personal_development.sql supabase/tests/0007_rls_development.sql src/types/database.types.ts
@@ -442,7 +449,7 @@ la integridad se resuelve al leer marcando el resultado como stale."
   - `goalProgress(krs: KeyResultProgress[]): number`
   - `goalAtRisk(startISO: string, horizonISO: string, pct: number, todayISO: string, thresholdPoints?: number): boolean`
 
-- [ ] **Step 1: Escribir los tests que fallan**
+- [x] **Step 1: Escribir los tests que fallan**
 
 ```ts
 // tests/domain/development-goals.test.ts
@@ -530,7 +537,7 @@ test("goalAtRisk: el umbral es estricto — exactamente 20 puntos de atraso toda
 });
 ```
 
-- [ ] **Step 2: Correr los tests y verificar que fallan**
+- [x] **Step 2: Correr los tests y verificar que fallan**
 
 ```bash
 pnpm test:unit
@@ -538,7 +545,7 @@ pnpm test:unit
 
 Esperado: FALLA con `Cannot find module .../development/goals.ts`.
 
-- [ ] **Step 3: Escribir la implementación mínima**
+- [x] **Step 3: Escribir la implementación mínima**
 
 ```ts
 // src/lib/domain/development/goals.ts
@@ -624,7 +631,7 @@ export function goalAtRisk(
 }
 ```
 
-- [ ] **Step 4: Correr los tests y verificar que pasan**
+- [x] **Step 4: Correr los tests y verificar que pasan**
 
 ```bash
 pnpm test:unit
@@ -632,7 +639,7 @@ pnpm test:unit
 
 Esperado: los 11 tests nuevos en verde, sin regresiones en los existentes.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lib/domain/development/goals.ts tests/domain/development-goals.test.ts
@@ -657,7 +664,7 @@ borrada devuelve stale en vez de un 0% que parece dato real."
 - Consumes: `keyResultProgress`, `goalProgress`, `goalAtRisk`, `SourceSnapshot` (Task 3); `getUserTimeZone`, `todayLocal`.
 - Produces: `loadSourceSnapshot(): Promise<SourceSnapshot>` en `src/lib/data/development.ts`; Server Actions `upsertPersonalGoal(id, formData)`, `deletePersonalGoal(id)`, `upsertKeyResult(goalId, id, formData)`, `deleteKeyResult(id)`.
 
-- [ ] **Step 1: Construir el snapshot de fuentes**
+- [x] **Step 1: Construir el snapshot de fuentes**
 
 ```ts
 // src/lib/data/development.ts
@@ -722,7 +729,7 @@ export const loadSourceSnapshot = cache(async (): Promise<SourceSnapshot> => {
 });
 ```
 
-- [ ] **Step 2: Escribir las Server Actions**
+- [x] **Step 2: Escribir las Server Actions**
 
 ```ts
 // src/app/(app)/development/goals/actions.ts
@@ -852,7 +859,7 @@ export async function deleteKeyResult(id: string) {
 
 Este archivo **no** importa `todayLocal` ni `getUserTimeZone`: ninguna de estas acciones necesita la fecha del usuario. `achieved_at` es un instante (`timestamptz`), no un día, así que `new Date().toISOString()` es correcto aquí y no contradice D-016.
 
-- [ ] **Step 3: Escribir la página**
+- [x] **Step 3: Escribir la página**
 
 `src/app/(app)/development/goals/page.tsx` — Server Component con la estructura de `src/app/(app)/development/habits/page.tsx`:
 
@@ -865,7 +872,7 @@ Este archivo **no** importa `todayLocal` ni `getUserTimeZone`: ninguna de estas 
 
 `GoalForm.tsx` y `KeyResultForm.tsx` son Client Components calcados de `HabitForm.tsx`: `useState(open)`, `useTransition`, `try/catch` que guarda el error en estado y lo muestra inline con `color: var(--danger)`. En `KeyResultForm`, el `<select name="sourceKind">` controla qué segundo `<select name="sourceId">` se muestra; con `manual` se muestra en su lugar `<input name="manualCurrent" type="number">`.
 
-- [ ] **Step 4: Añadir la ruta a la navegación**
+- [x] **Step 4: Añadir la ruta a la navegación**
 
 En `src/components/nav-items.ts`, antes de la línea de `/development/habits`:
 
@@ -873,7 +880,7 @@ En `src/components/nav-items.ts`, antes de la línea de `/development/habits`:
   { href: "/development/goals", label: "Metas Personales", group: "Personal Development OS", icon: "personalGoals", color: "var(--c-orange)" },
 ```
 
-- [ ] **Step 5: Verificar**
+- [x] **Step 5: Verificar**
 
 ```bash
 pnpm typecheck && pnpm lint && pnpm test:unit
@@ -881,7 +888,7 @@ pnpm typecheck && pnpm lint && pnpm test:unit
 
 Esperado: todo en verde.
 
-- [ ] **Step 6: Verificar en la app real**
+- [x] **Step 6: Verificar en la app real**
 
 ```bash
 pnpm dev
@@ -889,7 +896,7 @@ pnpm dev
 
 En `/development/goals`: crear la meta "Leer 24 libros" con horizonte `2026-12-31`; añadirle un resultado clave con fuente **libro** apuntando a un libro con páginas leídas y verificar que la barra refleja las páginas sin haber capturado nada. Añadir un segundo resultado clave manual y comprobar que el porcentaje de la meta es el promedio de ambos. Borrar el libro desde `/development/library` y recargar: el resultado clave debe mostrar "fuente eliminada", no 0 %.
 
-- [ ] **Step 7: Actualizar el UX_MAP y commitear**
+- [x] **Step 7: Actualizar el UX_MAP y commitear**
 
 Añadir en `docs/UX_MAP.md`:
 
@@ -928,7 +935,7 @@ contra el trabajo de un equipo (BR-012)."
   - `type HabitLogEffect = "insert" | "noop"`
   - `habitLogEffect(habitId: string | null, willBeDone: boolean, alreadyLoggedToday: boolean): HabitLogEffect`
 
-- [ ] **Step 1: Escribir los tests que fallan**
+- [x] **Step 1: Escribir los tests que fallan**
 
 ```ts
 // tests/domain/development-routines.test.ts
@@ -1026,7 +1033,7 @@ test("habitLogEffect: un paso sin hábito ligado no toca habit_logs", () => {
 });
 ```
 
-- [ ] **Step 2: Correr los tests y verificar que fallan**
+- [x] **Step 2: Correr los tests y verificar que fallan**
 
 ```bash
 pnpm test:unit
@@ -1034,7 +1041,7 @@ pnpm test:unit
 
 Esperado: FALLA con `Cannot find module .../development/routines.ts`.
 
-- [ ] **Step 3: Escribir la implementación mínima**
+- [x] **Step 3: Escribir la implementación mínima**
 
 ```ts
 // src/lib/domain/development/routines.ts
@@ -1140,7 +1147,7 @@ export function habitLogEffect(habitId: string | null, willBeDone: boolean, alre
 }
 ```
 
-- [ ] **Step 4: Correr los tests y verificar que pasan**
+- [x] **Step 4: Correr los tests y verificar que pasan**
 
 ```bash
 pnpm test:unit
@@ -1148,7 +1155,7 @@ pnpm test:unit
 
 Esperado: los 16 tests nuevos en verde, sin regresiones.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lib/domain/development/routines.ts tests/domain/development-routines.test.ts
@@ -1173,7 +1180,7 @@ desmarcar el paso."
 - Consumes: `routineDueToday`, `routineProgress`, `routineFitsBlock`, `routineAdherence`, `nextCompletedSteps`, `habitLogEffect` (Task 5).
 - Produces: Server Actions `upsertRoutine(id, formData)`, `deleteRoutine(id)`, `upsertRoutineStep(routineId, id, formData)`, `deleteRoutineStep(id)`, `toggleRoutineStep(routineId, stepId)`.
 
-- [ ] **Step 1: Escribir las Server Actions de CRUD**
+- [x] **Step 1: Escribir las Server Actions de CRUD**
 
 ```ts
 // src/app/(app)/development/routines/actions.ts
@@ -1276,7 +1283,7 @@ export async function deleteRoutineStep(id: string) {
 }
 ```
 
-- [ ] **Step 2: Escribir el puente hacia `habit_logs`**
+- [x] **Step 2: Escribir el puente hacia `habit_logs`**
 
 Añadir al final del mismo archivo:
 
@@ -1332,7 +1339,7 @@ export async function toggleRoutineStep(routineId: string, stepId: string) {
 }
 ```
 
-- [ ] **Step 3: Escribir la página**
+- [x] **Step 3: Escribir la página**
 
 `src/app/(app)/development/routines/page.tsx` — Server Component:
 
@@ -1347,7 +1354,7 @@ export async function toggleRoutineStep(routineId: string, stepId: string) {
 
 `RoutineForm.tsx` sigue el patrón de `HabitForm.tsx`, con el `<select name="occupationId">` de ocupaciones y, dentro de la rutina abierta, los campos de paso (`title`, `durationMin`, `<select name="habitId">` con "— sin ligar —").
 
-- [ ] **Step 4: Añadir la ruta a la navegación**
+- [x] **Step 4: Añadir la ruta a la navegación**
 
 En `src/components/nav-items.ts`, después de la línea de `/development/goals`:
 
@@ -1355,13 +1362,13 @@ En `src/components/nav-items.ts`, después de la línea de `/development/goals`:
   { href: "/development/routines", label: "Rutinas", group: "Personal Development OS", icon: "routines", color: "var(--c-orange)" },
 ```
 
-- [ ] **Step 5: Verificar**
+- [x] **Step 5: Verificar**
 
 ```bash
 pnpm typecheck && pnpm lint && pnpm test:unit
 ```
 
-- [ ] **Step 6: Verificar el puente en la app real**
+- [x] **Step 6: Verificar el puente en la app real**
 
 ```bash
 pnpm dev
@@ -1377,7 +1384,7 @@ Esta es **la comprobación que justifica el diseño de rutinas**, hazla completa
 6. Marca el paso otra vez y recarga: debe seguir habiendo **una sola** marca de hoy, no dos.
 7. Añade pasos que sumen más de 60 minutos: debe aparecer el chip "No cabe en el bloque".
 
-- [ ] **Step 7: Actualizar el UX_MAP y commitear**
+- [x] **Step 7: Actualizar el UX_MAP y commitear**
 
 ```markdown
 | Rutinas | `/development/routines` | `development/routines/page.tsx` | `routines`,`routine_steps`,`routine_runs`,`occupations`,`habits` | `upsertRoutine`,`deleteRoutine`,`upsertRoutineStep`,`deleteRoutineStep`,`toggleRoutineStep` |
@@ -1408,7 +1415,7 @@ Cierra la fase: la vista que responde "¿qué me toca hoy y cómo van mis metas?
 - Consumes: todo lo producido por las tareas 3, 4, 5 y 6, más `loadSourceSnapshot` de `src/lib/data/development.ts`.
 - Produces: la ruta `/development`.
 
-- [ ] **Step 1: Escribir la página**
+- [x] **Step 1: Escribir la página**
 
 Server Component que reúne lo ya construido, sin lógica nueva:
 
@@ -1421,7 +1428,7 @@ Server Component que reúne lo ya construido, sin lógica nueva:
    - **Fila de `<Stat>`** — metas activas, metas en riesgo, adherencia media de rutinas hoy.
 5. `<EmptyState icon="🌱" text="Empieza definiendo una meta personal o una rutina." />` cuando no hay ni metas ni rutinas.
 
-- [ ] **Step 2: Añadir la ruta como primer item del grupo**
+- [x] **Step 2: Añadir la ruta como primer item del grupo**
 
 En `src/components/nav-items.ts`, **antes** de `/development/goals`:
 
@@ -1429,13 +1436,13 @@ En `src/components/nav-items.ts`, **antes** de `/development/goals`:
   { href: "/development", label: "Panel", group: "Personal Development OS", icon: "development", color: "var(--c-orange)" },
 ```
 
-- [ ] **Step 3: Verificar**
+- [x] **Step 3: Verificar**
 
 ```bash
 pnpm typecheck && pnpm lint && pnpm test:unit
 ```
 
-- [ ] **Step 4: Verificar la fase completa**
+- [x] **Step 4: Verificar la fase completa**
 
 ```bash
 pnpm verify
@@ -1445,7 +1452,7 @@ Esperado: install, typecheck, lint, tests unitarios, build, `supabase db reset` 
 
 Después, con `pnpm dev`, recorrer `/development` y comprobar que la rutina marcada en la Task 6 aparece con su progreso y que una meta con horizonte cercano y poco avance muestra el chip "En riesgo".
 
-- [ ] **Step 5: Documentar el módulo**
+- [x] **Step 5: Documentar el módulo**
 
 En `README.md`, en la sección de privacidad, añadir el módulo a la lista de lo que es siempre privado:
 
@@ -1460,7 +1467,7 @@ En `docs/UX_MAP.md` añadir:
 | Panel de Desarrollo Personal | `/development` | `development/page.tsx` | `personal_goals`,`key_results`,`routines`,`routine_steps`,`routine_runs` | Lectura agregada |
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
