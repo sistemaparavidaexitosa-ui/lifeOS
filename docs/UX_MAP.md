@@ -15,7 +15,8 @@ Server Action real que escribe en Postgres (guardrail NO-MOCK, F8).
 | Planeación | `/planning` | `planning/page.tsx` | `daily_plans`,`weekly_reviews`,`tasks`,`projects` | `approveDailyPlan`,`closeoutTask`,`saveDailyLearning`,`approveWeeklyReview` |
 | Autogestión del Tiempo | `/time` | `time/page.tsx` | `profiles` (ventana),`occupations`,`tasks` | `updateActivityWindow`,`upsertOccupation`,`deleteOccupation`,`assignTaskToSlot` |
 | Vista semanal (7 días) | `/time?view=week` | `time/WeekView.tsx` | `occupations` (solo lectura) | — (edición redirige a `/time`) |
-| Hábitos y Lectura | `/habits` | `habits/page.tsx` | `habits`,`habit_logs`,`books`,`book_notes` | `upsertHabit`,`toggleHabitToday`,`upsertBook`,`addBookNote` |
+| Hábitos | `/development/habits` | `development/habits/page.tsx` | `habits`,`habit_logs`,`occupations` | `upsertHabit`,`toggleHabitToday`,`deleteHabit` |
+| Biblioteca | `/development/library` | `development/library/page.tsx` | `books`,`book_notes` | `upsertBook`,`addBookNote`,`deleteBook` |
 | Equipos y Colaboración | `/workspaces` | `workspaces/page.tsx` | `workspaces`,`memberships`,`invitations`,`project_shares` | `createWorkspace`,`inviteMember`,`removeMember`,`shareProject`,`deleteWorkspace` |
 | Dashboard y Gastos | `/money` | `money/page.tsx` | `accounts`,`journal_entries`,`journal_lines`,`budgets` | `createAccount`,`postTransaction`,`reconcileEntry`,`reverseEntry` |
 | Presupuesto (tabular) | `/money/budget` | `budget/page.tsx`,`QuincenalIncomeForm.tsx`,`CreateBudgetButton.tsx` | `budgets` (monthly_cost/q1/q2); `profiles.quincenal_income`; `accounts`+`journal_entries` (conciliación, lectura reutilizada) | `upsertBudgetLine`,`deleteBudgetLine`,`updateQuincenalIncome` |

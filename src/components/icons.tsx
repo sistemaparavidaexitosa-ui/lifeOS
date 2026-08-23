@@ -244,6 +244,46 @@ export const IconTrash = (p: IconProps) =>
     p
   );
 
+export const IconDevelopment = (p: IconProps) =>
+  base(
+    <>
+      <path d="M12 3v18" />
+      <path d="M5 8l7-5 7 5" />
+      <path d="M5 16l7 5 7-5" />
+    </>,
+    p
+  );
+
+export const IconPersonalGoals = (p: IconProps) =>
+  base(
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="12" cy="12" r="1" />
+    </>,
+    p
+  );
+
+export const IconRoutines = (p: IconProps) =>
+  base(
+    <>
+      <path d="M3 12a9 9 0 1 0 3-6.7" />
+      <path d="M3 4v5h5" />
+      <path d="M12 8v4l3 2" />
+    </>,
+    p
+  );
+
+export const IconLibrary = (p: IconProps) =>
+  base(
+    <>
+      <path d="M4 5v14" />
+      <path d="M8 4h9a2 2 0 0 1 2 2v13H8z" />
+      <path d="M8 9h8" />
+    </>,
+    p
+  );
+
 export const NAV_ICONS = {
   home: IconHome,
   reports: IconReports,
@@ -262,7 +302,11 @@ export const NAV_ICONS = {
   wealth: IconWealth,
   goals: IconGoals,
   household: IconHousehold,
-  settings: IconSettings
+  settings: IconSettings,
+  development: IconDevelopment,
+  personalGoals: IconPersonalGoals,
+  routines: IconRoutines,
+  library: IconLibrary
 } as const;
 
 export type NavIconKey = keyof typeof NAV_ICONS;

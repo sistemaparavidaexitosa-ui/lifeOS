@@ -128,7 +128,7 @@ export async function deleteOccupation(id: string) {
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "occupation.delete", object: id });
   revalidatePath("/time");
-  revalidatePath("/habits");
+  revalidatePath("/development/habits");
   revalidatePath("/home");
 }
 
