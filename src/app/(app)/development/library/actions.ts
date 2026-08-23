@@ -6,70 +6,6 @@ import { createClient } from "@/lib/supabase/server";
 import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
 
-const habitSchema = z.object({
-  name: z.string().min(1),
-  frequency: z.enum(["Diario", "Semanal", "Entre semana", "Fin de semana"]),
-  category: z.enum(["Salud", "Aprendizaje", "Trabajo", "Personal", "Otros"]),
-  occupationId: z.string().uuid().optional().or(z.literal(""))
-});
-
-/** FR-HAB-001: crear/editar hábito, opcionalmente ligado a una ocupación. */
-export async function upsertHabit(id: string | null, formData: FormData) {
-  const parsed = habitSchema.parse({
-    name: formData.get("name"),
-    frequency: formData.get("frequency"),
-    category: formData.get("category"),
-    occupationId: formData.get("occupationId") ?? ""
-  });
-
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
-
-  const payload = { name: parsed.name, frequency: parsed.frequency, category: parsed.category, occupation_id: parsed.occupationId || null };
-
-  if (id) {
-    const { error } = await supabase.from("habits").update(payload).eq("id", id);
-    if (error) throw new Error(error.message);
-  } else {
-    const { error } = await supabase.from("habits").insert({ ...payload, user_id: user.id });
-    if (error) throw new Error(error.message);
-  }
-  revalidatePath("/habits");
-  revalidatePath("/home");
-}
-
-export async function deleteHabit(id: string) {
-  const supabase = await createClient();
-  const { error } = await supabase.from("habits").delete().eq("id", id);
-  if (error) throw new Error(error.message);
-  revalidatePath("/habits");
-}
-
-/** FR-HAB-002: marca/desmarca el cumplimiento de hoy (toggle idempotente). */
-export async function toggleHabitToday(habitId: string) {
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
-
-  const t0 = todayLocal(await getUserTimeZone());
-  const { data: existing } = await supabase.from("habit_logs").select("id").eq("habit_id", habitId).eq("log_date", t0).maybeSingle();
-
-  if (existing) {
-    await supabase.from("habit_logs").delete().eq("id", existing.id);
-    await supabase.from("audit_log").insert({ user_id: user.id, action: "habit.uncomplete", object: habitId });
-  } else {
-    await supabase.from("habit_logs").insert({ habit_id: habitId, log_date: t0 });
-    await supabase.from("audit_log").insert({ user_id: user.id, action: "habit.complete", object: habitId });
-  }
-  revalidatePath("/habits");
-  revalidatePath("/home");
-}
-
 const bookSchema = z.object({
   title: z.string().min(1),
   author: z.string().optional().default(""),
@@ -133,7 +69,7 @@ export async function upsertBook(id: string | null, formData: FormData) {
   }
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "book.update", object: id ?? "" });
-  revalidatePath("/habits");
+  revalidatePath("/development/library");
   revalidatePath("/home");
 }
 
@@ -141,7 +77,7 @@ export async function deleteBook(id: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("books").delete().eq("id", id);
   if (error) throw new Error(error.message);
-  revalidatePath("/habits");
+  revalidatePath("/development/library");
   revalidatePath("/home");
 }
 
@@ -151,5 +87,5 @@ export async function addBookNote(bookId: string, pageRef: number, text: string)
   const supabase = await createClient();
   const { error } = await supabase.from("book_notes").insert({ book_id: bookId, page_ref: pageRef, text: text.trim() });
   if (error) throw new Error(error.message);
-  revalidatePath("/habits");
+  revalidatePath("/development/library");
 }

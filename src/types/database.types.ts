@@ -927,6 +927,53 @@ export type Database = {
           },
         ]
       }
+      key_results: {
+        Row: {
+          created_at: string
+          goal_id: string
+          id: string
+          manual_current: number
+          position: number
+          source_id: string | null
+          source_kind: string
+          target: number
+          title: string
+          unit: string
+        }
+        Insert: {
+          created_at?: string
+          goal_id: string
+          id?: string
+          manual_current?: number
+          position?: number
+          source_id?: string | null
+          source_kind?: string
+          target?: number
+          title: string
+          unit?: string
+        }
+        Update: {
+          created_at?: string
+          goal_id?: string
+          id?: string
+          manual_current?: number
+          position?: number
+          source_id?: string | null
+          source_kind?: string
+          target?: number
+          title?: string
+          unit?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "key_results_goal_id_fkey"
+            columns: ["goal_id"]
+            isOneToOne: false
+            referencedRelation: "personal_goals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       knowledge_items: {
         Row: {
           created_at: string
@@ -1211,6 +1258,42 @@ export type Database = {
         }
         Relationships: []
       }
+      personal_goals: {
+        Row: {
+          achieved_at: string | null
+          area: string
+          created_at: string
+          description: string
+          horizon: string | null
+          id: string
+          status: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          achieved_at?: string | null
+          area?: string
+          created_at?: string
+          description?: string
+          horizon?: string | null
+          id?: string
+          status?: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          achieved_at?: string | null
+          area?: string
+          created_at?: string
+          description?: string
+          horizon?: string | null
+          id?: string
+          status?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           activity_window_end: string
@@ -1429,6 +1512,124 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      routine_runs: {
+        Row: {
+          completed_at: string | null
+          completed_step_ids: string[]
+          id: string
+          local_date: string
+          routine_id: string
+          started_at: string
+        }
+        Insert: {
+          completed_at?: string | null
+          completed_step_ids?: string[]
+          id?: string
+          local_date: string
+          routine_id: string
+          started_at?: string
+        }
+        Update: {
+          completed_at?: string | null
+          completed_step_ids?: string[]
+          id?: string
+          local_date?: string
+          routine_id?: string
+          started_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "routine_runs_routine_id_fkey"
+            columns: ["routine_id"]
+            isOneToOne: false
+            referencedRelation: "routines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      routine_steps: {
+        Row: {
+          duration_min: number
+          habit_id: string | null
+          id: string
+          position: number
+          routine_id: string
+          title: string
+        }
+        Insert: {
+          duration_min?: number
+          habit_id?: string | null
+          id?: string
+          position?: number
+          routine_id: string
+          title: string
+        }
+        Update: {
+          duration_min?: number
+          habit_id?: string | null
+          id?: string
+          position?: number
+          routine_id?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "routine_steps_habit_id_fkey"
+            columns: ["habit_id"]
+            isOneToOne: false
+            referencedRelation: "habits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "routine_steps_routine_id_fkey"
+            columns: ["routine_id"]
+            isOneToOne: false
+            referencedRelation: "routines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      routines: {
+        Row: {
+          active: boolean
+          created_at: string
+          frequency: string
+          id: string
+          name: string
+          occupation_id: string | null
+          position: number
+          user_id: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          frequency?: string
+          id?: string
+          name: string
+          occupation_id?: string | null
+          position?: number
+          user_id: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          frequency?: string
+          id?: string
+          name?: string
+          occupation_id?: string | null
+          position?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "routines_occupation_id_fkey"
+            columns: ["occupation_id"]
+            isOneToOne: false
+            referencedRelation: "occupations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       savings_goals: {
         Row: {

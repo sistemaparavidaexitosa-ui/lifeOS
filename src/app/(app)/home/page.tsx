@@ -131,8 +131,8 @@ export default async function HomePage() {
               </div>
             </div>
           </div>
-          <Link href="/habits" className="btn-ghost btn-sm mt-2 inline-block">
-            Ir a Hábitos y Lectura
+          <Link href="/development/library" className="btn-ghost btn-sm mt-2 inline-block">
+            Ir a la Biblioteca
           </Link>
         </Card>
       )}
