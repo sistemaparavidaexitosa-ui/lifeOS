@@ -1476,7 +1476,9 @@ lógica propia: solo compone lo que ya calculan goals.ts y routines.ts."
 
 Está en el spec y llega después. No lo implementes aquí:
 
-- **Sistemas** (plantillas instanciables) — Fase 2, migración `0025`.
+- **Sistemas** (plantillas instanciables) — Fase 2, migración `0026`. (El plan
+  decía `0025`, pero ese número lo tomó `0025_fix_accept_invitation_ambiguity.sql`
+  al implementar esta fase: CI destapó un bug previo en `accept_invitation`.)
 - **Wishlist y compras** — Fase 3, migración `0026`.
 - **Integraciones externas** (Open Library, Readwise, Google Calendar, Strava/Fitbit) — Fase 4, migración `0027` + Vault + cambios de CSP.
 - **Extractor `development` para Intelligence OS** — Fase 5.

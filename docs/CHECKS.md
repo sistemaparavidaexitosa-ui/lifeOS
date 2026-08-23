@@ -179,3 +179,10 @@ ejecutar y lo cubre el job `db` de `.github/workflows/ci.yml`.
 | `supabase test db` (`0007_rls_development.sql`, 5 assertions) | ⚠️ NO EJECUTADO en el entorno del asistente | Sin Docker en esta máquina — lo corre el job `db` de CI |
 | `pnpm gen:types` | ⚠️ NO EJECUTADO en el entorno del asistente | Las cinco tablas nuevas se añadieron **a mano** a `src/types/database.types.ts`; ver `/docs/PATCH_database_types_development.md` |
 | Recorrido manual en `pnpm dev` | ⚠️ NO EJECUTADO | Requiere sesión de Supabase real con datos del owner. Los pasos exactos están en el plan (Task 6, Step 6: el puente rutina → `habit_logs`) |
+
+### Arreglo colateral: `accept_invitation` (0025)
+
+| Ítem | Estado | Evidencia |
+|---|---|---|
+| Bug detectado | ✅ EJECUTADO OK | Job `db` de CI, run 32652771534 sobre `main`: `column reference "workspace_id" is ambiguous` en `accept_invitation()`; `0006_invitations_accept.sql` abortaba con "Bad plan. You planned 11 tests but ran 8" |
+| `0025_fix_accept_invitation_ambiguity.sql` aplicada | ⚠️ NO EJECUTADO en el entorno del asistente | Sin Docker — lo prueba el job `db` de CI. La verificación es que `0006` (prueba que ya existía) pase completa, sin prueba nueva |
