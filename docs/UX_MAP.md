@@ -16,6 +16,7 @@ Server Action real que escribe en Postgres (guardrail NO-MOCK, F8).
 | Autogestión del Tiempo | `/time` | `time/page.tsx` | `profiles` (ventana),`occupations`,`tasks` | `updateActivityWindow`,`upsertOccupation`,`deleteOccupation`,`assignTaskToSlot` |
 | Vista semanal (7 días) | `/time?view=week` | `time/WeekView.tsx` | `occupations` (solo lectura) | — (edición redirige a `/time`) |
 | Metas Personales | `/development/goals` | `development/goals/page.tsx` | `personal_goals`,`key_results` + fuentes (`habits`,`habit_logs`,`projects`,`tasks`,`books`,`financial_goals`) | `upsertPersonalGoal`,`deletePersonalGoal`,`upsertKeyResult`,`deleteKeyResult` |
+| Rutinas | `/development/routines` | `development/routines/page.tsx` | `routines`,`routine_steps`,`routine_runs`,`occupations`,`habits` | `upsertRoutine`,`deleteRoutine`,`upsertRoutineStep`,`deleteRoutineStep`,`toggleRoutineStep` |
 | Hábitos | `/development/habits` | `development/habits/page.tsx` | `habits`,`habit_logs`,`occupations` | `upsertHabit`,`toggleHabitToday`,`deleteHabit` |
 | Biblioteca | `/development/library` | `development/library/page.tsx` | `books`,`book_notes` | `upsertBook`,`addBookNote`,`deleteBook` |
 | Equipos y Colaboración | `/workspaces` | `workspaces/page.tsx` | `workspaces`,`memberships`,`invitations`,`project_shares` | `createWorkspace`,`inviteMember`,`removeMember`,`shareProject`,`deleteWorkspace` |
