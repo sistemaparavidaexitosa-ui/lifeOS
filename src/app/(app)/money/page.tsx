@@ -10,6 +10,7 @@ import { todayInTimeZone } from "@/lib/domain/datetime.ts";
 import NewTransactionForm from "./NewTransactionForm";
 import NewAccountForm from "./NewAccountForm";
 import TxnRowActions from "./TxnRowActions";
+import InsightPanel, { type RecommendationLite } from "@/components/InsightPanel";
 
 export default async function MoneyPage() {
   const supabase = await createClient();
@@ -31,6 +32,16 @@ export default async function MoneyPage() {
       supabase.from("debts").select("id, name"),
       supabase.from("family_members").select("id, name, relationship")
     ]);
+
+  // Intelligence OS (Fase 1): solo las vivas de este ámbito. Las descartadas y
+  // las silenciadas no se muestran; estas últimas vuelven como contexto de
+  // rechazo del próximo análisis.
+  const { data: recommendations } = await supabase
+    .from("recommendations")
+    .select("id, type, text, confidence, impact, assumptions, evidence")
+    .eq("domain", "money")
+    .eq("status", "Presented")
+    .order("created_at", { ascending: false });
 
   if (!profile) throw new Error("Perfil no encontrado.");
   const currency = profile.currency;
@@ -194,6 +205,21 @@ export default async function MoneyPage() {
           </tbody>
         </table>
       </Card>
+
+      <InsightPanel
+        scope="money"
+        recommendations={(recommendations ?? []).map(
+          (r): RecommendationLite => ({
+            id: r.id,
+            type: r.type,
+            text: r.text,
+            confidence: r.confidence,
+            impact: r.impact,
+            assumptions: Array.isArray(r.assumptions) ? (r.assumptions as string[]) : [],
+            evidence: Array.isArray(r.evidence) ? (r.evidence as string[]) : []
+          })
+        )}
+      />
     </div>
   );
 }

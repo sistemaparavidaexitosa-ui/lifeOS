@@ -196,6 +196,35 @@
   - **El resto de `/api/*` responde `401` con cuerpo JSON, no un redirect a
     `/login`**: quien llama es `fetch`, y un redirect le entregaría el HTML del
     login con estado 200, que no puede interpretar como error.
+- **D-027 Intelligence OS, Fase 1: las decisiones que el spec dejó abiertas.**
+  - **Se añade `@anthropic-ai/sdk`, rompiendo D-008 a propósito.** D-008 fijó
+    cero dependencias de runtime nuevas y D-022 llegó a usar `fetch` contra
+    Resend antes que un SDK. Aquí no aplica el mismo criterio: la salida
+    estructurada del modelo (`messages.parse()` + `zodOutputFormat`) es
+    justamente lo que garantiza que la respuesta valide contra un esquema, y
+    reimplementarla a mano sobre `fetch` sería reescribir la parte del sistema
+    de la que depende que el modelo no invente formas. El spec del módulo ya
+    lo había elegido explícitamente.
+  - **zod sube de `3.24.1` a `3.25.76`, y solo el archivo de la IA importa
+    `zod/v4`.** El SDK exige `zod@^3.25`, y su `zodOutputFormat` convierte el
+    esquema con el núcleo v4: pasarle un esquema de la zod clásica revienta con
+    `Cannot read properties of undefined (reading 'def')` — comprobado. La
+    salida es que `src/lib/ai/recommend.ts` importa `zod/v4` y **el resto de la
+    app se queda en la zod clásica**, sin migrar 20 Server Actions. El spec
+    decía "si no cuadra, subir zod"; cuadra con la subida menor.
+  - **`context.ts` no carga datos, solo filtra.** El spec le daba también la
+    responsabilidad de cargar. Se separó: la Server Action carga y
+    `context.ts` queda puro, con allowlist, recorte y seudonimización. El
+    filtro de privacidad sigue viviendo en **un solo archivo auditable**, que
+    era el objetivo, y ahora además se puede probar sin base de datos.
+  - **La Server Action vive en `src/lib/insights/actions.ts`, no bajo
+    `app/`.** El panel se va a embeber en varias rutas (`/money` hoy, `/debt`,
+    `/time`, `/habits` después); colgar la acción de una de ellas la volvería
+    la dueña arbitraria de las demás.
+  - **Sin opt-in por dominio todavía**, porque el spec lo pone en la Fase 2.
+    En la Fase 1 el consentimiento es el clic: no sale nada del servidor hasta
+    que el usuario pulsa "Analizar", y el panel dice explícitamente qué se
+    envía antes de que lo pulse.
 
 ## Decisiones técnicas (§7, ERESOLVE)
 
