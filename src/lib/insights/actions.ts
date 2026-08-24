@@ -9,6 +9,10 @@ import type { JournalEntryLike } from "@/lib/domain/types.ts";
 import { buildAliasMap, buildContext, restore, type Scope } from "./context";
 import { recommend } from "@/lib/ai/recommend";
 import { MODEL } from "@/lib/ai/provider";
+import { recommendationFingerprint } from "@/lib/domain/insights/fingerprint.ts";
+import { canTransition, REJECTION_STATUSES, type RecommendationStatus } from "@/lib/domain/insights/states.ts";
+import type { Domain } from "@/lib/domain/insights/types.ts";
+import type { MemoryItemLike, MemoryScope } from "@/lib/domain/insights/memory.ts";
 
 /**
  * Intelligence OS — Fase 1: el análisis lo dispara el usuario, es informativo
@@ -45,9 +49,9 @@ export async function analyze(scope: Scope): Promise<AnalyzeResult> {
 
   const today = todayLocal(await getUserTimeZone());
 
-  const [{ data: profile }, { data: budgets }, { data: entries }, { data: accounts }, { data: members }, { data: rejected }] =
+  const [{ data: profile }, { data: budgets }, { data: entries }, { data: accounts }, { data: members }, { data: rejected }, { data: memory }] =
     await Promise.all([
-      supabase.from("profiles").select("quincenal_income").eq("user_id", user.id).single(),
+      supabase.from("profiles").select("quincenal_income, ai_domains").eq("user_id", user.id).single(),
       supabase.from("budgets").select("*").eq("period", "current"),
       supabase.from("journal_entries").select("*, journal_lines(*)"),
       supabase.from("accounts").select("name").order("created_at"),
@@ -55,10 +59,15 @@ export async function analyze(scope: Scope): Promise<AnalyzeResult> {
       supabase
         .from("recommendations")
         .select("status, text")
-        .in("status", ["Suppressed", "Reported"])
+        .in("status", REJECTION_STATUSES)
         .order("created_at", { ascending: false })
-        .limit(20)
+        .limit(20),
+      supabase.from("memory_items").select("*").order("created_at", { ascending: false })
     ]);
+
+  // Opt-in por dominio (§4.2). Vacío por defecto: nada sale hacia el modelo
+  // hasta que el usuario lo encienda en Configuración.
+  const enabledDomains = (profile?.ai_domains ?? []) as Domain[];
 
   const entriesForDomain: JournalEntryLike[] = (entries ?? []).map((e) => ({
     id: e.id,
@@ -98,8 +107,29 @@ export async function analyze(scope: Scope): Promise<AnalyzeResult> {
     scope,
     facts,
     previousRejections: (rejected ?? []).map((r) => ({ status: r.status, text: r.text })),
-    aliases
+    aliases,
+    enabledDomains,
+    todayISO: today,
+    memory: (memory ?? []).map(
+      (m): MemoryItemLike => ({
+        id: m.id,
+        scope: m.scope as MemoryScope,
+        origin: m.origin as MemoryItemLike["origin"],
+        text: m.text,
+        validUntil: m.valid_until
+      })
+    )
   });
+
+  // Si el usuario no autorizó este dominio, se dice explícitamente en vez de
+  // fingir cobertura y devolver una lista vacía sin explicación (§4.2).
+  if (!context.domains.length) {
+    return {
+      ok: false,
+      created: 0,
+      reason: `Dinero está apagado para el análisis. Enciéndelo en Configuración si quieres que sus cifras se envíen al modelo.`
+    };
+  }
 
   const result = await recommend(context);
 
@@ -122,7 +152,36 @@ export async function analyze(scope: Scope): Promise<AnalyzeResult> {
     return { ok: true, created: 0, reason: result.reason ?? "El análisis no encontró nada que valga la pena reportar." };
   }
 
-  const rows = result.recommendations.map((r) => ({
+  // Deduplicación (§5.2). Se consulta primero en vez de hacer upsert porque el
+  // índice único es parcial y porque las dos ramas no hacen lo mismo:
+  //  - una viva (Presented) con la misma huella se REFRESCA con el texto nuevo;
+  //  - una silenciada (Suppressed) se SALTA. El usuario dijo que no la quiere
+  //    ver; volver a insertarla con otro texto sería burlar esa decisión.
+  const conHuella = result.recommendations.map((r) => ({ ...r, fingerprint: recommendationFingerprint(r.type, r.factIds) }));
+  const { data: existentes } = await supabase
+    .from("recommendations")
+    .select("id, fingerprint, status")
+    .in("fingerprint", conHuella.map((r) => r.fingerprint))
+    .in("status", ["Presented", "Suppressed"]);
+
+  const porHuella = new Map((existentes ?? []).map((e) => [e.fingerprint, e]));
+  const nuevas = conHuella.filter((r) => !porHuella.has(r.fingerprint));
+  const refrescables = conHuella.filter((r) => porHuella.get(r.fingerprint)?.status === "Presented");
+
+  for (const r of refrescables) {
+    await supabase
+      .from("recommendations")
+      .update({
+        text: restore(r.text, aliases),
+        confidence: r.confidence,
+        impact: r.impact,
+        evidence: r.factIds,
+        assumptions: r.assumptions.map((a) => restore(a, aliases))
+      })
+      .eq("id", porHuella.get(r.fingerprint)!.id);
+  }
+
+  const rows = nuevas.map((r) => ({
     user_id: user.id,
     type: r.type,
     // Se devuelven los nombres reales: el alias fue solo para el viaje de ida.
@@ -135,26 +194,171 @@ export async function analyze(scope: Scope): Promise<AnalyzeResult> {
     actions: [],
     requires_confirmation: false,
     impact: r.impact,
-    status: "Presented"
+    status: "Presented",
+    fingerprint: r.fingerprint
   }));
 
-  const { error } = await supabase.from("recommendations").insert(rows);
-  if (error) return { ok: false, created: 0, reason: error.message };
+  if (rows.length) {
+    const { error } = await supabase.from("recommendations").insert(rows);
+    if (error) return { ok: false, created: 0, reason: error.message };
+  }
 
   revalidatePath("/money");
-  return { ok: true, created: rows.length };
+  revalidatePath("/intelligence");
+  if (rows.length) return { ok: true, created: rows.length };
+  return {
+    ok: true,
+    created: 0,
+    reason:
+      refrescables.length > 0
+        ? "Nada nuevo: las recomendaciones que ya tenías se actualizaron con las cifras de hoy."
+        : "Nada nuevo: el motor solo repitió lo que ya habías silenciado."
+  };
 }
 
-/** Descartar esta vez. Vuelve a poder aparecer en un análisis futuro. */
-export async function dismissRecommendation(id: string): Promise<void> {
+/**
+ * Mueve una recomendación por la máquina de estados (§5.1). La transición se
+ * valida contra el estado REAL en la base, no contra el que traiga el cliente:
+ * la bandeja puede estar desactualizada en otra pestaña.
+ */
+export async function setRecommendationStatus(id: string, to: RecommendationStatus): Promise<{ ok: boolean; reason?: string }> {
   const supabase = await createClient();
-  await supabase.from("recommendations").update({ status: "Dismissed" }).eq("id", id);
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, reason: "No autenticado" };
+
+  const { data: current } = await supabase.from("recommendations").select("status").eq("id", id).single();
+  if (!current) return { ok: false, reason: "La recomendación ya no existe." };
+
+  const from = current.status as RecommendationStatus;
+  if (!canTransition(from, to)) return { ok: false, reason: `No se puede pasar de ${from} a ${to}.` };
+
+  const { error } = await supabase.from("recommendations").update({ status: to }).eq("id", id);
+  if (error) return { ok: false, reason: error.message };
+
+  await supabase.from("audit_log").insert({
+    user_id: user.id,
+    action: "ai.recommendation.status",
+    object: id,
+    meta: { from, to }
+  });
+
+  revalidatePath("/money");
+  revalidatePath("/intelligence");
+  return { ok: true };
+}
+
+/**
+ * El usuario ajusta el texto antes de darlo por bueno. Pasa a `Edited`, que es
+ * un estado vivo: sigue esperando decisión, pero ya no es lo que el modelo
+ * escribió y la bandeja lo distingue.
+ */
+export async function editRecommendationText(id: string, text: string): Promise<{ ok: boolean; reason?: string }> {
+  const limpio = text.trim();
+  if (!limpio) return { ok: false, reason: "El texto no puede quedar vacío." };
+
+  const supabase = await createClient();
+  const { data: current } = await supabase.from("recommendations").select("status").eq("id", id).single();
+  if (!current) return { ok: false, reason: "La recomendación ya no existe." };
+  if (!canTransition(current.status as RecommendationStatus, "Edited") && current.status !== "Edited") {
+    return { ok: false, reason: "Esta recomendación ya no se puede editar." };
+  }
+
+  const { error } = await supabase.from("recommendations").update({ text: limpio, status: "Edited" }).eq("id", id);
+  if (error) return { ok: false, reason: error.message };
+
+  revalidatePath("/money");
+  revalidatePath("/intelligence");
+  return { ok: true };
+}
+
+// --- Memoria (§6) -----------------------------------------------------------
+
+const MEMORY_SCOPES = ["goal", "project", "finance", "decision", "preference", "time", "habit"] as const;
+
+/**
+ * Alta y edición de una nota de memoria. Solo origen `user`: la memoria de
+ * origen `ai` nace únicamente de aceptar una recomendación con acción
+ * `memory.remember`, y esas acciones llegan en la Fase 4. Nunca se escribe sola.
+ */
+export async function upsertMemoryItem(id: string | null, formData: FormData): Promise<{ ok: boolean; reason?: string }> {
+  const text = String(formData.get("text") ?? "").trim();
+  const scope = String(formData.get("scope") ?? "");
+  const validUntilRaw = String(formData.get("validUntil") ?? "").trim();
+
+  if (!text) return { ok: false, reason: "Escribe la nota." };
+  if (!(MEMORY_SCOPES as readonly string[]).includes(scope)) return { ok: false, reason: "Ámbito inválido." };
+
+  const supabase = await createClient();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, reason: "No autenticado" };
+
+  const payload = { scope, text, valid_until: validUntilRaw || null };
+  const { error } = id
+    ? await supabase.from("memory_items").update(payload).eq("id", id)
+    : await supabase.from("memory_items").insert({ ...payload, user_id: user.id, origin: "user" });
+  if (error) return { ok: false, reason: error.message };
+
+  revalidatePath("/intelligence/memory");
+  return { ok: true };
+}
+
+export async function deleteMemoryItem(id: string): Promise<void> {
+  const supabase = await createClient();
+  await supabase.from("memory_items").delete().eq("id", id);
+  revalidatePath("/intelligence/memory");
+}
+
+// --- Configuración del motor (§4.2, §4.4) -----------------------------------
+
+/**
+ * Qué dominios autoriza el usuario a enviar al modelo. Se reemplaza la lista
+ * completa en cada guardado: es una casilla por dominio, no un incremental.
+ */
+export async function setAiDomains(formData: FormData): Promise<void> {
+  const domains = ["money", "debt", "habits", "time", "execution"].filter((d) => formData.get(`domain.${d}`) === "on");
+
+  const supabase = await createClient();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  await supabase.from("profiles").update({ ai_domains: domains }).eq("user_id", user.id);
+  await supabase.from("audit_log").insert({ user_id: user.id, action: "ai.optin", object: "", meta: { domains } });
+
+  revalidatePath("/settings");
   revalidatePath("/money");
 }
 
-/** No volver a mostrarla: entra como contexto de rechazo del próximo análisis. */
-export async function suppressRecommendation(id: string): Promise<void> {
+/** §4.4: borrar TODO el historial de recomendaciones. Sin vuelta atrás. */
+export async function clearAiHistory(): Promise<void> {
   const supabase = await createClient();
-  await supabase.from("recommendations").update({ status: "Suppressed" }).eq("id", id);
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  await supabase.from("recommendations").delete().eq("user_id", user.id);
+  await supabase.from("audit_log").insert({ user_id: user.id, action: "ai.clear.history", object: "" });
+  revalidatePath("/intelligence");
   revalidatePath("/money");
+  revalidatePath("/settings");
+}
+
+/** §4.4: borrar toda la memoria. */
+export async function clearMemory(): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  await supabase.from("memory_items").delete().eq("user_id", user.id);
+  await supabase.from("audit_log").insert({ user_id: user.id, action: "ai.clear.memory", object: "" });
+  revalidatePath("/intelligence/memory");
+  revalidatePath("/settings");
 }

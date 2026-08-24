@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { analyze, dismissRecommendation, suppressRecommendation } from "@/lib/insights/actions";
+import Link from "next/link";
+import { analyze, setRecommendationStatus } from "@/lib/insights/actions";
+import type { RecommendationStatus } from "@/lib/domain/insights/states.ts";
 import type { Scope } from "@/lib/insights/context";
 import { Chip } from "./ui";
 
@@ -54,9 +56,14 @@ export default function InsightPanel({
             personas. Nada sale hasta que lo pidas.
           </p>
         </div>
-        <button className="btn-primary btn-sm" disabled={pending} onClick={run}>
-          {pending ? "Analizando…" : "Analizar"}
-        </button>
+        <div className="flex items-center gap-2">
+          <Link className="btn-ghost btn-sm" href="/intelligence">
+            Ver bandeja
+          </Link>
+          <button className="btn-primary btn-sm" disabled={pending} onClick={run}>
+            {pending ? "Analizando…" : "Analizar"}
+          </button>
+        </div>
       </div>
 
       {message && (
@@ -91,21 +98,29 @@ export default function InsightPanel({
               Basada en: {r.evidence.join(", ")}
             </p>
           )}
-          <div className="flex gap-2 mt-2">
-            <button
-              className="btn-ghost btn-sm"
-              disabled={pending}
-              onClick={() => startTransition(async () => { await dismissRecommendation(r.id); })}
-            >
-              Descartar
-            </button>
-            <button
-              className="btn-ghost btn-sm"
-              disabled={pending}
-              onClick={() => startTransition(async () => { await suppressRecommendation(r.id); })}
-            >
-              No mostrar de nuevo
-            </button>
+          <div className="flex gap-2 mt-2 flex-wrap">
+            {(
+              [
+                ["Accepted", "De acuerdo"],
+                ["Dismissed", "Descartar"],
+                ["Suppressed", "No mostrar de nuevo"],
+                ["Reported", "Está mal"]
+              ] as [RecommendationStatus, string][]
+            ).map(([status, label]) => (
+              <button
+                key={status}
+                className="btn-ghost btn-sm"
+                disabled={pending}
+                onClick={() =>
+                  startTransition(async () => {
+                    const res = await setRecommendationStatus(r.id, status);
+                    if (!res.ok) setMessage(res.reason ?? "No se pudo actualizar.");
+                  })
+                }
+              >
+                {label}
+              </button>
+            ))}
           </div>
         </div>
       ))}

@@ -274,6 +274,32 @@ export const IconRoutines = (p: IconProps) =>
     p
   );
 
+/** Intelligence OS: una chispa. El motor "nota" cosas, no conversa. */
+export const IconInsights = (p: IconProps) =>
+  base(
+    <>
+      <path d="M12 3v3" />
+      <path d="M12 18v3" />
+      <path d="M5.6 5.6l2.1 2.1" />
+      <path d="M16.3 16.3l2.1 2.1" />
+      <path d="M3 12h3" />
+      <path d="M18 12h3" />
+      <circle cx="12" cy="12" r="3.2" />
+    </>,
+    p
+  );
+
+/** Memoria: lo que el usuario le dijo al motor y no debe volver a preguntar. */
+export const IconMemory = (p: IconProps) =>
+  base(
+    <>
+      <path d="M9 3a4 4 0 0 0-4 4v1a3 3 0 0 0 0 6v1a4 4 0 0 0 4 4" />
+      <path d="M15 3a4 4 0 0 1 4 4v1a3 3 0 0 1 0 6v1a4 4 0 0 1-4 4" />
+      <path d="M12 3v18" />
+    </>,
+    p
+  );
+
 export const IconLibrary = (p: IconProps) =>
   base(
     <>
@@ -306,7 +332,9 @@ export const NAV_ICONS = {
   development: IconDevelopment,
   personalGoals: IconPersonalGoals,
   routines: IconRoutines,
-  library: IconLibrary
+  library: IconLibrary,
+  insights: IconInsights,
+  memory: IconMemory
 } as const;
 
 export type NavIconKey = keyof typeof NAV_ICONS;

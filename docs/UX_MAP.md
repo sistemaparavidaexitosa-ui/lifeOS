@@ -21,7 +21,10 @@ Server Action real que escribe en Postgres (guardrail NO-MOCK, F8).
 | Hábitos | `/development/habits` | `development/habits/page.tsx` | `habits`,`habit_logs`,`occupations` | `upsertHabit`,`toggleHabitToday`,`deleteHabit` |
 | Biblioteca | `/development/library` | `development/library/page.tsx` | `books`,`book_notes` | `upsertBook`,`addBookNote`,`deleteBook` |
 | Buscador de metadatos de libro | `/api/development/book-lookup` | `api/development/book-lookup/route.ts` | Open Library + Google Books (sin tabla) | Prellena `BookForm`; el libro lo guarda `upsertBook` |
-| Recomendaciones (panel de Dinero) | `/money` (al final) | `components/InsightPanel.tsx` | `recommendations` + hechos derivados de `budgets`,`journal_entries`,`profiles` | `analyze`,`dismissRecommendation`,`suppressRecommendation` |
+| Recomendaciones (panel de Dinero) | `/money` (al final) | `components/InsightPanel.tsx` | `recommendations` + hechos derivados de `budgets`,`journal_entries`,`profiles` | `analyze`,`setRecommendationStatus` |
+| Bandeja de recomendaciones | `/intelligence` | `intelligence/page.tsx` | `recommendations` | `setRecommendationStatus`,`editRecommendationText` |
+| Memoria del motor | `/intelligence/memory` | `intelligence/memory/page.tsx` | `memory_items` | `upsertMemoryItem`,`deleteMemoryItem` |
+| Opt-in y borrado de IA | `/settings` | `settings/AiSettings.tsx` | `profiles.ai_domains` | `setAiDomains`,`clearAiHistory`,`clearMemory` |
 | Equipos y Colaboración | `/workspaces` | `workspaces/page.tsx` | `workspaces`,`memberships`,`invitations`,`project_shares` | `createWorkspace`,`inviteMember`,`removeMember`,`shareProject`,`deleteWorkspace` |
 | Dashboard y Gastos | `/money` | `money/page.tsx` | `accounts`,`journal_entries`,`journal_lines`,`budgets` | `createAccount`,`postTransaction`,`reconcileEntry`,`reverseEntry` |
 | Presupuesto (tabular) | `/money/budget` | `budget/page.tsx`,`QuincenalIncomeForm.tsx`,`CreateBudgetButton.tsx` | `budgets` (monthly_cost/q1/q2); `profiles.quincenal_income`; `accounts`+`journal_entries` (conciliación, lectura reutilizada) | `upsertBudgetLine`,`deleteBudgetLine`,`updateQuincenalIncome` |
