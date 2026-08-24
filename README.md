@@ -64,6 +64,12 @@ Componente → Fuente de datos → Acción real.
 
 ## Privacidad (BR-012/019/020/027)
 
+**Intelligence OS es la única parte que envía datos fuera del servidor**, y solo
+cuando pulsas «Analizar»: viajan hechos ya calculados, en texto, con los nombres
+de cuentas y personas sustituidos por alias, y únicamente de los dominios que
+hayas encendido en Configuración (todos apagados por defecto). Nunca filas
+crudas de la base. El filtro vive en `src/lib/insights/context.ts`.
+
 Money OS (cuentas, presupuesto, deudas, cashback, inversiones, patrimonio,
 metas y Hogar) y la planeación personal (Hoy, ocupaciones, rango de
 actividad, hábitos, lectura, **metas personales y rutinas**) son **siempre

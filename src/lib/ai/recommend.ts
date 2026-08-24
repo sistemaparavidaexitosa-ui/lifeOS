@@ -53,15 +53,30 @@ export interface RecommendResult {
 
 function buildPrompt(context: InsightContext): string {
   const facts = context.facts.map((f) => `- id: ${f.id} | ${f.label}`).join("\n");
+
+  // La memoria va ANTES de los rechazos y después de los hechos: es contexto
+  // sobre el usuario, no una corrección. Sin ella el motor sugiere
+  // indefinidamente cosas que ya fueron decididas (§6).
+  const memory = context.memory.length
+    ? `\n\nLo que el usuario te ha dicho y debes respetar:\n${context.memory.map((m) => `- ${m}`).join("\n")}`
+    : "";
+
   const rejections = context.rejections.length
     ? `\n\nRecomendaciones que el usuario YA rechazó. No las repitas:\n${context.rejections.map((r) => `- ${r}`).join("\n")}`
     : "";
+
+  // Si hay dominios apagados se dice, para que el modelo no redacte como si
+  // tuviera la foto completa (§4.2).
+  const skipped = context.skippedDomains.length
+    ? `\n\n(El usuario no autorizó estos dominios, así que no tienes sus datos: ${context.skippedDomains.join(", ")}. No especules sobre ellos.)`
+    : "";
+
   const trimmed = context.trimmed > 0 ? `\n\n(Se omitieron ${context.trimmed} hechos menos relevantes.)` : "";
 
   return `Ámbito del análisis: ${context.scope} (dominios incluidos: ${context.domains.join(", ")}).
 
 HECHOS:
-${facts}${rejections}${trimmed}`;
+${facts}${memory}${rejections}${skipped}${trimmed}`;
 }
 
 export async function recommend(context: InsightContext): Promise<RecommendResult> {

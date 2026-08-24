@@ -347,3 +347,46 @@ primera corrida con llave real:
 2. Si las recomendaciones que produce sobre datos reales son útiles o son
    obviedades que el propio panel ya muestra — que es la pregunta que esta fase
    existía para responder.
+
+---
+
+## Intelligence OS — Fase 2: bandeja, memoria, deduplicación y opt-in
+
+Lo que el §8.2 del spec pedía: rutas `/intelligence` y `/intelligence/memory`,
+los siete estados, dedupe por huella (migración `0027`, no la `0023` que pedía
+el spec) y opt-in por dominio en `/settings`, más los dos borrados del §4.4.
+
+Verificado el 2026-08-24 contra la pila local.
+
+| Ítem | Estado | Evidencia |
+|---|---|---|
+| `pnpm verify` completo | ✅ EJECUTADO OK | typecheck, lint, **192 pruebas unitarias**, build, `db reset` con 26 migraciones y **59 assertions pgTAP** |
+| pgTAP de la fase (`0008_rls_intelligence.sql`) | ✅ EJECUTADO OK | 7 assertions: el opt-in nace vacío, el índice parcial bloquea el duplicado vivo, una descartada deja pasar la misma huella otra vez, `origin` solo admite `user`/`ai`, y otro usuario no ve recomendaciones, memoria ni bitácora |
+| **El opt-in apagado corta el envío de verdad** | ✅ EJECUTADO OK | Con `ai_domains` vacío (el default), `analyze` responde "Dinero está apagado para el análisis…" y **no sale ni una petición hacia el modelo** — comprobado borrando el registro del stub antes de la llamada: no se volvió a crear |
+| Encender el dominio en Configuración | ✅ EJECUTADO OK | `setAiDomains` desde el formulario real: `ai_domains={money}` en la base |
+| Memoria vigente en el prompt | ✅ EJECUTADO OK | Con dos notas, una vigente y una caducada en enero, el prompt salió con la sección "Lo que el usuario te ha dicho y debes respetar" conteniendo **solo la vigente** |
+| **Dedupe: no duplicar lo vivo** | ✅ EJECUTADO OK | Dos análisis seguidos con la misma salida: **una sola fila**, y la respuesta lo dice ("las recomendaciones que ya tenías se actualizaron") |
+| **Dedupe: no resucitar lo silenciado** | ✅ EJECUTADO OK | Con la recomendación en `Suppressed`, un análisis nuevo con la misma huella **no la reescribe ni la revive**: sigue en `Suppressed`, una sola fila |
+| Máquina de estados sobre el cable | ✅ EJECUTADO OK | `Suppressed → Presented` rechazada (`"No se puede pasar de Suppressed a Presented."`); `Suppressed → Dismissed` aceptada, con `audit_log` registrando `{"from":"Suppressed","to":"Dismissed"}` |
+| Bandeja `/intelligence` | ✅ EJECUTADO OK | 200, con el contador "0 sin resolver de 1", los filtros por estado y la tarjeta con impacto, confianza, estado, dominio y tipo |
+| Memoria `/intelligence/memory` | ✅ EJECUTADO OK | 200, las dos notas listadas y la caducada marcada como tal y tachada |
+| Grupo de navegación | ✅ EJECUTADO OK | "Intelligence OS" en la sidebar con sus dos rutas, en `var(--c-teal)` |
+
+### Un bug que solo apareció integrando
+
+La memoria entraba al contexto y **no se estaba renderizando en el prompt**: la
+añadí a `buildContext` y olvidé la sección correspondiente en `buildPrompt`. Las
+pruebas unitarias del contexto pasaban —la memoria estaba ahí— y aun así el
+modelo nunca la habría visto. Lo destapó mirar el cuerpo real de la petición en
+el stub, no el árbol de pruebas. Corregido y vuelto a comprobar.
+
+### Lo que sigue sin verificarse
+
+- **La llamada al modelo real**, por lo mismo que en la Fase 1: no hay
+  `ANTHROPIC_API_KEY` en esta máquina. Todo lo de arriba corre contra el stub
+  local del endpoint.
+- **`upsertMemoryItem` y `deleteMemoryItem` no se ejercitaron sobre el cable.**
+  Se invocan desde un formulario con argumentos ligados y reproducir ese
+  protocolo con `curl` no era proporcional; la memoria se sembró por PostgREST,
+  que pasa por la misma RLS. Lo que sí se verificó de punta a punta es que la
+  memoria vigente llega al prompt y la caducada no.

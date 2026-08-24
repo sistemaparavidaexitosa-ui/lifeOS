@@ -1293,6 +1293,7 @@ export type Database = {
         Row: {
           activity_window_end: string
           activity_window_start: string
+          ai_domains: string[]
           created_at: string
           currency: string
           cycle: string
@@ -1308,6 +1309,7 @@ export type Database = {
         Insert: {
           activity_window_end?: string
           activity_window_start?: string
+          ai_domains?: string[]
           created_at?: string
           currency?: string
           cycle?: string
@@ -1323,6 +1325,7 @@ export type Database = {
         Update: {
           activity_window_end?: string
           activity_window_start?: string
+          ai_domains?: string[]
           created_at?: string
           currency?: string
           cycle?: string
@@ -1468,6 +1471,7 @@ export type Database = {
           created_at: string
           domain: string
           evidence: Json
+          fingerprint: string | null
           id: string
           impact: string
           requires_confirmation: boolean
@@ -1483,6 +1487,7 @@ export type Database = {
           created_at?: string
           domain: string
           evidence?: Json
+          fingerprint?: string | null
           id?: string
           impact?: string
           requires_confirmation?: boolean
@@ -1498,6 +1503,7 @@ export type Database = {
           created_at?: string
           domain?: string
           evidence?: Json
+          fingerprint?: string | null
           id?: string
           impact?: string
           requires_confirmation?: boolean

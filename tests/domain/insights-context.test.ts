@@ -113,3 +113,77 @@ test("buildContext: sin mapa de alias el texto pasa tal cual", () => {
   const ctx = buildContext({ scope: "money", facts: [fact("m1", "money", 1, "Alimentos: 8400")] });
   assert.strictEqual(ctx.facts[0].label, "Alimentos: 8400");
 });
+
+// --- Fase 2: opt-in por dominio y memoria ----------------------------------
+
+test("buildContext: un dominio que el usuario NO autorizó no sale, aunque el ámbito lo permita", () => {
+  // El allowlist dice qué PUEDE ver el ámbito; el opt-in, qué quiere el usuario
+  // que salga. Solo viaja la intersección.
+  const ctx = buildContext({
+    scope: "money",
+    facts: [fact("m1", "money", 1, "Alimentos: 8400")],
+    enabledDomains: []
+  });
+  assert.deepStrictEqual(ctx.facts, []);
+  assert.deepStrictEqual(ctx.domains, []);
+  assert.deepStrictEqual(ctx.skippedDomains, ["money"], "y se dice cuál se omitió");
+});
+
+test("buildContext: con el dominio autorizado, todo pasa y nada queda omitido", () => {
+  const ctx = buildContext({
+    scope: "money",
+    facts: [fact("m1", "money", 1)],
+    enabledDomains: ["money"]
+  });
+  assert.deepStrictEqual(ctx.domains, ["money"]);
+  assert.deepStrictEqual(ctx.skippedDomains, []);
+  assert.strictEqual(ctx.facts.length, 1);
+});
+
+test("buildContext: sin lista de autorizados no se aplica el filtro", () => {
+  const ctx = buildContext({ scope: "money", facts: [fact("m1", "money", 1)] });
+  assert.strictEqual(ctx.facts.length, 1);
+  assert.deepStrictEqual(ctx.skippedDomains, []);
+});
+
+test("buildContext: en global se omiten solo los dominios apagados, no todos", () => {
+  const ctx = buildContext({
+    scope: "global",
+    facts: [fact("m1", "money", 1), fact("h1", "habits", 1)],
+    enabledDomains: ["habits"]
+  });
+  assert.deepStrictEqual(ctx.facts.map((f) => f.id), ["h1"]);
+  assert.ok(ctx.skippedDomains.includes("money"));
+  assert.ok(!ctx.skippedDomains.includes("habits"));
+});
+
+test("buildContext: la memoria vigente entra y la caducada no", () => {
+  const ctx = buildContext({
+    scope: "money",
+    facts: [fact("m1", "money", 1)],
+    todayISO: "2026-08-24",
+    memory: [
+      { id: "a", scope: "finance", origin: "user", text: "Quiero liquidar la tarjeta antes de diciembre", validUntil: null },
+      { id: "b", scope: "finance", origin: "user", text: "Ya caducó", validUntil: "2026-01-01" }
+    ]
+  });
+  assert.deepStrictEqual(ctx.memory, ["Quiero liquidar la tarjeta antes de diciembre"]);
+});
+
+test("buildContext: la memoria también se seudonimiza antes de salir", () => {
+  const map = buildAliasMap([{ kind: "member", name: "Ana" }]);
+  const ctx = buildContext({
+    scope: "money",
+    facts: [fact("m1", "money", 1)],
+    aliases: map,
+    todayISO: "2026-08-24",
+    memory: [{ id: "a", scope: "finance", origin: "user", text: "No recortar el gasto de Ana", validUntil: null }]
+  });
+  assert.deepStrictEqual(ctx.memory, ["No recortar el gasto de Dependiente #1"]);
+  assert.ok(!JSON.stringify(ctx).includes("Ana"));
+});
+
+test("buildContext: sin memoria cargada el contexto la deja vacía, no undefined", () => {
+  const ctx = buildContext({ scope: "money", facts: [fact("m1", "money", 1)] });
+  assert.deepStrictEqual(ctx.memory, []);
+});

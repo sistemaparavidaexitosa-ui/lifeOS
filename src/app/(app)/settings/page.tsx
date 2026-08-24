@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui";
 import { updateProfile } from "./actions";
+import AiSettings from "./AiSettings";
 
 export default async function SettingsPage() {
   const supabase = await createClient();
@@ -80,6 +81,11 @@ export default async function SettingsPage() {
         <a href="/time" className="btn-ghost btn-sm" style={{ marginTop: 10 }}>
           Editar en Autogestión del Tiempo
         </a>
+      </Card>
+
+      <Card>
+        <h3 className="font-bold mb-2">Recomendaciones (Intelligence OS)</h3>
+        <AiSettings enabled={(profile.ai_domains ?? []) as string[]} />
       </Card>
 
       {/*

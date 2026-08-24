@@ -225,6 +225,28 @@
     En la Fase 1 el consentimiento es el clic: no sale nada del servidor hasta
     que el usuario pulsa "Analizar", y el panel dice explícitamente qué se
     envía antes de que lo pulse.
+- **D-028 Intelligence OS, Fase 2: qué significa exactamente "refrescar en vez
+  de duplicar".** El §5.2 del spec pide deduplicar por huella, pero no dice qué
+  hacer cuando la que ya existe está silenciada. Las dos ramas no pueden ser la
+  misma:
+  - una **viva** (`Presented`) con la misma huella se **refresca** con el texto
+    y las cifras nuevas;
+  - una **silenciada** (`Suppressed`) se **salta entera**. El usuario dijo que
+    no quiere verla; volver a insertarla con otro texto sería burlar esa
+    decisión por la puerta de atrás.
+  - Una **descartada** (`Dismissed`) no bloquea nada: "esta vez no" no es "nunca
+    más", y si las cifras cambian el motor debe poder replantearlo. Por eso el
+    índice único es **parcial** sobre `Presented`/`Suppressed`.
+  - **El opt-in y el allowlist son cosas distintas y se aplican los dos.** El
+    allowlist dice qué PUEDE ver un ámbito; `profiles.ai_domains` dice qué
+    QUIERE el usuario que salga. Solo viaja la intersección, y lo que se quedó
+    fuera se nombra —en la UI y en el propio prompt— en vez de fingir cobertura
+    completa.
+  - **La huella la calcula la app, no la base.** Es `type` + los factId citados,
+    ordenados y hasheados; vive en una función pura para poder probarla sin
+    Postgres. El índice único es la red de seguridad, no el mecanismo.
+  - La migración es la `0027`, no la `0023` que pedía el spec: tercera
+    renumeración del plan original. Lo que importa es el orden de aplicación.
 
 ## Decisiones técnicas (§7, ERESOLVE)
 

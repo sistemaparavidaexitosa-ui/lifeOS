@@ -7,6 +7,7 @@
 // estas reglas —que son las que importan— se puedan probar sin base de datos.
 
 import type { Domain, Fact } from "../domain/insights/types.ts";
+import { activeMemory, type MemoryItemLike } from "../domain/insights/memory.ts";
 
 export type Scope = "money" | "debt" | "habits" | "time" | "execution" | "global";
 
@@ -112,14 +113,33 @@ export interface ContextInput {
   previousRejections?: PreviousRejection[];
   aliases?: AliasMap;
   projectIsWorkspace?: boolean;
+  /**
+   * Dominios que el usuario autorizó a enviar al modelo (§4.2,
+   * `profiles.ai_domains`). Distinto del allowlist: aquel dice qué PUEDE ver
+   * este ámbito, este dice qué QUIERE el usuario que salga. Solo pasa la
+   * intersección. Ausente = no se aplica el filtro (retrocompatible).
+   */
+  enabledDomains?: Domain[];
+  /** Memoria del usuario, ya leída. Se filtra por vigencia y relevancia aquí. */
+  memory?: MemoryItemLike[];
+  /** "Hoy" en la zona del usuario, para decidir qué memoria caducó (D-018). */
+  todayISO?: string;
 }
 
 export interface InsightContext {
   scope: Scope;
+  /** Los que de verdad viajan: allowlist ∩ autorizados por el usuario. */
   domains: Domain[];
+  /**
+   * Los que el ámbito permitía pero el usuario tiene apagados. La UI los dice
+   * explícitamente en vez de fingir cobertura total (§4.2).
+   */
+  skippedDomains: Domain[];
   /** Ya filtrados por allowlist, ordenados por peso, recortados y seudonimizados. */
   facts: Fact[];
   rejections: string[];
+  /** Memoria vigente y relevante, ya seudonimizada. */
+  memory: string[];
   /** Cuántos hechos se descartaron por el tope, para poder decirlo en la UI. */
   trimmed: number;
 }
@@ -129,19 +149,29 @@ export interface InsightContext {
  * peso, recortar, seudonimizar.
  */
 export function buildContext(input: ContextInput): InsightContext {
-  const domains = allowedDomains(input.scope, { projectIsWorkspace: input.projectIsWorkspace });
+  const allowed = allowedDomains(input.scope, { projectIsWorkspace: input.projectIsWorkspace });
+  // Allowlist ∩ opt-in. Lo que el ámbito permite Y el usuario autorizó.
+  const domains = input.enabledDomains ? allowed.filter((d) => input.enabledDomains!.includes(d)) : allowed;
+  const skippedDomains = allowed.filter((d) => !domains.includes(d));
+
   const permitted = input.facts.filter((f) => domains.includes(f.domain));
   const ordered = [...permitted].sort((a, b) => b.weight - a.weight);
   const kept = ordered.slice(0, MAX_FACTS);
   const aliases = input.aliases;
+  const hide = (text: string) => (aliases ? pseudonymize(text, aliases) : text);
+
+  const memory =
+    input.memory && input.todayISO
+      ? activeMemory(input.memory, input.scope, input.todayISO).map((m) => hide(m.text))
+      : [];
 
   return {
     scope: input.scope,
     domains,
+    skippedDomains,
     facts: aliases ? kept.map((f) => ({ ...f, label: pseudonymize(f.label, aliases) })) : kept,
-    rejections: (input.previousRejections ?? []).map((r) =>
-      aliases ? pseudonymize(r.text, aliases) : r.text
-    ),
+    rejections: (input.previousRejections ?? []).map((r) => hide(r.text)),
+    memory,
     trimmed: ordered.length - kept.length
   };
 }

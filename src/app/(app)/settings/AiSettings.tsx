@@ -1,0 +1,89 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { clearAiHistory, clearMemory, setAiDomains } from "@/lib/insights/actions";
+
+const DOMAINS: [string, string][] = [
+  ["money", "Dinero"],
+  ["debt", "Deudas"],
+  ["habits", "Hábitos"],
+  ["time", "Tiempo"],
+  ["execution", "Proyectos y tareas"]
+];
+
+/**
+ * Opt-in por dominio (§4.2) y los dos borrados del §4.4.
+ *
+ * Todo apagado por defecto, y la casilla es lo que autoriza que las cifras de
+ * ese dominio salgan hacia el proveedor del modelo. Los borrados piden
+ * confirmación porque no tienen vuelta atrás.
+ */
+export default function AiSettings({ enabled }: { enabled: string[] }) {
+  const [pending, startTransition] = useTransition();
+  const [confirming, setConfirming] = useState<"history" | "memory" | null>(null);
+
+  return (
+    <div className="flex flex-col gap-3">
+      <form action={setAiDomains} className="flex flex-col gap-2">
+        <p className="text-xs" style={{ color: "var(--muted)" }}>
+          Solo los dominios que marques envían sus hechos al modelo, y solo cuando pulses «Analizar». Lo que viaja son
+          cifras ya calculadas, en texto, con los nombres de cuentas y personas sustituidos por alias.
+        </p>
+        {DOMAINS.map(([value, label]) => (
+          <label key={value} className="flex items-center gap-2 text-sm">
+            <input type="checkbox" name={`domain.${value}`} defaultChecked={enabled.includes(value)} />
+            {label}
+            {value !== "money" && (
+              <span className="text-xs" style={{ color: "var(--muted)" }}>
+                (aún sin extractor: llega en la siguiente fase)
+              </span>
+            )}
+          </label>
+        ))}
+        <div>
+          <button className="btn-primary btn-sm" type="submit" disabled={pending}>
+            Guardar
+          </button>
+        </div>
+      </form>
+
+      <div className="flex gap-2 flex-wrap items-center" style={{ borderTop: "1px solid var(--line)", paddingTop: 10 }}>
+        {confirming === null && (
+          <>
+            <button className="btn-ghost btn-sm" onClick={() => setConfirming("history")}>
+              Borrar historial de recomendaciones
+            </button>
+            <button className="btn-ghost btn-sm" onClick={() => setConfirming("memory")}>
+              Borrar toda la memoria
+            </button>
+          </>
+        )}
+        {confirming !== null && (
+          <>
+            <span className="text-sm">
+              {confirming === "history"
+                ? "Se borran todas las recomendaciones, incluidas las silenciadas. El motor podrá volver a proponerlas."
+                : "Se borra toda la memoria. El motor dejará de saber lo que le habías dicho."}
+            </span>
+            <button
+              className="btn-danger btn-sm"
+              disabled={pending}
+              onClick={() =>
+                startTransition(async () => {
+                  if (confirming === "history") await clearAiHistory();
+                  else await clearMemory();
+                  setConfirming(null);
+                })
+              }
+            >
+              Sí, borrar
+            </button>
+            <button className="btn-ghost btn-sm" onClick={() => setConfirming(null)}>
+              Cancelar
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
