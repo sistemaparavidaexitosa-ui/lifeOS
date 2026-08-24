@@ -157,6 +157,30 @@
     `habitLogEffect`, una función pura y probada. El efecto observable es el
     mismo y el índice único `(habit_id, log_date)` sigue siendo la garantía
     última, pero la decisión queda testeable sin base de datos.
+- **D-025 Metadatos de libros: Open Library manda, Google Books rellena**
+  (Fase 4, §5.1). Las dos APIs se consultan en paralelo desde el servidor y se
+  fusionan con `fillGaps`, en vez de mostrarle al usuario dos listas de
+  resultados para que adivine cuál fila es el mismo libro.
+  - **Open Library es el primario** porque no pide credenciales ni tiene cuota
+    declarada. Google Books entra solo a rellenar huecos (`totalPages` sobre
+    todo) porque **sin API key responde contra una cuota anónima compartida
+    que en la práctica está agotada**: verificado el 2026-08-23, devuelve
+    `429 Quota exceeded ... per day`. Por eso admite una
+    `GOOGLE_BOOKS_API_KEY` **opcional** (F11: perezosa, por feature, su
+    ausencia no rompe nada) y por eso no puede ser el primario.
+  - **Se guarda la URL de la portada, no el archivo** (`books.cover_url`,
+    migración `0026`). Nada de Storage: si el proveedor borra la imagen, la
+    vista degrada al placeholder de siempre.
+  - **La portada se pinta con `<img>`, no con `next/image`.** El optimizador
+    de Vercel cobra por transformación y aquí se trata de una miniatura de
+    ~180px que no controlamos; además `next/image` la serviría desde nuestro
+    origen, escondiendo que el recurso es de un tercero. El costo es ampliar
+    `img-src` en la CSP a `covers.openlibrary.org` y `books.google.com` — los
+    dos únicos hosts externos que el navegador carga en toda la app.
+  - **El host se valida también al guardar** (`isAllowedCoverUrl`), no solo al
+    buscar: la URL viaja en un `<input hidden>` y eso lo edita cualquiera. Una
+    URL fuera de la lista se guarda como "sin portada" en vez de tumbar el
+    guardado del libro.
 
 ## Decisiones técnicas (§7, ERESOLVE)
 

@@ -5,13 +5,24 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
+import { isAllowedCoverUrl } from "@/lib/domain/development/book-lookup.ts";
 
 const bookSchema = z.object({
   title: z.string().min(1),
   author: z.string().optional().default(""),
   status: z.enum(["Por leer", "Leyendo", "Terminado"]),
   currentPage: z.coerce.number().int().min(0).default(0),
-  totalPages: z.coerce.number().int().min(0).default(0)
+  totalPages: z.coerce.number().int().min(0).default(0),
+  // La portada la propone el buscador de metadatos (§5.1) y viaja en un input
+  // oculto, así que aquí NO se confía en ella: solo pasan URLs https de los
+  // hosts que la CSP permite pintar. Cualquier otra cosa se guarda como "sin
+  // portada" en vez de rechazar el libro entero — el usuario vino a guardar
+  // un libro, no a pelearse con una imagen.
+  coverUrl: z
+    .string()
+    .optional()
+    .default("")
+    .transform((url) => (isAllowedCoverUrl(url) ? url : ""))
 });
 
 // Fix (post primera corrida real de `tsc` en CI, TS2769): el payload YA NO
@@ -25,6 +36,7 @@ interface BookUpsertPayload {
   status: string;
   current_page: number;
   total_pages: number;
+  cover_url: string;
   updated_at: string;
   started_at?: string | null;
   finished_at?: string | null;
@@ -37,7 +49,8 @@ export async function upsertBook(id: string | null, formData: FormData) {
     author: formData.get("author") ?? "",
     status: formData.get("status"),
     currentPage: formData.get("currentPage") ?? 0,
-    totalPages: formData.get("totalPages") ?? 0
+    totalPages: formData.get("totalPages") ?? 0,
+    coverUrl: formData.get("coverUrl") ?? ""
   });
 
   const supabase = await createClient();
@@ -53,6 +66,7 @@ export async function upsertBook(id: string | null, formData: FormData) {
     status: parsed.status,
     current_page: parsed.currentPage,
     total_pages: parsed.totalPages,
+    cover_url: parsed.coverUrl,
     updated_at: new Date().toISOString()
   };
 
