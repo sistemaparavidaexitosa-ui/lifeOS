@@ -137,6 +137,50 @@
   invitado enmascarado (`lu***@gmail.com`). Se agregó `?next=` a login y
   onboarding para volver a la invitación tras autenticarse, validando que el
   destino sea una ruta relativa (evita convertir el login en un open redirect).
+- **D-024 Desviaciones deliberadas del spec de Personal Development OS**
+  (`docs/superpowers/specs/2026-08-22-personal-development-os-design.md`).
+  Se revisaron una por una el 2026-08-23 contra la Fase 1 ya implementada;
+  ninguna cambia el comportamiento descrito, pero quedan escritas para que la
+  Fase 2 no las tome por error:
+  - `goalAtRisk` recibe `(startISO, horizonISO, pct, todayISO, threshold = 20)`,
+    no `(horizonISO, pct, todayISO)` como dibuja el §3.3. Sin fecha de inicio no
+    hay "porcentaje de horizonte transcurrido" que calcular, y el umbral
+    explícito hace la regla comprobable en un test en vez de esconderla.
+  - Las pruebas de dominio viven en `tests/domain/development-*.test.ts`, planas,
+    no en `tests/domain/development/*.test.ts`. El script `test:unit` usa el glob
+    `tests/domain/*.test.ts`, de un solo nivel; una subcarpeta habría quedado
+    fuera de `pnpm verify` sin que nadie lo notara.
+  - La clave del ícono es `personalGoals` (camelCase), no `personal-goals`:
+    `NAV_ICONS` se indexa como propiedad de objeto en el resto del archivo.
+  - El puente a `habit_logs` no hace `upsert ... on conflict do nothing` como
+    sugiere el §4.2: consulta si ya existe la fila del día y decide con
+    `habitLogEffect`, una función pura y probada. El efecto observable es el
+    mismo y el índice único `(habit_id, log_date)` sigue siendo la garantía
+    última, pero la decisión queda testeable sin base de datos.
+- **D-025 Metadatos de libros: Open Library manda, Google Books rellena**
+  (Fase 4, §5.1). Las dos APIs se consultan en paralelo desde el servidor y se
+  fusionan con `fillGaps`, en vez de mostrarle al usuario dos listas de
+  resultados para que adivine cuál fila es el mismo libro.
+  - **Open Library es el primario** porque no pide credenciales ni tiene cuota
+    declarada. Google Books entra solo a rellenar huecos (`totalPages` sobre
+    todo) porque **sin API key responde contra una cuota anónima compartida
+    que en la práctica está agotada**: verificado el 2026-08-23, devuelve
+    `429 Quota exceeded ... per day`. Por eso admite una
+    `GOOGLE_BOOKS_API_KEY` **opcional** (F11: perezosa, por feature, su
+    ausencia no rompe nada) y por eso no puede ser el primario.
+  - **Se guarda la URL de la portada, no el archivo** (`books.cover_url`,
+    migración `0026`). Nada de Storage: si el proveedor borra la imagen, la
+    vista degrada al placeholder de siempre.
+  - **La portada se pinta con `<img>`, no con `next/image`.** El optimizador
+    de Vercel cobra por transformación y aquí se trata de una miniatura de
+    ~180px que no controlamos; además `next/image` la serviría desde nuestro
+    origen, escondiendo que el recurso es de un tercero. El costo es ampliar
+    `img-src` en la CSP a `covers.openlibrary.org` y `books.google.com` — los
+    dos únicos hosts externos que el navegador carga en toda la app.
+  - **El host se valida también al guardar** (`isAllowedCoverUrl`), no solo al
+    buscar: la URL viaja en un `<input hidden>` y eso lo edita cualquiera. Una
+    URL fuera de la lista se guarda como "sin portada" en vez de tumbar el
+    guardado del libro.
 
 ## Decisiones técnicas (§7, ERESOLVE)
 
@@ -179,7 +223,7 @@ implementa:
 |---|---|
 | F1 (ERESOLVE) | `package.json` (versiones exactas), `.npmrc` |
 | F2 (tsc en serie) | `package.json` script `typecheck` separado de `build` |
-| F3 (tipos DB stub) | `src/types/database.types.ts` (comentario explícito ⚠️) |
+| F3 (tipos DB) | `src/types/database.types.ts`, generado con `supabase gen types` (`pnpm gen:types:local` / `pnpm gen:types`). Dejó de ser un stub escrito a mano el 2026-08-23 |
 | F4 (env a nivel de módulo) | `src/config/env.ts` (`safeParse` + defaults, validación lazy) |
 | F5 (CSP sin nonce) | `middleware.ts` |
 | F6 (typedRoutes) | `next.config.ts` (`experimental.typedRoutes: false`) |

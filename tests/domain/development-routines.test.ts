@@ -9,6 +9,8 @@ import {
   nextCompletedSteps,
   habitLogEffect
 } from "../../src/lib/domain/development/routines.ts";
+import { habitStreak } from "../../src/lib/domain/habits.ts";
+import type { HabitLogLike } from "../../src/lib/domain/types.ts";
 
 // 2026-08-22 es sábado; 2026-08-24 es lunes; 2026-08-26 es miércoles.
 
@@ -90,4 +92,38 @@ test("habitLogEffect: desmarcar el paso NO desmarca el hábito", () => {
 
 test("habitLogEffect: un paso sin hábito ligado no toca habit_logs", () => {
   assert.strictEqual(habitLogEffect(null, true, false), "noop");
+});
+
+// El puente rutina → hábito, verificado como pide §9 del spec: la racha tiene
+// que dar lo mismo se haya cerrado el hábito desde la rutina o desde
+// /development/habits. Se simula el almacén de `habit_logs` con la misma regla
+// que aplica la Server Action: insertar solo cuando `habitLogEffect` lo dice, y
+// nunca dos veces la misma fecha (índice único `(habit_id, log_date)`).
+function applyToggle(logs: HabitLogLike[], habitId: string | null, willBeDone: boolean, today: string): HabitLogLike[] {
+  const already = logs.some((l) => l.habitId === habitId && l.date === today);
+  if (habitLogEffect(habitId, willBeDone, already) !== "insert" || habitId === null) return logs;
+  return [...logs, { habitId, date: today }];
+}
+
+test("puente rutina → hábito: marcar el paso deja exactamente una fila en habit_logs", () => {
+  const today = "2026-08-26";
+  let logs: HabitLogLike[] = [];
+  logs = applyToggle(logs, "h1", true, today);
+  logs = applyToggle(logs, "h1", false, today); // desmarcar el paso
+  logs = applyToggle(logs, "h1", true, today); // y volver a marcarlo
+  assert.strictEqual(logs.filter((l) => l.habitId === "h1" && l.date === today).length, 1);
+});
+
+test("puente rutina → hábito: la racha es la misma que marcando desde /development/habits", () => {
+  const ayer = "2026-08-25";
+  const hoy = "2026-08-26";
+  const previos: HabitLogLike[] = [{ habitId: "h1", date: ayer }];
+
+  // Camino A: el hábito se cierra ejecutando el paso de la rutina.
+  const porRutina = applyToggle(previos, "h1", true, hoy);
+  // Camino B: el hábito se marca directo en /development/habits (misma fila).
+  const porHabitos: HabitLogLike[] = [...previos, { habitId: "h1", date: hoy }];
+
+  assert.strictEqual(habitStreak("h1", porRutina, hoy), habitStreak("h1", porHabitos, hoy));
+  assert.strictEqual(habitStreak("h1", porRutina, hoy), 2);
 });

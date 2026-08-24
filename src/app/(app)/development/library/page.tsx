@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Card, EmptyState } from "@/components/ui";
-import BookForm from "./BookForm";
+import BookForm, { BookCover } from "./BookForm";
 
 export default async function LibraryPage() {
   const supabase = await createClient();
@@ -42,12 +42,7 @@ export default async function LibraryPage() {
               const pct = b.total_pages ? Math.round((b.current_page / b.total_pages) * 100) : 0;
               return (
                 <div key={b.id} className="flex items-center gap-3 py-2.5" style={{ borderBottom: "1px solid var(--line)" }}>
-                  <div
-                    className="w-11 rounded-lg grid place-items-center text-white font-black flex-shrink-0"
-                    style={{ height: 60, background: "linear-gradient(145deg, var(--accent2), var(--accent))" }}
-                  >
-                    📖
-                  </div>
+                  <BookCover url={b.cover_url} />
                   <div className="grow">
                     <b>{b.title}</b>
                     <div className="text-xs" style={{ color: "var(--muted)" }}>
@@ -55,7 +50,7 @@ export default async function LibraryPage() {
                       {status === "Leyendo" ? ` · pág. ${b.current_page}/${b.total_pages} (${pct}%)` : ""} · {notes.length} nota(s)
                     </div>
                   </div>
-                  <BookForm book={{ id: b.id, title: b.title, author: b.author, status: b.status, currentPage: b.current_page, totalPages: b.total_pages }} notes={notes} />
+                  <BookForm book={{ id: b.id, title: b.title, author: b.author, status: b.status, currentPage: b.current_page, totalPages: b.total_pages, coverUrl: b.cover_url }} notes={notes} />
                 </div>
               );
             })}

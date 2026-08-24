@@ -1,12 +1,11 @@
 -- 0007_rls_development.sql — pgTAP: Personal Development OS (migración 0024).
--- ⚠️ NO EJECUTADO en el entorno del asistente (sin supabase CLI/Docker aquí,
--- igual que 0001-0006 — ver /docs/CHECKS.md). Lo corre el job `db` de CI
--- (.github/workflows/ci.yml) y localmente con: `supabase test db`.
+-- Se corre con `supabase test db` (local, sobre Docker) y en el job `db` de CI
+-- (.github/workflows/ci.yml). Verde en ambos desde el 2026-08-23.
 -- BR-012/019/027: todo el módulo es privado por user_id. Ningún rol de
 -- workspace lo alcanza, y un usuario no ve las filas de otro.
 
 begin;
-select plan(5);
+select plan(8);
 
 insert into auth.users (id, instance_id, aud, role, email) values
   ('11111111-1111-4111-8111-111111111111', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'dev-titular@test.local'),
@@ -73,6 +72,23 @@ select is_empty(
 select is_empty(
   $$ select 1 from public.key_results $$,
   'Otro usuario no ve los resultados clave del titular, protegidos vía el padre'
+);
+
+-- §9 del spec: "ningún rol de workspace alcanza ninguna tabla del módulo".
+-- Como estas tablas no tienen workspace_id y su política es user_id =
+-- auth.uid(), un miembro de workspace no es más que otro usuario: basta con
+-- que las tres tablas de rutinas también queden vacías para él.
+select is_empty(
+  $$ select 1 from public.routines $$,
+  'Otro usuario no ve las rutinas del titular (BR-027)'
+);
+select is_empty(
+  $$ select 1 from public.routine_steps $$,
+  'Otro usuario no ve los pasos de rutina del titular, protegidos vía el padre'
+);
+select is_empty(
+  $$ select 1 from public.routine_runs $$,
+  'Otro usuario no ve las ejecuciones de rutina del titular, protegidas vía el padre'
 );
 
 select * from finish();

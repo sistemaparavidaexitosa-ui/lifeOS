@@ -1,6 +1,6 @@
 -- 0006_invitations_accept.sql — pgTAP: canje de invitaciones (migración 0022).
--- ⚠️ NO EJECUTADO en el entorno del asistente (sin supabase CLI/Docker aquí,
--- igual que 0001-0005 — ver /docs/CHECKS.md). Correr con: `supabase test db`.
+-- Se corre con `supabase test db` (local, sobre Docker) y en el job `db` de CI.
+-- Verde en ambos desde el 2026-08-23 — ver /docs/CHECKS.md.
 --
 -- Cubre exactamente los agujeros que tenía el flujo antes de la 0022:
 -- token inexistente, correo distinto al invitado, invitación expirada,

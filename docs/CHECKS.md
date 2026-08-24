@@ -175,15 +175,23 @@ Docker**: la pila local de Supabase (`npx supabase start`) estuvo levantada, as�
 que las migraciones, las pruebas pgTAP, la generación de tipos y el recorrido
 manual en `pnpm dev` se ejecutaron de verdad. No queda ningún ⚠️ en esta fase.
 
+La revisión contra el spec del módulo
+(`docs/superpowers/specs/2026-08-22-personal-development-os-design.md`, añadido
+al repo el 2026-08-23) cerró además los dos huecos de su §9 que no estaban
+cubiertos: la equivalencia de la racha entre los dos caminos de marcado, y que
+las tres tablas de rutinas también queden vacías para otro usuario. Las
+desviaciones de forma respecto del spec, todas deliberadas, están en D-024 de
+`/docs/DECISIONS.md`.
+
 | Ítem | Estado | Evidencia |
 |---|---|---|
 | `pnpm install --frozen-lockfile` | ✅ EJECUTADO OK | Instalación limpia contra `pnpm-lock.yaml` commiteado |
 | `pnpm typecheck` (`tsc --noEmit`) | ✅ EJECUTADO OK | Sin errores, ya con `database.types.ts` regenerado desde la base real |
 | `pnpm lint` | ✅ EJECUTADO OK | `✔ No ESLint warnings or errors` |
-| `pnpm test:unit` | ✅ EJECUTADO OK | 114/114 (86 previos + 12 de `development-goals` + 16 de `development-routines`) |
+| `pnpm test:unit` | ✅ EJECUTADO OK | 116/116 (86 previos + 12 de `development-goals` + 18 de `development-routines`, incluidas las 2 del puente rutina → racha que pedía el §9 del spec) |
 | `pnpm build` | ✅ EJECUTADO OK | 30 rutas, incluidas `/development`, `/development/goals`, `/development/routines`, `/development/habits`, `/development/library` |
 | `supabase db reset` (migraciones `0002`→`0025`) | ✅ EJECUTADO OK | Las 24 migraciones aplican de cero sin error, incluidas `0024_personal_development.sql` y `0025_fix_accept_invitation_ambiguity.sql`; el seed corre después |
-| `supabase test db` | ✅ EJECUTADO OK | **7 archivos, 49 assertions, 0 fallos.** `0007_rls_development.sql` en verde y `0006_invitations_accept.sql` ya completo (era el que abortaba con el plan de 11/8) |
+| `supabase test db` | ✅ EJECUTADO OK | **7 archivos, 52 assertions, 0 fallos.** `0007_rls_development.sql` en verde y `0006_invitations_accept.sql` ya completo (era el que abortaba con el plan de 11/8) |
 | Tipos de base de datos | ✅ EJECUTADO OK | `supabase gen types typescript --local` regeneró `src/types/database.types.ts` desde el esquema real. Sustituye el parche manual de `/docs/PATCH_database_types_development.md`. La regeneración también corrigió deriva previa: sobraba `occupations.days` (columna que ninguna migración crea) y faltaba la firma de `accept_invitation` |
 
 ### Recorrido manual en `pnpm dev` (los pasos "verificar en la app real" del plan)
@@ -211,3 +219,55 @@ JWT del usuario**, es decir pasando por RLS, no por `service_role`.
 |---|---|---|
 | Bug detectado | ✅ EJECUTADO OK | Job `db` de CI, run 32652771534 sobre `main`: `column reference "workspace_id" is ambiguous` en `accept_invitation()`; `0006_invitations_accept.sql` abortaba con "Bad plan. You planned 11 tests but ran 8" |
 | `0025_fix_accept_invitation_ambiguity.sql` aplicada | ✅ EJECUTADO OK | `supabase test db` local: `0006_invitations_accept.sql .... ok`, sin plan roto |
+
+---
+
+## Personal Development OS — Fase 4, rebanada 1: metadatos de libros (`0026`)
+
+Open Library / Google Books (§5.1 del spec del módulo). Sin OAuth, sin
+credenciales obligatorias, sin tabla nueva. Verificado el 2026-08-23 contra la
+pila local en Docker y contra las **APIs reales** de los dos proveedores.
+
+| Ítem | Estado | Evidencia |
+|---|---|---|
+| `pnpm typecheck` / `pnpm lint` | ✅ EJECUTADO OK | Sin errores ni warnings |
+| `pnpm test:unit` | ✅ EJECUTADO OK | 133/133 (116 previos + 17 de `development-book-lookup`) |
+| `pnpm build` | ✅ EJECUTADO OK | 31 rutas: las 30 previas más `/api/development/book-lookup` |
+| `supabase db reset` con `0026` | ✅ EJECUTADO OK | 25 migraciones desde cero; `books.cover_url text not null default ''` presente en el esquema |
+| `supabase test db` | ✅ EJECUTADO OK | 7 archivos, 52 assertions, 0 fallos (la columna nueva hereda RLS y GRANT de `books`) |
+| Open Library, API real | ✅ EJECUTADO OK | `isbn:9780735211292` → "Atomic Habits", James Clear, 323 págs, portada `covers.openlibrary.org/b/id/12539702-M.jpg`. Búsqueda por título ("deep work newport") → 5 candidatos, el primero correcto y completo |
+| Google Books, API real | ❌ EJECUTADO FALLÓ (del proveedor, no del código) | Sin API key devuelve `429 Quota exceeded for quota metric 'Queries' ... per day` sobre una cuota anónima compartida. El fallo suave funcionó: la búsqueda siguió devolviendo los resultados de Open Library. Ver D-025 y la `GOOGLE_BOOKS_API_KEY` opcional |
+| Ruta protegida | ✅ EJECUTADO OK | Sin sesión: `401 {"ok":false,...,"reason":"No autenticado"}`. Con sesión: 200 con candidatos |
+| Portada en la biblioteca | ✅ EJECUTADO OK | El libro con `cover_url` renderiza `<img src="https://covers.openlibrary.org/…">`; el libro sin portada renderiza el placeholder 📖 de siempre |
+| `img-src` ampliado | ⚠️ CORRECTO PERO INERTE HOY | La directiva quedó bien escrita y se comprobó emitida —`img-src 'self' data: blob: https://covers.openlibrary.org https://books.google.com`— **solo al mover el middleware a `src/`**. En el árbol tal como está, ninguna respuesta lleva CSP: ver el hallazgo de abajo |
+| Guardado de la portada por la Server Action | ⚠️ VERIFICADO PARCIALMENTE | La validación del host está cubierta por pruebas unitarias (`isAllowedCoverUrl`) y el renderizado se comprobó con una fila real; lo que **no** se simuló es el envío del formulario desde el navegador — la acción se invoca con argumentos ligados y reproducir ese protocolo con `curl` no era proporcional |
+
+### Hallazgo colateral (preexistente, NO introducido por esta rebanada): el middleware nunca corre
+
+`middleware.ts` está en la **raíz** del repo mientras la aplicación vive en
+`src/`. Next.js busca el middleware junto al directorio `app`, así que lo
+ignora por completo. Comprobado de tres formas independientes el 2026-08-23:
+
+1. `.next/server/middleware-manifest.json` tiene `middleware: {}` — sin entradas.
+2. Ninguna respuesta de la app lleva cabecera `Content-Security-Policy`, en
+   ninguna ruta (`/login`, `/development/library`, `/api/health`).
+3. El dev server nunca reporta haber compilado un middleware.
+
+Consecuencias, todas anteriores a esta rama:
+
+- **La CSP con nonce por request (F5 🔴) no se está aplicando en ningún lado.**
+  El código existe y es correcto, pero no se ejecuta.
+- **El refresco de sesión de `@supabase/ssr` en cada request tampoco corre.**
+  Las páginas siguen funcionando porque cada una llama `getUser()` por su
+  cuenta, y el redirect a `/login` que se observa lo produce la página, no el
+  middleware.
+- Por eso el Route Handler nuevo valida la sesión él mismo: era la única
+  guarda real que tenía.
+
+**El arreglo es mover el archivo a `src/middleware.ts`**, y se probó que
+funciona: con el archivo ahí, la CSP se emite con su nonce y Next lo aplica a
+los 37 `<script>` de la página, que sigue renderizando. **No se incluye en esta
+rama a propósito**: encender por primera vez una CSP en toda la app, más el
+refresco de sesión y el redirect del middleware para rutas `/api/*`, es un
+cambio de comportamiento global que merece su propio PR y su propia prueba, no
+un viaje de polizón en un buscador de libros.
