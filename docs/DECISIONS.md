@@ -247,6 +247,28 @@
     Postgres. El índice único es la red de seguridad, no el mecanismo.
   - La migración es la `0027`, no la `0023` que pedía el spec: tercera
     renumeración del plan original. Lo que importa es el orden de aplicación.
+- **D-029 Con CSP de nonce, ninguna ruta puede ser estática.** El nonce se
+  genera por petición en `middleware.ts` y Next solo puede escribirlo en los
+  `<script>` si renderiza en el momento de la petición: lee ahí la cabecera
+  `content-security-policy` que le pasa el middleware. Una página
+  prerenderizada se hornea en el build, cuando ese nonce todavía no existe, y
+  sale con sus scripts desnudos; `strict-dynamic` los bloquea **todos**,
+  incluidos los del propio Next, y la página nunca hidrata.
+  - Costó una caída de producción el 2026-08-24, el día que la CSP se activó
+    por primera vez (D-026). `/login` y `/_not-found` eran las dos únicas rutas
+    estáticas de las 31, y `/login` es justo donde aterriza quien no ha entrado:
+    se quedaba en el "Cargando…" del Suspense para siempre. En dev no se ve
+    porque ahí todo es dinámico.
+  - **No sirve relajar `strict-dynamic`**: el HTML prerenderizado trae 6
+    scripts inline (la carga RSC, `self.__next_f.push`), que sin nonce quedan
+    bloqueados igual salvo que se abra `'unsafe-inline'`, que es justo lo que la
+    CSP existe para impedir.
+  - La salida es `export const dynamic = "force-dynamic"` en esas páginas, más
+    un `not-found.tsx` propio (el 404 de fábrica de Next es estático y no admite
+    la directiva). Es barato: la app ya tenía 30 rutas dinámicas.
+  - **`pnpm check:csp` lo vigila** después de cada build, dentro de `verify`:
+    falla si `prerender-manifest.json` vuelve a listar una ruta. Se comprobó que
+    la guarda detecta el fallo revirtiendo la corrección a propósito.
 
 ## Decisiones técnicas (§7, ERESOLVE)
 

@@ -18,7 +18,8 @@
     "gen:types:local": "supabase gen types typescript --local > src/types/database.types.ts",
     "db:reset": "supabase db reset",
     "db:test": "supabase test db",
-    "verify": "pnpm install --frozen-lockfile && pnpm typecheck && pnpm lint && pnpm test:unit && pnpm build && supabase db reset && supabase db test"
+    "verify": "pnpm install --frozen-lockfile && pnpm typecheck && pnpm lint && pnpm test:unit && pnpm build && pnpm check:csp && supabase db reset && supabase db test",
+    "check:csp": "node scripts/check-no-prerender.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.120.0",

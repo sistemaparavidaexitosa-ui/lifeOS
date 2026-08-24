@@ -390,3 +390,28 @@ el stub, no el árbol de pruebas. Corregido y vuelto a comprobar.
   protocolo con `curl` no era proporcional; la memoria se sembró por PostgREST,
   que pasa por la misma RLS. Lo que sí se verificó de punta a punta es que la
   memoria vigente llega al prompt y la caducada no.
+
+---
+
+## Incidente de producción: la app se quedaba en "Cargando…" (2026-08-24)
+
+El primer deploy con la CSP activa (D-026) dejó la aplicación colgada en el
+fallback del `<Suspense>` del login. **Causa: `/login` estaba prerenderizada** y
+una página horneada en el build no puede llevar el nonce que la CSP exige por
+petición. Ver D-029.
+
+| Ítem | Estado | Evidencia |
+|---|---|---|
+| Reproducido fuera de producción | ✅ EJECUTADO OK | `pnpm build && pnpm start` en local (no `pnpm dev`, que renderiza todo por petición y por eso nunca lo mostró): `/login` servía **12 scripts, 0 con nonce**, y el nonce de la cabecera no aparecía en el HTML |
+| Causa aislada | ✅ EJECUTADO OK | La tabla del build marcaba `○ /login` y `○ /_not-found` — las 2 únicas estáticas de 31 rutas. El HTML traía 6 scripts externos y **6 inline** (`self.__next_f.push`, la carga RSC), todos sin nonce |
+| Descartado relajar `strict-dynamic` | ✅ EJECUTADO OK (por análisis) | Los 6 inline seguirían bloqueados sin `'unsafe-inline'`, que es lo que la CSP existe para impedir |
+| Corrección verificada | ✅ EJECUTADO OK | Con `force-dynamic` en el login y un `not-found.tsx` propio: build sin ninguna ruta `○`, y el servidor de producción sirve **13 de 13 scripts con nonce**, coincidiendo con el de la cabecera |
+| Guarda contra la regresión | ✅ EJECUTADO OK | `pnpm check:csp` lee `prerender-manifest.json` tras el build y falla si aparece una ruta estática. **Comprobado revirtiendo la corrección a propósito**: la guarda salió con código 1 y nombró `/login` |
+| `pnpm verify` con la guarda dentro | ✅ EJECUTADO OK | 192 pruebas unitarias, 59 assertions pgTAP, 26 migraciones, build de 31 rutas y `check:csp` en verde |
+
+### Por qué no lo cazó la verificación de la Fase del middleware
+
+Aquella pasada comprobó los nonces **con `pnpm dev`**, donde todas las páginas se
+renderizan por petición y por tanto todas reciben nonce. El modo producción es
+el único que hornea HTML, y era justo el que no se había mirado. El chequeo que
+faltaba no era más pruebas unitarias: era arrancar `pnpm start`.

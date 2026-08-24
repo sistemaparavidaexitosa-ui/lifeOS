@@ -1,6 +1,22 @@
 import { Suspense } from "react";
 import LoginForm from "./login-form";
 
+/**
+ * F5 🔴, segunda parte: esta página TIENE que renderizarse por petición.
+ *
+ * La CSP lleva un nonce distinto en cada request (middleware.ts) y Next solo
+ * puede escribir ese nonce en los `<script>` cuando renderiza en el momento de
+ * la petición. Prerenderizada, el HTML se hornea en el build —cuando todavía no
+ * existe ningún nonce— y en producción el navegador recibe 12 scripts sin
+ * nonce contra una cabecera que exige uno: `strict-dynamic` los bloquea todos,
+ * la página no hidrata y el usuario se queda mirando el "Cargando…" del
+ * Suspense de abajo. Pasó en producción el 2026-08-24.
+ *
+ * Es el precio del nonce, y es barato: esta app ya tenía 30 rutas dinámicas.
+ * Si algún día se quita el nonce de la CSP, esto puede volver a ser estático.
+ */
+export const dynamic = "force-dynamic";
+
 // F7 🔴: cualquier lectura de useSearchParams debe envolverse en <Suspense>
 // para evitar el bailout de prerender ("should be wrapped in a suspense boundary").
 export default function LoginPage() {

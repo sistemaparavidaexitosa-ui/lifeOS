@@ -36,6 +36,24 @@ arranque debe imprimir `Compiling /middleware`.
 encienden de golpe la CSP, el refresco de sesión de `@supabase/ssr` y el
 redirect a `/login` — verifica que las rutas `/api/*` respondan lo que deben.
 
+### La página se queda en "Cargando…" y no avanza (F5, en producción)
+**Síntoma:** el HTML llega —se ve el fallback de un `<Suspense>`, típicamente el
+"Cargando…" del login— pero nada hidrata. En dev funciona perfecto. La consola
+del navegador muestra errores de `Content-Security-Policy` bloqueando
+`script-src`.
+**Causa raíz:** una página **prerenderizada** con una CSP de nonce por petición.
+Next solo puede estampar el nonce en los `<script>` cuando renderiza en el
+momento de la petición; si la página se horneó en el build, su HTML sale sin
+nonce y `strict-dynamic` bloquea hasta los scripts del propio Next. En dev no
+pasa porque ahí todo se renderiza por petición.
+**Diagnóstico:** `pnpm build` y busca rutas marcadas `○` en la tabla, o corre
+`pnpm check:csp`. Para confirmarlo contra un servidor: compara el nonce de la
+cabecera con el de los `<script>` del HTML —
+`curl -s -D h.txt URL | grep -c 'script[^>]*nonce='`.
+**Fix:** `export const dynamic = "force-dynamic";` en el `page.tsx` de esa ruta.
+`pnpm verify` ya incluye `pnpm check:csp`, que falla si vuelve a aparecer una
+ruta estática.
+
 ### Build roto por errores de tipo en cascada (F2)
 **Fix:** corre `pnpm typecheck` de forma aislada (sin `next build`) para ver
 TODOS los errores de una vez, arréglalos juntos, y solo entonces corre
