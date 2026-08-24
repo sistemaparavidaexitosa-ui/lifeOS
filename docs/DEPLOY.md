@@ -37,6 +37,24 @@ pnpm gen:types
      habilitado. En Authentication → URL Configuration, agrega tu dominio de
      Vercel a **Redirect URLs** (`https://tu-dominio.vercel.app/auth/callback`).
 
+## 1ter) Motor de recomendaciones (Intelligence OS)
+
+El análisis de `/money` llama a la API de Claude. Sin esta variable la app
+**no falla**: el botón "Analizar" responde que el motor no está configurado y
+el resto de la página sigue igual.
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-xxxxxxxx   # https://console.anthropic.com → API Keys
+```
+
+El análisis lo dispara siempre el usuario con un clic; no hay cron ni llamadas
+en segundo plano, así que el gasto es una llamada por clic. El modelo es
+`claude-opus-5` y está fijado en `src/lib/ai/provider.ts`.
+
+⚠️ Lo que sale del servidor son los **hechos ya calculados**, en texto, con los
+nombres de cuentas y dependientes sustituidos por alias. Nunca filas crudas de
+la base. El filtro vive en un solo archivo, `src/lib/insights/context.ts`.
+
 ## 1bis) Correo transaccional (invitaciones a workspaces)
 
 Las invitaciones a workspaces envían un correo con el enlace de aceptación.

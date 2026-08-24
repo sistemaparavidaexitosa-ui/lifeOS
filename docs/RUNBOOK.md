@@ -22,6 +22,20 @@ Studio y ejecútalo.
 **Fix:** confirma que `middleware.ts` (no `next.config.ts`) es quien define
 `Content-Security-Policy`, y que incluye `'nonce-...' 'strict-dynamic'`.
 
+### No hay CSP en ninguna respuesta (el fallo silencioso opuesto)
+**Síntoma:** `curl -D - -o /dev/null https://tu-dominio/login` no devuelve
+ninguna cabecera `Content-Security-Policy`, y aun así la app funciona. Nada
+falla a gritos: simplemente no hay política aplicada.
+**Causa raíz:** el middleware no se está ejecutando. Con el proyecto en `src/`,
+Next.js **solo** reconoce `src/middleware.ts`; un `middleware.ts` en la raíz lo
+ignora sin error ni warning. Así estuvo este repo hasta el 2026-08-23.
+**Diagnóstico:** `cat .next/server/middleware-manifest.json` — si
+`"middleware"` es un objeto vacío, no se registró ninguno. En `pnpm dev`, el
+arranque debe imprimir `Compiling /middleware`.
+**Fix:** `git mv middleware.ts src/middleware.ts`. Ojo: al arreglarlo se
+encienden de golpe la CSP, el refresco de sesión de `@supabase/ssr` y el
+redirect a `/login` — verifica que las rutas `/api/*` respondan lo que deben.
+
 ### Build roto por errores de tipo en cascada (F2)
 **Fix:** corre `pnpm typecheck` de forma aislada (sin `next build`) para ver
 TODOS los errores de una vez, arréglalos juntos, y solo entonces corre

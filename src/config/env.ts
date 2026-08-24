@@ -51,6 +51,21 @@ export function requireServiceRoleKey(): string {
 }
 
 /**
+ * F11: el secreto del motor de recomendaciones. Solo lo exige la Server Action
+ * que de verdad llama al modelo; ninguna página, ninguna otra acción. Si falta,
+ * el análisis dice que no está configurado y el resto de la app no se entera.
+ */
+export function requireAnthropicApiKey(): string {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) {
+    throw new Error(
+      "ANTHROPIC_API_KEY no está definida. Solo se requiere para generar recomendaciones (Intelligence OS) — ver /docs/DEPLOY.md."
+    );
+  }
+  return key;
+}
+
+/**
  * F11: ejemplo de validación desacoplada por feature. Ninguna acción que NO
  * use el proveedor de email para invitaciones debe exigir esta variable.
  * Si en el futuro se activa el envío de invitaciones por correo (FR-WSP-003),

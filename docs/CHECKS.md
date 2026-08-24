@@ -264,10 +264,86 @@ Consecuencias, todas anteriores a esta rama:
 - Por eso el Route Handler nuevo valida la sesión él mismo: era la única
   guarda real que tenía.
 
-**El arreglo es mover el archivo a `src/middleware.ts`**, y se probó que
-funciona: con el archivo ahí, la CSP se emite con su nonce y Next lo aplica a
-los 37 `<script>` de la página, que sigue renderizando. **No se incluye en esta
-rama a propósito**: encender por primera vez una CSP en toda la app, más el
-refresco de sesión y el redirect del middleware para rutas `/api/*`, es un
-cambio de comportamiento global que merece su propio PR y su propia prueba, no
-un viaje de polizón en un buscador de libros.
+**El arreglo es mover el archivo a `src/middleware.ts`.** No se incluyó en la
+rama del buscador de libros a propósito —encender por primera vez una CSP en
+toda la app es un cambio de comportamiento global que no debe viajar de
+polizón— y se hizo aparte, en la rama siguiente. Su verificación está abajo.
+
+---
+
+## Arreglo: el middleware se mueve a `src/` y la CSP se enciende por primera vez
+
+`git mv middleware.ts src/middleware.ts`, más las dos guardas que antes no
+hacían falta porque el código no corría (ver D-026). Verificado el 2026-08-23
+contra la pila local, con la CSP ya activa.
+
+| Ítem | Estado | Evidencia |
+|---|---|---|
+| El middleware se registra | ✅ EJECUTADO OK | `pnpm dev` imprime `Compiling /middleware ... Compiled /middleware in 533ms`. Antes no aparecía nunca |
+| CSP presente en toda respuesta | ✅ EJECUTADO OK | `/login`, `/home`, `/execution`, `/money`, `/time`, `/development`, `/settings`: **200 y cabecera CSP en las siete** |
+| El nonce llega a los scripts | ✅ EJECUTADO OK | **35 de 35** `<script>` de `/development/library` llevan `nonce=`, y es el mismo valor que la cabecera. Sin esto, encender la CSP sería la pantalla en blanco de F5 |
+| `connect-src` cubre Supabase | ✅ EJECUTADO OK | `connect-src 'self' http://127.0.0.1:54321 https://*.supabase.co wss://*.supabase.co` — el origen local sale de `NEXT_PUBLIC_SUPABASE_URL`, así que en producción apunta al proyecto real |
+| `img-src` cubre las portadas | ✅ EJECUTADO OK | `img-src 'self' data: blob: https://covers.openlibrary.org https://books.google.com`, y la portada se renderiza en la biblioteca |
+| `/api/health` sigue público | ✅ EJECUTADO OK | Sin sesión: `200 {"status":"ok",...}`. Es el smoke check de DEPLOY.md paso 4 — sin la exención, el arreglo lo habría roto |
+| `/api/*` responde 401, no redirect | ✅ EJECUTADO OK | `/api/development/book-lookup` sin sesión: `401 {"ok":false,"reason":"No autenticado"}`. Con redirect, el `fetch` del cliente habría recibido el HTML del login con estado 200 |
+| Página protegida sin sesión | ✅ EJECUTADO OK | `307 → /login`, ahora sí desde el middleware, y **el redirect también lleva CSP** (antes era el único camino que se quedaba sin ella) |
+| Página protegida con sesión | ✅ EJECUTADO OK | `/development/library` → 200, con la portada y el listado completos |
+| `pnpm verify` | ✅ EJECUTADO OK | Cadena completa en verde: 133 pruebas unitarias, 52 assertions pgTAP, 25 migraciones, build de 31 rutas |
+
+### Lo que este arreglo cambia en producción, y que hay que mirar tras el deploy
+
+- **La barra de "Preview Comments" de Vercel se carga desde `vercel.live`**, que
+  no está en `script-src`. En los deploys de *preview* es previsible que quede
+  bloqueada. Producción no la usa, y no se abrió la CSP por una herramienta de
+  preview.
+- **El refresco de sesión empieza a correr de verdad** en cada request. Es el
+  comportamiento que el patrón oficial de `@supabase/ssr` espera y que llevaba
+  todo este tiempo apagado.
+
+---
+
+## Intelligence OS — Fase 1: rebanada vertical sobre Dinero
+
+El motor de recomendaciones existía solo como cuatro tablas de la `0008` y cero
+código. Esta fase entrega la rebanada vertical del §8.1 de su spec: tipo `Fact`,
+extractor de money, `context.ts` con allowlist, capa de modelo, validación por
+anclaje y `InsightPanel` en `/money`. Sin ruta nueva, sin memoria, sin acciones
+aplicables y **sin migración**: la tabla `recommendations` ya tenía todo lo que
+hacía falta.
+
+Verificado el 2026-08-24 contra la pila local.
+
+| Ítem | Estado | Evidencia |
+|---|---|---|
+| `pnpm typecheck` / `pnpm lint` | ✅ EJECUTADO OK | Sin errores ni warnings, ya con zod `3.25.76` |
+| `pnpm test:unit` | ✅ EJECUTADO OK | 166/166 (133 previos + 33 nuevas: 14 del extractor, 12 del filtro de privacidad, 7 del anclaje) |
+| `pnpm build` | ✅ EJECUTADO OK | 31 rutas, sin ruta nueva |
+| `supabase db reset` + `supabase test db` | ✅ EJECUTADO OK | 25 migraciones, 52 assertions pgTAP |
+| Compatibilidad de `zodOutputFormat` con la zod del proyecto | ❌ EJECUTADO FALLÓ, y por eso se cambió | El spec dejó esto marcado como "verificar al instalar". Con la zod clásica revienta: `Cannot read properties of undefined (reading 'def')`. Resuelto subiendo a `3.25.76` e importando `zod/v4` **solo** en `recommend.ts` — ver D-027 |
+| Hechos calculados desde datos reales | ✅ EJECUTADO OK | Con 8400 gastados contra 6000 presupuestados en la base, el prompt salió con `budget.overrun.alimentos \| Alimentos: 8400 gastado de 6000 presupuestado (2400 por encima)` e `income.unassigned \| 14000 de ingreso mensual sin asignar` |
+| Petición al modelo bien formada | ✅ EJECUTADO OK | `model: claude-opus-5`, `thinking: {type: adaptive}`, `output_config.effort: high`, `output_config.format.type: json_schema`, `max_tokens: 8000` |
+| **Validación de anclaje** | ✅ EJECUTADO OK | El proveedor devolvió dos recomendaciones: una anclada a `budget.overrun.alimentos` y otra citando `investment.loss.inexistente`. **Se escribió una sola fila**; la inventada se descartó y quedó contada en la bitácora (`dropped: 1`) |
+| **Seudonimización en el camino real** | ✅ EJECUTADO OK | Con una recomendación suprimida que decía "No recortes el gasto de Ana ni toques BBVA Nómina", la petición salió con "Dependiente #1" y "Cuenta #1", y ni `Ana` ni `BBVA Nómina` aparecen en ningún punto del cuerpo enviado |
+| Bitácora del análisis (§4.2) | ✅ EJECUTADO OK | `audit_log`: `ai.analyze` con `{"model":"claude-opus-5","scope":"money","domains":["money"],"factCount":2,"created":1,"dropped":1}` |
+| Fallo suave sin llave | ✅ EJECUTADO OK | Sin `ANTHROPIC_API_KEY`: el análisis responde `{"ok":false,...,"reason":"ANTHROPIC_API_KEY no está definida..."}` y `/money` sigue en 200. Un motor no configurado no puede tumbar la página de dinero (D-021) |
+
+### Lo que NO se pudo verificar: la llamada al modelo real
+
+**No hay `ANTHROPIC_API_KEY` en esta máquina ni CLI de Anthropic instalado**, así
+que ninguna petición llegó a la API de verdad. Todo lo de arriba se comprobó
+contra un **stub local del endpoint `/v1/messages`** (`ANTHROPIC_BASE_URL`
+apuntando a `127.0.0.1`), que registra la petición recibida y responde con una
+salida estructurada fabricada a propósito: una recomendación bien anclada y una
+inventada.
+
+Eso verifica de punta a punta la construcción de la petición, el parseo de la
+salida, la validación de anclaje, la seudonimización, la escritura en la base y
+la bitácora. Lo que **no** verifica es la calidad de lo que el modelo real
+escribe, ni que la API acepte exactamente este cuerpo. Queda pendiente de la
+primera corrida con llave real:
+
+1. Que la API acepte la combinación `thinking: adaptive` + `output_config` con
+   `effort` y `format` a la vez.
+2. Si las recomendaciones que produce sobre datos reales son útiles o son
+   obviedades que el propio panel ya muestra — que es la pregunta que esta fase
+   existía para responder.
