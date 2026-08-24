@@ -181,6 +181,21 @@
     buscar: la URL viaja en un `<input hidden>` y eso lo edita cualquiera. Una
     URL fuera de la lista se guarda como "sin portada" en vez de tumbar el
     guardado del libro.
+- **D-026 El middleware vive en `src/`, y eso no es cosmético.** Con el
+  proyecto usando `src/`, Next.js solo reconoce `src/middleware.ts`. El archivo
+  estuvo en la raíz desde el primer commit y el framework lo ignoró en
+  silencio: sin error, sin warning, con `middleware-manifest.json` vacío. Se
+  detectó el 2026-08-23 al notar que **ninguna** respuesta llevaba cabecera
+  `Content-Security-Policy`. Durante todo ese tiempo la CSP con nonce (F5) no
+  se aplicó y el refresco de sesión de `@supabase/ssr` no corrió — las páginas
+  parecían protegidas porque cada `page.tsx` llama `getUser()` por su cuenta, y
+  ese era el `307` que uno observaba. Al moverlo se añadieron dos guardas que
+  antes no hacían falta porque el código no corría:
+  - **`/api/health` queda exento de sesión**: es el smoke check post-deploy
+    (DEPLOY.md paso 4) y se consulta desde fuera, sin cookies.
+  - **El resto de `/api/*` responde `401` con cuerpo JSON, no un redirect a
+    `/login`**: quien llama es `fetch`, y un redirect le entregaría el HTML del
+    login con estado 200, que no puede interpretar como error.
 
 ## Decisiones técnicas (§7, ERESOLVE)
 

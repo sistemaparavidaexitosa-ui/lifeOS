@@ -3,6 +3,22 @@ import { NextResponse, type NextRequest } from "next/server";
 import { publicEnv } from "@/config/env";
 
 /**
+ * ⚠️ ESTE ARCHIVO TIENE QUE VIVIR EN `src/`, junto al directorio `app`.
+ *
+ * Estuvo en la raíz del repo desde el primer commit y Next.js lo ignoró en
+ * silencio todo ese tiempo: cuando el proyecto usa `src/`, el middleware se
+ * busca en `src/middleware.ts` y punto. No hay error, no hay warning — el
+ * archivo simplemente no existe para el framework. Se detectó el 2026-08-23
+ * porque NINGUNA respuesta llevaba cabecera `Content-Security-Policy`, y se
+ * confirmó con `middleware-manifest.json` vacío.
+ *
+ * Consecuencia de aquello: la CSP con nonce (F5) nunca se aplicó y el
+ * refresco de sesión de @supabase/ssr nunca corrió. Si alguna vez alguien
+ * mueve esto de vuelta a la raíz "para ordenar", ambas cosas se apagan otra
+ * vez sin que nada falle a gritos.
+ */
+
+/**
  * F5 🔴: la CSP se define AQUÍ, con un nonce distinto por request, y NUNCA
  * como header estático en next.config.ts. Una CSP estática sin nonce
  * bloquea los scripts inline que Next.js inserta (pantalla en blanco en
@@ -63,18 +79,36 @@ export async function middleware(request: NextRequest) {
     data: { user }
   } = await supabase.auth.getUser();
 
-  const isAuthRoute = request.nextUrl.pathname.startsWith("/login") || request.nextUrl.pathname.startsWith("/auth");
-  const isPublicAsset = request.nextUrl.pathname.startsWith("/_next") || request.nextUrl.pathname.startsWith("/favicon");
+  const { pathname } = request.nextUrl;
+  const isAuthRoute = pathname.startsWith("/login") || pathname.startsWith("/auth");
+  const isPublicAsset = pathname.startsWith("/_next") || pathname.startsWith("/favicon");
+  // `/api/health` es el smoke check post-deploy (DEPLOY.md paso 4): se
+  // consulta desde fuera, sin sesión, y debe seguir respondiendo 200.
+  const isHealthCheck = pathname === "/api/health";
+  const isApiRoute = pathname.startsWith("/api/");
   // /invite/[token] es pública a propósito: el invitado llega desde el correo
   // SIN cuenta todavía. Si se redirigiera a /login, perdería el token y no
   // sabría siquiera a qué lo invitaron. La página no expone datos del
   // workspace más allá del nombre y el rol (ver invitation_preview, 0022).
-  const isInvite = request.nextUrl.pathname.startsWith("/invite/");
+  const isInvite = pathname.startsWith("/invite/");
 
-  if (!user && !isAuthRoute && !isPublicAsset && !isInvite && request.nextUrl.pathname !== "/") {
+  if (!user && !isAuthRoute && !isPublicAsset && !isInvite && !isHealthCheck && pathname !== "/") {
+    // Una ruta de API no se redirige a /login: quien la llama es `fetch`, no
+    // un navegador, y recibiría el HTML del login con estado 200 en vez de un
+    // error que pueda leer. Devuelve el mismo cuerpo que ya usan los Route
+    // Handlers cuando falta sesión.
+    if (isApiRoute) {
+      const denied = NextResponse.json({ ok: false, reason: "No autenticado" }, { status: 401 });
+      denied.headers.set("Content-Security-Policy", csp);
+      return denied;
+    }
     const url = request.nextUrl.clone();
     url.pathname = "/login";
-    return NextResponse.redirect(url);
+    // El redirect también lleva CSP: era el único camino de respuesta que se
+    // quedaba sin ella.
+    const redirected = NextResponse.redirect(url);
+    redirected.headers.set("Content-Security-Policy", csp);
+    return redirected;
   }
 
   return response;

@@ -264,10 +264,38 @@ Consecuencias, todas anteriores a esta rama:
 - Por eso el Route Handler nuevo valida la sesión él mismo: era la única
   guarda real que tenía.
 
-**El arreglo es mover el archivo a `src/middleware.ts`**, y se probó que
-funciona: con el archivo ahí, la CSP se emite con su nonce y Next lo aplica a
-los 37 `<script>` de la página, que sigue renderizando. **No se incluye en esta
-rama a propósito**: encender por primera vez una CSP en toda la app, más el
-refresco de sesión y el redirect del middleware para rutas `/api/*`, es un
-cambio de comportamiento global que merece su propio PR y su propia prueba, no
-un viaje de polizón en un buscador de libros.
+**El arreglo es mover el archivo a `src/middleware.ts`.** No se incluyó en la
+rama del buscador de libros a propósito —encender por primera vez una CSP en
+toda la app es un cambio de comportamiento global que no debe viajar de
+polizón— y se hizo aparte, en la rama siguiente. Su verificación está abajo.
+
+---
+
+## Arreglo: el middleware se mueve a `src/` y la CSP se enciende por primera vez
+
+`git mv middleware.ts src/middleware.ts`, más las dos guardas que antes no
+hacían falta porque el código no corría (ver D-026). Verificado el 2026-08-23
+contra la pila local, con la CSP ya activa.
+
+| Ítem | Estado | Evidencia |
+|---|---|---|
+| El middleware se registra | ✅ EJECUTADO OK | `pnpm dev` imprime `Compiling /middleware ... Compiled /middleware in 533ms`. Antes no aparecía nunca |
+| CSP presente en toda respuesta | ✅ EJECUTADO OK | `/login`, `/home`, `/execution`, `/money`, `/time`, `/development`, `/settings`: **200 y cabecera CSP en las siete** |
+| El nonce llega a los scripts | ✅ EJECUTADO OK | **35 de 35** `<script>` de `/development/library` llevan `nonce=`, y es el mismo valor que la cabecera. Sin esto, encender la CSP sería la pantalla en blanco de F5 |
+| `connect-src` cubre Supabase | ✅ EJECUTADO OK | `connect-src 'self' http://127.0.0.1:54321 https://*.supabase.co wss://*.supabase.co` — el origen local sale de `NEXT_PUBLIC_SUPABASE_URL`, así que en producción apunta al proyecto real |
+| `img-src` cubre las portadas | ✅ EJECUTADO OK | `img-src 'self' data: blob: https://covers.openlibrary.org https://books.google.com`, y la portada se renderiza en la biblioteca |
+| `/api/health` sigue público | ✅ EJECUTADO OK | Sin sesión: `200 {"status":"ok",...}`. Es el smoke check de DEPLOY.md paso 4 — sin la exención, el arreglo lo habría roto |
+| `/api/*` responde 401, no redirect | ✅ EJECUTADO OK | `/api/development/book-lookup` sin sesión: `401 {"ok":false,"reason":"No autenticado"}`. Con redirect, el `fetch` del cliente habría recibido el HTML del login con estado 200 |
+| Página protegida sin sesión | ✅ EJECUTADO OK | `307 → /login`, ahora sí desde el middleware, y **el redirect también lleva CSP** (antes era el único camino que se quedaba sin ella) |
+| Página protegida con sesión | ✅ EJECUTADO OK | `/development/library` → 200, con la portada y el listado completos |
+| `pnpm verify` | ✅ EJECUTADO OK | Cadena completa en verde: 133 pruebas unitarias, 52 assertions pgTAP, 25 migraciones, build de 31 rutas |
+
+### Lo que este arreglo cambia en producción, y que hay que mirar tras el deploy
+
+- **La barra de "Preview Comments" de Vercel se carga desde `vercel.live`**, que
+  no está en `script-src`. En los deploys de *preview* es previsible que quede
+  bloqueada. Producción no la usa, y no se abrió la CSP por una herramienta de
+  preview.
+- **El refresco de sesión empieza a correr de verdad** en cada request. Es el
+  comportamiento que el patrón oficial de `@supabase/ssr` espera y que llevaba
+  todo este tiempo apagado.
