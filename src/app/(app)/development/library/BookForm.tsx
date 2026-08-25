@@ -56,6 +56,7 @@ export default function BookForm({ book, notes = [] }: { book?: BookLite; notes?
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [noteText, setNoteText] = useState("");
+  const [noteError, setNoteError] = useState<string | null>(null);
   const [notePage, setNotePage] = useState(book?.currentPage ?? 0);
 
   // Campos que el buscador de metadatos puede rellenar: controlados, para que
@@ -171,15 +172,23 @@ export default function BookForm({ book, notes = [] }: { book?: BookLite; notes?
       <form
         action={(fd) =>
           startTransition(async () => {
+            // La acción ya no lanza: devuelve { ok, reason } con un motivo
+            // legible incluso en producción (src/lib/supabase/errors.ts). El
+            // try/catch se conserva solo para lo que sigue siendo excepción de
+            // verdad: que la petición ni siquiera llegue al servidor.
             try {
-              await upsertBook(book?.id ?? null, fd);
+              const result = await upsertBook(book?.id ?? null, fd);
+              if (!result.ok) {
+                setError(result.reason ?? "No se pudo guardar el libro.");
+                return;
+              }
               setError(null);
               if (!book) {
                 resetForm();
                 setOpen(false);
               }
-            } catch (e) {
-              setError(e instanceof Error ? e.message : "Error");
+            } catch {
+              setError("No se pudo contactar al servidor. Revisa tu conexión.");
             }
           })
         }
@@ -215,7 +224,16 @@ export default function BookForm({ book, notes = [] }: { book?: BookLite; notes?
               type="button"
               className="btn-danger btn-sm"
               disabled={pending}
-              onClick={() => startTransition(async () => { await deleteBook(book.id); setOpen(false); })}
+              onClick={() =>
+                startTransition(async () => {
+                  const result = await deleteBook(book.id);
+                  if (!result.ok) {
+                    setError(result.reason ?? "No se pudo eliminar el libro.");
+                    return;
+                  }
+                  setOpen(false);
+                })
+              }
             >
               Eliminar
             </button>
@@ -254,7 +272,12 @@ export default function BookForm({ book, notes = [] }: { book?: BookLite; notes?
               disabled={pending}
               onClick={() =>
                 startTransition(async () => {
-                  await addBookNote(book.id, notePage, noteText);
+                  const result = await addBookNote(book.id, notePage, noteText);
+                  if (!result.ok) {
+                    setNoteError(result.reason ?? "No se pudo agregar la nota.");
+                    return;
+                  }
+                  setNoteError(null);
                   setNoteText("");
                 })
               }
@@ -262,6 +285,7 @@ export default function BookForm({ book, notes = [] }: { book?: BookLite; notes?
               Agregar
             </button>
           </div>
+          {noteError && <div className="text-xs mt-1" style={{ color: "var(--danger)" }}>{noteError}</div>}
         </div>
       )}
     </div>

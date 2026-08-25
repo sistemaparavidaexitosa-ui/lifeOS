@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
 import { isAllowedCoverUrl } from "@/lib/domain/development/book-lookup.ts";
+import { actionFailed, actionOk, type ActionResult } from "@/lib/supabase/errors";
 
 const bookSchema = z.object({
   title: z.string().min(1),
@@ -42,9 +43,16 @@ interface BookUpsertPayload {
   finished_at?: string | null;
 }
 
-/** FR-HAB-003: registrar/actualizar un libro de la biblioteca. */
-export async function upsertBook(id: string | null, formData: FormData) {
-  const parsed = bookSchema.parse({
+/**
+ * FR-HAB-003: registrar/actualizar un libro de la biblioteca.
+ *
+ * NO LANZA (contrato de sendEmail(), D-021 / spec §5.5). Antes hacía
+ * `throw new Error(error.message)` y en producción Next redactaba el mensaje,
+ * dejando al usuario con "The specific message is omitted in production
+ * builds" — indistinguible de un fallo de red. Ver src/lib/supabase/errors.ts.
+ */
+export async function upsertBook(id: string | null, formData: FormData): Promise<ActionResult> {
+  const parsed = bookSchema.safeParse({
     title: formData.get("title"),
     author: formData.get("author") ?? "",
     status: formData.get("status"),
@@ -52,54 +60,63 @@ export async function upsertBook(id: string | null, formData: FormData) {
     totalPages: formData.get("totalPages") ?? 0,
     coverUrl: formData.get("coverUrl") ?? ""
   });
+  if (!parsed.success) {
+    return { ok: false, reason: parsed.error.issues[0]?.message ?? "Datos del libro inválidos." };
+  }
 
   const supabase = await createClient();
   const {
     data: { user }
   } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  if (!user) return { ok: false, reason: "No autenticado." };
 
   const t0 = todayLocal(await getUserTimeZone());
+  const book = parsed.data;
   const payload: BookUpsertPayload = {
-    title: parsed.title,
-    author: parsed.author,
-    status: parsed.status,
-    current_page: parsed.currentPage,
-    total_pages: parsed.totalPages,
-    cover_url: parsed.coverUrl,
+    title: book.title,
+    author: book.author,
+    status: book.status,
+    current_page: book.currentPage,
+    total_pages: book.totalPages,
+    cover_url: book.coverUrl,
     updated_at: new Date().toISOString()
   };
 
   if (id) {
     const { data: prev } = await supabase.from("books").select("status, started_at").eq("id", id).single();
-    if (parsed.status === "Leyendo" && prev?.status !== "Leyendo" && !prev?.started_at) payload.started_at = t0;
-    if (parsed.status === "Terminado") payload.finished_at = t0;
+    if (book.status === "Leyendo" && prev?.status !== "Leyendo" && !prev?.started_at) payload.started_at = t0;
+    if (book.status === "Terminado") payload.finished_at = t0;
     const { error } = await supabase.from("books").update(payload).eq("id", id);
-    if (error) throw new Error(error.message);
+    if (error) return actionFailed(error);
   } else {
-    payload.started_at = parsed.status === "Leyendo" ? t0 : null;
+    payload.started_at = book.status === "Leyendo" ? t0 : null;
     const { error } = await supabase.from("books").insert({ ...payload, user_id: user.id });
-    if (error) throw new Error(error.message);
+    if (error) return actionFailed(error);
   }
 
+  // La auditoría es un efecto secundario: que falle no invalida el guardado
+  // del libro, que ya ocurrió. No se propaga al usuario.
   await supabase.from("audit_log").insert({ user_id: user.id, action: "book.update", object: id ?? "" });
   revalidatePath("/development/library");
   revalidatePath("/home");
+  return actionOk;
 }
 
-export async function deleteBook(id: string) {
+export async function deleteBook(id: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.from("books").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) return actionFailed(error);
   revalidatePath("/development/library");
   revalidatePath("/home");
+  return actionOk;
 }
 
 /** FR-HAB-004: agregar una nota de lectura asociada a una página. */
-export async function addBookNote(bookId: string, pageRef: number, text: string) {
-  if (!text.trim()) return;
+export async function addBookNote(bookId: string, pageRef: number, text: string): Promise<ActionResult> {
+  if (!text.trim()) return { ok: false, reason: "La nota está vacía." };
   const supabase = await createClient();
   const { error } = await supabase.from("book_notes").insert({ book_id: bookId, page_ref: pageRef, text: text.trim() });
-  if (error) throw new Error(error.message);
+  if (error) return actionFailed(error);
   revalidatePath("/development/library");
+  return actionOk;
 }
