@@ -16,14 +16,15 @@
 
 | Decisión | Elección | Razón |
 |---|---|---|
-| Días de la semana | **Columna en `occupations`** | Si viven solo en la rutina, `/time` no puede pintarlos sin conocer el módulo de desarrollo. Puesto ahí, `/time` gana la función que hoy le falta y la rutina solo la usa. |
-| `frequency` de rutina | **Reemplazada por `weekdays`** | Los cuatro valores son subconjuntos de un set de días. Mantener ambos sería dos fuentes de verdad para la misma pregunta. Los presets sobreviven como botones. |
+| Días de la semana | **Columna `occupations.days`** | Si viven solo en la rutina, `/time` no puede pintarlos sin conocer el módulo de desarrollo. Puesto ahí, `/time` gana la función que hoy le falta y la rutina solo la usa. |
+| Nombre y convención | **`days`, con 0=domingo … 6=sábado** | **La columna ya existía en producción**, creada a mano sin migración, con su check y un dato real (`{0,1,3}`). Se adopta tal cual en vez de imponer `days`/ISO: cero rename, cero conversión de datos, y 0–6 es lo que `Date.getUTCDay()` devuelve, así que el predicado no necesita traducción. |
+| `frequency` de rutina | **Reemplazada por `days`** | Los cuatro valores son subconjuntos de un set de días. Mantener ambos sería dos fuentes de verdad para la misma pregunta. Los presets sobreviven como botones. |
 | `habits.frequency` | **No se toca** | Fuera de alcance. La divergencia queda anotada en `DECISIONS.md`, para que no parezca descuido. |
 | Programación automática | **No existe** | El usuario confirma siempre. Sin cron, sin materialización nocturna, sin escrituras en render. |
 | Desenlaces | **Tres: `Completada` / `Sin oportunidad` / `Omitida`** | "Parcial" es derivable de los pasos marcados; los otros tres no. La distinción "no pude" vs. "no quise" es la única razón de preguntar. |
 | Bloque proyectado | **Editable desde `/time`, con escritura de vuelta** | Decisión explícita del usuario, en contra de la recomendación inicial de solo lectura. El riesgo de ciclo se contiene con mappers puros (Task 5). |
 | Notificaciones | **Solo en la app (capa A)** | Un banner y una bandeja de pendientes. Sin `pg_cron`, sin correo, sin Web Push, sin `routine_nudges`: esa tabla solo servía para no duplicar envíos que aquí no ocurren. |
-| Denominador del scorecard | **Se calcula desde `weekdays`, no se lee de filas** | Un día que el usuario nunca abrió la app no tiene fila. Si el denominador saliera de filas, ese día desaparecería del score en vez de contar como pendiente. |
+| Denominador del scorecard | **Se calcula desde `days`, no se lee de filas** | Un día que el usuario nunca abrió la app no tiene fila. Si el denominador saliera de filas, ese día desaparecería del score en vez de contar como pendiente. |
 
 **Consecuencia aceptada de la escritura bidireccional:** mover el bloque a 45 min cuando los pasos suman 60 escribe `duration_min_override = 45` y `routineFitsBlock` empieza a reportar "no cabe". Es correcto: el usuario dijo que ese bloque dura 45 minutos, y el sistema se lo señala en vez de contradecirlo en silencio.
 
@@ -35,7 +36,7 @@
 
 Registrar en `docs/DECISIONS.md` como **D-027**:
 
-1. El spec (§4.2) da a `routines` una columna `frequency` con los cuatro valores de `habits`. Este plan la sustituye por `weekdays smallint[]`. Motivo: el requisito de asignar a días concretos.
+1. El spec (§4.2) da a `routines` una columna `frequency` con los cuatro valores de `habits`. Este plan la sustituye por `days smallint[]` (0=domingo … 6=sábado). Motivo: el requisito de asignar a días concretos, y la convención la fija `occupations.days`, que ya existía en producción.
 2. El spec deja el horario íntegramente en `occupations` sin que nada lo escriba desde fuera. Este plan hace que la rutina **proyecte y mantenga** su ocupación. La propiedad del dato sigue en `occupations`; lo que se agrega es un escritor más, identificado por `occupations.source = 'routine'`.
 3. `routine_steps.duration_min` pasa a ser nullable. El spec la fijó `not null default 5`; el usuario pidió duración aproximada **o ninguna**.
 
@@ -55,136 +56,86 @@ Aplican a **todas** las tareas. No se repiten en cada una.
 - **Errores legibles:** las acciones nuevas **devuelven `{ ok, reason }`, no lanzan** (contrato de `sendEmail()`, spec §5.5). En producción Next redacta el mensaje de una excepción y el usuario recibe una pared opaca — es exactamente el bug que hoy tiene el guardado de la biblioteca.
 - **Verificación por tarea:** `pnpm typecheck && pnpm lint && pnpm test:unit` en verde antes de cada commit.
 
-## Prerrequisito bloqueante
+## Prerrequisito — RESUELTO el 2026-08-25
 
-- [ ] **Sincronizar el esquema de producción antes de empezar.**
+- [x] **Sincronizar el esquema de producción.**
 
-```bash
-supabase link --project-ref <TU_PROJECT_REF>
-supabase migration list --linked   # local vs remoto
-supabase db push
-```
+Producción estaba en `0020`, no en `0027`: faltaban seis migraciones, incluida `0024`, o sea que **todo el Personal Development OS no existía en producción**. El guardado de la biblioteca fallando por `books.cover_url` era un síntoma entre varios. Aplicadas con `supabase db push` (`0021`, `0022`, `0024`–`0027`), todas aditivas, sin pérdida de datos.
 
-`0026_book_cover.sql` y `0027_intelligence_phase2.sql` se verificaron **solo contra la pila local** (`docs/CHECKS.md`). Si `books.cover_url` no existe en producción, el guardado de la biblioteca falla con `PGRST204` y `0028` se apilaría sobre una base ya desfasada. Si la columna sí existe pero el error persiste, recargar el caché de PostgREST: `notify pgrst, 'reload schema';`
+Al comparar esquemas apareció la deriva en el sentido contrario: **`occupations.days` existía en producción sin migración que la creara**, hecha a mano desde el dashboard, con check constraint y un valor real capturado. La resolvió `0028_occupation_days.sql` adoptándola tal cual (ver la tabla de decisiones). Local y producción ahora coinciden en las 26 migraciones.
 
 ---
 
-### Task 1: `0028` — días de la semana en las ocupaciones
+### Task 1: días de la semana en las ocupaciones
 
 Aislada a propósito: toca `/time` y `/home`, nada de rutinas. Si algo se mueve en Autogestión del Tiempo, se sabe que fue esto.
 
 **Files:**
-- Create: `supabase/migrations/0028_occupation_weekdays.sql`
-- Create: `supabase/tests/0008_occupation_weekdays.sql`
+- ~~Create: `supabase/migrations/0028_occupation_days.sql`~~ **hecho**
+- ~~Create: `supabase/tests/0009_occupation_days.sql`~~ **hecho**
 - Modify: `src/lib/domain/time.ts`, `tests/domain/time.test.ts`
 - Modify: `src/lib/data/home.ts:95`, `src/app/(app)/time/{page.tsx:64,WeekView.tsx:83,OccupationForm.tsx,actions.ts}`
-- Modify: `src/types/database.types.ts` (regenerado)
+- ~~Modify: `src/types/database.types.ts` (regenerado)~~ **hecho**
 
 **Interfaces:**
-- Produces: `occupations.weekdays smallint[]`, `occupations.source text`; `occupationAppliesOn(occ, dateISO): boolean` en `src/lib/domain/time.ts`.
+- Produces: `occupationAppliesOn(occ, dateISO): boolean` en `src/lib/domain/time.ts`.
 
-- [ ] **Step 1: Escribir el test pgTAP primero**
+- [x] **Steps 1–3: migración y test pgTAP — COMPLETADOS el 2026-08-25**
 
-`supabase/tests/0008_occupation_weekdays.sql`, 4 assertions:
+`0028_occupation_days.sql` y `supabase/tests/0009_occupation_days.sql` están escritos, probados en local (65 assertions pgTAP en verde) y **aplicados en producción**.
 
-1. Una ocupación `recurring = true` insertada **sin** especificar `weekdays` recibe `{1,2,3,4,5,6,7}` — el comportamiento de hoy no cambia al migrar.
-2. Una fila preexistente (insertada antes en el mismo test, simulando el backfill) tiene los siete días.
-3. `source` acepta `'manual'` y `'routine'` y rechaza cualquier otro valor (`23514`).
-4. `weekdays` rechaza un día fuera de 1–7 (`23514`).
+Dos cosas que la ejecución enseñó y que el plan no preveía:
 
-- [ ] **Step 2: Correr el test y verificar que falla**
+1. **La columna ya existía en producción** con la convención JS (0=domingo … 6=sábado) y un dato real. La migración la adopta en vez de imponer `days`/ISO. El plan original iba a crear una segunda columna para el mismo concepto.
+2. **`array_length('{}', 1)` devuelve `NULL`, no `0`, y un `CHECK` que evalúa a `NULL` PASA.** La primera versión del constraint dejaba colar el arreglo vacío; lo destapó el test 4. La versión aplicada lleva `coalesce(array_length(days,1), 0)`.
 
-```bash
-supabase db reset && supabase test db
-```
-
-Esperado: FALLA con `column "weekdays" of relation "occupations" does not exist`.
-
-- [ ] **Step 3: Escribir la migración**
-
-```sql
--- 0028_occupation_weekdays.sql
--- Autogestión del Tiempo: una ocupación recurrente puede repetirse en días
--- concretos, no solo "todos los días".
---
--- ANTES: recurring=true significaba los SIETE días (WeekView.tsx filtraba por
--- `o.recurring || o.date === d`). No existía "lunes, miércoles y viernes".
---
--- El default de los siete días hace la migración NEUTRA: toda fila existente
--- se sigue comportando igual. Sin ese default, encender esta columna vaciaría
--- la semana de todo el mundo.
---
--- Sin cambios de RLS/GRANT: las columnas nuevas heredan las políticas y
--- grants de public.occupations (0004_planning_time_habits.sql). Mismo criterio
--- que 0017 y 0026.
-
-alter table public.occupations
-  add column if not exists weekdays smallint[] not null default '{1,2,3,4,5,6,7}',
-  add column if not exists source text not null default 'manual';
-
-alter table public.occupations
-  add constraint occupations_source_check check (source in ('manual','routine')),
-  add constraint occupations_weekdays_check
-    check (array_length(weekdays, 1) between 1 and 7
-           and weekdays <@ array[1,2,3,4,5,6,7]::smallint[]);
-
-comment on column public.occupations.weekdays is
-  'ISO-8601: 1=lunes … 7=domingo. Solo aplica cuando recurring=true; una ocupación con occ_date lo ignora. Default = los siete días, para que la migración no cambie el comportamiento de ninguna fila existente.';
-comment on column public.occupations.source is
-  'manual = la creó el usuario en /time. routine = es la proyección de una rutina (Personal Development OS) y se sincroniza en ambos sentidos. Determina si borrar la rutina puede borrar el bloque.';
-
-create index if not exists idx_occupations_source on public.occupations(user_id, source);
-```
+El test pgTAP quedó como `0009_` porque `0008_` ya lo ocupaba `0008_rls_intelligence.sql`.
 
 - [ ] **Step 4: Escribir `occupationAppliesOn` — un solo predicado, no tres**
 
 En `src/lib/domain/time.ts`. Hoy el filtro está copiado en tres archivos; se centraliza aquí para que la regla exista una sola vez.
 
 ```ts
-/**
- * ISO-8601: 1 = lunes … 7 = domingo. `Date.getUTCDay()` devuelve 0 = domingo,
- * de ahí la conversión — el borde del domingo es donde este cálculo se
- * equivoca si se escribe a la ligera.
- */
-export function isoWeekday(dateISO: string): number {
-  const dow = new Date(`${dateISO}T00:00:00Z`).getUTCDay();
-  return dow === 0 ? 7 : dow;
-}
-
 export interface OccurrenceLike {
   recurring: boolean;
   occDate: string | null;
-  weekdays: number[];
+  days: number[];
 }
 
+/**
+ * `days` usa la convención de `Date.getUTCDay()`: 0 = domingo … 6 = sábado.
+ * Por eso NO hay conversión aquí — es exactamente el valor que devuelve el
+ * reloj. Fue la razón de adoptar la columna que ya existía en producción en
+ * vez de imponer ISO-8601, que habría obligado a traducir en cada lectura.
+ */
 export function occupationAppliesOn(occ: OccurrenceLike, dateISO: string): boolean {
   if (!occ.recurring) return occ.occDate === dateISO;
-  return occ.weekdays.includes(isoWeekday(dateISO));
+  return occ.days.includes(new Date(`${dateISO}T00:00:00Z`).getUTCDay());
 }
 ```
 
 Tests en `tests/domain/time.test.ts` (2026-08-24 es lunes, 2026-08-30 es domingo):
-- `{1,2,3,4,5}` aplica el lunes 24 y **no** el domingo 30.
-- `{7}` aplica el domingo 30 — la conversión `0 → 7` es correcta.
+- `{1,2,3,4,5}` (lun–vie) aplica el lunes 24 y **no** el domingo 30.
+- `{0}` aplica el domingo 30: el domingo es 0, no 7.
+- `{6}` aplica el sábado 29 y no el domingo 30 — el borde donde se equivoca quien piense en ISO.
 - Los siete días aplican cualquier fecha: el comportamiento previo se conserva.
-- No recurrente aplica solo si `occDate` coincide exactamente.
-- `isoWeekday("2026-08-30") === 7`.
+- No recurrente aplica solo si `occDate` coincide exactamente, sin mirar `days`.
 
 - [ ] **Step 5: Reemplazar los tres filtros**
 
 | Archivo | Antes | Después |
 |---|---|---|
-| `src/lib/data/home.ts:95` | `.filter((o) => o.recurring \|\| o.occ_date === t0)` | `.filter((o) => occupationAppliesOn({ recurring: o.recurring, occDate: o.occ_date, weekdays: o.weekdays }, t0))` |
+| `src/lib/data/home.ts:95` | `.filter((o) => o.recurring \|\| o.occ_date === t0)` | `.filter((o) => occupationAppliesOn({ recurring: o.recurring, occDate: o.occ_date, days: o.days }, t0))` |
 | `src/app/(app)/time/page.tsx:64` | `.filter((o) => o.recurring \|\| o.date === todayISO)` | idem con `todayISO` |
 | `src/app/(app)/time/WeekView.tsx:83` | `.filter((o) => o.recurring \|\| o.date === d)` | idem con `d` |
 
-`WeekView` y `page.tsx` mapean la fila a un tipo local; añadir `weekdays` a esos mapeos y a las interfaces `OccLite` correspondientes.
+`WeekView` y `page.tsx` mapean la fila a un tipo local; añadir `days` a esos mapeos y a las interfaces `OccLite` correspondientes.
 
 - [ ] **Step 6: Selector de días en el formulario**
 
 En `OccupationForm.tsx`, cuando `recurring` está marcado, mostrar siete casillas `L M X J V S D` (hoy ese caso solo dice *"ignorado: se repite todos los días"*). Cuatro presets que solo marcan casillas: **Todos**, **Entre semana**, **Fin de semana**, **Ninguno**. Al menos un día debe quedar marcado — el `check` de la base lo exige y el formulario debe impedirlo antes, no dejar que reviente el insert.
 
-En `actions.ts`, `occupationSchema` gana `weekdays: z.array(z.coerce.number().int().min(1).max(7)).min(1).default([1,2,3,4,5,6,7])`, leído con `formData.getAll("weekdays")`.
+En `actions.ts`, `occupationSchema` gana `days: z.array(z.coerce.number().int().min(0).max(6)).min(1).default([0,1,2,3,4,5,6])`, leído con `formData.getAll("days")`. Ojo con el rango: **0 a 6**, no 1 a 7.
 
 Actualizar la leyenda de `WeekView.tsx:137`: las recurrentes ya no "se repiten todos los días", se repiten **en los días marcados**.
 
@@ -209,7 +160,7 @@ git add -A
 git commit -m "Repetir una ocupación en los días que elijas, no siempre en los siete
 
 recurring=true significaba los siete días y no había forma de decir
-lunes, miércoles y viernes. La columna weekdays llega con los siete por
+lunes, miércoles y viernes. La columna days llega con los siete por
 default, así que ninguna ocupación existente cambia de comportamiento.
 
 El predicado vivía copiado en tres archivos; ahora es occupationAppliesOn
@@ -222,16 +173,16 @@ en el dominio, con test propio para el borde del domingo."
 
 **Files:**
 - Create: `supabase/migrations/0029_routine_scheduling.sql`
-- Create: `supabase/tests/0009_routine_scheduling.sql`
+- Create: `supabase/tests/0010_routine_scheduling.sql`
 - Modify: `src/types/database.types.ts` (regenerado)
 
 - [ ] **Step 1: Escribir el test pgTAP primero**
 
-`supabase/tests/0009_routine_scheduling.sql`, 5 assertions:
+`supabase/tests/0010_routine_scheduling.sql`, 5 assertions:
 
 1. `routine_steps.duration_min` acepta `null` (paso sin estimar).
 2. `duration_min = 0` sigue rechazado (`23514`): sin estimar es `null`, no cero.
-3. Una rutina preexistente con `frequency = 'Entre semana'` queda con `weekdays = {1,2,3,4,5}` tras el backfill.
+3. Una rutina preexistente con `frequency = 'Entre semana'` queda con `days = {1,2,3,4,5}` tras el backfill (lunes a viernes: en la convención 0–6 coinciden con ISO, pero el fin de semana **no**).
 4. `routine_runs.outcome` rechaza `'Parcial'` (`23514`) — los desenlaces son exactamente tres.
 5. Borrar la ocupación deja `routines.occupation_id` en null y la rutina viva (BR-026 sigue en pie).
 
@@ -251,34 +202,34 @@ en el dominio, con test propio para el borde del domingo."
 -- Días y horario de la rutina
 -- ---------------------------------------------------------------------------
 alter table public.routines
-  add column if not exists weekdays smallint[] not null default '{1,2,3,4,5,6,7}',
+  add column if not exists days smallint[] not null default '{0,1,2,3,4,5,6}',
   add column if not exists start_time time,
   add column if not exists duration_min_override integer;
 
 alter table public.routines
-  add constraint routines_weekdays_check
-    check (array_length(weekdays, 1) between 1 and 7
-           and weekdays <@ array[1,2,3,4,5,6,7]::smallint[]),
+  add constraint routines_days_check
+    check (coalesce(array_length(days, 1), 0) between 1 and 7
+           and days <@ array[0,1,2,3,4,5,6]::smallint[]),
   add constraint routines_duration_override_check
     check (duration_min_override is null or duration_min_override > 0);
 
 -- Backfill desde frequency: los cuatro valores de Fase 1 son subconjuntos de
 -- un set de días. Nada se pierde.
-update public.routines set weekdays = case frequency
-  when 'Diario'        then '{1,2,3,4,5,6,7}'::smallint[]
+update public.routines set days = case frequency
+  when 'Diario'        then '{0,1,2,3,4,5,6}'::smallint[]
   when 'Entre semana'  then '{1,2,3,4,5}'::smallint[]
-  when 'Fin de semana' then '{6,7}'::smallint[]
-  when 'Semanal'       then '{1}'::smallint[]   -- anclada al lunes, como routineDueToday
-  else '{1,2,3,4,5,6,7}'::smallint[]
+  when 'Fin de semana' then '{0,6}'::smallint[]   -- domingo=0 y sábado=6, NO {6,7}
+  when 'Semanal'       then '{1}'::smallint[]     -- anclada al lunes, como routineDueToday
+  else '{0,1,2,3,4,5,6}'::smallint[]
 end;
 
 -- `frequency` se CONSERVA sin uso durante esta migración y se elimina en una
 -- posterior, cuando ningún deploy anterior pueda seguir leyéndola. Borrarla
 -- aquí rompería la versión que aún esté sirviendo tráfico durante el deploy.
 comment on column public.routines.frequency is
-  'OBSOLETA desde 0029: sustituida por weekdays. Se conserva por compatibilidad de deploy y se elimina en una migración posterior. No leer.';
-comment on column public.routines.weekdays is
-  'ISO-8601: 1=lunes … 7=domingo. Misma convención que occupations.weekdays.';
+  'OBSOLETA desde 0029: sustituida por days. Se conserva por compatibilidad de deploy y se elimina en una migración posterior. No leer.';
+comment on column public.routines.days is
+  '0=domingo … 6=sábado, la convención de Date.getUTCDay(). MISMA que occupations.days: una sola forma de decir "qué día" en todo el proyecto.';
 comment on column public.routines.duration_min_override is
   'Duración explícita del bloque. Si es null, la duración es la suma de los pasos estimados. Se escribe sola cuando el usuario redimensiona el bloque desde /time.';
 
@@ -317,10 +268,10 @@ create index if not exists idx_routine_runs_outcome on public.routine_runs(routi
 
 ```bash
 supabase db reset && supabase test db && pnpm gen:types:local && pnpm typecheck
-git add supabase/migrations/0029_routine_scheduling.sql supabase/tests/0009_routine_scheduling.sql src/types/database.types.ts
+git add supabase/migrations/0029_routine_scheduling.sql supabase/tests/0010_routine_scheduling.sql src/types/database.types.ts
 git commit -m "Dar a la rutina días, hora y desenlace confirmado
 
-weekdays sustituye a frequency con backfill sin pérdida; frequency se
+days sustituye a frequency con backfill sin pérdida; frequency se
 conserva sin uso hasta una migración posterior para no romper el deploy en
 curso. duration_min pasa a nullable: un paso puede no tener estimación, pero
 cero sigue prohibido para que las sumas no mientan."
@@ -335,12 +286,12 @@ cero sigue prohibido para que las sumas no mientan."
 - Modify: `tests/domain/development-routines.test.ts`
 
 **Interfaces:**
-- Cambia: `StepLike.durationMin: number | null`; `routineDueToday(weekdays: number[], dateISO: string)`; `routineProgress` devuelve además `untimedRemaining`; `routineFitsBlock` devuelve `BlockFit`, ya no `boolean`; `routineAdherence` recibe `weekdays`.
+- Cambia: `StepLike.durationMin: number | null`; `routineDueToday(days: number[], dateISO: string)`; `routineProgress` devuelve además `untimedRemaining`; `routineFitsBlock` devuelve `BlockFit`, ya no `boolean`; `routineAdherence` recibe `days`.
 - Produces: `routineDuration(steps): { min: number; untimed: number }`, `type BlockFit = "cabe" | "no cabe" | "indeterminado"`.
 
 - [ ] **Step 1: Actualizar los tests primero**
 
-Los tests de Fase 1 que pasan `frequency` cambian a `weekdays` (mismo caso, otra entrada). Los nuevos:
+Los tests de Fase 1 que pasan `frequency` cambian a `days` (mismo caso, otra entrada). Los nuevos:
 
 ```ts
 test("routineDuration: suma los estimados y cuenta los que no lo están", () => {
@@ -366,9 +317,10 @@ test("routineFitsBlock: si lo ya estimado NO cabe, sobra saber el resto", () => 
   assert.strictEqual(routineFitsBlock(steps, { start: "06:00", end: "07:00" }), "no cabe");
 });
 
-test("routineDueToday: weekdays decide, y el domingo es 7", () => {
+test("routineDueToday: days decide, y el domingo es 0", () => {
   assert.strictEqual(routineDueToday([1,2,3,4,5], "2026-08-30"), false); // domingo
-  assert.strictEqual(routineDueToday([7], "2026-08-30"), true);
+  assert.strictEqual(routineDueToday([0], "2026-08-30"), true);
+  assert.strictEqual(routineDueToday([7], "2026-08-30"), false);  // el 7 no existe aquí
 });
 ```
 
@@ -388,8 +340,9 @@ export function routineDuration(steps: StepLike[]): { min: number; untimed: numb
   };
 }
 
-export function routineDueToday(weekdays: number[], dateISO: string): boolean {
-  return weekdays.includes(isoWeekday(dateISO));   // reutiliza el dominio de time.ts
+export function routineDueToday(days: number[], dateISO: string): boolean {
+  // Sin conversión: `days` ya está en la convención que devuelve getUTCDay().
+  return days.includes(new Date(`${dateISO}T00:00:00Z`).getUTCDay());
 }
 
 /**
@@ -443,7 +396,7 @@ mantiene firme cuando lo ya estimado rebasa el bloque por sí solo."
 export type RunState = "no toca" | "programada" | "por comenzar" | "en curso" | "por confirmar" | "cerrada";
 
 export function routineRunState(
-  routine: { weekdays: number[]; startTime: string | null; durationMin: number },
+  routine: { days: number[]; startTime: string | null; durationMin: number },
   outcome: string | null,
   dateISO: string,
   nowHHMM: string,
@@ -454,7 +407,7 @@ export function routineRunState(
 
 Tests en las fronteras exactas, que es donde estas funciones se rompen:
 
-- Un día que no está en `weekdays` → `"no toca"`, sin importar la hora.
+- Un día que no está en `days` → `"no toca"`, sin importar la hora.
 - `06:00` de inicio, `nowHHMM = "05:49"` → `"programada"`; `"05:50"` → `"por comenzar"` (el minuto exacto del lead ya cuenta).
 - `"06:00"` → `"en curso"`; `"06:59"` con 60 min → `"en curso"`; `"07:00"` → `"por confirmar"` (el minuto del fin ya cerró el bloque).
 - Con `outcome` no nulo → `"cerrada"` a cualquier hora.
@@ -467,7 +420,7 @@ Tests en las fronteras exactas, que es donde estas funciones se rompen:
 ```ts
 export interface RoutineScore {
   routineId: string;
-  programadas: number;      // días que tocaban, DERIVADOS de weekdays
+  programadas: number;      // días que tocaban, DERIVADOS de days
   completadas: number;
   sinOportunidad: number;
   omitidas: number;
@@ -481,7 +434,7 @@ export interface RoutineScore {
 ```
 
 Tests:
-- **El denominador sale de `weekdays`, no de filas.** Una rutina L-V en una semana sin ninguna fila `routine_runs` reporta `programadas: 5`, `sinConfirmar: 5`. Si saliera de filas, reportaría cero y el score mentiría por omisión.
+- **El denominador sale de `days`, no de filas.** Una rutina L-V en una semana sin ninguna fila `routine_runs` reporta `programadas: 5`, `sinConfirmar: 5`. Si saliera de filas, reportaría cero y el score mentiría por omisión.
 - 5 programadas, 3 completadas, 1 sin oportunidad, 1 omitida → `cumplimiento: 75` (3 de 4), `constancia: 60` (3 de 5), `confirmacion: 100`.
 - Los mismos números pero con la "sin oportunidad" **sin confirmar** → `cumplimiento: 75` (3 de 4 confirmadas), `constancia: 60`, `confirmacion: 80`. Un día no confirmado **no** cuenta como omitido: castigaría al usuario por no abrir la app, no por no hacer la rutina.
 - Rango donde la rutina nunca toca → todo en cero, sin división entre cero.
@@ -505,7 +458,7 @@ Tres números porque responden preguntas distintas: cumplimiento (cuando
 pudiste, ¿lo hiciste?), constancia (de lo que planeaste, ¿cuánto ocurrió?) y
 confirmación (¿estás cerrando el día?).
 
-El denominador se deriva de weekdays, no de filas: un día que nunca abriste
+El denominador se deriva de days, no de filas: un día que nunca abriste
 la app no tiene fila, y si el score saliera de filas ese día desaparecería
 en vez de contar como pendiente."
 ```
@@ -540,14 +493,14 @@ Se resuelve así, y no con una columna `occupations.routine_id`, para no crear u
 ```ts
 // Rutina → bloque
 export function projectRoutineToOccupation(
-  routine: { name: string; weekdays: number[]; startTime: string | null },
+  routine: { name: string; days: number[]; startTime: string | null },
   steps: StepLike[]
-): { title: string; startTime: string; endTime: string; weekdays: number[]; recurring: true; source: "routine" } | null;
+): { title: string; startTime: string; endTime: string; days: number[]; recurring: true; source: "routine" } | null;
 
 // Bloque → rutina
 export function absorbOccupationIntoRoutine(
-  occ: { title: string; startTime: string; endTime: string; weekdays: number[] }
-): { name: string; startTime: string; weekdays: number[]; durationMinOverride: number };
+  occ: { title: string; startTime: string; endTime: string; days: number[] }
+): { name: string; startTime: string; days: number[]; durationMinOverride: number };
 ```
 
 Tests:
@@ -581,7 +534,7 @@ if (parsed.source === "routine") {
     await supabase.from("routines").update({
       name: next.name,
       start_time: next.startTime,
-      weekdays: next.weekdays,
+      days: next.days,
       duration_min_override: next.durationMinOverride
     }).eq("id", routine.id);
     revalidatePath("/development/routines");
@@ -645,7 +598,7 @@ usuario hizo a mano sobrevive: la rutina no es dueña de lo que no creó."
 
 `ROUTINE_TEMPLATES` en `routine-templates.ts`: 5–6 plantillas (mañana profunda, cierre del día, entrenamiento, revisión semanal, lectura). **Ninguna fila global en la base** — así el módulo conserva su regla única `user_id = auth.uid()` y no hace falta abrir una excepción de lectura pública en RLS. Es el mismo argumento del spec §4.3 para el catálogo de sistemas.
 
-Cada plantilla trae `key`, `name`, `weekdays`, `startTime`, y pasos con `durationMin: number | null` y `habitRef?: string`.
+Cada plantilla trae `key`, `name`, `days`, `startTime`, y pasos con `durationMin: number | null` y `habitRef?: string`.
 
 - [ ] **Step 2: Escribir los tests de `instantiateTemplate`**
 
@@ -671,7 +624,7 @@ export function instantiateTemplate(
 |---|---|
 | `createRoutineFromTemplate(key)` | Lee los hábitos del usuario → `instantiateTemplate` → escribe hábitos, rutina y pasos → `syncOccupation` (Task 5) |
 | `createBlankRoutine(name)` | Rutina vacía, sin pasos, sin hora. Sin bloque hasta que se le ponga hora |
-| `upsertRoutine` / `upsertRoutineStep` | Ya existen; ganan `weekdays`, `startTime`, `durationMin` nullable |
+| `upsertRoutine` / `upsertRoutineStep` | Ya existen; ganan `days`, `startTime`, `durationMin` nullable |
 | `deleteRoutine` | Ya existe; gana el borrado condicional del bloque (Task 5, Step 4) |
 
 Todas devuelven `{ ok, reason }` en vez de lanzar.
@@ -726,7 +679,7 @@ export async function confirmRoutineRun(
 
 `upsert` sobre `(routine_id, local_date)` con `onConflict` — el índice único de Fase 1 resuelve dos clics simultáneos. Escribe `outcome`, `outcome_at`, `outcome_note`, y una fila en `audit_log` con `action: "routine.outcome"` y `meta: { routine_id, local_date, outcome }`. La tabla ya existe y es append-only con RLS por `user_id`: cero migración para tener la bitácora.
 
-**La fila se crea al confirmar, no antes.** No hay materialización nocturna porque no hay cron y porque el scorecard deriva su denominador de `weekdays` (Task 4): un día sin fila es un día sin confirmar, y eso ya se sabe sin escribir nada.
+**La fila se crea al confirmar, no antes.** No hay materialización nocturna porque no hay cron y porque el scorecard deriva su denominador de `days` (Task 4): un día sin fila es un día sin confirmar, y eso ya se sabe sin escribir nada.
 
 - [ ] **Step 2: Banner de la rutina en curso**
 
