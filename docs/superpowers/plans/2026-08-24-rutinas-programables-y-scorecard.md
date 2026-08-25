@@ -66,7 +66,7 @@ Al comparar esquemas apareció la deriva en el sentido contrario: **`occupations
 
 ---
 
-### Task 1: días de la semana en las ocupaciones
+### Task 1: días de la semana en las ocupaciones — COMPLETADA el 2026-08-25
 
 Aislada a propósito: toca `/time` y `/home`, nada de rutinas. Si algo se mueve en Autogestión del Tiempo, se sabe que fue esto.
 
@@ -91,7 +91,7 @@ Dos cosas que la ejecución enseñó y que el plan no preveía:
 
 El test pgTAP quedó como `0009_` porque `0008_` ya lo ocupaba `0008_rls_intelligence.sql`.
 
-- [ ] **Step 4: Escribir `occupationAppliesOn` — un solo predicado, no tres**
+- [x] **Step 4: Escribir `occupationAppliesOn` — un solo predicado, no tres**
 
 En `src/lib/domain/time.ts`. Hoy el filtro está copiado en tres archivos; se centraliza aquí para que la regla exista una sola vez.
 
@@ -121,7 +121,7 @@ Tests en `tests/domain/time.test.ts` (2026-08-24 es lunes, 2026-08-30 es domingo
 - Los siete días aplican cualquier fecha: el comportamiento previo se conserva.
 - No recurrente aplica solo si `occDate` coincide exactamente, sin mirar `days`.
 
-- [ ] **Step 5: Reemplazar los tres filtros**
+- [x] **Step 5: Reemplazar los tres filtros**
 
 | Archivo | Antes | Después |
 |---|---|---|
@@ -131,7 +131,7 @@ Tests en `tests/domain/time.test.ts` (2026-08-24 es lunes, 2026-08-30 es domingo
 
 `WeekView` y `page.tsx` mapean la fila a un tipo local; añadir `days` a esos mapeos y a las interfaces `OccLite` correspondientes.
 
-- [ ] **Step 6: Selector de días en el formulario**
+- [x] **Step 6: Selector de días en el formulario**
 
 En `OccupationForm.tsx`, cuando `recurring` está marcado, mostrar siete casillas `L M X J V S D` (hoy ese caso solo dice *"ignorado: se repite todos los días"*). Cuatro presets que solo marcan casillas: **Todos**, **Entre semana**, **Fin de semana**, **Ninguno**. Al menos un día debe quedar marcado — el `check` de la base lo exige y el formulario debe impedirlo antes, no dejar que reviente el insert.
 
@@ -139,7 +139,7 @@ En `actions.ts`, `occupationSchema` gana `days: z.array(z.coerce.number().int().
 
 Actualizar la leyenda de `WeekView.tsx:137`: las recurrentes ya no "se repiten todos los días", se repiten **en los días marcados**.
 
-- [ ] **Step 7: Verificar**
+- [x] **Step 7: Verificar**
 
 ```bash
 supabase db reset && supabase test db && pnpm gen:types:local && pnpm typecheck && pnpm lint && pnpm test:unit

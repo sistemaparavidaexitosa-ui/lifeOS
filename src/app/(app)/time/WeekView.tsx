@@ -1,4 +1,4 @@
-import { timeToMin } from "@/lib/domain/time.ts";
+import { timeToMin, occupationAppliesOn } from "@/lib/domain/time.ts";
 import DayEditor from "./DayEditor";
 
 interface OccupationLite {
@@ -9,6 +9,7 @@ interface OccupationLite {
   category: string;
   recurring: boolean;
   date: string | null; // occ_date; null si recurring=true
+  days: number[];      // 0=domingo … 6=sábado; solo aplica si recurring
 }
 
 interface TaskLite {
@@ -44,9 +45,10 @@ function weekDatesFrom(todayISO: string): string[] {
  * ocupación particular de cada día (antes repetía el mismo conjunto de
  * ocupaciones en los 7 días, incluidas las no-recurrentes — bug real
  * corregido con la columna occ_date, migración
- * 0016_time_occupation_date.sql). Cada ocupación recurring=true se muestra
- * en los 7 días; cada ocupación con occ_date específico SOLO se muestra en
- * ese día. Además, cada día ahora es editable directamente desde esta
+ * 0016_time_occupation_date.sql). Una ocupación recurring=true se muestra
+ * en los días que declara su columna `days` (0028_occupation_days.sql; antes
+ * era siempre en los 7); cada ocupación con occ_date específico SOLO se
+ * muestra en ese día. Además, cada día ahora es editable directamente desde esta
  * vista mediante <DayEditor> (antes era de solo lectura y la edición
  * redirigía siempre a /time, limitado al día actual).
  */
@@ -80,7 +82,7 @@ export default function WeekView({
 
       {dates.map((d, i) => {
         const isToday = d === todayISO;
-        const dayOccs = occupations.filter((o) => o.recurring || o.date === d);
+        const dayOccs = occupations.filter((o) => occupationAppliesOn({ recurring: o.recurring, occDate: o.date, days: o.days }, d));
         const dayDueTasks = dueTasks.filter((t) => t.due === d);
         const dayLabel = `${DAY_NAMES[i]}${isToday ? " (hoy)" : ""}`;
 
@@ -134,7 +136,7 @@ export default function WeekView({
       })}
 
       <div className="text-xs" style={{ color: "var(--muted)", marginTop: 10 }}>
-        Rango de actividad {windowStart}–{windowEnd}. Las ocupaciones marcadas 🔁 se repiten todos los días; el resto
+        Rango de actividad {windowStart}–{windowEnd}. Las ocupaciones marcadas 🔁 se repiten cada semana en los días que tengan marcados; el resto
         pertenece únicamente al día donde aparecen.
       </div>
     </div>

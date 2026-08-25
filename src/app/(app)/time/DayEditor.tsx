@@ -13,7 +13,7 @@
 // día — ninguna lógica de negocio se reescribe aquí.
 
 import { useState, useTransition } from "react";
-import { availableSlots } from "@/lib/domain/time.ts";
+import { availableSlots, daysLabel } from "@/lib/domain/time.ts";
 import OccupationForm from "./OccupationForm";
 import AssignSlotButton from "./AssignSlotButton";
 import { assignTaskToDate, unassignTaskDue } from "./actions";
@@ -26,6 +26,7 @@ interface OccupationLite {
   category: string;
   recurring: boolean;
   date: string | null;
+  days: number[]; // 0=domingo … 6=sábado; solo aplica si recurring
 }
 
 interface TaskLite {
@@ -92,7 +93,7 @@ export default function DayEditor({
                   <b className="text-sm">{o.title}</b>
                   <div className="text-xs" style={{ color: "var(--muted)" }}>
                     {o.start} – {o.end} · {o.category}
-                    {o.recurring ? " · 🔁 recurrente" : ""}
+                    {o.recurring ? ` · 🔁 ${daysLabel(o.days)}` : ""}
                   </div>
                 </div>
                 <OccupationForm occupation={o} defaultDate={dayISO} />
