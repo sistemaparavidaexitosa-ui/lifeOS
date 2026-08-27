@@ -6,9 +6,9 @@
 // Incluye el switch de "Urgente" porque prioridad + urgencia son justamente
 // los dos ejes de quadrantOf() en src/lib/domain/eisenhower.ts: cambiarlos
 // aquí mueve la tarea de cuadrante sin salir del tablero.
-import { useState } from "react";
 import { PRIORITY_META, PRIORITY_ORDER } from "./status-meta";
 import type { Priority } from "@/lib/domain/types.ts";
+import MenuSurface, { useMenuAnchor } from "./MenuSurface";
 
 export default function PriorityMenu({
   priority,
@@ -19,7 +19,7 @@ export default function PriorityMenu({
   urgent: boolean;
   onChange: (priority: Priority, urgent: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const menu = useMenuAnchor();
   const meta = PRIORITY_META[priority];
 
   return (
@@ -28,17 +28,16 @@ export default function PriorityMenu({
         type="button"
         className="mb-pill soft"
         style={{ background: meta.soft, color: meta.color }}
-        onClick={() => setOpen((v) => !v)}
+        onClick={menu.toggle}
         aria-haspopup="menu"
-        aria-expanded={open}
+        aria-expanded={menu.open}
       >
         {urgent ? "⚡ " : ""}
         {meta.label}
       </button>
-      {open && (
-        <>
-          <div className="ex-backdrop" onClick={() => setOpen(false)} />
-          <div className="mb-menu card" role="menu">
+      {menu.open && (
+        <MenuSurface anchor={menu.anchor} onClose={menu.close} label="Cambiar prioridad">
+          <div className="ex-menu-list">
             {PRIORITY_ORDER.map((p) => (
               <button
                 key={p}
@@ -47,7 +46,7 @@ export default function PriorityMenu({
                 className="mb-pill soft"
                 style={{ background: PRIORITY_META[p].soft, color: PRIORITY_META[p].color }}
                 onClick={() => {
-                  setOpen(false);
+                  menu.close();
                   onChange(p, urgent);
                 }}
               >
@@ -59,14 +58,14 @@ export default function PriorityMenu({
                 type="checkbox"
                 checked={urgent}
                 onChange={(e) => {
-                  setOpen(false);
+                  menu.close();
                   onChange(priority, e.target.checked);
                 }}
               />
               Urgente (Eisenhower)
             </label>
           </div>
-        </>
+        </MenuSurface>
       )}
     </div>
   );

@@ -8,26 +8,19 @@
 // claridad si el correo salió o no. Sin proveedor configurado
 // (RESEND_API_KEY), invitar sigue siendo útil: copias el enlace y lo mandas
 // por donde quieras.
+//
+// Este recuadro es una COMODIDAD, no la única vía al enlace: vive en estado
+// de cliente y cualquier cosa que remonte el componente lo borra. El enlace
+// de cada invitación pendiente se pinta también desde el servidor en la lista
+// de abajo (page.tsx), que se arma con el token que ya está en la base.
 import { useState, useTransition } from "react";
 import { inviteMember, type InviteResult } from "./actions";
+import InviteLink from "./InviteLink";
 
 export default function InviteMemberForm({ workspaceId }: { workspaceId: string }) {
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<InviteResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-
-  async function copyLink(url: string) {
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Sin permiso de portapapeles (http, Safari sin gesto): el enlace ya
-      // está visible y seleccionable en pantalla.
-    }
-  }
-
   return (
     <div className="flex flex-col gap-2 mt-3">
       <form
@@ -36,10 +29,18 @@ export default function InviteMemberForm({ workspaceId }: { workspaceId: string 
             setError(null);
             try {
               const invite = await inviteMember(fd);
+              // La acción ya no lanza: devuelve el motivo legible (D-030).
+              if (!invite.ok) {
+                setResult(null);
+                setError(invite.reason);
+                return;
+              }
               setResult(invite);
-            } catch (e) {
+            } catch {
+              // Solo queda lo que sigue siendo excepción de verdad: que la
+              // petición ni siquiera llegue al servidor.
               setResult(null);
-              setError(e instanceof Error ? e.message : "No se pudo crear la invitación");
+              setError("No se pudo contactar al servidor. Revisa tu conexión.");
             }
           })
         }
@@ -64,7 +65,7 @@ export default function InviteMemberForm({ workspaceId }: { workspaceId: string 
         </p>
       )}
 
-      {result && (
+      {result?.ok && (
         <div
           className="text-sm p-2.5 rounded-xl flex flex-col gap-1.5"
           style={{
@@ -85,17 +86,10 @@ export default function InviteMemberForm({ workspaceId }: { workspaceId: string 
           <span className="text-xs" style={{ color: "var(--muted)" }}>
             Enlace (vence en 7 días, un solo uso):
           </span>
-          <code
-            className="text-xs"
-            style={{ wordBreak: "break-all", background: "var(--surface2)", padding: "6px 8px", borderRadius: 8 }}
-          >
-            {result.inviteUrl}
-          </code>
-          <button type="button" className="btn-ghost btn-sm" onClick={() => copyLink(result.inviteUrl)} style={{ alignSelf: "flex-start" }}>
-            {copied ? "✓ Copiado" : "Copiar enlace"}
-          </button>
+          <InviteLink url={result.inviteUrl} />
         </div>
       )}
+
     </div>
   );
 }

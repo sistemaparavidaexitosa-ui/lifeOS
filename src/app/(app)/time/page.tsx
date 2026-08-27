@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Card, Chip, Stat, EmptyState } from "@/components/ui";
-import { availableSlots, saturationStatus } from "@/lib/domain/time.ts";
+import { availableSlots, saturationStatus, occupationAppliesOn, daysLabel } from "@/lib/domain/time.ts";
 import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
 import Timeline from "./Timeline";
@@ -56,12 +56,14 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
     end: o.end_time.slice(0, 5),
     category: o.category,
     recurring: o.recurring,
-    date: (o.occ_date ?? null) as string | null
+    date: (o.occ_date ?? null) as string | null,
+    days: o.days
   }));
 
-  // FIX: solo las ocupaciones recurrentes o con occ_date = hoy cuentan para
-  // el rango/saturación/línea de tiempo del DÍA ACTUAL.
-  const todayOccs = allOccs.filter((o) => o.recurring || o.date === todayISO);
+  // Solo las ocupaciones que aplican HOY cuentan para el rango, la saturación
+  // y la línea de tiempo del DÍA ACTUAL. Una recurrente de lunes a viernes no
+  // debe saturar el sábado.
+  const todayOccs = allOccs.filter((o) => occupationAppliesOn({ recurring: o.recurring, occDate: o.date, days: o.days }, todayISO));
 
   const slots = availableSlots({ start: windowStart, end: windowEnd }, todayOccs);
   const impactMinutes = (tasks ?? [])
@@ -181,7 +183,7 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
                   <b className="text-sm">{o.title}</b>
                   <div className="text-xs" style={{ color: "var(--muted)" }}>
                     {o.start} – {o.end} · {o.category}
-                    {o.recurring ? " · recurrente" : ""}
+                    {o.recurring ? ` · 🔁 ${daysLabel(o.days)}` : ""}
                   </div>
                 </div>
                 <OccupationForm occupation={o} defaultDate={todayISO} />

@@ -280,6 +280,51 @@
   el primer concepto, se usa el flujo habitual "+ Concepto"
   (`BudgetLineForm`), que ya soportaba edición de conceptos existentes.
 
+- **D-029 Los días de la semana de una ocupación usan `0=domingo`, no ISO-8601.**
+  Al sincronizar el esquema el 2026-08-25 apareció que `occupations.days` **ya
+  existía en producción** sin ninguna migración que la creara: se hizo a mano
+  desde el dashboard, con su `CHECK`, y con una ocupación que tenía `{0,1,3}`
+  capturado de verdad. `supabase db reset` en local nunca la reproducía, así
+  que las dos bases venían divergiendo en silencio.
+
+  `0028_occupation_days.sql` la **adopta tal cual** —mismo nombre, tipo,
+  default y convención— en vez de imponer el `weekdays smallint[]` con ISO
+  (1=lunes … 7=domingo) que el plan traía. Tres razones, en orden de peso:
+  1. **Riesgo:** sin rename, sin cambio de tipo, sin conversión del dato ya
+     capturado. La migración es casi un no-op en producción.
+  2. **La convención JS ya es la nativa del código.** `Date.getUTCDay()`
+     devuelve 0–6, así que `occupationAppliesOn` no traduce nada. Con ISO
+     habría una conversión en cada lectura, y ahí es donde nacen los bugs de
+     "se corrió un día".
+  3. Imponer el diseño propio sobre algo que ya funciona en producción cuesta
+     más de lo que rinde.
+
+  **Contrapartida aceptada:** `days` es un nombre más vago que `weekdays`
+  —¿días del mes?—, y se compensa con el comentario de la columna y con que
+  `routines.days` usará la misma convención, para que no haya dos formas de
+  decir "qué día" en el proyecto.
+
+  **Además:** el `CHECK` lleva `coalesce(array_length(days,1), 0)` y el
+  `coalesce` no es adorno. `array_length('{}', 1)` devuelve `NULL`, no `0`, y
+  un `CHECK` que evalúa a `NULL` **pasa** — sin él, el arreglo vacío se colaba
+  y la restricción no restringía. Lo destapó el test 4 de
+  `supabase/tests/0009_occupation_days.sql`.
+
+- **D-030 Las Server Actions de biblioteca y tiempo devuelven `{ ok, reason }`
+  en vez de lanzar.** En el build de producción, Next redacta el mensaje de una
+  excepción lanzada desde una Server Action y entrega *"An error occurred in
+  the Server Components render. The specific message is omitted…"*. Guardar un
+  libro fallaba así por `books.cover_url` ausente en producción, y desde la
+  pantalla era indistinguible de un fallo de red.
+
+  Se adopta el contrato de `sendEmail()` (D-021), que el spec del Personal
+  Development OS ya pedía en §5.5. `src/lib/supabase/errors.ts` traduce el
+  error de PostgREST a algo accionable: para una columna faltante nombra la
+  columna y dice si toca `supabase db push` o recargar el caché del esquema.
+  `zod` pasa de `parse` a `safeParse` por lo mismo: un campo vacío producía una
+  excepción cruda en vez de un mensaje.
+
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo

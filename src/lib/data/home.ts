@@ -1,7 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { accountBalance, periodStats } from "@/lib/domain/money.ts";
-import { saturationStatus } from "@/lib/domain/time.ts";
+import { saturationStatus, occupationAppliesOn } from "@/lib/domain/time.ts";
 import { effectiveStatus } from "@/lib/domain/task-state.ts";
 import { budgetTabRow } from "@/lib/domain/budget.ts";
 import { todayLocal, addDaysISO } from "./dates";
@@ -89,10 +89,12 @@ export async function getHomeData(userId: string) {
     .filter((t) => t.impact && t.status !== "Completed" && t.status !== "Cancelled")
     .reduce((s, t) => s + (t.est ?? 0), 0);
 
-  // FIX: solo ocupaciones recurrentes o con occ_date = hoy cuentan para "Tu
-  // tiempo hoy" — ver comentario de la función arriba.
+  // Solo las ocupaciones que aplican HOY cuentan para "Tu tiempo hoy": las
+  // recurrentes que incluyen este día de la semana, y las que tienen occ_date
+  // de hoy. El predicado vive en el dominio (occupationAppliesOn) porque antes
+  // estaba copiado aquí, en /time y en WeekView.
   const todayOccupations = (occupations ?? [])
-    .filter((o) => o.recurring || o.occ_date === t0)
+    .filter((o) => occupationAppliesOn({ recurring: o.recurring, occDate: o.occ_date, days: o.days }, t0))
     .map((o) => ({ id: o.id, title: o.title, start: o.start_time.slice(0, 5), end: o.end_time.slice(0, 5) }));
 
   const saturation = saturationStatus(

@@ -20,6 +20,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { actionFailed, actionOk, type ActionResult } from "@/lib/supabase/errors";
 import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
 
@@ -57,6 +58,9 @@ const occupationSchema = z
     end: z.string().regex(/^\d{2}:\d{2}$/),
     category: z.enum(["Trabajo", "Familia", "Personal", "Salud", "Descanso", "Otros"]),
     recurring: z.coerce.boolean().default(false),
+    // 0 = domingo … 6 = sábado (0028_occupation_days.sql). Rango 0–6, NO 1–7:
+    // es la convención de Date.getUTCDay(), que es la que lee el dominio.
+    days: z.array(z.coerce.number().int().min(0).max(6)).min(1).default([0, 1, 2, 3, 4, 5, 6]),
     date: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -75,22 +79,30 @@ const occupationSchema = z
  * semana (no solo "hoy"). `date` se persiste en occ_date cuando
  * recurring=false; se guarda null cuando recurring=true.
  */
-export async function upsertOccupation(id: string | null, formData: FormData) {
-  const parsed = occupationSchema.parse({
+export async function upsertOccupation(id: string | null, formData: FormData): Promise<ActionResult> {
+  const recurring = formData.get("recurring") === "on";
+  const result = occupationSchema.safeParse({
     title: formData.get("title"),
     start: formData.get("start"),
     end: formData.get("end"),
     category: formData.get("category"),
-    recurring: formData.get("recurring") === "on",
+    recurring,
+    // Solo una ocupación recurrente declara días; la que tiene fecha concreta
+    // se queda con el default y la columna la ignora.
+    days: recurring ? formData.getAll("days") : undefined,
     date: formData.get("date") ?? ""
   });
-  if (parsed.end <= parsed.start) throw new Error("El fin debe ser posterior al inicio.");
+  if (!result.success) {
+    return { ok: false, reason: result.error.issues[0]?.message ?? "Datos de la ocupación inválidos." };
+  }
+  const parsed = result.data;
+  if (parsed.end <= parsed.start) return { ok: false, reason: "El fin debe ser posterior al inicio." };
 
   const supabase = await createClient();
   const {
     data: { user }
   } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  if (!user) return { ok: false, reason: "No autenticado." };
 
   const payload = {
     title: parsed.title,
@@ -98,38 +110,41 @@ export async function upsertOccupation(id: string | null, formData: FormData) {
     end_time: parsed.end,
     category: parsed.category,
     recurring: parsed.recurring,
+    days: parsed.days,
     occ_date: parsed.recurring ? null : parsed.date || null
   };
 
   if (id) {
     const { error } = await supabase.from("occupations").update(payload).eq("id", id);
-    if (error) throw new Error(error.message);
-    await supabase.from("audit_log").insert({ user_id: user.id, action: "occupation.update", object: id, meta: { date: payload.occ_date } });
+    if (error) return actionFailed(error);
+    await supabase.from("audit_log").insert({ user_id: user.id, action: "occupation.update", object: id, meta: { date: payload.occ_date, days: payload.days } });
   } else {
     const { error } = await supabase.from("occupations").insert({ ...payload, user_id: user.id });
-    if (error) throw new Error(error.message);
-    await supabase.from("audit_log").insert({ user_id: user.id, action: "occupation.create", meta: { date: payload.occ_date } });
+    if (error) return actionFailed(error);
+    await supabase.from("audit_log").insert({ user_id: user.id, action: "occupation.create", meta: { date: payload.occ_date, days: payload.days } });
   }
 
   revalidatePath("/time");
   revalidatePath("/home");
+  return actionOk;
 }
 
 /** FR-HAB-006, BR-026: eliminar la ocupación NO borra los hábitos ligados (la FK ya usa ON DELETE SET NULL). */
-export async function deleteOccupation(id: string) {
+export async function deleteOccupation(id: string): Promise<ActionResult> {
   const supabase = await createClient();
   const {
     data: { user }
   } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  if (!user) return { ok: false, reason: "No autenticado." };
 
   const { error } = await supabase.from("occupations").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) return actionFailed(error);
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "occupation.delete", object: id });
   revalidatePath("/time");
   revalidatePath("/development/habits");
   revalidatePath("/home");
+  return actionOk;
 }
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);

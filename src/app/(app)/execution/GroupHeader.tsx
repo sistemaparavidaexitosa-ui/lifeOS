@@ -7,6 +7,7 @@ import { useState } from "react";
 import { computeStats } from "@/lib/domain/board.ts";
 import { STATUS_META, STATUS_ORDER, GROUP_COLORS } from "./status-meta";
 import type { BoardGroup, BoardTask } from "./board-types";
+import MenuSurface, { useMenuAnchor } from "./MenuSurface";
 import { IconChevronDown, IconChevronRight, IconTrash } from "@/components/icons";
 
 export default function GroupHeader({
@@ -44,7 +45,7 @@ export default function GroupHeader({
   onSelectAll: (next: boolean) => void;
 }) {
   const [name, setName] = useState(group.name);
-  const [paletteOpen, setPaletteOpen] = useState(false);
+  const palette = useMenuAnchor();
   const stats = computeStats(tasks, today);
 
   function saveName() {
@@ -113,14 +114,13 @@ export default function GroupHeader({
             type="button"
             className="mb-color-dot"
             style={{ background: group.color }}
-            onClick={() => setPaletteOpen((v) => !v)}
+            onClick={palette.toggle}
             aria-label="Color del grupo"
-            aria-expanded={paletteOpen}
+            aria-expanded={palette.open}
           />
-          {paletteOpen && (
-            <>
-              <div className="ex-backdrop" onClick={() => setPaletteOpen(false)} />
-              <div className="mb-palette card">
+          {palette.open && (
+            <MenuSurface anchor={palette.anchor} onClose={palette.close} align="end" label="Color del grupo">
+              <div className="mb-palette">
                 {GROUP_COLORS.map((color) => (
                   <button
                     key={color}
@@ -130,12 +130,12 @@ export default function GroupHeader({
                     aria-label={`Usar color ${color}`}
                     onClick={() => {
                       onColor(color);
-                      setPaletteOpen(false);
+                      palette.close();
                     }}
                   />
                 ))}
               </div>
-            </>
+            </MenuSurface>
           )}
         </div>
         <button

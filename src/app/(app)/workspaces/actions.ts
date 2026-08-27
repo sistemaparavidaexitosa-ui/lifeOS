@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { sendEmail, appUrl } from "@/lib/email/send";
 import { invitationEmail } from "@/lib/email/templates";
 import { fdate } from "@/lib/format";
+import { describeDbError } from "@/lib/supabase/errors";
 
 /** FR-WSP-001: crea el workspace y la membresía Owner del creador. */
 export async function createWorkspace(name: string) {
@@ -39,13 +40,16 @@ const inviteSchema = z.object({
  * puede compartirlo a mano en vez de quedarse esperando un correo que nunca
  * llega — que es exactamente lo que pasaba antes, salvo que ni siquiera había
  * enlace: la invitación se guardaba y ahí moría.
+ *
+ * `ok: false` con un motivo legible en vez de lanzar (D-030, mismo contrato
+ * que `sendEmail` y que las acciones de la biblioteca). Antes esto hacía
+ * `throw new Error(...)` y en producción Next borraba el mensaje: la
+ * respuesta era un 500 con un `digest` y nada más, así que el admin no podía
+ * saber por qué no salía el enlace y nosotros tampoco.
  */
-export interface InviteResult {
-  inviteUrl: string;
-  emailSent: boolean;
-  emailError?: string;
-  email: string;
-}
+export type InviteResult =
+  | { ok: true; inviteUrl: string; emailSent: boolean; emailError?: string; email: string }
+  | { ok: false; reason: string };
 
 /**
  * FR-WSP-003, BR-013: token de un solo uso con expiración (7 días, DEFAULT de
@@ -57,28 +61,38 @@ export interface InviteResult {
  * tabla de tokens vivos para la misma persona.
  */
 export async function inviteMember(formData: FormData): Promise<InviteResult> {
-  const parsed = inviteSchema.parse({
+  const parsed = inviteSchema.safeParse({
     workspaceId: formData.get("workspaceId"),
     email: formData.get("email"),
     role: formData.get("role")
   });
-  const email = parsed.email.trim().toLowerCase();
+  if (!parsed.success) {
+    return { ok: false, reason: parsed.error.issues[0]?.message ?? "Datos de la invitación inválidos." };
+  }
+  const { workspaceId, role } = parsed.data;
+  const email = parsed.data.email.trim().toLowerCase();
 
   const supabase = await createClient();
   const {
     data: { user }
   } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  if (!user) return { ok: false, reason: "Tu sesión expiró. Vuelve a iniciar sesión." };
 
-  const { data: workspace } = await supabase.from("workspaces").select("name").eq("id", parsed.workspaceId).single();
-  if (!workspace) throw new Error("Workspace no encontrado");
+  const { data: workspace, error: wsError } = await supabase.from("workspaces").select("name").eq("id", workspaceId).single();
+  if (wsError) return { ok: false, reason: describeDbError(wsError) };
+  if (!workspace) return { ok: false, reason: "Ese workspace ya no existe." };
 
   const { data: existing } = await supabase
     .from("invitations")
     .select("id, token, expires_at, status")
-    .eq("workspace_id", parsed.workspaceId)
+    .eq("workspace_id", workspaceId)
     .eq("email", email)
     .eq("status", "Pending")
+    // maybeSingle() devuelve error si hay MÁS de una pendiente para el mismo
+    // correo. Antes eso dejaba `existing` en null y se creaba otra encima,
+    // acumulando tokens vivos; ahora se ordena y se toma la más reciente.
+    .order("expires_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   let token = existing?.token;
@@ -89,17 +103,22 @@ export async function inviteMember(formData: FormData): Promise<InviteResult> {
     const renewed = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
     const { error } = await supabase
       .from("invitations")
-      .update({ role: parsed.role, expires_at: renewed })
+      .update({ role, expires_at: renewed })
       .eq("id", existing.id);
-    if (error) throw new Error(error.message);
+    if (error) return { ok: false, reason: describeDbError(error) };
     expiresAt = renewed;
   } else {
     const { data: created, error } = await supabase
       .from("invitations")
-      .insert({ workspace_id: parsed.workspaceId, email, role: parsed.role })
+      .insert({ workspace_id: workspaceId, email, role })
       .select("token, expires_at")
       .single();
-    if (error) throw new Error(error.message);
+    if (error) return { ok: false, reason: describeDbError(error) };
+    if (!created?.token) {
+      // RLS puede dejar pasar el INSERT y no devolver la fila. Sin token no
+      // hay enlace, y decirlo es mejor que devolver uno con "undefined".
+      return { ok: false, reason: "La invitación se guardó pero no se pudo leer su token. Revisa las políticas RLS de invitations." };
+    }
     token = created.token;
     expiresAt = created.expires_at;
   }
@@ -109,10 +128,10 @@ export async function inviteMember(formData: FormData): Promise<InviteResult> {
 
   const template = invitationEmail({
     workspaceName: workspace.name,
-    role: parsed.role,
+    role,
     inviterName: profile?.name || user.email || "Un colega",
     acceptUrl: inviteUrl,
-    expiresAt: fdate(expiresAt!)
+    expiresAt: fdate(expiresAt)
   });
   const delivery = await sendEmail({ to: email, ...template });
 
@@ -120,11 +139,11 @@ export async function inviteMember(formData: FormData): Promise<InviteResult> {
     user_id: user.id,
     action: "invite.send",
     object: email,
-    meta: { workspaceId: parsed.workspaceId, role: parsed.role, emailSent: delivery.sent, reason: delivery.reason ?? null }
+    meta: { workspaceId, role, emailSent: delivery.sent, reason: delivery.reason ?? null }
   });
   revalidatePath("/workspaces");
 
-  return { inviteUrl, emailSent: delivery.sent, emailError: delivery.reason, email };
+  return { ok: true, inviteUrl, emailSent: delivery.sent, emailError: delivery.reason, email };
 }
 
 /** Cancela una invitación pendiente: el enlace deja de servir de inmediato. */

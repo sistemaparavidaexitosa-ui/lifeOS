@@ -2,8 +2,10 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Card, Chip, EmptyState } from "@/components/ui";
 import { fdate } from "@/lib/format";
+import { appUrl } from "@/lib/email/send";
 import { createWorkspace, removeMember, deleteWorkspace, shareProject, revokeInvitation } from "./actions";
 import InviteMemberForm from "./InviteMemberForm";
+import InviteLink from "./InviteLink";
 
 export default async function WorkspacesPage({ searchParams }: { searchParams: Promise<{ ws?: string }> }) {
   const { ws: selectedWs } = await searchParams;
@@ -144,21 +146,32 @@ export default async function WorkspacesPage({ searchParams }: { searchParams: P
                     const expired = i.status === "Pending" && new Date(i.expires_at) < new Date();
                     const state = expired ? "Expired" : i.status;
                     return (
-                      <div key={i.id} className="flex items-center justify-between py-2 text-sm flex-wrap gap-2" style={{ borderBottom: "1px solid var(--line)" }}>
-                        <span>{i.email}</span>
-                        <div className="flex items-center gap-2">
-                          <span style={{ color: "var(--muted)" }}>
-                            {i.role} · {expired ? "venció" : "expira"} {fdate(i.expires_at)}
-                          </span>
-                          <Chip kind={state === "Accepted" ? "ok" : state === "Pending" ? "warn" : ""}>{state}</Chip>
-                          {canManage && i.status === "Pending" && (
-                            <form action={async () => { "use server"; await revokeInvitation(i.id); }}>
-                              <button className="btn-ghost btn-sm" type="submit">
-                                Cancelar
-                              </button>
-                            </form>
-                          )}
+                      <div key={i.id} className="py-2 text-sm flex flex-col gap-1.5" style={{ borderBottom: "1px solid var(--line)" }}>
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <span>{i.email}</span>
+                          <div className="flex items-center gap-2">
+                            <span style={{ color: "var(--muted)" }}>
+                              {i.role} · {expired ? "venció" : "expira"} {fdate(i.expires_at)}
+                            </span>
+                            <Chip kind={state === "Accepted" ? "ok" : state === "Pending" ? "warn" : ""}>{state}</Chip>
+                            {canManage && i.status === "Pending" && (
+                              <form action={async () => { "use server"; await revokeInvitation(i.id); }}>
+                                <button className="btn-ghost btn-sm" type="submit">
+                                  Cancelar
+                                </button>
+                              </form>
+                            )}
+                          </div>
                         </div>
+                        {/* El enlace se arma aquí, en el servidor, a partir del
+                            token que ya está en la base. Es la vía FIABLE de
+                            recuperarlo: el recuadro que aparece justo después de
+                            invitar vive en estado de cliente y se pierde con
+                            cualquier recarga o remontaje, y entonces el admin se
+                            quedaba sin forma de conseguir el enlace. Solo para
+                            las pendientes vigentes: una vencida o aceptada ya no
+                            sirve. */}
+                        {canManage && state === "Pending" && <InviteLink url={appUrl(`/invite/${i.token}`)} />}
                       </div>
                     );
                   })}

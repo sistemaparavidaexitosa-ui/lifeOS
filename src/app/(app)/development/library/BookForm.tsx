@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { upsertBook, deleteBook, addBookNote } from "./actions";
-import type { BookCandidate } from "@/lib/domain/development/book-lookup.ts";
+import { coverProxyUrl, type BookCandidate } from "@/lib/domain/development/book-lookup.ts";
 
 interface NoteLite {
   id: string;
@@ -23,7 +23,16 @@ interface BookLite {
 /** Portada real cuando el libro tiene una; si no, el mismo emoji de siempre. */
 export function BookCover({ url, size = 60 }: { url: string; size?: number }) {
   const width = Math.round(size * 0.73);
-  if (!url) {
+  // Se recuerda QUÉ url falló, no un booleano: así elegir otro candidato en el
+  // buscador vuelve a intentar la portada nueva sin necesidad de resetear nada.
+  const [failedUrl, setFailedUrl] = useState("");
+  // La portada se pide a NUESTRO origen, no al proveedor: covers.openlibrary.org
+  // responde 302 hacia archive.org y la CSP corta el redirect (ver el route
+  // handler en /api/development/book-cover). Devuelve "" si no hay portada o si
+  // la url guardada no pasa la lista blanca.
+  const src = coverProxyUrl(url);
+
+  if (!src || failedUrl === url) {
     return (
       <div
         className="rounded-lg grid place-items-center text-white font-black flex-shrink-0"
@@ -34,17 +43,19 @@ export function BookCover({ url, size = 60 }: { url: string; size?: number }) {
     );
   }
   return (
-    // La portada es una URL de un tercero (Open Library / Google Books), no un
-    // archivo nuestro. next/image la pasaría por el optimizador de Vercel,
-    // gastando cuota en una miniatura de 180px que no controlamos; se carga
-    // directo, con el host permitido en img-src (middleware.ts, §5.1).
+    // next/image la pasaría por el optimizador de Vercel, gastando cuota en una
+    // miniatura de 180px; el proxy ya la sirve desde el mismo origen con cache.
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={url}
+      src={src}
       alt=""
       width={width}
       height={size}
       loading="lazy"
+      // El proveedor puede no tener esa portada (el handler responde 404). Sin
+      // esto, el usuario vería el icono de imagen rota del navegador en vez del
+      // placeholder que la app ya tiene para "sin portada".
+      onError={() => setFailedUrl(url)}
       className="rounded-lg flex-shrink-0"
       style={{ width, height: size, objectFit: "cover", background: "var(--surface2)" }}
     />
@@ -56,6 +67,7 @@ export default function BookForm({ book, notes = [] }: { book?: BookLite; notes?
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [noteText, setNoteText] = useState("");
+  const [noteError, setNoteError] = useState<string | null>(null);
   const [notePage, setNotePage] = useState(book?.currentPage ?? 0);
 
   // Campos que el buscador de metadatos puede rellenar: controlados, para que
@@ -120,10 +132,11 @@ export default function BookForm({ book, notes = [] }: { book?: BookLite; notes?
 
   return (
     <div className="card mt-2" style={{ background: "var(--surface2)" }}>
-      {/* §5.1: metadatos desde Open Library / Google Books. El fetch sale del
-          servidor por /api/development/book-lookup; el navegador solo pide la
-          portada. Sin credenciales y sin registro: es una comodidad, no un
-          requisito — el formulario de abajo funciona igual sin tocar esto. */}
+      {/* §5.1: metadatos desde Open Library / Google Books. Todo sale por el
+          servidor: los datos por /api/development/book-lookup y la portada por
+          /api/development/book-cover. Sin credenciales y sin registro: es una
+          comodidad, no un requisito — el formulario de abajo funciona igual
+          sin tocar esto. */}
       <div className="flex gap-2">
         <input
           value={term}
@@ -171,15 +184,23 @@ export default function BookForm({ book, notes = [] }: { book?: BookLite; notes?
       <form
         action={(fd) =>
           startTransition(async () => {
+            // La acción ya no lanza: devuelve { ok, reason } con un motivo
+            // legible incluso en producción (src/lib/supabase/errors.ts). El
+            // try/catch se conserva solo para lo que sigue siendo excepción de
+            // verdad: que la petición ni siquiera llegue al servidor.
             try {
-              await upsertBook(book?.id ?? null, fd);
+              const result = await upsertBook(book?.id ?? null, fd);
+              if (!result.ok) {
+                setError(result.reason ?? "No se pudo guardar el libro.");
+                return;
+              }
               setError(null);
               if (!book) {
                 resetForm();
                 setOpen(false);
               }
-            } catch (e) {
-              setError(e instanceof Error ? e.message : "Error");
+            } catch {
+              setError("No se pudo contactar al servidor. Revisa tu conexión.");
             }
           })
         }
@@ -215,7 +236,16 @@ export default function BookForm({ book, notes = [] }: { book?: BookLite; notes?
               type="button"
               className="btn-danger btn-sm"
               disabled={pending}
-              onClick={() => startTransition(async () => { await deleteBook(book.id); setOpen(false); })}
+              onClick={() =>
+                startTransition(async () => {
+                  const result = await deleteBook(book.id);
+                  if (!result.ok) {
+                    setError(result.reason ?? "No se pudo eliminar el libro.");
+                    return;
+                  }
+                  setOpen(false);
+                })
+              }
             >
               Eliminar
             </button>
@@ -254,7 +284,12 @@ export default function BookForm({ book, notes = [] }: { book?: BookLite; notes?
               disabled={pending}
               onClick={() =>
                 startTransition(async () => {
-                  await addBookNote(book.id, notePage, noteText);
+                  const result = await addBookNote(book.id, notePage, noteText);
+                  if (!result.ok) {
+                    setNoteError(result.reason ?? "No se pudo agregar la nota.");
+                    return;
+                  }
+                  setNoteError(null);
                   setNoteText("");
                 })
               }
@@ -262,6 +297,7 @@ export default function BookForm({ book, notes = [] }: { book?: BookLite; notes?
               Agregar
             </button>
           </div>
+          {noteError && <div className="text-xs mt-1" style={{ color: "var(--danger)" }}>{noteError}</div>}
         </div>
       )}
     </div>

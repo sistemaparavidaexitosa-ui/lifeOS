@@ -201,6 +201,10 @@ export default function MondayRow({
           </span>
         </div>
 
+        {/* En escritorio esto es `display: contents` y la rejilla sigue viendo
+            las cuatro celdas como columnas; en móvil se vuelve un flex que las
+            envuelve en una línea de metadatos legible (globals.css). */}
+        <div className="mb-row-meta">
         <div className="mb-cell mb-cell-people">
           <AssigneePopover
             taskId={task.id}
@@ -228,6 +232,7 @@ export default function MondayRow({
             today={api.today}
             onChange={(startDate, due) => api.patchTask(task.id, { startDate, due })}
           />
+        </div>
         </div>
       </div>
 

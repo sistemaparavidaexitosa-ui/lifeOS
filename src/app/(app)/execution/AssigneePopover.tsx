@@ -8,6 +8,7 @@
 import { useState, useTransition } from "react";
 import { setTaskAssignees } from "./task-detail-actions";
 import { AvatarStack } from "@/components/ui";
+import MenuSurface, { useMenuAnchor } from "./MenuSurface";
 
 export default function AssigneePopover({
   taskId,
@@ -20,7 +21,7 @@ export default function AssigneePopover({
   selected: string[];
   onChange: (names: string[]) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const menu = useMenuAnchor();
   const [checked, setChecked] = useState<string[]>(selected);
   const [pending, startTransition] = useTransition();
 
@@ -32,53 +33,46 @@ export default function AssigneePopover({
     startTransition(async () => {
       await setTaskAssignees(taskId, checked);
       onChange(checked);
-      setOpen(false);
+      menu.close();
     });
   }
 
   return (
-    <div style={{ position: "relative", display: "flex", justifyContent: "center" }}>
+    <div className="mb-menu-wrap">
       <button
         type="button"
-        onClick={() => {
+        className="mb-people-btn"
+        onClick={(e) => {
           setChecked(selected);
-          setOpen((v) => !v);
+          menu.toggle(e);
         }}
-        style={{ background: "transparent", border: "none", padding: 0, cursor: "pointer" }}
+        aria-haspopup="menu"
+        aria-expanded={menu.open}
         aria-label="Responsables"
       >
         <AvatarStack names={selected} />
       </button>
-      {open && (
-        <div
-          className="card"
-          style={{ position: "absolute", zIndex: 45, top: 32, left: 0, width: 220, boxShadow: "var(--shadow)", padding: 12 }}
-        >
-          <b className="text-xs" style={{ color: "var(--muted)" }}>
-            Responsables
-          </b>
-          <div style={{ maxHeight: 180, overflowY: "auto", marginTop: 6 }}>
-            {members.length === 0 && (
-              <div className="text-xs" style={{ color: "var(--muted)" }}>
-                Solo tú (proyecto personal).
-              </div>
-            )}
+      {menu.open && (
+        <MenuSurface anchor={menu.anchor} onClose={menu.close} width={232} label="Responsables">
+          <b className="ex-menu-title">Responsables</b>
+          <div className="ex-menu-scroll">
+            {members.length === 0 && <div className="ex-menu-empty">Solo tú (proyecto personal).</div>}
             {members.map((m) => (
-              <label key={m} style={{ display: "flex", gap: 8, alignItems: "center", padding: "4px 0", cursor: "pointer" }}>
-                <input type="checkbox" checked={checked.includes(m)} onChange={() => toggle(m)} style={{ width: "auto", minHeight: "auto" }} />
-                <span className="text-sm">{m}</span>
+              <label key={m} className="ex-menu-check">
+                <input type="checkbox" checked={checked.includes(m)} onChange={() => toggle(m)} />
+                <span>{m}</span>
               </label>
             ))}
           </div>
-          <div className="flex gap-2" style={{ marginTop: 8, display: "flex" }}>
-            <button className="btn-ghost btn-sm" type="button" onClick={() => setOpen(false)}>
+          <div className="ex-menu-actions">
+            <button className="btn-ghost btn-sm" type="button" onClick={menu.close}>
               Cancelar
             </button>
             <button className="btn-primary btn-sm" type="button" disabled={pending} onClick={save}>
               {pending ? "…" : "Guardar"}
             </button>
           </div>
-        </div>
+        </MenuSurface>
       )}
     </div>
   );

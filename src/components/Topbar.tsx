@@ -15,8 +15,12 @@ export default function Topbar({
 }) {
   return (
     <div
-      className="sticky top-0 z-20 flex items-center gap-2.5 backdrop-blur"
+      className="sticky top-0 flex items-center gap-2.5 backdrop-blur"
       style={{
+        // Escala de capas en globals.css: el chrome de la app manda sobre el
+        // contenido. Antes valía z-20 y la barra del tablero (z-30) se le subía
+        // encima al hacer scroll.
+        zIndex: "var(--z-topbar)",
         padding: "10px 14px",
         paddingTop: "calc(10px + env(safe-area-inset-top))", // F12: barra superior fija con safe-area
         background: "color-mix(in srgb, var(--bg) 85%, transparent)",

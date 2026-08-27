@@ -65,14 +65,14 @@ export default function ProjectMenu({
       {open && (
         <>
           {/* backdrop transparente para cerrar al hacer clic fuera */}
-          <div style={{ position: "fixed", inset: 0, zIndex: 40 }} onClick={() => setOpen(false)} />
+          <div className="ex-backdrop" onClick={() => setOpen(false)} />
           <div
             role="menu"
             style={{
               position: "absolute",
               right: 0,
               top: "calc(100% + 6px)",
-              zIndex: 41,
+              zIndex: "var(--z-popover)",
               background: "var(--surface)",
               border: "1px solid var(--line)",
               borderRadius: 12,

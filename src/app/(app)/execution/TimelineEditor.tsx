@@ -10,6 +10,7 @@ import { useState, useTransition } from "react";
 import { IconCalendar } from "@/components/icons";
 import { addDaysISO } from "@/lib/domain/board.ts";
 import { updateTaskDates } from "./actions";
+import MenuSurface, { useMenuAnchor } from "./MenuSurface";
 
 function fmt(d: string | null): string | null {
   if (!d) return null;
@@ -32,7 +33,7 @@ export default function TimelineEditor({
   today: string;
   onChange: (start: string | null, due: string | null) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const menu = useMenuAnchor();
   const [s, setS] = useState(start ?? "");
   const [d, setD] = useState(due ?? "");
   const [pending, startTransition] = useTransition();
@@ -45,7 +46,7 @@ export default function TimelineEditor({
     onChange(nextStart, nextDue);
     startTransition(async () => {
       await updateTaskDates(taskId, nextStart, nextDue);
-      setOpen(false);
+      menu.close();
     });
   }
 
@@ -54,17 +55,15 @@ export default function TimelineEditor({
       <button
         type="button"
         className={`mb-timeline${overdue ? " overdue" : ""}`}
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
+        onClick={menu.toggle}
+        aria-expanded={menu.open}
         title={overdue ? "Tarea vencida" : "Editar fechas"}
       >
         <IconCalendar width={14} height={14} />
         {label}
       </button>
-      {open && (
-        <>
-          <div className="ex-backdrop" onClick={() => setOpen(false)} />
-          <div className="mb-menu card mb-dates">
+      {menu.open && (
+        <MenuSurface anchor={menu.anchor} onClose={menu.close} align="end" width={244} className="mb-dates" label="Editar fechas">
             <label className="text-xs">Inicio</label>
             <input type="date" value={s} onChange={(e) => setS(e.target.value)} />
             <label className="text-xs">Fin / vence</label>
@@ -81,15 +80,14 @@ export default function TimelineEditor({
               </button>
             </div>
             <div className="mb-dates-actions">
-              <button type="button" className="btn-ghost btn-sm" onClick={() => setOpen(false)}>
+              <button type="button" className="btn-ghost btn-sm" onClick={menu.close}>
                 Cancelar
               </button>
               <button type="button" className="btn-primary btn-sm" disabled={pending} onClick={() => persist(s || null, d || null)}>
                 {pending ? "…" : "Guardar"}
               </button>
             </div>
-          </div>
-        </>
+        </MenuSurface>
       )}
     </div>
   );

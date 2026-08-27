@@ -1,6 +1,26 @@
 import { Suspense } from "react";
 import LoginForm from "./login-form";
 
+/**
+ * 🔴 Esta página TIENE que renderizarse por request. No es una preferencia.
+ *
+ * La CSP de `src/middleware.ts` usa `script-src 'nonce-… ' 'strict-dynamic'`, y
+ * `strict-dynamic` ANULA `'self'`: con él presente, un `<script src="/_next/…">`
+ * sin nonce ya no se carga por ser del mismo origen. El nonce solo lo inyecta
+ * Next.js en el HTML cuando hay un request de por medio.
+ *
+ * Al ser esta la ÚNICA página prerenderizada de la app (las demás leen cookies
+ * y ya son dinámicas), su HTML se generaba en build sin un solo `nonce=` y
+ * después se servía desde la caché de Vercel junto a una cabecera CSP con un
+ * nonce nuevo por request. Resultado: el navegador bloqueaba TODOS los scripts,
+ * React nunca hidrataba y el usuario se quedaba mirando el fallback del
+ * <Suspense> — el famoso "Cargando…" eterno en /login (2026-08-26), con la
+ * app entera inaccesible porque el login es la puerta de entrada.
+ *
+ * Ver también `next.config.ts`: misma trampa, otra cara.
+ */
+export const dynamic = "force-dynamic";
+
 // F7 🔴: cualquier lectura de useSearchParams debe envolverse en <Suspense>
 // para evitar el bailout de prerender ("should be wrapped in a suspense boundary").
 export default function LoginPage() {

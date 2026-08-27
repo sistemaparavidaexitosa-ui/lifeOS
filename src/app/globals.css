@@ -51,6 +51,25 @@
   --r: 20px;
   --r2: 14px;
   --topbar-h: 60px;
+
+  /* Alto REAL de la barra superior: en un iPhone con notch el safe-area la
+     empuja hacia abajo, y todo lo que se pegue por debajo tiene que contarlo.
+     Sin esto la barra de herramientas del tablero se pegaba a 64px mientras la
+     superior medía ~107px, y una tapaba a la otra. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --topbar-total: calc(var(--topbar-h) + var(--safe-top));
+
+  /* ESCALA DE CAPAS — una sola, y en un solo sitio.
+     Antes cada componente elegía su número a mano (20 aquí, 30 allá, 44, 45,
+     46, 55…) y quién tapaba a quién era casualidad. Cualquier capa nueva se
+     declara aquí, no incrustada en un archivo suelto. */
+  --z-board-sticky: 10;  /* cabeceras de grupo y de columnas */
+  --z-toolbar: 20;       /* barra de vistas/filtros del tablero */
+  --z-topbar: 30;        /* chrome de la app: manda sobre el contenido */
+  --z-bulkbar: 40;       /* acciones sobre la selección */
+  --z-drawer: 50;        /* panel de detalle */
+  --z-popover: 60;       /* menús anclados: por encima del drawer */
+  --z-nav: 70;           /* menú lateral en móvil: toma la pantalla entera */
 }
 
 html[data-theme="dark"] {
@@ -383,10 +402,6 @@ textarea:focus {
   min-height: auto;
 }
 .mb-palette {
-  position: absolute;
-  z-index: 46;
-  top: 26px;
-  right: 0;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 8px;
@@ -639,19 +654,99 @@ textarea:focus {
 .ex-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 44;
+  /* Justo por debajo del menú al que pertenece: captura el clic de fuera
+     sin taparlo. */
+  z-index: calc(var(--z-popover) - 1);
 }
-.mb-menu {
-  position: absolute;
-  z-index: 45;
-  top: 34px;
-  left: 0;
-  min-width: 180px;
+/* Superficie de menú anclada (ver MenuSurface.tsx). `fixed` a propósito: con
+   `absolute` cualquier ancestro con overflow —el navegador de tableros, el
+   cuerpo del drawer— recortaba el menú, y en la última fila de un tablero
+   largo nacía fuera de la pantalla. */
+.ex-menu {
+  position: fixed;
+  z-index: var(--z-popover);
+  min-width: 184px;
+  max-width: calc(100vw - 16px);
   padding: 8px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
   box-shadow: var(--shadow);
+  animation: ex-menu-in 0.13s ease-out;
+}
+@keyframes ex-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+.ex-menu[data-placement="top"] {
+  animation-name: ex-menu-in-up;
+}
+@keyframes ex-menu-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+.ex-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.ex-menu-title {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.ex-menu-scroll {
+  max-height: 200px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ex-menu-empty {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.ex-menu-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 4px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.ex-menu-check:hover {
+  background: var(--surface2);
+}
+.ex-menu-check input {
+  width: auto;
+  min-height: auto;
+  accent-color: var(--accent);
+}
+.ex-menu-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.mb-people-btn {
+  background: transparent;
+  border: none;
+  padding: 2px;
+  border-radius: 999px;
+  cursor: pointer;
+  min-height: auto;
+}
+.mb-people-btn:hover {
+  background: var(--surface3);
 }
 .mb-menu-check {
   display: flex;
@@ -686,7 +781,7 @@ textarea:focus {
   left: 0;
   color: var(--danger);
   white-space: nowrap;
-  z-index: 46;
+  z-index: var(--z-popover);
 }
 
 .mb-expand {
@@ -859,12 +954,12 @@ textarea:focus {
 /* --- Navegador de tableros --------------------------------------------- */
 .ex-sidebar {
   position: sticky;
-  top: calc(var(--topbar-h) + 10px);
+  top: calc(var(--topbar-total) + 10px);
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r2);
   padding: 12px;
-  max-height: calc(100dvh - var(--topbar-h) - 24px);
+  max-height: calc(100dvh - var(--topbar-total) - 24px);
   overflow: auto;
 }
 .ex-sidebar-toggle {
@@ -994,8 +1089,8 @@ textarea:focus {
   border-radius: var(--r2);
   padding: 10px 12px;
   position: sticky;
-  top: calc(var(--topbar-h) + 4px);
-  z-index: 30;
+  top: calc(var(--topbar-total) + 6px);
+  z-index: var(--z-toolbar);
 }
 .ex-tabs,
 .ex-scope {
@@ -1139,7 +1234,7 @@ textarea:focus {
 .ex-bulkbar {
   position: sticky;
   bottom: 10px;
-  z-index: 35;
+  z-index: var(--z-bulkbar);
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1575,5 +1670,428 @@ textarea:focus {
   .ex-sort select {
     flex: 1;
     min-width: 0;
+  }
+}
+
+/* ======================================================================== */
+/* Panel de detalle de tarea (drawer lateral)                               */
+/*                                                                          */
+/* ESTE BLOQUE FALTABA POR COMPLETO. Las clases td-* se usaban en            */
+/* TaskDetailPanel.tsx y ProjectMenu.tsx desde el primer commit, pero nunca  */
+/* llegó a escribirse una sola regla para ellas. Sin CSS, el <aside> del     */
+/* drawer se pintaba como un bloque más EN EL FLUJO del documento: abría a   */
+/* lo ancho, empujaba el tablero y se montaba encima de lo que hubiera       */
+/* debajo. Eso era el "hay capas que cubren otros componentes".              */
+/* ======================================================================== */
+.td-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-drawer) - 1);
+  background: rgba(12, 12, 30, 0.42);
+  backdrop-filter: blur(2px);
+  animation: td-fade 0.16s ease-out;
+}
+@keyframes td-fade {
+  from {
+    opacity: 0;
+  }
+}
+.td-drawer {
+  position: fixed;
+  z-index: var(--z-drawer);
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(480px, 100vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+  box-shadow: -18px 0 50px rgba(20, 20, 60, 0.18);
+  animation: td-slide 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  padding-top: var(--safe-top);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@keyframes td-slide {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+}
+.td-drawer-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+.td-drawer-title {
+  font-size: 15.5px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+  flex: 1;
+  min-width: 0;
+  /* Un título largo no puede empujar el botón de cerrar fuera del panel. */
+  overflow-wrap: anywhere;
+}
+.td-drawer-close {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  min-height: auto;
+  padding: 0;
+  border: none;
+  border-radius: 10px;
+  background: var(--surface2);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.td-drawer-close:hover {
+  background: var(--surface3);
+  color: var(--text);
+}
+.td-drawer-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* En móvil el drawer sube desde abajo y deja ver algo del tablero detrás:
+   ocupar el 100% de la pantalla lo convertía en una pantalla nueva y se
+   perdía el contexto de dónde estabas. */
+@media (max-width: 640px) {
+  .td-drawer {
+    top: auto;
+    left: 0;
+    width: 100vw;
+    height: 92dvh;
+    border-left: none;
+    border-top: 1px solid var(--line);
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -18px 50px rgba(20, 20, 60, 0.22);
+    animation-name: td-slide-up;
+  }
+  @keyframes td-slide-up {
+    from {
+      transform: translateY(28px);
+      opacity: 0;
+    }
+  }
+  /* Asidero visual de que se arrastra/cierra desde arriba. */
+  .td-drawer-header::before {
+    content: "";
+    position: absolute;
+    top: 7px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 38px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--surface3);
+  }
+  .td-drawer-header {
+    position: relative;
+    padding-top: 18px;
+  }
+}
+
+/* Capa del menú lateral en móvil (Sidebar.tsx). */
+.ex-nav-layer {
+  z-index: var(--z-nav);
+}
+
+/* ======================================================================== */
+/* Execution OS — capa de acabado                                           */
+/*                                                                          */
+/* Va al FINAL a propósito: refina lo definido arriba sin reescribirlo, así  */
+/* el diff se lee como "qué cambió de aspecto" y no como un archivo nuevo.   */
+/* No se inventa ni un color: todo sale de los tokens ya existentes.         */
+/* ======================================================================== */
+
+/* --- Tablero: ritmo, densidad y jerarquía ------------------------------- */
+.mb-board {
+  /* Columnas más anchas: 104px no alcanzaban para "Sin empezar" ni para un
+     rango "12 sep - 30 sep", que se cortaban con puntos suspensivos. El
+     título arranca en 240px para que nunca quede reducido a dos palabras. */
+  --mb-cols: minmax(240px, 1fr) 132px 158px 136px 186px;
+}
+.mb-group {
+  border-radius: 16px;
+  border-color: var(--line);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 16px;
+}
+.mb-group-head {
+  padding: 11px 14px;
+  gap: 10px;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+  /* El borde de color pasa de 5px a 3px: a 5px el bloque de color competía
+     con el nombre del grupo en vez de acompañarlo. */
+  border-left-width: 3px;
+  background: color-mix(in srgb, var(--group-color, var(--accent)) 6%, var(--surface));
+}
+.mb-cols {
+  padding: 7px 14px;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  background: color-mix(in srgb, var(--surface2) 55%, var(--surface));
+}
+.mb-row {
+  padding: 9px 14px;
+  min-height: 52px;
+  border-top-color: color-mix(in srgb, var(--line) 70%, transparent);
+  transition: background 0.12s ease, box-shadow 0.12s ease;
+}
+.mb-row:hover {
+  background: color-mix(in srgb, var(--accent) 4%, var(--surface));
+}
+.mb-row.selected {
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.mb-row-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  border-radius: 8px;
+  transition: background 0.12s ease, box-shadow 0.12s ease;
+}
+.mb-row-title:hover {
+  background: var(--surface2);
+}
+/* `contents` hace que .mb-row-meta no exista para el layout: sus cuatro
+   celdas siguen siendo columnas de la rejilla de la fila. En móvil se
+   convierte en un flex de verdad (ver el bloque de 860px). */
+.mb-row-meta {
+  display: contents;
+}
+
+/* Pills: bloques de color legibles, como en monday. El texto blanco sobre
+   amarillo (--st-working) no pasaba contraste; se oscurece el propio texto en
+   vez de cambiar el color de estado, que es semántico y se usa en más sitios. */
+.mb-pill {
+  min-height: 32px;
+  border-radius: 9px;
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.09);
+  transition: filter 0.12s ease, transform 0.1s ease;
+}
+.mb-pill:hover {
+  filter: brightness(1.06);
+}
+.mb-pill:active {
+  transform: scale(0.985);
+}
+.mb-pill.soft {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 22%, transparent);
+}
+.mb-timeline {
+  min-height: 32px;
+  border-radius: 9px;
+  font-size: 12px;
+  background: var(--surface2);
+  border: 1px solid transparent;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.mb-timeline:hover {
+  background: var(--surface3);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.mb-timeline.overdue {
+  border-color: color-mix(in srgb, var(--st-stuck) 35%, transparent);
+}
+
+/* Los botones de fila aparecían solo al hover, y en táctil el hover no
+   existe: en móvil no había forma de abrir el detalle ni de borrar. */
+.mb-row-tools {
+  opacity: 0.42;
+  transition: opacity 0.14s ease;
+}
+.mb-row:hover .mb-row-tools,
+.mb-row:focus-within .mb-row-tools {
+  opacity: 1;
+}
+@media (hover: none) {
+  .mb-row-tools {
+    opacity: 1;
+  }
+}
+
+/* --- Barra de herramientas: control segmentado -------------------------- */
+.ex-toolbar {
+  border-radius: 16px;
+  padding: 11px 13px;
+  box-shadow: var(--shadow-sm);
+  /* Al quedarse pegada, se separa del contenido con un velo, no con un salto
+     duro de borde. */
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(10px);
+}
+.ex-tabs {
+  background: var(--surface2);
+  padding: 3px;
+  border-radius: 11px;
+  gap: 2px;
+}
+.ex-tab {
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 700;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  transition: background 0.14s ease, color 0.14s ease, box-shadow 0.14s ease;
+}
+.ex-tab:hover {
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  color: var(--text);
+}
+.ex-tab.active {
+  background: var(--surface);
+  color: var(--accent-d);
+  box-shadow: var(--shadow-sm);
+}
+.ex-stat-chip {
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+/* --- Navegador de tableros --------------------------------------------- */
+.ex-sidebar {
+  border-radius: 16px;
+  box-shadow: var(--shadow-sm);
+}
+.ex-project {
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.ex-project.active {
+  box-shadow: var(--shadow-sm);
+}
+.ex-header {
+  border-radius: 16px;
+  padding: 16px 18px;
+  box-shadow: var(--shadow-sm);
+}
+.ex-header-title {
+  font-size: 1.3rem;
+}
+
+/* --- Kanban ------------------------------------------------------------- */
+.kb-col {
+  border-radius: 14px;
+}
+.kb-card {
+  border-radius: 12px;
+  transition: box-shadow 0.14s ease, transform 0.14s ease;
+}
+.kb-card:hover {
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+
+/* --- Barra de acciones en lote ------------------------------------------ */
+.ex-bulkbar {
+  border-radius: 16px;
+  /* `sticky bottom` dejaba la barra pisando la última fila del tablero. El
+     margen inferior le devuelve el aire y el padding del tablero hace el resto. */
+  margin-top: 4px;
+  padding: 11px 15px;
+}
+
+/* ======================================================================== */
+/* Móvil: la fila deja de ser una rejilla apretada y pasa a ser una tarjeta  */
+/*                                                                          */
+/* Antes, por debajo de 860px, la fila era `grid-template-columns: 1fr 1fr`: */
+/* estado, prioridad, fechas y personas quedaban en cuadrantes de ~150px,    */
+/* con las pills recortadas y sin ninguna pista de qué era cada una.         */
+/* ======================================================================== */
+@media (max-width: 860px) {
+  .mb-group {
+    margin-bottom: 12px;
+  }
+  .mb-row {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 13px 14px;
+    min-height: 0;
+  }
+  .mb-row + .mb-row {
+    border-top: 1px solid var(--line);
+  }
+  .mb-row-item {
+    gap: 8px;
+  }
+  .mb-row-title {
+    flex: 1 1 100%;
+    font-size: 14.5px;
+    font-weight: 650;
+    padding: 4px 6px;
+  }
+  /* Las cuatro celdas de metadatos fluyen en una sola línea envolvente, cada
+     una con su ancho natural, en vez de repartirse en cuadrantes fijos. */
+  .mb-cell {
+    display: inline-flex;
+    justify-content: flex-start;
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  .mb-cell,
+  .mb-cell-people {
+    justify-content: flex-start;
+  }
+  .mb-row-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  .mb-row-meta .mb-cell {
+    display: inline-flex;
+  }
+  .mb-pill,
+  .mb-timeline {
+    width: auto;
+    min-width: 0;
+    padding-left: 11px;
+    padding-right: 11px;
+  }
+  .mb-row-tools {
+    margin-left: auto;
+  }
+}
+
+/* Toolbar en móvil: las pestañas ocupan el ancho completo y se reparten por
+   igual, en vez de amontonarse a la izquierda dejando un hueco muerto. */
+@media (max-width: 640px) {
+  .ex-tabs {
+    width: 100%;
+  }
+  .ex-tab {
+    flex: 1;
+    text-align: center;
+    justify-content: center;
+  }
+  .ex-toolbar {
+    padding: 10px;
+    border-radius: 14px;
+  }
+  .ex-bulkbar {
+    padding: 10px 12px;
+    border-radius: 14px;
   }
 }

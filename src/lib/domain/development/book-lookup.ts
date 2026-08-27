@@ -145,10 +145,13 @@ export function dedupeByTitle(candidates: BookCandidate[]): BookCandidate[] {
 }
 
 /**
- * Hosts de portada que la app acepta guardar. Es la misma lista que `img-src`
- * en `middleware.ts` y las dos tienen que moverse juntas: una URL fuera de
- * esta lista se guardaría bien y luego el navegador la bloquearía, dejando un
- * hueco silencioso en la biblioteca.
+ * Hosts de portada que la app acepta guardar.
+ *
+ * Ya NO tiene que ir en espejo con `img-src` de `middleware.ts`: desde que la
+ * portada se sirve por /api/development/book-cover, el navegador solo pide
+ * imágenes a nuestro propio origen y la CSP no nombra ningún host de tercero.
+ * Esta lista es ahora la frontera del PROXY —a qué hosts sale el servidor— y
+ * por eso sigue siendo estricta.
  *
  * Se valida en el servidor al guardar, no solo al buscar: el candidato llega
  * por un `<input hidden>` y eso lo puede editar cualquiera.
@@ -163,4 +166,23 @@ export function isAllowedCoverUrl(raw: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * URL con la que el navegador pide una portada. SIEMPRE de nuestro origen,
+ * nunca la del proveedor.
+ *
+ * `covers.openlibrary.org` responde 302 hacia `archive.org`, y la CSP se
+ * evalúa en cada salto del redirect: pedir la URL del proveedor directo desde
+ * un `<img>` termina en imagen rota aunque el primer host esté permitido. El
+ * salto lo da el servidor (ver el route handler); aquí solo se arma la
+ * dirección.
+ *
+ * Devuelve "" para "sin portada" y también para una URL que no pasa la lista
+ * blanca, de modo que quien la use pinte el placeholder en vez de disparar
+ * una petición que el handler va a rechazar igual.
+ */
+export function coverProxyUrl(raw: string): string {
+  if (!raw || !isAllowedCoverUrl(raw)) return "";
+  return `/api/development/book-cover?url=${encodeURIComponent(raw)}`;
 }
