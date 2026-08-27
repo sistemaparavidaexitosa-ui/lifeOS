@@ -4,6 +4,7 @@ import { Card, EmptyState } from "@/components/ui";
 import { habitStreak, habitDoneToday } from "@/lib/domain/habits.ts";
 import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
+import { ModuleNote, SectionHeader } from "../FormSheet";
 import HabitRow from "./HabitRow";
 import HabitForm from "./HabitForm";
 
@@ -32,32 +33,32 @@ export default async function HabitsPage() {
 
   return (
     <div className="flex flex-col gap-3.5">
-      <div className="text-sm p-2.5 rounded-r-xl" style={{ background: "color-mix(in srgb, var(--c-orange) 9%, var(--surface))", borderLeft: "3px solid var(--c-orange)" }}>
+      <ModuleNote>
         Los hábitos pueden ligarse a una ocupación de Autogestión del Tiempo. Son un seguimiento personal, privado, sin
         relación con Workspaces (BR-027).
-      </div>
+      </ModuleNote>
 
-      <div className="flex items-center justify-between">
-        <h3 className="font-bold">Hábitos</h3>
-        <HabitForm occupations={occOptions} />
-      </div>
+      <SectionHeader action={<HabitForm occupations={occOptions} />}>Hábitos</SectionHeader>
+
       <Card>
         {!habits?.length && <EmptyState icon="✅" text="Crea tu primer hábito, opcionalmente ligado a una ocupación." />}
         {(habits ?? []).map((h) => (
-          <div key={h.id}>
-            <HabitRow
-              habit={{ id: h.id, name: h.name, frequency: h.frequency, category: h.category }}
-              doneToday={habitDoneToday(h.id, logs, t0)}
-              streak={habitStreak(h.id, logs, t0)}
-              occupation={h.occupation_id ? occById.get(h.occupation_id) ?? null : null}
-            />
-            <div className="flex justify-end -mt-1 mb-1">
+          // El botón de editar va DENTRO de la fila: antes colgaba de una fila
+          // propia alineada a la derecha bajo cada hábito, y en móvil la lista
+          // se leía como el doble de renglones de los que tiene.
+          <HabitRow
+            key={h.id}
+            habit={{ id: h.id, name: h.name, frequency: h.frequency, category: h.category }}
+            doneToday={habitDoneToday(h.id, logs, t0)}
+            streak={habitStreak(h.id, logs, t0)}
+            occupation={h.occupation_id ? occById.get(h.occupation_id) ?? null : null}
+            action={
               <HabitForm
                 habit={{ id: h.id, name: h.name, frequency: h.frequency, category: h.category, occupationId: h.occupation_id }}
                 occupations={occOptions}
               />
-            </div>
-          </div>
+            }
+          />
         ))}
       </Card>
     </div>

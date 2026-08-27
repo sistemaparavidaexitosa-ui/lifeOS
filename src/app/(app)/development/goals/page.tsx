@@ -5,6 +5,7 @@ import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
 import { loadSourceSnapshot } from "@/lib/data/development";
 import { keyResultProgress, goalProgress, goalAtRisk } from "@/lib/domain/development/goals.ts";
+import { CardHeader, ModuleNote, SectionHeader } from "../FormSheet";
 import GoalForm from "./GoalForm";
 import KeyResultForm, { type SourceOptions } from "./KeyResultForm";
 
@@ -60,15 +61,12 @@ export default async function PersonalGoalsPage() {
 
   return (
     <div className="flex flex-col gap-3.5">
-      <div className="text-sm p-2.5 rounded-r-xl" style={{ background: "color-mix(in srgb, var(--c-orange) 9%, var(--surface))", borderLeft: "3px solid var(--c-orange)" }}>
+      <ModuleNote>
         El progreso no se teclea. Cada resultado clave declara de dónde sale su número —un hábito, un proyecto personal, un
         libro o una meta financiera— y LifeOS lo calcula. Todo aquí es privado (BR-012).
-      </div>
+      </ModuleNote>
 
-      <div className="flex items-center justify-between">
-        <h3 className="font-bold">Metas Personales</h3>
-        <GoalForm />
-      </div>
+      <SectionHeader action={<GoalForm />}>Metas Personales</SectionHeader>
 
       {!rows.length && (
         <Card>
@@ -78,33 +76,39 @@ export default async function PersonalGoalsPage() {
 
       {rows.map(({ goal, progress, pct, atRisk }) => (
         <Card key={goal.id}>
-          <div className="flex items-center gap-2 flex-wrap">
-            <b className="grow">{goal.title}</b>
-            <Chip kind="info">{goal.area}</Chip>
-            {goal.status !== "Activa" && <Chip>{goal.status}</Chip>}
-            {atRisk && <Chip kind="bad">En riesgo</Chip>}
-            <GoalForm
-              goal={{
-                id: goal.id,
-                title: goal.title,
-                description: goal.description,
-                area: goal.area,
-                horizon: goal.horizon,
-                status: goal.status
-              }}
-            />
-          </div>
+          <CardHeader
+            title={goal.title}
+            meta={
+              <>
+                <Chip kind="info">{goal.area}</Chip>
+                {goal.status !== "Activa" && <Chip>{goal.status}</Chip>}
+                {atRisk && <Chip kind="bad">En riesgo</Chip>}
+              </>
+            }
+            action={
+              <GoalForm
+                goal={{
+                  id: goal.id,
+                  title: goal.title,
+                  description: goal.description,
+                  area: goal.area,
+                  horizon: goal.horizon,
+                  status: goal.status
+                }}
+              />
+            }
+          />
 
           {goal.description && (
-            <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+            <p className="text-xs mt-1.5" style={{ color: "var(--muted)", overflowWrap: "anywhere" }}>
               {goal.description}
             </p>
           )}
 
-          <div className="mt-2">
-            <div className="flex justify-between text-xs mb-1" style={{ color: "var(--muted)" }}>
+          <div className="mt-2.5">
+            <div className="flex justify-between gap-2 text-xs mb-1" style={{ color: "var(--muted)" }}>
               <span>{pct}% de avance</span>
-              {goal.horizon && <span>horizonte {goal.horizon}</span>}
+              {goal.horizon && <span className="flex-shrink-0">horizonte {goal.horizon}</span>}
             </div>
             <Progress pct={pct} kind={atRisk ? "warn" : undefined} />
           </div>
@@ -117,8 +121,29 @@ export default async function PersonalGoalsPage() {
             )}
             {progress.map(({ kr, p }) => (
               <div key={kr.id} style={{ borderTop: "1px solid var(--line)", paddingTop: 8 }}>
-                <div className="flex items-center gap-2 flex-wrap text-sm">
-                  <span className="grow">{kr.title}</span>
+                {/* El título del resultado clave manda en su línea; la lectura y
+                    el botón de editar caen debajo, envueltos entre sí. */}
+                <div className="flex items-start gap-2">
+                  <span className="grow min-w-0 text-sm" style={{ overflowWrap: "anywhere" }}>
+                    {kr.title}
+                  </span>
+                  <span className="flex-shrink-0">
+                    <KeyResultForm
+                      goalId={goal.id}
+                      kr={{
+                        id: kr.id,
+                        title: kr.title,
+                        sourceKind: kr.source_kind,
+                        sourceId: kr.source_id,
+                        target: Number(kr.target),
+                        manualCurrent: Number(kr.manual_current),
+                        unit: kr.unit
+                      }}
+                      sources={sourceOptions}
+                    />
+                  </span>
+                </div>
+                <div className="mt-1 flex items-center gap-2 flex-wrap">
                   {p.stale ? (
                     <Chip kind="warn">fuente eliminada</Chip>
                   ) : (
@@ -126,28 +151,13 @@ export default async function PersonalGoalsPage() {
                       {p.current} / {p.target} {kr.unit}
                     </span>
                   )}
-                  <KeyResultForm
-                    goalId={goal.id}
-                    kr={{
-                      id: kr.id,
-                      title: kr.title,
-                      sourceKind: kr.source_kind,
-                      sourceId: kr.source_id,
-                      target: Number(kr.target),
-                      manualCurrent: Number(kr.manual_current),
-                      unit: kr.unit
-                    }}
-                    sources={sourceOptions}
-                  />
                 </div>
-                <div className="mt-1">
+                <div className="mt-1.5">
                   <Progress pct={p.pct} kind={p.stale ? "bad" : undefined} />
                 </div>
               </div>
             ))}
-            <div className="flex justify-end">
-              <KeyResultForm goalId={goal.id} sources={sourceOptions} />
-            </div>
+            <KeyResultForm goalId={goal.id} sources={sourceOptions} block />
           </div>
         </Card>
       ))}

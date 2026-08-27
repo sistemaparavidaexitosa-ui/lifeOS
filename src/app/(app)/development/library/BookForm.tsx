@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { upsertBook, deleteBook, addBookNote } from "./actions";
 import { coverProxyUrl, type BookCandidate } from "@/lib/domain/development/book-lookup.ts";
+import FormSheet, { Field, FormActions } from "../FormSheet";
 
 interface NoteLite {
   id: string;
@@ -63,7 +64,18 @@ export function BookCover({ url, size = 60 }: { url: string; size?: number }) {
 }
 
 export default function BookForm({ book, notes = [] }: { book?: BookLite; notes?: NoteLite[] }) {
-  const [open, setOpen] = useState(false);
+  return (
+    <FormSheet
+      label={book ? "Abrir" : "+ Libro"}
+      title={book ? book.title : "Nuevo libro"}
+      variant={book ? "ghost" : "primary"}
+    >
+      {(close) => <BookFields book={book} notes={notes} close={close} />}
+    </FormSheet>
+  );
+}
+
+function BookFields({ book, notes, close }: { book?: BookLite; notes: NoteLite[]; close: () => void }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [noteText, setNoteText] = useState("");
@@ -112,26 +124,8 @@ export default function BookForm({ book, notes = [] }: { book?: BookLite; notes?
     setTerm("");
   }
 
-  function resetForm() {
-    setTitle("");
-    setAuthor("");
-    setTotalPages(0);
-    setCoverUrl("");
-    setResults([]);
-    setLookupMsg(null);
-    setTerm("");
-  }
-
-  if (!open) {
-    return (
-      <button className="btn-ghost btn-sm" onClick={() => setOpen(true)}>
-        {book ? "Abrir" : "+ Libro"}
-      </button>
-    );
-  }
-
   return (
-    <div className="card mt-2" style={{ background: "var(--surface2)" }}>
+    <>
       {/* §5.1: metadatos desde Open Library / Google Books. Todo sale por el
           servidor: los datos por /api/development/book-lookup y la portada por
           /api/development/book-cover. Sin credenciales y sin registro: es una
@@ -149,29 +143,36 @@ export default function BookForm({ book, notes = [] }: { book?: BookLite; notes?
           }}
           placeholder="Buscar por título o ISBN…"
         />
-        <button type="button" className="btn-ghost btn-sm" disabled={looking || !term.trim()} onClick={() => void runLookup()}>
+        {/* Sin `flex-shrink-0` el botón se comprimía hasta "Busc…" en cuanto el
+            panel se estrechaba. */}
+        <button
+          type="button"
+          className="btn-ghost btn-sm flex-shrink-0"
+          disabled={looking || !term.trim()}
+          onClick={() => void runLookup()}
+        >
           {looking ? "…" : "Buscar"}
         </button>
       </div>
       {lookupMsg && (
-        <div className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+        <div className="text-xs -mt-2" style={{ color: "var(--muted)" }}>
           {lookupMsg}
         </div>
       )}
       {results.length > 0 && (
-        <div className="mt-2 flex flex-col gap-1">
+        <div className="flex flex-col gap-1 -mt-2">
           {results.map((c, i) => (
             <button
               key={`${c.source}-${c.isbn || i}`}
               type="button"
               className="flex items-center gap-2 text-left rounded-xl p-1.5"
-              style={{ background: "var(--surface)" }}
+              style={{ background: "var(--surface2)" }}
               onClick={() => pick(c)}
             >
               <BookCover url={c.coverUrl} size={44} />
-              <span className="grow text-sm">
-                <b>{c.title}</b>
-                <span className="block text-xs" style={{ color: "var(--muted)" }}>
+              <span className="grow min-w-0 text-sm">
+                <b style={{ overflowWrap: "anywhere" }}>{c.title}</b>
+                <span className="block text-xs" style={{ color: "var(--muted)", overflowWrap: "anywhere" }}>
                   {c.author || "Autor desconocido"}
                   {c.totalPages > 0 ? ` · ${c.totalPages} págs.` : " · sin total de páginas"}
                 </span>
@@ -195,93 +196,121 @@ export default function BookForm({ book, notes = [] }: { book?: BookLite; notes?
                 return;
               }
               setError(null);
-              if (!book) {
-                resetForm();
-                setOpen(false);
-              }
+              close();
             } catch {
               setError("No se pudo contactar al servidor. Revisa tu conexión.");
             }
           })
         }
-        className="flex flex-col gap-2 mt-2"
+        className="flex flex-col gap-3"
       >
-        <div className="flex gap-2 items-start">
+        <div className="flex gap-3 items-start">
           <BookCover url={coverUrl} />
-          <div className="grow flex flex-col gap-2">
-            <input name="title" placeholder="Título" value={title} onChange={(e) => setTitle(e.target.value)} required />
-            <input name="author" placeholder="Autor" value={author} onChange={(e) => setAuthor(e.target.value)} />
+          <div className="grow min-w-0 flex flex-col gap-3">
+            <Field label="Título">
+              <input name="title" placeholder="Título" value={title} onChange={(e) => setTitle(e.target.value)} required />
+            </Field>
+            <Field label="Autor">
+              <input name="author" placeholder="Autor" value={author} onChange={(e) => setAuthor(e.target.value)} />
+            </Field>
           </div>
         </div>
         <input type="hidden" name="coverUrl" value={coverUrl} />
-        <div className="grid grid-cols-3 gap-2">
-          <select name="status" defaultValue={book?.status ?? "Por leer"}>
-            <option>Por leer</option>
-            <option>Leyendo</option>
-            <option>Terminado</option>
-          </select>
-          <input name="currentPage" type="number" placeholder="Pág. actual" defaultValue={book?.currentPage ?? 0} />
-          <input
-            name="totalPages"
-            type="number"
-            placeholder="Total págs."
-            value={totalPages}
-            onChange={(e) => setTotalPages(Number(e.target.value))}
-          />
+
+        {/* Tres campos en una fila daban ~90px por columna en un móvil: el
+            select de estado se cortaba y "Total págs." no cabía. El estado se
+            queda con la línea entera y las dos páginas se reparten la de abajo;
+            desde `sm` vuelven las tres columnas. */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <Field label="Estado" className="col-span-2 sm:col-span-1">
+            <select name="status" defaultValue={book?.status ?? "Por leer"}>
+              <option>Por leer</option>
+              <option>Leyendo</option>
+              <option>Terminado</option>
+            </select>
+          </Field>
+          <Field label="Pág. actual">
+            <input name="currentPage" type="number" min={0} defaultValue={book?.currentPage ?? 0} />
+          </Field>
+          <Field label="Total págs.">
+            <input
+              name="totalPages"
+              type="number"
+              min={0}
+              value={totalPages}
+              onChange={(e) => setTotalPages(Number(e.target.value))}
+            />
+          </Field>
         </div>
-        {error && <div className="text-xs" style={{ color: "var(--danger)" }}>{error}</div>}
-        <div className="flex gap-2">
-          {book && (
-            <button
-              type="button"
-              className="btn-danger btn-sm"
-              disabled={pending}
-              onClick={() =>
-                startTransition(async () => {
-                  const result = await deleteBook(book.id);
-                  if (!result.ok) {
-                    setError(result.reason ?? "No se pudo eliminar el libro.");
-                    return;
-                  }
-                  setOpen(false);
-                })
-              }
-            >
-              Eliminar
-            </button>
-          )}
-          {coverUrl && (
-            <button type="button" className="btn-ghost btn-sm" disabled={pending} onClick={() => setCoverUrl("")}>
-              Quitar portada
-            </button>
-          )}
-          <span className="grow" />
-          <button type="button" className="btn-ghost btn-sm" onClick={() => setOpen(false)}>
-            Cerrar
+
+        {coverUrl && (
+          <button
+            type="button"
+            className="btn-ghost btn-sm self-start"
+            disabled={pending}
+            onClick={() => setCoverUrl("")}
+          >
+            Quitar portada
           </button>
-          <button type="submit" className="btn-primary btn-sm" disabled={pending}>
-            {pending ? "…" : "Guardar"}
-          </button>
-        </div>
+        )}
+        {error && (
+          <div className="text-xs" style={{ color: "var(--danger)" }}>
+            {error}
+          </div>
+        )}
+
+        <FormActions
+          pending={pending}
+          onCancel={close}
+          onDelete={
+            book
+              ? () =>
+                  startTransition(async () => {
+                    const result = await deleteBook(book.id);
+                    if (!result.ok) {
+                      setError(result.reason ?? "No se pudo eliminar el libro.");
+                      return;
+                    }
+                    close();
+                  })
+              : undefined
+          }
+        />
       </form>
 
       {book && (
-        <div className="mt-3">
+        <div className="flex flex-col gap-2" style={{ borderTop: "1px solid var(--line)", paddingTop: 14 }}>
           <b className="text-sm">Notas de lectura</b>
           {notes.map((n) => (
-            <div key={n.id} className="rounded-xl px-2.5 py-2 my-2 text-sm" style={{ background: "var(--surface)" }}>
-              {n.text}
+            <div key={n.id} className="rounded-xl px-2.5 py-2 text-sm" style={{ background: "var(--surface2)" }}>
+              <span style={{ overflowWrap: "anywhere" }}>{n.text}</span>
               <div className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
                 pág. {n.pageRef}
               </div>
             </div>
           ))}
-          <div className="flex gap-2 mt-2">
-            <input type="number" value={notePage} onChange={(e) => setNotePage(Number(e.target.value))} style={{ width: 90 }} placeholder="Página" />
-            <input value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Escribe una nota…" />
+          {/* Página + nota + botón en una sola fila dejaban al texto de la nota
+              unos 120px. Apilado en móvil, en línea desde `sm`. */}
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              type="number"
+              min={0}
+              value={notePage}
+              onChange={(e) => setNotePage(Number(e.target.value))}
+              className="sm:w-24 sm:flex-shrink-0"
+              placeholder="Página"
+              aria-label="Página de la nota"
+            />
+            <input
+              value={noteText}
+              onChange={(e) => setNoteText(e.target.value)}
+              placeholder="Escribe una nota…"
+              aria-label="Texto de la nota"
+            />
             <button
-              className="btn-ghost btn-sm"
-              disabled={pending}
+              type="button"
+              className="btn-ghost btn-sm sm:flex-shrink-0"
+              disabled={pending || !noteText.trim()}
               onClick={() =>
                 startTransition(async () => {
                   const result = await addBookNote(book.id, notePage, noteText);
@@ -297,9 +326,13 @@ export default function BookForm({ book, notes = [] }: { book?: BookLite; notes?
               Agregar
             </button>
           </div>
-          {noteError && <div className="text-xs mt-1" style={{ color: "var(--danger)" }}>{noteError}</div>}
+          {noteError && (
+            <div className="text-xs" style={{ color: "var(--danger)" }}>
+              {noteError}
+            </div>
+          )}
         </div>
       )}
-    </div>
+    </>
   );
 }

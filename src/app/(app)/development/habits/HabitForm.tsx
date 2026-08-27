@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { upsertHabit, deleteHabit } from "./actions";
+import FormSheet, { Field, FormActions } from "../FormSheet";
 
 interface OccupationLite {
   id: string;
@@ -10,49 +11,67 @@ interface OccupationLite {
   end: string;
 }
 
-export default function HabitForm({
+interface HabitLite {
+  id: string;
+  name: string;
+  frequency: string;
+  category: string;
+  occupationId: string | null;
+}
+
+export default function HabitForm({ habit, occupations }: { habit?: HabitLite; occupations: OccupationLite[] }) {
+  return (
+    <FormSheet
+      label={habit ? "Editar" : "+ Hábito"}
+      title={habit ? "Editar hábito" : "Nuevo hábito"}
+      variant={habit ? "ghost" : "primary"}
+    >
+      {(close) => <HabitFields habit={habit} occupations={occupations} close={close} />}
+    </FormSheet>
+  );
+}
+
+function HabitFields({
   habit,
-  occupations
+  occupations,
+  close
 }: {
-  habit?: { id: string; name: string; frequency: string; category: string; occupationId: string | null };
+  habit?: HabitLite;
   occupations: OccupationLite[];
+  close: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  if (!open) {
-    return (
-      <button className="btn-ghost btn-sm" onClick={() => setOpen(true)}>
-        {habit ? "Editar" : "+ Hábito"}
-      </button>
-    );
-  }
-
   return (
-    <div className="card mt-2" style={{ background: "var(--surface2)" }}>
-      <form
-        action={(fd) =>
-          startTransition(async () => {
-            try {
-              await upsertHabit(habit?.id ?? null, fd);
-              setOpen(false);
-              setError(null);
-            } catch (e) {
-              setError(e instanceof Error ? e.message : "Error");
-            }
-          })
-        }
-        className="flex flex-col gap-2"
-      >
-        <input name="name" placeholder="Nombre del hábito" defaultValue={habit?.name} required />
-        <div className="grid grid-cols-2 gap-2">
+    <form
+      action={(fd) =>
+        startTransition(async () => {
+          try {
+            await upsertHabit(habit?.id ?? null, fd);
+            setError(null);
+            close();
+          } catch (e) {
+            setError(e instanceof Error ? e.message : "Error");
+          }
+        })
+      }
+      className="flex flex-col gap-3"
+    >
+      <Field label="Nombre del hábito">
+        <input name="name" placeholder="Ej. leer 20 minutos" defaultValue={habit?.name} required />
+      </Field>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Field label="Frecuencia">
           <select name="frequency" defaultValue={habit?.frequency ?? "Diario"}>
             <option>Diario</option>
             <option>Semanal</option>
             <option>Entre semana</option>
             <option>Fin de semana</option>
           </select>
+        </Field>
+        <Field label="Categoría">
           <select name="category" defaultValue={habit?.category ?? "Salud"}>
             <option>Salud</option>
             <option>Aprendizaje</option>
@@ -60,7 +79,10 @@ export default function HabitForm({
             <option>Personal</option>
             <option>Otros</option>
           </select>
-        </div>
+        </Field>
+      </div>
+
+      <Field label="Bloque de Autogestión del Tiempo">
         <select name="occupationId" defaultValue={habit?.occupationId ?? ""}>
           <option value="">— sin ligar —</option>
           {occupations.map((o) => (
@@ -69,30 +91,34 @@ export default function HabitForm({
             </option>
           ))}
         </select>
-        <p className="text-xs" style={{ color: "var(--muted)" }}>
-          Conecta el hábito con un bloque de tu Autogestión del Tiempo (FR-HAB-001).
-        </p>
-        {error && <div className="text-xs" style={{ color: "var(--danger)" }}>{error}</div>}
-        <div className="flex gap-2">
-          {habit && (
-            <button
-              type="button"
-              className="btn-danger btn-sm"
-              disabled={pending}
-              onClick={() => startTransition(async () => { await deleteHabit(habit.id); setOpen(false); })}
-            >
-              Eliminar
-            </button>
-          )}
-          <span className="grow" />
-          <button type="button" className="btn-ghost btn-sm" onClick={() => setOpen(false)}>
-            Cancelar
-          </button>
-          <button type="submit" className="btn-primary btn-sm" disabled={pending}>
-            {pending ? "…" : "Guardar"}
-          </button>
+      </Field>
+
+      <p className="text-xs" style={{ color: "var(--muted)" }}>
+        Conecta el hábito con un bloque de tu Autogestión del Tiempo (FR-HAB-001).
+      </p>
+      {error && (
+        <div className="text-xs" style={{ color: "var(--danger)" }}>
+          {error}
         </div>
-      </form>
-    </div>
+      )}
+
+      <FormActions
+        pending={pending}
+        onCancel={close}
+        onDelete={
+          habit
+            ? () =>
+                startTransition(async () => {
+                  try {
+                    await deleteHabit(habit.id);
+                    close();
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : "Error");
+                  }
+                })
+            : undefined
+        }
+      />
+    </form>
   );
 }

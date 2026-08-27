@@ -10,6 +10,7 @@ import {
   routineAdherence,
   type Frequency
 } from "@/lib/domain/development/routines.ts";
+import { CardHeader, ModuleNote, SectionHeader } from "../FormSheet";
 import RoutineForm, { StepForm, type OccupationLite } from "./RoutineForm";
 import RoutineRunner, { type RunnerStep } from "./RoutineRunner";
 
@@ -53,11 +54,23 @@ export default async function RoutinesPage() {
     return {
       routine: r,
       steps: own,
+      // El botón de editar viaja DENTRO de cada paso. Antes todos los "Editar
+      // paso" se acumulaban en una fila al pie de la tarjeta: seis pasos daban
+      // seis botones idénticos, sin decir cuál era cuál, y en móvil ocupaban
+      // más alto que la propia rutina.
       runnerSteps: own.map<RunnerStep>((s) => ({
         id: s.id,
         title: s.title,
         durationMin: s.duration_min,
-        habitName: s.habit_id ? habitById.get(s.habit_id) ?? null : null
+        habitName: s.habit_id ? habitById.get(s.habit_id) ?? null : null,
+        action: (
+          <StepForm
+            routineId={r.id}
+            step={{ id: s.id, title: s.title, durationMin: s.duration_min, habitId: s.habit_id, position: s.position }}
+            position={s.position}
+            habits={habitOptions}
+          />
+        )
       })),
       completedStepIds: run?.completed_step_ids ?? [],
       due: routineDueToday(r.frequency as Frequency, today),
@@ -75,35 +88,43 @@ export default async function RoutinesPage() {
     const { routine, occ, progress, fits, adherence, runnerSteps, completedStepIds, steps: own } = row;
     return (
       <Card key={routine.id}>
-        <div className="flex items-center gap-2 flex-wrap" style={dimmed ? { opacity: 0.65 } : undefined}>
-          <b className="grow">{routine.name}</b>
-          <Chip kind="info">{routine.frequency}</Chip>
-          {!routine.active && <Chip>Inactiva</Chip>}
-          {occ && (
-            <Chip kind="purple">
-              {occ.title} {occ.start_time.slice(0, 5)}–{occ.end_time.slice(0, 5)}
-            </Chip>
-          )}
-          {!fits && <Chip kind="warn">No cabe en el bloque</Chip>}
-          <Chip kind={adherence >= 70 ? "ok" : adherence >= 40 ? "warn" : "bad"}>{adherence}% a 30 días</Chip>
-          <RoutineForm
-            routine={{
-              id: routine.id,
-              name: routine.name,
-              frequency: routine.frequency,
-              occupationId: routine.occupation_id,
-              active: routine.active
-            }}
-            occupations={occOptions}
+        <div style={dimmed ? { opacity: 0.65 } : undefined}>
+          <CardHeader
+            title={routine.name}
+            meta={
+              <>
+                <Chip kind="info">{routine.frequency}</Chip>
+                {!routine.active && <Chip>Inactiva</Chip>}
+                {occ && (
+                  <Chip kind="purple">
+                    {occ.title} {occ.start_time.slice(0, 5)}–{occ.end_time.slice(0, 5)}
+                  </Chip>
+                )}
+                {!fits && <Chip kind="warn">No cabe en el bloque</Chip>}
+                <Chip kind={adherence >= 70 ? "ok" : adherence >= 40 ? "warn" : "bad"}>{adherence}% a 30 días</Chip>
+              </>
+            }
+            action={
+              <RoutineForm
+                routine={{
+                  id: routine.id,
+                  name: routine.name,
+                  frequency: routine.frequency,
+                  occupationId: routine.occupation_id,
+                  active: routine.active
+                }}
+                occupations={occOptions}
+              />
+            }
           />
         </div>
 
-        <div className="mt-2">
-          <div className="flex justify-between text-xs mb-1" style={{ color: "var(--muted)" }}>
+        <div className="mt-2.5">
+          <div className="flex justify-between gap-2 text-xs mb-1" style={{ color: "var(--muted)" }}>
             <span>
               {progress.done} de {progress.total} pasos
             </span>
-            <span>{progress.remainingMin} min por delante</span>
+            <span className="flex-shrink-0">{progress.remainingMin} min por delante</span>
           </div>
           <Progress pct={progress.pct} kind={!fits ? "warn" : undefined} />
         </div>
@@ -111,26 +132,27 @@ export default async function RoutinesPage() {
         {row.due && routine.active ? (
           <RoutineRunner routineId={routine.id} steps={runnerSteps} completedStepIds={completedStepIds} today={today} />
         ) : (
-          <div className="mt-2 flex flex-col gap-1">
+          <div className="mt-2.5 flex flex-col">
             {own.map((s) => (
-              <div key={s.id} className="text-sm" style={{ color: "var(--muted)" }}>
-                {s.title} · {s.duration_min} min
+              <div key={s.id} className="flex items-start gap-2 py-1.5" style={{ borderTop: "1px solid var(--line)" }}>
+                <span className="grow min-w-0 text-sm" style={{ color: "var(--muted)", overflowWrap: "anywhere" }}>
+                  {s.title} · {s.duration_min} min
+                </span>
+                <span className="flex-shrink-0">
+                  <StepForm
+                    routineId={routine.id}
+                    step={{ id: s.id, title: s.title, durationMin: s.duration_min, habitId: s.habit_id, position: s.position }}
+                    position={s.position}
+                    habits={habitOptions}
+                  />
+                </span>
               </div>
             ))}
           </div>
         )}
 
-        <div className="mt-2 flex items-center gap-2 flex-wrap justify-end">
-          {own.map((s) => (
-            <StepForm
-              key={s.id}
-              routineId={routine.id}
-              step={{ id: s.id, title: s.title, durationMin: s.duration_min, habitId: s.habit_id, position: s.position }}
-              position={s.position}
-              habits={habitOptions}
-            />
-          ))}
-          <StepForm routineId={routine.id} position={own.length} habits={habitOptions} />
+        <div className="mt-2.5">
+          <StepForm routineId={routine.id} position={own.length} habits={habitOptions} block />
         </div>
       </Card>
     );
@@ -138,15 +160,12 @@ export default async function RoutinesPage() {
 
   return (
     <div className="flex flex-col gap-3.5">
-      <div className="text-sm p-2.5 rounded-r-xl" style={{ background: "color-mix(in srgb, var(--c-orange) 9%, var(--surface))", borderLeft: "3px solid var(--c-orange)" }}>
+      <ModuleNote>
         Una rutina solo aporta el orden de sus pasos: el bloque horario sigue viviendo en Autogestión del Tiempo y la racha
         sigue viviendo en Hábitos. Completar un paso ligado a un hábito lo marca allá, sin duplicarlo.
-      </div>
+      </ModuleNote>
 
-      <div className="flex items-center justify-between">
-        <h3 className="font-bold">Rutinas de hoy</h3>
-        <RoutineForm occupations={occOptions} />
-      </div>
+      <SectionHeader action={<RoutineForm occupations={occOptions} />}>Rutinas de hoy</SectionHeader>
 
       {!rows.length && (
         <Card>

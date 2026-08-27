@@ -257,6 +257,23 @@ textarea {
   min-height: 44px;
   width: 100%;
 }
+/* La casilla y el radio NO son un campo de texto: heredaban de la regla de
+   arriba el 100 % de ancho y los 44px de alto, y la lista de pasos de una
+   rutina dejaba de leerse como una lista. Se corrige aquí, en el origen, en vez
+   de repetir `style={{ width: "auto", minHeight: "auto" }}` en cada llamada.
+
+   `input:where(...)` pesa lo MISMO que el `input` de arriba (:where no suma
+   especificidad): gana por orden, y cualquier regla de clase —.mb-check,
+   .ex-menu-check, .mb-menu-check— sigue mandando sobre ambas. */
+input:where([type="checkbox"], [type="radio"]) {
+  width: 18px;
+  height: 18px;
+  min-height: auto;
+  padding: 0;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
 input:focus,
 select:focus,
 textarea:focus {
@@ -922,6 +939,12 @@ textarea:focus {
   textarea {
     min-height: 46px;
     font-size: 16px; /* evita el zoom automático de iOS Safari en focus */
+  }
+  /* Área táctil algo mayor para la casilla, sin deformarla. */
+  input:where([type="checkbox"], [type="radio"]) {
+    min-height: auto;
+    width: 20px;
+    height: 20px;
   }
 }
 
