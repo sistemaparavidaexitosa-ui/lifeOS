@@ -7,6 +7,7 @@
 // ahora se importan directamente del dominio (una sola tabla, no una copia).
 import { useState, useTransition } from "react";
 import { setTaskStatus } from "./actions";
+import MenuSurface, { useMenuAnchor } from "./MenuSurface";
 import { STATUS_META, TASK_TRANSITIONS } from "./status-meta";
 import type { TaskStatus } from "@/lib/domain/types.ts";
 
@@ -21,14 +22,14 @@ export default function StatusMenu({
   onChange: (s: TaskStatus) => void;
   onError?: (message: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const menu = useMenuAnchor();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const allowed = TASK_TRANSITIONS[status];
   const meta = STATUS_META[status];
 
   function choose(to: TaskStatus) {
-    setOpen(false);
+    menu.close();
     const previous = status;
     onChange(to);
     startTransition(async () => {
@@ -50,17 +51,16 @@ export default function StatusMenu({
         type="button"
         className="mb-pill"
         style={{ background: meta.color, opacity: pending ? 0.7 : 1, cursor: allowed.length ? "pointer" : "default" }}
-        onClick={() => allowed.length > 0 && setOpen((v) => !v)}
+        onClick={(e) => allowed.length > 0 && menu.toggle(e)}
         aria-haspopup="menu"
-        aria-expanded={open}
+        aria-expanded={menu.open}
         title={allowed.length ? "Cambiar estado" : "Estado final: no admite más transiciones"}
       >
         {meta.label}
       </button>
-      {open && (
-        <>
-          <div className="ex-backdrop" onClick={() => setOpen(false)} />
-          <div className="mb-menu card" role="menu">
+      {menu.open && (
+        <MenuSurface anchor={menu.anchor} onClose={menu.close} label="Cambiar estado">
+          <div className="ex-menu-list">
             {allowed.map((to) => (
               <button
                 key={to}
@@ -74,7 +74,7 @@ export default function StatusMenu({
               </button>
             ))}
           </div>
-        </>
+        </MenuSurface>
       )}
       {error && <span className="mb-inline-error text-xs">{error}</span>}
     </div>

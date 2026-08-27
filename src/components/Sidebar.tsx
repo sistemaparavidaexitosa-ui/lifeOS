@@ -30,7 +30,7 @@ function SidebarInner({ open, onClose }: { open: boolean; onClose: () => void })
 
   return (
     <aside
-      className={`fixed md:sticky top-0 left-0 h-dvh md:h-screen overflow-y-auto overflow-x-hidden z-[60] md:z-auto transition-transform duration-200 ${
+      className={`fixed md:sticky top-0 left-0 h-dvh md:h-screen overflow-y-auto overflow-x-hidden ex-nav-layer md:z-auto transition-transform duration-200 ${
         open ? "translate-x-0" : "-translate-x-full md:translate-x-0"
       }`}
       style={{
