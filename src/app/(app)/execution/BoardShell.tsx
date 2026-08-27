@@ -256,8 +256,6 @@ export default function BoardShell({
         sort={sort}
         onSortChange={setSort}
         members={members}
-        stats={stats}
-        filteredCount={filteredStats.total}
         filtersActive={filtersActive}
       />
 

@@ -1121,67 +1121,178 @@ textarea:focus {
   color: var(--accent-d);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
 }
-.ex-toolbar-controls {
+
+/* --- Ribbon de acciones (estilo monday: buscar / persona / filtro / …) --- */
+.ex-ribbon {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 2px;
   flex-wrap: wrap;
+  border-top: 1px solid var(--line);
+  padding-top: 7px;
 }
-.ex-toolbar-controls .ex-search {
-  flex: 1;
-  min-width: 160px;
-}
-.ex-sort {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--muted);
-}
-.ex-sort select {
-  min-height: 36px;
-  padding: 5px 8px;
-  border-radius: 10px;
-  width: auto;
-}
-.ex-chips {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.ex-stat-chip {
+.ex-rib-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 11.5px;
-  font-weight: 650;
-  color: var(--muted);
-  background: var(--surface2);
-  border-radius: 999px;
-  padding: 3px 10px;
-  border-left: 3px solid var(--chip-color, var(--muted));
-}
-.ex-stat-chip b {
+  gap: 7px;
+  border: none;
+  background: transparent;
   color: var(--text);
-  font-weight: 850;
+  font-size: 13px;
+  font-weight: 650;
+  padding: 7px 11px;
+  border-radius: 10px;
+  min-height: auto;
+  cursor: pointer;
+  transition: background 0.13s ease, color 0.13s ease;
 }
-.ex-filter-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  border-top: 1px solid var(--line);
-  padding-top: 10px;
-}
-.ex-filter-group {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.ex-filter-title {
-  font-size: 11px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+.ex-rib-btn svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
   color: var(--muted);
+}
+.ex-rib-btn:hover,
+.ex-rib-btn.open {
+  background: var(--surface2);
+}
+.ex-rib-btn:hover svg,
+.ex-rib-btn.open svg {
+  color: var(--text);
+}
+/* Un filtro puesto se ve en su propio botón — por eso ya no hace falta el
+   panel de filtros siempre abierto ni la fila de chips de resumen. */
+.ex-rib-btn.active,
+.ex-rib-btn.active:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent-d);
+}
+.ex-rib-btn.active svg {
+  color: var(--accent-d);
+}
+.ex-rib-btn .ex-rib-caret {
+  width: 14px;
+  height: 14px;
+  margin-left: -3px;
+}
+.ex-rib-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 800;
+}
+.ex-rib-value {
+  max-width: 132px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--accent-d);
+  font-weight: 750;
+}
+.ex-rib-clear {
+  margin-left: auto;
+  color: var(--muted);
+}
+.ex-rib-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1 1 190px;
+  max-width: 300px;
+  height: 34px;
+  padding: 0 6px 0 11px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--surface2);
+}
+.ex-rib-search:focus-within {
+  background: var(--surface);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.ex-rib-search svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  color: var(--muted);
+}
+.ex-rib-search input {
+  flex: 1;
+  min-width: 0;
+  min-height: auto;
+  padding: 0;
+  border: none;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+.ex-rib-x {
+  display: inline-flex;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 3px;
+  border-radius: 999px;
+  min-height: auto;
+  cursor: pointer;
+}
+.ex-rib-x:hover {
+  background: var(--surface3);
+  color: var(--text);
+}
+.ex-rib-x svg {
+  width: 14px;
+  height: 14px;
+}
+.ex-rib-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  flex: none;
+}
+.ex-rib-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--surface3);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+/* Opción de valor único dentro de un popover (Ordenar, Fechas). */
+.ex-menu-opt {
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 6px 8px;
+  border-radius: 8px;
+  min-height: auto;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ex-menu-opt:hover {
+  background: var(--surface2);
+}
+.ex-menu-opt.active {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  color: var(--accent-d);
+  font-weight: 750;
 }
 .ex-filter-row {
   display: flex;
@@ -1202,11 +1313,6 @@ textarea:focus {
 .ex-filter-pill.active {
   background: color-mix(in srgb, currentColor 14%, transparent);
   box-shadow: inset 0 0 0 1px currentColor;
-}
-.ex-filter-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
 }
 .ex-alert {
   display: flex;
@@ -1661,15 +1767,13 @@ textarea:focus {
     padding: 6px 9px;
     font-size: 12px;
   }
-  .ex-toolbar-controls .ex-search {
+  .ex-rib-btn {
+    padding: 7px 9px;
+    font-size: 12.5px;
+  }
+  .ex-rib-search {
     flex: 1 1 100%;
-  }
-  .ex-sort {
-    flex: 1 1 auto;
-  }
-  .ex-sort select {
-    flex: 1;
-    min-width: 0;
+    max-width: none;
   }
 }
 
@@ -1963,12 +2067,6 @@ textarea:focus {
   color: var(--accent-d);
   box-shadow: var(--shadow-sm);
 }
-.ex-stat-chip {
-  border-radius: 999px;
-  font-size: 11.5px;
-  font-weight: 700;
-}
-
 /* --- Navegador de tableros --------------------------------------------- */
 .ex-sidebar {
   border-radius: 16px;
