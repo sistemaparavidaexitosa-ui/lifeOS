@@ -9,6 +9,7 @@ import {
   normalizeGoogleBooks,
   fillGaps,
   isAllowedCoverUrl,
+  coverProxyUrl,
   type BookCandidate
 } from "../../src/lib/domain/development/book-lookup.ts";
 
@@ -144,4 +145,35 @@ test("dedupeByTitle: no colapsa títulos distintos ni reordena", () => {
   const a: BookCandidate = { title: "Uno", author: "A", totalPages: 1, coverUrl: "", isbn: "", source: "openlibrary" };
   const b: BookCandidate = { title: "Dos", author: "B", totalPages: 2, coverUrl: "", isbn: "", source: "openlibrary" };
   assert.deepStrictEqual(dedupeByTitle([a, b]), [a, b]);
+});
+
+test("coverProxyUrl: la portada se pide a nuestro origen, nunca al proveedor", () => {
+  // covers.openlibrary.org responde 302 hacia archive.org y la CSP se evalúa en
+  // cada salto: pedirla directo desde el <img> deja la portada rota.
+  assert.strictEqual(
+    coverProxyUrl("https://covers.openlibrary.org/b/id/12539702-M.jpg"),
+    "/api/development/book-cover?url=https%3A%2F%2Fcovers.openlibrary.org%2Fb%2Fid%2F12539702-M.jpg"
+  );
+});
+
+test("coverProxyUrl: escapa la query del proveedor en vez de dejarla suelta", () => {
+  // La miniatura de Google Books trae `&` y `?`: sin encodeURIComponent, el
+  // `&img=1` se leería como otro parámetro NUESTRO y el proxy recibiría una
+  // url truncada.
+  const url = coverProxyUrl("https://books.google.com/books/content?id=abc&img=1&zoom=1");
+  assert.strictEqual(url, "/api/development/book-cover?url=https%3A%2F%2Fbooks.google.com%2Fbooks%2Fcontent%3Fid%3Dabc%26img%3D1%26zoom%3D1");
+  // Y al leerla del otro lado se recupera intacta.
+  assert.strictEqual(
+    new URLSearchParams(url.split("?")[1]).get("url"),
+    "https://books.google.com/books/content?id=abc&img=1&zoom=1"
+  );
+});
+
+test("coverProxyUrl: sin portada y url no permitida dan lo mismo, cadena vacía", () => {
+  // "" hace que BookCover pinte el placeholder en vez de disparar una petición
+  // que el handler rechazaría igual.
+  assert.strictEqual(coverProxyUrl(""), "");
+  assert.strictEqual(coverProxyUrl("https://evil.example/portada.jpg"), "");
+  assert.strictEqual(coverProxyUrl("http://covers.openlibrary.org/b/id/1-M.jpg"), "");
+  assert.strictEqual(coverProxyUrl("javascript:alert(1)"), "");
 });

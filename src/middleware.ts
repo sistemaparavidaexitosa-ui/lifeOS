@@ -40,12 +40,16 @@ export async function middleware(request: NextRequest) {
     `default-src 'self'`,
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
     `style-src 'self' 'unsafe-inline'`,
-    // Portadas de libros (§5.1, Fase 4): la búsqueda de metadatos corre en el
-    // servidor, pero la imagen la pide el navegador directo al proveedor —
-    // se guarda la URL, no el archivo. Son los dos únicos hosts de terceros
-    // que la app carga en el navegador; el resto de integraciones son
-    // servidor a servidor y no tocan la CSP (D-002).
-    `img-src 'self' data: blob: https://covers.openlibrary.org https://books.google.com`,
+    // Portadas de libros (§5.1, Fase 4): NINGÚN host de tercero aquí, a
+    // propósito. Se intentó y no funciona: covers.openlibrary.org responde
+    // 302 hacia archive.org, que redirige a un nodo iaNNNNNN.us.archive.org
+    // distinto entre peticiones, y la CSP se evalúa en CADA salto — permitir
+    // el primer host no autoriza los siguientes, así que la portada quedaba
+    // rota (2026-08-26). La imagen la sirve ahora nuestro propio origen desde
+    // /api/development/book-cover, así que `'self'` alcanza y esta línea deja
+    // de depender de dónde guarde Open Library sus archivos.
+    // Se sigue guardando la URL, no el archivo (D-002).
+    `img-src 'self' data: blob:`,
     `font-src 'self' data:`,
     `connect-src 'self' ${supabaseHost} https://*.supabase.co wss://*.supabase.co`,
     `frame-ancestors 'none'`,
