@@ -1061,8 +1061,18 @@ textarea:focus {
 /* Execution OS — Cartera de proyectos, barra de herramientas, Kanban,      */
 /* Tabla y Timeline. Reutiliza los tokens existentes — cero colores nuevos. */
 /* ----------------------------------------------------------------------- */
+/* La fila del tablero ocupa TODO el ancho de su contenedor, y la columna de
+   título es la que lleva el `1fr`: cuanto más ancho, más se estira ese hueco
+   y más lejos quedan los metadatos del nombre al que describen. Bajar la app
+   de 1600 a 1240px no bastó porque 1240 sigue sobrando para 574px de columnas
+   fijas. Aquí se fija la medida del módulo, no la de la app: cabecera, ribbon
+   y filas se estrechan JUNTOS, que es lo que evita que unos queden alineados
+   y otras no. Es el único sitio donde tocar esto. */
 .ex-main {
   min-width: 0;
+  width: 100%;
+  max-width: 1060px;
+  margin-inline: auto;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -1099,7 +1109,7 @@ textarea:focus {
   flex: 1 1 100%;
 }
 .ex-portfolio-board {
-  --mb-cols: minmax(240px, 1fr) 158px 136px 150px 168px;
+  --mb-cols: minmax(220px, 1fr) 150px 128px 140px 160px;
 }
 .ex-portfolio-title {
   font-size: 13.5px;
@@ -2042,7 +2052,7 @@ textarea:focus {
   /* Columnas más anchas: 104px no alcanzaban para "Sin empezar" ni para un
      rango "12 sep - 30 sep", que se cortaban con puntos suspensivos. El
      título arranca en 240px para que nunca quede reducido a dos palabras. */
-  --mb-cols: minmax(240px, 1fr) 132px 158px 136px 186px;
+  --mb-cols: minmax(220px, 1fr) 120px 150px 128px 176px;
 }
 .mb-group {
   border-radius: 16px;
@@ -2051,7 +2061,7 @@ textarea:focus {
   margin-bottom: 16px;
 }
 .mb-group-head {
-  padding: 11px 14px;
+  padding: 9px 14px;
   gap: 10px;
   font-size: 14px;
   letter-spacing: -0.01em;
@@ -2067,8 +2077,8 @@ textarea:focus {
   background: color-mix(in srgb, var(--surface2) 55%, var(--surface));
 }
 .mb-row {
-  padding: 9px 14px;
-  min-height: 52px;
+  padding: 7px 14px;
+  min-height: 46px;
   border-top-color: color-mix(in srgb, var(--line) 70%, transparent);
   transition: background 0.12s ease, box-shadow 0.12s ease;
 }
