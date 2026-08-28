@@ -1191,7 +1191,12 @@ textarea:focus {
   gap: 4px;
 }
 /* --- Encabezado del tablero -------------------------------------------- */
+/* El "⋯" se ancla a la esquina: en el flujo ocupaba una FILA entera de la
+   cabecera para un botón de 44px, con todo el ancho restante vacío a su
+   izquierda. Sacarlo del flujo devuelve esa línea al proyecto. El
+   padding-right reserva su hueco para que el título no se le meta debajo. */
 .ex-header {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1199,6 +1204,7 @@ textarea:focus {
   border: 1px solid var(--line);
   border-radius: var(--r2);
   padding: 14px 16px;
+  padding-right: 66px;
 }
 .ex-header-main {
   display: flex;
@@ -1230,11 +1236,12 @@ textarea:focus {
   white-space: nowrap;
 }
 .ex-header-actions {
+  position: absolute;
+  top: 12px;
+  right: 12px;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   gap: 8px;
-  flex-wrap: wrap;
 }
 .ex-header-more {
   min-width: 44px;
@@ -2194,6 +2201,7 @@ textarea:focus {
 .ex-header {
   border-radius: 16px;
   padding: 16px 18px;
+  padding-right: 68px;
   box-shadow: var(--shadow-sm);
 }
 .ex-header-title {
@@ -2233,25 +2241,40 @@ textarea:focus {
   .mb-group {
     margin-bottom: 12px;
   }
+  /* DENSIDAD EN MÓVIL. Apilada, la fila medía ~104px: con cinco tareas ya
+     había que hacer scroll para ver el grupo entero. El desglose era
+     revelador — 46px se los llevaba el título, 32px las pastillas, 26px el
+     relleno y los huecos. Se recorta cada parte sin bajar de un área táctil
+     usable, hasta ~72px. */
   .mb-row {
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    gap: 10px;
-    padding: 13px 14px;
+    gap: 5px;
+    padding: 6px 12px;
     min-height: 0;
   }
   .mb-row + .mb-row {
     border-top: 1px solid var(--line);
   }
   .mb-row-item {
-    gap: 8px;
+    gap: 6px;
   }
+  /* EL MAYOR CULPABLE: el título de la fila es un <input>, así que heredaba
+     el `min-height: 46px` que la regla base da a los campos en móvil. Casi la
+     mitad del alto de la fila la ponía un campo con UNA línea de texto —
+     .mb-row-title nunca lo anuló, a diferencia de .mb-group-name. */
   .mb-row-title {
     flex: 1 1 100%;
-    font-size: 14.5px;
+    min-height: auto;
+    font-size: 14px;
     font-weight: 650;
-    padding: 4px 6px;
+    padding: 2px 6px;
+  }
+  /* El asa de arrastre no sirve en táctil —el arrastre HTML5 no existe ahí— y
+     ya se pintaba invisible; ocupando sitio, eso sí. */
+  .mb-drag {
+    display: none;
   }
   /* Las cuatro celdas de metadatos fluyen en una sola línea envolvente, cada
      una con su ancho natural, en vez de repartirse en cuadrantes fijos. */
@@ -2269,7 +2292,7 @@ textarea:focus {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
+    gap: 5px;
   }
   .mb-row-meta .mb-cell {
     display: inline-flex;
@@ -2278,11 +2301,20 @@ textarea:focus {
   .mb-timeline {
     width: auto;
     min-width: 0;
-    padding-left: 11px;
-    padding-right: 11px;
+    min-height: 26px;
+    padding: 3px 10px;
   }
   .mb-row-tools {
     margin-left: auto;
+  }
+  /* Los botones de la fila son acciones secundarias (detalle, subtarea,
+     borrar) y son los que marcan el alto de la primera línea: 30px se pulsan
+     bien y no inflan la fila. Los del grupo se quedan en 38px porque son los
+     únicos de su cabecera. */
+  .mb-row-tools .mb-icon-btn {
+    min-height: 30px;
+    min-width: 30px;
+    padding: 4px 6px;
   }
   /* La celda de avance es la única que no es una pastilla: en la línea
      envolvente necesita ancho propio o la barra queda de dos píxeles. */
@@ -2291,8 +2323,15 @@ textarea:focus {
   }
   .ex-portfolio-title {
     flex: 1 1 100%;
-    font-size: 14.5px;
+    font-size: 14px;
+    padding: 2px 6px;
     white-space: normal;
+  }
+  .ex-portfolio-progress {
+    gap: 6px;
+  }
+  .mb-group-head {
+    padding: 8px 12px;
   }
 }
 
@@ -2390,16 +2429,14 @@ textarea:focus {
      la derecha, donde "✨ Sugerir secuencia" y "⋯" quedaban descolgados. */
   .ex-header {
     padding: 14px;
+    padding-right: 60px;
   }
   .ex-header-title {
     font-size: 1.15rem;
   }
   .ex-header-actions {
-    justify-content: flex-start;
-  }
-  .ex-header-actions > button:first-child,
-  .ex-header-actions > .btn-ghost:first-child {
-    flex: 1 1 auto;
+    top: 10px;
+    right: 10px;
   }
 
   /* La barra de la cartera: buscador arriba, filtro y "+ Nuevo proyecto"
