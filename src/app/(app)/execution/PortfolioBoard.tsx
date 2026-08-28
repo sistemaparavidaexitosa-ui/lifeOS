@@ -17,10 +17,10 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Progress } from "@/components/ui";
-import { IconCalendar } from "@/components/icons";
+import { IconCalendar, IconTrash } from "@/components/icons";
 import MenuSurface, { useMenuAnchor } from "./MenuSurface";
 import { PRIORITY_META, PRIORITY_ORDER, PROJECT_OPEN_STATUSES, PROJECT_STATUS_META, PROJECT_STATUS_ORDER } from "./status-meta";
-import { patchProject, type ProjectPatch } from "./actions";
+import { deleteProject, patchProject, type ProjectPatch } from "./actions";
 import type { Priority, ProjectStatus } from "@/lib/domain/types.ts";
 
 export interface PortfolioProject {
@@ -64,6 +64,18 @@ export default function PortfolioBoard({
       return true;
     });
   }, [rows, query, scope]);
+
+  function remove(project: PortfolioProject) {
+    const detail = project.taskCount > 0 ? ` y sus ${project.taskCount} tarea(s)` : "";
+    if (!window.confirm(`¿Eliminar "${project.title}"${detail}? Esta acción no se puede deshacer.`)) return;
+
+    const previous = rows;
+    setRows((prev) => prev.filter((p) => p.id !== project.id));
+    deleteProject(project.id).catch((e) => {
+      setRows(previous);
+      setError(e instanceof Error ? e.message : "No se pudo eliminar el proyecto");
+    });
+  }
 
   function apply(id: string, patch: ProjectPatch) {
     const previous = rows;
@@ -160,7 +172,7 @@ export default function PortfolioBoard({
           </div>
 
           {visible.map((p) => (
-            <ProjectRow key={p.id} project={p} view={view} onPatch={(patch) => apply(p.id, patch)} />
+            <ProjectRow key={p.id} project={p} view={view} onPatch={(patch) => apply(p.id, patch)} onDelete={() => remove(p)} />
           ))}
 
           {!visible.length && <p className="mb-empty">Ningún proyecto coincide con la búsqueda.</p>}
@@ -173,11 +185,13 @@ export default function PortfolioBoard({
 function ProjectRow({
   project,
   view,
-  onPatch
+  onPatch,
+  onDelete
 }: {
   project: PortfolioProject;
   view: string;
   onPatch: (patch: ProjectPatch) => void;
+  onDelete: () => void;
 }) {
   return (
     <div className="mb-row">
@@ -193,6 +207,20 @@ function ProjectRow({
         {project.overdueCount > 0 && (
           <span className="chip bad mb-urgent">{project.overdueCount} vencidas</span>
         )}
+
+        {/* Mismo sitio y mismo icono que el borrado de una tarea en MondayRow:
+            si la fila de proyecto imita a la de tarea, sus acciones también. */}
+        <span className="mb-row-tools">
+          <button
+            type="button"
+            className="mb-icon-btn danger"
+            onClick={onDelete}
+            title={`Eliminar ${project.title}`}
+            aria-label={`Eliminar proyecto ${project.title}`}
+          >
+            <IconTrash />
+          </button>
+        </span>
       </div>
 
       <div className="mb-row-meta">

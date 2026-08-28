@@ -29,8 +29,9 @@ export default function BoardHeader({
 }) {
   return (
     <header className="ex-header">
+      <h2 className="ex-header-title">{project.title}</h2>
+
       <div className="ex-header-main">
-        <h2 className="ex-header-title">{project.title}</h2>
         <Chip kind={project.status === "Active" ? "accent" : project.status === "Completed" ? "ok" : ""}>{project.status}</Chip>
         <Chip kind={project.priority === "High" ? "bad" : project.priority === "Medium" ? "warn" : ""}>
           Prioridad {project.priority}
@@ -50,7 +51,12 @@ export default function BoardHeader({
 
       <div className="ex-header-actions">
         <SequenceButton projectId={project.id} tasks={sequenceTasks} />
-        <ProjectMenu project={project} logbookEntries={logbookEntries} knowledgeItems={knowledgeItems} />
+        <ProjectMenu
+          project={project}
+          taskCount={taskCount}
+          logbookEntries={logbookEntries}
+          knowledgeItems={knowledgeItems}
+        />
       </div>
     </header>
   );

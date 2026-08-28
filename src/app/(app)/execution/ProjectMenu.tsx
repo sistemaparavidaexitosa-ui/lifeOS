@@ -1,21 +1,25 @@
 "use client";
-// Punto 2 — Menú de tres puntitos por proyecto.
+// Menú "⋯" del proyecto: editar, bitácora, base de conocimiento y eliminar.
 //
-// Reemplaza la exhibición SIEMPRE-VISIBLE de LogbookCard + KnowledgeCard al
-// final de la expansión del proyecto (en page.tsx). Ahora esas 2 tarjetas —
-// más "Editar proyecto" — viven detrás de un botón "⋯" que abre un Drawer
-// lateral bajo demanda, reutilizando las clases .td-* ya existentes en
-// globals.css (el mismo Drawer del detalle de tarea, Fase 3). Cero CSS nuevo.
+// Sus paneles viven en el Drawer lateral (.td-*), el mismo del detalle de
+// tarea: lateral en escritorio, hoja desde abajo en móvil.
 //
-// No duplica lógica: LogbookCard/KnowledgeCard se siguen usando tal cual (con
-// sus Server Actions de logbook-knowledge-actions.ts) y "Editar proyecto"
-// reutiliza updateProject (nueva Server Action en actions.ts).
-import { useState } from "react";
+// FIX (móvil): este era el ÚNICO popover del módulo que seguía con
+// posicionamiento a mano — `position: absolute; right: 0; top: calc(100% +
+// 6px)` y su z-index escrito en línea. Cuando se unificaron los menús en
+// MenuSurface se quedó fuera, y por eso era el que se encimaba: `absolute` lo
+// recorta cualquier ancestro con overflow y no sabe voltearse cuando nace
+// pegado al borde inferior de la pantalla. Ahora usa MenuSurface como los
+// demás, así que hereda el volteo arriba/abajo y el recorte contra la ventana.
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import LogbookCard from "./LogbookCard";
 import KnowledgeCard from "./KnowledgeCard";
 import EditProjectForm from "./EditProjectForm";
+import MenuSurface, { useMenuAnchor } from "./MenuSurface";
+import { deleteProject } from "./actions";
 import type { LogEntry, KnowledgeItem } from "./logbook-knowledge-actions";
-import { IconClose } from "@/components/icons";
+import { IconClose, IconTrash } from "@/components/icons";
 
 export interface ProjectMenuData {
   id: string;
@@ -26,74 +30,65 @@ export interface ProjectMenuData {
   targetDate: string | null;
 }
 
-type Panel = "edit" | "logbook" | "knowledge" | null;
+type Panel = "edit" | "logbook" | "knowledge" | "delete" | null;
+
+const PANEL_TITLE: Record<Exclude<Panel, null>, string> = {
+  edit: "Editar proyecto",
+  logbook: "Bitácora",
+  knowledge: "Base de conocimiento",
+  delete: "Eliminar proyecto"
+};
 
 export default function ProjectMenu({
   project,
+  taskCount,
   logbookEntries,
   knowledgeItems
 }: {
   project: ProjectMenuData;
+  /** Cuántas tareas se van con el proyecto: el aviso tiene que decirlo. */
+  taskCount: number;
   logbookEntries: LogEntry[];
   knowledgeItems: KnowledgeItem[];
 }) {
-  const [open, setOpen] = useState(false);
+  const menu = useMenuAnchor();
   const [panel, setPanel] = useState<Panel>(null);
 
   function openPanel(p: Panel) {
-    setOpen(false);
+    menu.close();
     setPanel(p);
   }
 
-  const panelTitle =
-    panel === "edit" ? "Editar proyecto" : panel === "logbook" ? "Bitácora" : "Base de conocimiento";
-
   return (
-    <div style={{ position: "relative" }}>
+    <>
       <button
         type="button"
-        className="btn-ghost btn-sm"
-        onClick={() => setOpen((v) => !v)}
+        className="btn-ghost btn-sm ex-header-more"
+        onClick={menu.toggle}
         aria-label="Opciones del proyecto"
         aria-haspopup="menu"
-        aria-expanded={open}
-        style={{ minWidth: 40, padding: "6px 12px", fontWeight: 900, letterSpacing: 2, lineHeight: 1 }}
+        aria-expanded={menu.open}
       >
         ⋯
       </button>
 
-      {open && (
-        <>
-          {/* backdrop transparente para cerrar al hacer clic fuera */}
-          <div className="ex-backdrop" onClick={() => setOpen(false)} />
-          <div
-            role="menu"
-            style={{
-              position: "absolute",
-              right: 0,
-              top: "calc(100% + 6px)",
-              zIndex: "var(--z-popover)",
-              background: "var(--surface)",
-              border: "1px solid var(--line)",
-              borderRadius: 12,
-              boxShadow: "var(--shadow)",
-              minWidth: 230,
-              padding: 6
-            }}
-          >
+      {menu.open && (
+        <MenuSurface anchor={menu.anchor} onClose={menu.close} align="end" width={236} label="Opciones del proyecto">
+          <div className="ex-menu-list">
             <MenuItem icon="✏️" label="Editar proyecto" onClick={() => openPanel("edit")} />
             <MenuItem icon="📓" label="Bitácora" onClick={() => openPanel("logbook")} />
             <MenuItem icon="📚" label="Base de conocimiento" onClick={() => openPanel("knowledge")} />
+            <MenuItem icon="🗑️" label="Eliminar proyecto" danger onClick={() => openPanel("delete")} />
           </div>
-        </>
+        </MenuSurface>
       )}
 
       {panel && (
         <>
           <div className="td-backdrop" onClick={() => setPanel(null)} />
-          <aside className="td-drawer" role="dialog" aria-modal="true" aria-label={panelTitle}>
+          <aside className="td-drawer" role="dialog" aria-modal="true" aria-label={PANEL_TITLE[panel]}>
             <div className="td-drawer-header">
-              <b className="td-drawer-title">{panelTitle}</b>
+              <b className="td-drawer-title">{PANEL_TITLE[panel]}</b>
               <button type="button" className="td-drawer-close" onClick={() => setPanel(null)} aria-label="Cerrar">
                 <IconClose />
               </button>
@@ -102,38 +97,119 @@ export default function ProjectMenu({
               {panel === "edit" && <EditProjectForm project={project} onSaved={() => setPanel(null)} />}
               {panel === "logbook" && <LogbookCard projectId={project.id} entries={logbookEntries} />}
               {panel === "knowledge" && <KnowledgeCard projectId={project.id} items={knowledgeItems} />}
+              {panel === "delete" && (
+                <DeleteProjectPanel project={project} taskCount={taskCount} onCancel={() => setPanel(null)} />
+              )}
             </div>
           </aside>
         </>
       )}
+    </>
+  );
+}
+
+/**
+ * Borrar un proyecto se lleva por delante todas sus tareas, así que no basta
+ * un window.confirm: hay que teclear el título. Es la misma barrera que usa
+ * GitHub para borrar un repositorio, y por la misma razón — el clic de más se
+ * da por reflejo, teclear un nombre no.
+ */
+function DeleteProjectPanel({
+  project,
+  taskCount,
+  onCancel
+}: {
+  project: ProjectMenuData;
+  taskCount: number;
+  onCancel: () => void;
+}) {
+  const router = useRouter();
+  const [typed, setTyped] = useState("");
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const matches = typed.trim() === project.title.trim();
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="ex-danger-note">
+        <b>Esto no se puede deshacer.</b> Se eliminarán el proyecto{" "}
+        <b style={{ overflowWrap: "anywhere" }}>{project.title}</b>
+        {taskCount > 0 ? (
+          <>
+            {" "}
+            y sus <b>{taskCount}</b> tarea{taskCount === 1 ? "" : "s"}, con sus grupos, responsables, archivos y
+            comentarios.
+          </>
+        ) : (
+          <> y sus grupos.</>
+        )}
+      </div>
+
+      <p className="text-xs" style={{ color: "var(--muted)" }}>
+        Tu bitácora y tu base de conocimiento NO se borran: son tuyas, no del proyecto, y siguen disponibles.
+      </p>
+
+      <label className="text-xs flex flex-col gap-1" style={{ color: "var(--muted)" }}>
+        Escribe <b style={{ color: "var(--text)", overflowWrap: "anywhere" }}>{project.title}</b> para confirmar
+        <input
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+          placeholder="Título del proyecto"
+          aria-label="Confirmar título del proyecto"
+          autoComplete="off"
+        />
+      </label>
+
+      {error && (
+        <div className="text-xs" style={{ color: "var(--danger)" }}>
+          {error}
+        </div>
+      )}
+
+      <div className="flex flex-col-reverse sm:flex-row sm:items-center gap-2">
+        <button type="button" className="btn-ghost btn-sm w-full sm:w-auto" onClick={onCancel} disabled={pending}>
+          Cancelar
+        </button>
+        <span className="hidden sm:block grow" />
+        <button
+          type="button"
+          className="btn-danger btn-sm w-full sm:w-auto"
+          disabled={!matches || pending}
+          onClick={() =>
+            startTransition(async () => {
+              try {
+                await deleteProject(project.id);
+                // El tablero que se estaba viendo ya no existe: volver a la
+                // cartera es lo único coherente.
+                router.push("/execution");
+                router.refresh();
+              } catch (e) {
+                setError(e instanceof Error ? e.message : "No se pudo eliminar el proyecto");
+              }
+            })
+          }
+        >
+          <IconTrash width={15} height={15} />
+          {pending ? "Eliminando…" : "Eliminar proyecto"}
+        </button>
+      </div>
     </div>
   );
 }
 
-function MenuItem({ icon, label, onClick }: { icon: string; label: string; onClick: () => void }) {
+function MenuItem({
+  icon,
+  label,
+  onClick,
+  danger = false
+}: {
+  icon: string;
+  label: string;
+  onClick: () => void;
+  danger?: boolean;
+}) {
   return (
-    <button
-      type="button"
-      role="menuitem"
-      onClick={onClick}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        width: "100%",
-        border: "none",
-        background: "transparent",
-        padding: "9px 10px",
-        borderRadius: 8,
-        textAlign: "left",
-        cursor: "pointer",
-        color: "var(--text)",
-        fontWeight: 600,
-        minHeight: "auto"
-      }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface2)")}
-      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-    >
+    <button type="button" role="menuitem" onClick={onClick} className={`ex-menu-item${danger ? " danger" : ""}`}>
       <span aria-hidden>{icon}</span>
       {label}
     </button>

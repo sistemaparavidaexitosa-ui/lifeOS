@@ -148,8 +148,8 @@ export default function MondayBoard({
   // Grupos
   // -------------------------------------------------------------------------
 
-  function handleCreateGroup() {
-    const name = newGroupName.trim();
+  function handleCreateGroup(explicitName?: string) {
+    const name = (explicitName ?? newGroupName).trim();
     if (!name) return;
     createTaskGroup({ projectId: api.projectId, name })
       .then((created) => {
@@ -285,15 +285,48 @@ export default function MondayBoard({
         );
       })}
 
+      {/* Un proyecto sin grupos no tiene DÓNDE crear una tarea: "+ Agregar
+          tarea" vive dentro de un grupo. Antes lo único que quedaba era el
+          input de abajo, sin etiqueta ni botón, que había que descubrir y
+          rematar con Enter. Ahora createProject deja el grupo "General"
+          hecho; esto cubre los proyectos antiguos que se quedaron sin
+          ninguno. */}
+      {!sortedGroups.length && (
+        <div className="mb-noboard">
+          <div className="mb-noboard-icon" aria-hidden>
+            🗂️
+          </div>
+          <b>Este tablero todavía no tiene grupos</b>
+          <p className="text-sm">
+            Las tareas viven dentro de un grupo (por ejemplo &quot;General&quot;, &quot;Esta semana&quot; o una fase del
+            proyecto). Crea el primero y podrás agregar tareas enseguida.
+          </p>
+          <button type="button" className="btn-primary btn-sm" onClick={() => handleCreateGroup("General")}>
+            <IconPlus /> Crear grupo &quot;General&quot;
+          </button>
+        </div>
+      )}
+
       <div className="mb-newgroup">
         <IconPlus />
         <input
           value={newGroupName}
           onChange={(e) => setNewGroupName(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleCreateGroup()}
-          placeholder="Nuevo grupo (Enter para crear)"
-          aria-label="Nuevo grupo"
+          placeholder="Nombre del nuevo grupo…"
+          aria-label="Nombre del nuevo grupo"
         />
+        {/* El botón no es decorativo: sin él la única forma de crear un grupo
+            era adivinar que había que pulsar Enter. En táctil, además, el
+            teclado no siempre ofrece un Enter que envíe. */}
+        <button
+          type="button"
+          className="btn-ghost btn-sm mb-newgroup-btn"
+          disabled={!newGroupName.trim()}
+          onClick={() => handleCreateGroup()}
+        >
+          Crear grupo
+        </button>
       </div>
     </div>
   );

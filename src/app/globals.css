@@ -749,6 +749,44 @@ textarea:focus {
   min-height: auto;
   accent-color: var(--accent);
 }
+/* Ítem de menú del proyecto. Estaba escrito con `style={{...}}` y dos
+   handlers de mouse para el hover — que en táctil no existe. */
+.ex-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 9px 10px;
+  border-radius: 8px;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 13px;
+  min-height: 40px;
+}
+.ex-menu-item:hover {
+  background: var(--surface2);
+}
+.ex-menu-item.danger {
+  color: var(--danger);
+}
+.ex-menu-item.danger:hover {
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+/* Aviso de acción irreversible (borrar proyecto). */
+.ex-danger-note {
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 11px 12px;
+  border-radius: 12px;
+  border-left: 3px solid var(--danger);
+  background: color-mix(in srgb, var(--danger) 9%, var(--surface));
+}
+
 .ex-menu-actions {
   display: flex;
   gap: 8px;
@@ -867,6 +905,41 @@ textarea:focus {
   min-height: 34px;
   padding: 4px 6px;
   width: 100%;
+}
+.mb-newgroup-btn {
+  flex-shrink: 0;
+}
+
+/* Métricas del grupo (barra de estados + % + vencidas) como un bloque, para
+   que en móvil bajen juntas y no se intercalen con los botones. */
+.mb-group-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Tablero sin ningún grupo: no hay dónde crear una tarea, así que la pantalla
+   tiene que decirlo y ofrecer la salida. */
+.mb-noboard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  padding: 26px 18px;
+  background: var(--surface);
+  border: 1px dashed color-mix(in srgb, var(--accent) 32%, var(--line));
+  border-radius: var(--r2);
+}
+.mb-noboard-icon {
+  font-size: 30px;
+  line-height: 1;
+}
+.mb-noboard p {
+  color: var(--muted);
+  margin: 0;
+  max-width: 46ch;
 }
 
 /* Mobile: cada fila se convierte en tarjeta apilada — nunca tabla con
@@ -1120,10 +1193,18 @@ textarea:focus {
 }
 .ex-header-actions {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: flex-end;
   gap: 8px;
   flex-wrap: wrap;
+}
+.ex-header-more {
+  min-width: 44px;
+  padding: 6px 12px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
 /* --- Barra de herramientas (vistas + filtros + resumen) ----------------- */
@@ -2164,6 +2245,65 @@ textarea:focus {
   }
 }
 
+/* ======================================================================== */
+/* Móvil: cabecera de grupo y de proyecto                                    */
+/*                                                                           */
+/* La cabecera de grupo era UNA sola fila envolvente con nueve controles:    */
+/* colapsar, casilla, nombre, contador, barra de estados de 120px fijos, %,  */
+/* chip de vencidas y tres botones anclados con `margin-left: auto`. En 360px */
+/* eso envuelve en tres líneas y el `auto` reparte los botones donde caiga:  */
+/* acababan encima de la barra de estados. Ahora el nombre manda en la       */
+/* primera línea con sus acciones, y las métricas bajan enteras a la suya.   */
+/* ======================================================================== */
+@media (max-width: 860px) {
+  .mb-group-head {
+    row-gap: 6px;
+  }
+  .mb-group-name {
+    flex: 1 1 auto;
+    max-width: none;
+    min-width: 0;
+  }
+  .mb-group-stats {
+    flex: 1 1 100%;
+    order: 3;
+  }
+  .mb-statusbar {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 60px;
+  }
+  .mb-group-actions {
+    order: 2;
+  }
+  /* 30px de alto es un objetivo táctil corto: los botones de grupo y de fila
+     se pulsan con el pulgar, no con un ratón. */
+  .mb-icon-btn {
+    min-height: 38px;
+    min-width: 38px;
+    padding: 6px 8px;
+  }
+  .mb-color-dot {
+    width: 22px;
+    height: 22px;
+  }
+
+  /* Alta rápida: el input ocupa la línea entera en vez de compartirla con el
+     icono y quedarse en un tercio del ancho. */
+  .mb-quickadd,
+  .mb-newgroup {
+    flex-wrap: wrap;
+  }
+  .mb-quickadd input,
+  .mb-newgroup input {
+    flex: 1 1 100%;
+    min-height: 40px;
+  }
+  .mb-newgroup-btn {
+    flex: 1 1 100%;
+  }
+}
+
 /* Toolbar en móvil: las pestañas ocupan el ancho completo y se reparten por
    igual, en vez de amontonarse a la izquierda dejando un hueco muerto. */
 @media (max-width: 640px) {
@@ -2182,5 +2322,38 @@ textarea:focus {
   .ex-bulkbar {
     padding: 10px 12px;
     border-radius: 14px;
+  }
+
+  /* Cabecera del proyecto: el título ya va en su propia línea (BoardHeader);
+     aquí se le quita el aire que le sobra y las acciones dejan de alinearse a
+     la derecha, donde "✨ Sugerir secuencia" y "⋯" quedaban descolgados. */
+  .ex-header {
+    padding: 14px;
+  }
+  .ex-header-title {
+    font-size: 1.15rem;
+  }
+  .ex-header-actions {
+    justify-content: flex-start;
+  }
+  .ex-header-actions > button:first-child,
+  .ex-header-actions > .btn-ghost:first-child {
+    flex: 1 1 auto;
+  }
+
+  /* La barra de la cartera: buscador arriba, filtro y "+ Nuevo proyecto"
+     repartiéndose la línea de abajo. */
+  .ex-portfolio-search {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+  .ex-portfolio-spacer {
+    display: none;
+  }
+  .ex-portfolio-bar > .ex-scope {
+    flex: 1 1 auto;
+  }
+  .ex-portfolio-bar > .ex-scope .ex-tab {
+    flex: 1;
   }
 }

@@ -5,12 +5,15 @@
 // "+ X" que abre/cierra). Ahora sigue exactamente ese mismo patrón: botón
 // que abre el formulario y se cierra solo al crear (o al cancelar).
 import { useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { createProject } from "./actions";
 
 export default function NewProjectForm() {
+  const router = useRouter();
   const ref = useRef<HTMLFormElement>(null);
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   if (!open) {
     return (
@@ -25,9 +28,18 @@ export default function NewProjectForm() {
       ref={ref}
       action={(fd) =>
         startTransition(async () => {
-          await createProject(fd);
-          ref.current?.reset();
-          setOpen(false);
+          try {
+            const projectId = await createProject(fd);
+            ref.current?.reset();
+            setOpen(false);
+            setError(null);
+            // Directo a su tablero: ahí ya está el grupo "General" y su
+            // "+ Agregar tarea". Antes había que localizar el proyecto recién
+            // creado en la cartera y abrirlo a mano para poder empezar.
+            router.push(`/execution?project=${projectId}`);
+          } catch (e) {
+            setError(e instanceof Error ? e.message : "No se pudo crear el proyecto");
+          }
         })
       }
       className="card flex flex-col gap-2"
@@ -48,6 +60,11 @@ export default function NewProjectForm() {
         </select>
       </div>
       <input name="targetDate" type="date" />
+      {error && (
+        <div className="text-xs" style={{ color: "var(--danger)" }}>
+          {error}
+        </div>
+      )}
       <div style={{ display: "flex", gap: 8 }}>
         <button type="button" className="btn-ghost btn-sm" onClick={() => setOpen(false)} disabled={pending} style={{ flex: 1 }}>
           Cancelar
