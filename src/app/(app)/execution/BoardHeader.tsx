@@ -3,7 +3,6 @@
 // conocimiento). Server Component puro.
 import { Chip, Progress } from "@/components/ui";
 import ProjectMenu, { type ProjectMenuData } from "./ProjectMenu";
-import SequenceButton from "./SequenceButton";
 import type { LogEntry, KnowledgeItem } from "./logbook-knowledge-actions";
 
 export default function BoardHeader({
@@ -49,11 +48,14 @@ export default function BoardHeader({
         </span>
       </div>
 
+      {/* Una sola acción visible. "✨ Sugerir secuencia" era un botón ancho
+          permanente para algo que se usa de vez en cuando: ahora es una
+          entrada del "⋯" y esta fila deja de estirarse por él. */}
       <div className="ex-header-actions">
-        <SequenceButton projectId={project.id} tasks={sequenceTasks} />
         <ProjectMenu
           project={project}
           taskCount={taskCount}
+          sequenceTasks={sequenceTasks}
           logbookEntries={logbookEntries}
           knowledgeItems={knowledgeItems}
         />

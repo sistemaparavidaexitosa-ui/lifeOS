@@ -889,6 +889,38 @@ textarea:focus {
   padding: 6px 10px;
   border-radius: 8px;
 }
+/* El "+" pasó de icono decorativo a botón real (QuickAddRow): tiene que
+   responder al puntero y tener área que pulsar. */
+.mb-quickadd-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  min-height: auto;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.13s ease, color 0.13s ease;
+}
+.mb-quickadd-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent-d);
+}
+.mb-quickadd-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.mb-quickadd-go {
+  flex-shrink: 0;
+  min-height: 30px;
+  padding: 4px 12px;
+  font-size: 12.5px;
+}
 .mb-newgroup {
   display: flex;
   align-items: center;
@@ -970,10 +1002,6 @@ textarea:focus {
   .mb-indent-3 {
     padding-left: 20px;
     border-left: 3px solid var(--surface3);
-  }
-  .mb-menu {
-    left: auto;
-    right: 0;
   }
 }
 
@@ -1264,20 +1292,33 @@ textarea:focus {
   border-top: 1px solid var(--line);
   padding-top: 7px;
 }
+/* El ribbon es de iconos: la etiqueta vive en el title/aria-label, no pintada.
+   Seis controles con texto ("Buscar Persona Filtro Ordenar Status Fechas")
+   ocupaban la fila entera y la obligaban a envolver. Sin texto, el botón es
+   cuadrado salvo cuando lleva contador o valor, que sí se ven. */
 .ex-rib-btn {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  justify-content: center;
+  gap: 5px;
   border: none;
   background: transparent;
   color: var(--text);
   font-size: 13px;
   font-weight: 650;
-  padding: 7px 11px;
+  padding: 7px;
+  min-width: 36px;
   border-radius: 10px;
   min-height: auto;
   cursor: pointer;
   transition: background 0.13s ease, color 0.13s ease;
+}
+/* Con contador o valor deja de ser cuadrado y recupera aire lateral. */
+.ex-rib-btn:has(.ex-rib-count),
+.ex-rib-btn:has(.ex-rib-value),
+.ex-rib-clear {
+  padding-left: 10px;
+  padding-right: 10px;
 }
 .ex-rib-btn svg {
   width: 17px;
@@ -1322,7 +1363,7 @@ textarea:focus {
   font-weight: 800;
 }
 .ex-rib-value {
-  max-width: 132px;
+  max-width: 104px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2288,13 +2329,23 @@ textarea:focus {
     height: 22px;
   }
 
-  /* Alta rápida: el input ocupa la línea entera en vez de compartirla con el
-     icono y quedarse en un tercio del ancho. */
+  /* Alta rápida. El "+" ya es un botón de verdad, así que comparte línea con
+     el campo —el campo se queda con todo lo que sobra— y la confirmación baja
+     a su propia línea, a lo ancho, que es donde el pulgar la busca. */
   .mb-quickadd,
   .mb-newgroup {
     flex-wrap: wrap;
   }
-  .mb-quickadd input,
+  .mb-quickadd input {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 40px;
+  }
+  .mb-quickadd-go {
+    flex: 1 1 100%;
+  }
+  /* El grupo no tiene botón "+" propio: su campo se lleva la línea entera y
+     "Crear grupo" baja debajo. */
   .mb-newgroup input {
     flex: 1 1 100%;
     min-height: 40px;

@@ -16,6 +16,7 @@ import { useRouter } from "next/navigation";
 import LogbookCard from "./LogbookCard";
 import KnowledgeCard from "./KnowledgeCard";
 import EditProjectForm from "./EditProjectForm";
+import SequencePanel from "./SequencePanel";
 import MenuSurface, { useMenuAnchor } from "./MenuSurface";
 import { deleteProject } from "./actions";
 import type { LogEntry, KnowledgeItem } from "./logbook-knowledge-actions";
@@ -30,9 +31,10 @@ export interface ProjectMenuData {
   targetDate: string | null;
 }
 
-type Panel = "edit" | "logbook" | "knowledge" | "delete" | null;
+type Panel = "sequence" | "edit" | "logbook" | "knowledge" | "delete" | null;
 
 const PANEL_TITLE: Record<Exclude<Panel, null>, string> = {
+  sequence: "Secuencia sugerida",
   edit: "Editar proyecto",
   logbook: "Bitácora",
   knowledge: "Base de conocimiento",
@@ -42,12 +44,15 @@ const PANEL_TITLE: Record<Exclude<Panel, null>, string> = {
 export default function ProjectMenu({
   project,
   taskCount,
+  sequenceTasks,
   logbookEntries,
   knowledgeItems
 }: {
   project: ProjectMenuData;
   /** Cuántas tareas se van con el proyecto: el aviso tiene que decirlo. */
   taskCount: number;
+  /** Tareas que alimentan la secuencia sugerida (antes un botón aparte). */
+  sequenceTasks: { id: string; title: string }[];
   logbookEntries: LogEntry[];
   knowledgeItems: KnowledgeItem[];
 }) {
@@ -75,6 +80,7 @@ export default function ProjectMenu({
       {menu.open && (
         <MenuSurface anchor={menu.anchor} onClose={menu.close} align="end" width={236} label="Opciones del proyecto">
           <div className="ex-menu-list">
+            <MenuItem icon="✨" label="Sugerir secuencia" onClick={() => openPanel("sequence")} />
             <MenuItem icon="✏️" label="Editar proyecto" onClick={() => openPanel("edit")} />
             <MenuItem icon="📓" label="Bitácora" onClick={() => openPanel("logbook")} />
             <MenuItem icon="📚" label="Base de conocimiento" onClick={() => openPanel("knowledge")} />
@@ -94,6 +100,9 @@ export default function ProjectMenu({
               </button>
             </div>
             <div className="td-drawer-body">
+              {panel === "sequence" && (
+                <SequencePanel projectId={project.id} tasks={sequenceTasks} onClose={() => setPanel(null)} />
+              )}
               {panel === "edit" && <EditProjectForm project={project} onSaved={() => setPanel(null)} />}
               {panel === "logbook" && <LogbookCard projectId={project.id} entries={logbookEntries} />}
               {panel === "knowledge" && <KnowledgeCard projectId={project.id} items={knowledgeItems} />}

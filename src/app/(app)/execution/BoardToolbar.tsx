@@ -273,9 +273,14 @@ function RibbonSearch({ value, onChange }: { value: string; onChange: (v: string
 
   if (!expanded) {
     return (
-      <button type="button" className="ex-rib-btn" onClick={() => setOpen(true)}>
+      <button
+        type="button"
+        className="ex-rib-btn"
+        onClick={() => setOpen(true)}
+        title="Buscar tarea"
+        aria-label="Buscar tarea"
+      >
         <IconSearch aria-hidden />
-        <span>Buscar</span>
       </button>
     );
   }
@@ -342,6 +347,11 @@ function RibbonMenu({
 }) {
   const menu = useMenuAnchor();
   const active = count > 0 || value !== null;
+  // La etiqueta deja de pintarse y pasa al title/aria-label: seis controles con
+  // texto ocupaban la fila entera y obligaban a envolverla. Lo que SÍ se queda
+  // es el estado —el contador y el valor elegido—, porque sin él un filtro
+  // activo no se distinguiría de uno vacío más que por el tinte del botón.
+  const described = value !== null ? `${label}: ${value}` : count > 0 ? `${label} (${count})` : label;
 
   return (
     <>
@@ -351,9 +361,10 @@ function RibbonMenu({
         onClick={menu.toggle}
         aria-haspopup="menu"
         aria-expanded={menu.open}
+        title={described}
+        aria-label={described}
       >
         <Icon aria-hidden />
-        <span>{label}</span>
         {count > 0 && <span className="ex-rib-count">{count}</span>}
         {value !== null && <span className="ex-rib-value">{value}</span>}
         {caret && <IconChevronDown className="ex-rib-caret" aria-hidden />}
