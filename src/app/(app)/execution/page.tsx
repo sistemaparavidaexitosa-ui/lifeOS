@@ -1,13 +1,13 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { fdate } from "@/lib/format";
 import { isOverdue, isOpen, type BoardTaskLike } from "@/lib/domain/board.ts";
 import { todayInTimeZone } from "@/lib/domain/datetime.ts";
 import { getUserTimeZone } from "@/lib/data/profile";
-import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
+import type { TaskStatus, Priority, ProjectStatus } from "@/lib/domain/types.ts";
 import NewProjectForm from "./NewProjectForm";
-import ProjectSidebar, { type SidebarProject } from "./ProjectSidebar";
-import ProjectsOverview from "./ProjectsOverview";
+import PortfolioBoard, { type PortfolioProject } from "./PortfolioBoard";
 import BoardHeader from "./BoardHeader";
 import BoardShell from "./BoardShell";
 import { isExecutionView, type BoardGroup, type BoardTask, type ExecutionView } from "./board-types";
@@ -23,9 +23,14 @@ import { getProjectLogAndKnowledge } from "./logbook-knowledge-actions";
 // distinta del mismo proyecto.
 //
 // Ahora:
-//   1. Layout de 2 paneles: navegador de tableros fijo a la izquierda
-//      (ProjectSidebar) + área de trabajo a la derecha. Sin proyecto
-//      seleccionado se muestra el portafolio (ProjectsOverview).
+//   1. Una sola pantalla por vez. Sin ?project= se ve la CARTERA: todos los
+//      proyectos como filas tipo monday (PortfolioBoard). Con ?project= se ve
+//      ese tablero a ancho completo, con una miga de pan para volver.
+//
+//      Antes había dos paneles y la lista de proyectos se pintaba DOS VECES a
+//      la vez —el navegador lateral y el portafolio en tarjetas—, con los
+//      mismos datos en dos formatos. El navegador lateral se elimina: la fila
+//      de la cartera es a la vez la lista y el enlace al tablero.
 //   2. Este Server Component consulta UNA sola vez TODO lo que el tablero
 //      necesita (tareas, grupos, responsables, comentarios, miembros) y se
 //      lo entrega a BoardShell, que mantiene el estado en el cliente. Las 4
@@ -55,15 +60,15 @@ export default async function ExecutionPage({
   const { data: projects } = await supabase.from("projects").select("*").order("created_at", { ascending: false });
   const { data: allTasks } = await supabase.from("tasks").select("id, project_id, status, due, parent_task_id");
 
-  const sidebarProjects: SidebarProject[] = (projects ?? []).map((p) => {
+  const portfolio: PortfolioProject[] = (projects ?? []).map((p) => {
     const rootTasks = (allTasks ?? []).filter((t) => t.project_id === p.id && !t.parent_task_id);
     const countable = rootTasks.filter((t) => t.status !== "Cancelled");
     const done = countable.filter((t) => t.status === "Completed").length;
     return {
       id: p.id,
       title: p.title,
-      status: p.status,
-      priority: p.priority,
+      status: p.status as ProjectStatus,
+      priority: p.priority as Priority,
       progress: countable.length ? Math.round((done / countable.length) * 100) : 0,
       taskCount: rootTasks.length,
       openCount: rootTasks.filter((t) => isOpen(t.status as TaskStatus)).length,
@@ -76,19 +81,26 @@ export default async function ExecutionPage({
   const selectedProject = selectedProjectId ? projects?.find((p) => p.id === selectedProjectId) : undefined;
 
   return (
-    <div className="ex-workspace">
-      <ProjectSidebar projects={sidebarProjects} selectedId={selectedProject?.id ?? null} view={view}>
-        <NewProjectForm />
-      </ProjectSidebar>
-
-      <main className="ex-main">
-        {!selectedProject ? (
-          <ProjectsOverview projects={sidebarProjects} view={view} />
-        ) : (
+    <main className="ex-main">
+      {!selectedProject ? (
+        <PortfolioBoard projects={portfolio} view={view}>
+          <NewProjectForm />
+        </PortfolioBoard>
+      ) : (
+        <>
+          {/* Sin navegador lateral, esta miga de pan es el único camino de
+              vuelta: no puede faltar ni esconderse tras un menú. */}
+          <nav className="ex-crumbs" aria-label="Ruta">
+            <Link href="/execution" className="ex-crumb-back">
+              ← Proyectos
+            </Link>
+            <span className="ex-crumb-sep">/</span>
+            <span className="ex-crumb-current">{selectedProject.title}</span>
+          </nav>
           <BoardWorkspace projectRow={selectedProject} view={view} userId={user.id} today={today} />
-        )}
-      </main>
-    </div>
+        </>
+      )}
+    </main>
   );
 }
 

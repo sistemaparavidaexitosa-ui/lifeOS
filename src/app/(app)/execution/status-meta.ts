@@ -2,7 +2,7 @@
 // verdad para StatusMenu, PriorityMenu, MondayRow, KanbanBoard, TableView y
 // TimelineView: el color de un estado es SIEMPRE el mismo sin importar la
 // vista.
-import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
+import type { TaskStatus, Priority, ProjectStatus } from "@/lib/domain/types.ts";
 
 export interface StatusMeta {
   label: string;
@@ -23,6 +23,34 @@ export const STATUS_META: Record<TaskStatus, StatusMeta> = {
 
 /** Orden de columnas del Kanban y de los chips de resumen. */
 export const STATUS_ORDER: TaskStatus[] = ["Pending", "InProgress", "Blocked", "Rescheduled", "Completed", "Cancelled"];
+
+/**
+ * Estado de PROYECTO. Es un enum distinto al de tarea (projects.status admite
+ * Draft/OnHold/Archived, que no existen en una tarea), así que tiene su propio
+ * mapa en vez de forzar el de tareas: la cartera de proyectos y el tablero de
+ * tareas no deben poder contradecirse porque alguien reutilizó una etiqueta.
+ */
+export const PROJECT_STATUS_META: Record<ProjectStatus, StatusMeta> = {
+  Draft: { label: "Borrador", color: "var(--st-notstarted)", soft: "var(--st-notstarted-bg)" },
+  Active: { label: "Activo", color: "var(--accent)", soft: "color-mix(in srgb, var(--accent) 16%, transparent)" },
+  OnHold: { label: "En pausa", color: "var(--st-working)", soft: "var(--st-working-bg)" },
+  Completed: { label: "Completado", color: "var(--st-done)", soft: "var(--st-done-bg)" },
+  Cancelled: { label: "Cancelado", color: "var(--st-stuck)", soft: "var(--st-stuck-bg)" },
+  Archived: { label: "Archivado", color: "var(--st-cancelled)", soft: "var(--st-cancelled-bg)" }
+};
+
+/** Orden del menú de estado de proyecto: el ciclo de vida, no el alfabeto. */
+export const PROJECT_STATUS_ORDER: ProjectStatus[] = [
+  "Draft",
+  "Active",
+  "OnHold",
+  "Completed",
+  "Cancelled",
+  "Archived"
+];
+
+/** Estados que cuentan como "en curso" en el filtro de la cartera. */
+export const PROJECT_OPEN_STATUSES: ProjectStatus[] = ["Draft", "Active", "OnHold"];
 
 export interface PriorityMeta {
   label: string;

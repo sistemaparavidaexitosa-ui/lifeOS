@@ -957,16 +957,9 @@ textarea:focus {
   border-radius: 999px;
 }
 /* ----------------------------------------------------------------------- */
-/* Execution OS — Workspace de 2 paneles (navegador de tableros + área de   */
-/* trabajo), barra de herramientas, Kanban, Tabla y Timeline.              */
-/* Reutiliza los tokens existentes — cero colores nuevos.                  */
+/* Execution OS — Cartera de proyectos, barra de herramientas, Kanban,      */
+/* Tabla y Timeline. Reutiliza los tokens existentes — cero colores nuevos. */
 /* ----------------------------------------------------------------------- */
-.ex-workspace {
-  display: grid;
-  grid-template-columns: 268px minmax(0, 1fr);
-  gap: 14px;
-  align-items: start;
-}
 .ex-main {
   min-width: 0;
   display: flex;
@@ -974,37 +967,108 @@ textarea:focus {
   gap: 12px;
 }
 
-/* --- Navegador de tableros --------------------------------------------- */
-.ex-sidebar {
-  position: sticky;
-  top: calc(var(--topbar-total) + 10px);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r2);
-  padding: 12px;
-  max-height: calc(100dvh - var(--topbar-total) - 24px);
-  overflow: auto;
-}
-.ex-sidebar-toggle {
-  display: none;
-  width: 100%;
-  justify-content: flex-start;
-}
-.ex-sidebar-body {
+/* --- Cartera de proyectos ----------------------------------------------- */
+/* La cartera NO trae rejilla propia: reutiliza .mb-board/.mb-group/.mb-row,
+   así una fila de proyecto y una de tarea son la misma pieza y el
+   comportamiento responsive ya resuelto para tareas vale aquí sin copiarlo.
+   Lo único propio es el juego de columnas —la cartera no tiene "Personas"
+   sino "Avance"— y el título, que es un enlace y no un input. */
+.ex-portfolio {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 12px;
 }
-.ex-sidebar-head {
+.ex-portfolio-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
   flex-wrap: wrap;
 }
-.ex-sidebar-empty {
+.ex-portfolio-search {
+  flex: 1 1 200px;
+  max-width: 320px;
+}
+.ex-portfolio-spacer {
+  flex: 1 1 0;
+}
+/* NewProjectForm sustituye su botón por una tarjeta al abrirse. Sin esto
+   quedaría estrujada como un ítem flex más de la barra, entre el buscador y
+   el espaciador; así se queda con la línea entera. */
+.ex-portfolio-bar > form {
+  flex: 1 1 100%;
+}
+.ex-portfolio-board {
+  --mb-cols: minmax(240px, 1fr) 158px 136px 150px 168px;
+}
+.ex-portfolio-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text);
+  border-radius: 8px;
+  padding: 4px 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.ex-portfolio-title:hover {
+  background: var(--surface2);
+  color: var(--accent-d);
+}
+.ex-portfolio-count {
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+/* La barra y el porcentaje comparten celda: el número solo no dice si vas
+   bien, y la barra sola no dice cuánto. */
+.ex-portfolio-progress {
+  align-items: center;
+  gap: 8px;
+}
+.ex-portfolio-progress .progress {
+  flex: 1 1 auto;
+  min-width: 44px;
+}
+.ex-portfolio-progress b {
+  font-size: 11.5px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+/* --- Miga de pan (única vuelta a la cartera, ya sin navegador lateral) --- */
+.ex-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  min-width: 0;
+}
+.ex-crumb-back {
+  font-weight: 700;
+  color: var(--accent-d);
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  white-space: nowrap;
+}
+.ex-crumb-back:hover {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.ex-crumb-sep {
   color: var(--muted);
 }
+.ex-crumb-current {
+  color: var(--muted);
+  font-weight: 650;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .ex-search {
   min-height: 36px;
   padding: 6px 10px;
@@ -1015,41 +1079,6 @@ textarea:focus {
   display: flex;
   gap: 4px;
 }
-.ex-project-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.ex-project {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 9px 10px;
-  border-radius: 10px;
-  color: var(--text);
-  border-left: 3px solid transparent;
-}
-.ex-project:hover {
-  background: var(--surface2);
-}
-.ex-project.active {
-  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
-  border-left-color: var(--accent);
-}
-.ex-project-title {
-  font-weight: 700;
-  font-size: 13.5px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ex-project-meta {
-  color: var(--muted);
-}
-.ex-project-late {
-  color: var(--danger);
-}
-
 /* --- Encabezado del tablero -------------------------------------------- */
 .ex-header {
   display: flex;
@@ -1401,47 +1430,6 @@ textarea:focus {
   color: var(--danger);
 }
 
-/* --- Portafolio (sin tablero seleccionado) ------------------------------ */
-.ex-overview {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.ex-overview-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 10px;
-}
-.ex-overview-title {
-  color: var(--muted);
-  margin: 0;
-}
-.ex-overview-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  gap: 10px;
-}
-.ex-overview-card {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  color: var(--text);
-  transition: transform 0.12s ease, border-color 0.12s ease;
-}
-.ex-overview-card:hover {
-  transform: translateY(-2px);
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
-}
-.ex-overview-card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.ex-overview-meta {
-  color: var(--muted);
-}
-
 /* --- Kanban ------------------------------------------------------------- */
 .kb-board {
   display: grid;
@@ -1754,26 +1742,7 @@ textarea:focus {
   border: none;
 }
 
-/* --- Responsive: el workspace se apila y el navegador se pliega --------- */
 @media (max-width: 980px) {
-  .ex-workspace {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .ex-sidebar {
-    position: static;
-    max-height: none;
-    padding: 8px;
-  }
-  .ex-sidebar-toggle {
-    display: inline-flex;
-  }
-  .ex-sidebar .ex-sidebar-body {
-    display: none;
-    padding-top: 8px;
-  }
-  .ex-sidebar.open .ex-sidebar-body {
-    display: flex;
-  }
   .ex-toolbar {
     position: static;
   }
@@ -2090,17 +2059,6 @@ textarea:focus {
   color: var(--accent-d);
   box-shadow: var(--shadow-sm);
 }
-/* --- Navegador de tableros --------------------------------------------- */
-.ex-sidebar {
-  border-radius: 16px;
-  box-shadow: var(--shadow-sm);
-}
-.ex-project {
-  transition: background 0.12s ease, border-color 0.12s ease;
-}
-.ex-project.active {
-  box-shadow: var(--shadow-sm);
-}
 .ex-header {
   border-radius: 16px;
   padding: 16px 18px;
@@ -2193,6 +2151,16 @@ textarea:focus {
   }
   .mb-row-tools {
     margin-left: auto;
+  }
+  /* La celda de avance es la única que no es una pastilla: en la línea
+     envolvente necesita ancho propio o la barra queda de dos píxeles. */
+  .ex-portfolio-progress {
+    flex: 1 1 140px;
+  }
+  .ex-portfolio-title {
+    flex: 1 1 100%;
+    font-size: 14.5px;
+    white-space: normal;
   }
 }
 

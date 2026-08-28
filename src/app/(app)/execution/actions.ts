@@ -311,6 +311,49 @@ const updateProjectSchema = z.object({
   targetDate: z.string().optional().nullable()
 });
 
+const patchProjectSchema = z.object({
+  projectId: z.string().uuid(),
+  status: z.enum(["Draft", "Active", "OnHold", "Completed", "Cancelled", "Archived"]).optional(),
+  priority: z.enum(["High", "Medium", "Low"]).optional(),
+  targetDate: z.string().nullable().optional()
+});
+
+export type ProjectPatch = Omit<z.infer<typeof patchProjectSchema>, "projectId">;
+
+/**
+ * Cambio parcial de UN campo del proyecto desde su fila en la cartera.
+ *
+ * updateProject() no sirve para esto: exige título, objetivo, estado,
+ * prioridad y fecha en el mismo envío, así que cambiar solo el estado desde
+ * una fila obligaría al cliente a reenviar el resto — y a pisarlo con lo que
+ * tuviera cargado, que es justo cómo se pierde el objetivo de un proyecto sin
+ * que nadie lo edite. Aquí solo viaja lo que cambió.
+ */
+export async function patchProject(projectId: string, patch: ProjectPatch) {
+  const parsed = patchProjectSchema.parse({ projectId, ...patch });
+
+  const supabase = await createClient();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  const { data: project } = await supabase.from("projects").select("version").eq("id", parsed.projectId).single();
+  if (!project) throw new Error("Proyecto no encontrado");
+
+  const update: Record<string, unknown> = { version: project.version + 1 };
+  if (parsed.status !== undefined) update.status = parsed.status;
+  if (parsed.priority !== undefined) update.priority = parsed.priority;
+  if (parsed.targetDate !== undefined) update.target_date = parsed.targetDate;
+
+  const { error } = await supabase.from("projects").update(update).eq("id", parsed.projectId);
+  if (error) throw new Error(error.message);
+
+  await supabase.from("audit_log").insert({ user_id: user.id, action: "project.update", object: parsed.projectId });
+  revalidatePath("/execution");
+  revalidatePath("/home");
+}
+
 export async function updateProject(formData: FormData) {
   const parsed = updateProjectSchema.parse({
     projectId: formData.get("projectId"),
