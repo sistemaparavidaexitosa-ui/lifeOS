@@ -1,6 +1,31 @@
 import { createServerClient } from "@supabase/ssr";
+import { isAuthRetryableFetchError, type User } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
 import { publicEnv } from "@/config/env";
+
+/**
+ * Tope de tiempo para averiguar quién eres. Existe por un 504 en producción
+ * (2026-08-29, `MIDDLEWARE_INVOCATION_TIMEOUT`): el sitio ENTERO dejó de
+ * responder, no una ruta suelta, porque el middleware corre antes que
+ * cualquier página y su matcher cubre casi todo.
+ *
+ * `supabase.auth.getUser()` no lee la cookie: hace un viaje de red a
+ * `/auth/v1/user` (la misma nota está en lib/data/session.ts). Sin límite
+ * propio, si Supabase no contesta hay DOS relojes que se nos van de las manos:
+ *
+ *   1. el `fetch` en sí, que puede quedarse colgado indefinidamente; y
+ *   2. peor, el reintento de @supabase/auth-js al refrescar el token, que
+ *      insiste con backoff exponencial durante 30 s (`AUTO_REFRESH_TICK_DURATION`
+ *      en GoTrueClient) — más que los 25 s a los que Vercel mata el middleware.
+ *
+ * Por (2) no basta con acortar el fetch: hace falta un plazo para la operación
+ * COMPLETA. Tres segundos son holgados para una llamada que normalmente tarda
+ * ~200 ms, y cortan mucho antes del límite de la plataforma.
+ */
+const AUTH_DEADLINE_MS = 3000;
+
+/** Centinela del plazo agotado; no puede confundirse con una respuesta real. */
+const AUTH_TIMED_OUT = Symbol("auth-deadline");
 
 /**
  * ⚠️ ESTE ARCHIVO TIENE QUE VIVIR EN `src/`, junto al directorio `app`.
@@ -64,8 +89,21 @@ export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("Content-Security-Policy", csp);
 
+  // Un único abort para todo lo que este request le pregunte a Supabase: al
+  // vencer el plazo corta el fetch en vuelo Y hace que los reintentos internos
+  // de auth-js fallen en el acto en vez de seguir esperando en el vacío.
+  const authAbort = new AbortController();
+  const authFetch: typeof fetch = (input, init) => {
+    const signal =
+      init?.signal && typeof AbortSignal.any === "function"
+        ? AbortSignal.any([init.signal, authAbort.signal])
+        : authAbort.signal;
+    return fetch(input, { ...init, signal });
+  };
+
   // Refresco de sesión Supabase en cada request (patrón oficial @supabase/ssr).
   const supabase = createServerClient(publicEnv.NEXT_PUBLIC_SUPABASE_URL, publicEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+    global: { fetch: authFetch },
     cookies: {
       getAll() {
         return request.cookies.getAll();
@@ -79,9 +117,34 @@ export async function middleware(request: NextRequest) {
     }
   });
 
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  let user: User | null = null;
+  // `false` = Supabase no contestó a tiempo (o no contestó). NO es lo mismo que
+  // "no hay sesión", y por eso se distingue: ver el guardia de más abajo.
+  let authReachable = true;
+
+  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<typeof AUTH_TIMED_OUT>((resolve) => {
+    deadlineTimer = setTimeout(() => {
+      authAbort.abort();
+      resolve(AUTH_TIMED_OUT);
+    }, AUTH_DEADLINE_MS);
+  });
+
+  try {
+    const outcome = await Promise.race([supabase.auth.getUser(), deadline]);
+    if (outcome === AUTH_TIMED_OUT) {
+      authReachable = false;
+    } else {
+      user = outcome.data.user;
+      // Un fallo de red NO se lanza: auth-js lo devuelve como error. Sin esta
+      // comprobación, "Supabase caído" se leería como "no has iniciado sesión".
+      if (!user && outcome.error && isAuthRetryableFetchError(outcome.error)) authReachable = false;
+    }
+  } catch {
+    authReachable = false;
+  } finally {
+    clearTimeout(deadlineTimer);
+  }
 
   const { pathname } = request.nextUrl;
   const isAuthRoute = pathname.startsWith("/login") || pathname.startsWith("/auth");
@@ -96,7 +159,13 @@ export async function middleware(request: NextRequest) {
   // workspace más allá del nombre y el rol (ver invitation_preview, 0022).
   const isInvite = pathname.startsWith("/invite/");
 
-  if (!user && !isAuthRoute && !isPublicAsset && !isInvite && !isHealthCheck && pathname !== "/") {
+  // `authReachable` deja pasar el request cuando el plazo se agota, en vez de
+  // mandar a /login a alguien que sí tiene sesión por un tropiezo de red. No
+  // abre ninguna puerta: este redirect es comodidad, no la única cerradura —
+  // el layout de (app) vuelve a comprobar la sesión y redirige por su cuenta
+  // ("defensa en profundidad", app/(app)/layout.tsx), los Route Handlers
+  // devuelven 401 solos, y por debajo de todo sigue estando RLS.
+  if (!user && authReachable && !isAuthRoute && !isPublicAsset && !isInvite && !isHealthCheck && pathname !== "/") {
     // Una ruta de API no se redirige a /login: quien la llama es `fetch`, no
     // un navegador, y recibiría el HTML del login con estado 200 en vez de un
     // error que pueda leer. Devuelve el mismo cuerpo que ya usan los Route
