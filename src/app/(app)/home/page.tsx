@@ -5,6 +5,7 @@ import { Card, Chip, Stat, Progress, EmptyState } from "@/components/ui";
 import { money0, fdate } from "@/lib/format";
 import { greetingFor, hourInTimeZone, todayInTimeZone } from "@/lib/domain/datetime.ts";
 import { getSessionUser } from "@/lib/data/session";
+import InsightSection from "@/components/InsightSection";
 
 export default async function HomePage() {
   const user = await getSessionUser();
@@ -158,6 +159,12 @@ export default async function HomePage() {
           ))
         )}
       </Card>
+
+      {/* El ámbito `global` es el único que cruza los cinco dominios, y Home es
+          la única pantalla que no es de ninguno en particular. Es donde una
+          recomendación puede decir algo que ninguna otra puede: que la agenda
+          está llena justo la semana en que vence la tarjeta cara. */}
+      <InsightSection scope="global" />
     </div>
   );
 }

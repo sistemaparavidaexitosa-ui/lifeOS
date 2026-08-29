@@ -722,6 +722,45 @@
     confirmación explícita. Mientras esa decisión de producto siga abierta, se
     quedan.
 
+- **D-053 El quinto extractor cierra el motor, y `global` deja de estar
+  bloqueado.** Deudas era el dominio que faltaba, y con él se levanta la
+  restricción de D-050: `global` ya no calla ningún dominio, así que puede
+  ofrecerse. Su panel vive en Home, que es la única pantalla que no pertenece a
+  ningún módulo — donde una recomendación puede decir lo que ninguna otra
+  puede, porque es la única que ve la agenda y la tarjeta a la vez.
+
+  EL HECHO QUE JUSTIFICA EL MÓDULO ENTERO
+
+  Que el pago mínimo no cubra ni los intereses. No es que la deuda tarde: es
+  que CRECE. Nadie lo ve mirando /debt, porque ahí el interés mensual y el pago
+  mínimo son dos números en dos recuadros distintos y la resta hay que hacerla
+  de cabeza. Pesa 1 siempre, sin escala.
+
+  Se separa del hecho de horizonte a propósito: `simulateSingleDebt` tiene un
+  tope de 600 meses, así que este caso saldría por ahí como "tarda 600 meses",
+  que es una manera pésima de decir "nunca" — suena a mucho tiempo, no a
+  imposible.
+
+  LO QUE EL EXTRACTOR NO HACE, Y POR QUÉ
+
+  No compara métodos de pago (avalancha, bola de nieve, cash flow). El orden
+  entre deudas solo cambia algo cuando hay dinero EXTRA que repartir —con solo
+  los mínimos, `runSimulation` da el mismo resultado con cualquier orden— y
+  cuánto extra puede poner el usuario no está en ninguna tabla. Inventar una
+  cifra para que la comparación tuviera gracia es exactamente lo que el motor
+  tiene prohibido. Esa comparación ya vive en el simulador de /debt, donde el
+  usuario pone su propio número.
+
+  EL SILENCIO DE UNA DEUDA SE MIRA SOLO SI ANTES HUBO RUIDO
+
+  "No registra pagos desde hace X" solo se reporta si esa deuda tuvo algún pago
+  ligado alguna vez. Quien paga por fuera y no lo anota no tiene un problema de
+  deuda, tiene otra manera de llevar sus cuentas, y avisarle cada vez es la
+  forma de que deje de leer las recomendaciones. Mismo criterio que el proyecto
+  que nunca completó nada y la rutina que nunca se ejecutó: sin un antes, no hay
+  nada que haya cambiado. Y el hecho dice las dos lecturas —no se pagó, o no se
+  anotó— porque desde aquí no se pueden distinguir.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo

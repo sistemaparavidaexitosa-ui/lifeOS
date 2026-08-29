@@ -8,6 +8,7 @@ import { moneyFacts, type BudgetLineLike } from "@/lib/domain/insights/facts/mon
 import { timeFacts } from "@/lib/domain/insights/facts/time.ts";
 import { executionFacts } from "@/lib/domain/insights/facts/execution.ts";
 import { habitsFacts, type HabitFrequency } from "@/lib/domain/insights/facts/habits.ts";
+import { debtFacts } from "@/lib/domain/insights/facts/debt.ts";
 import { occupationAppliesOn } from "@/lib/domain/time.ts";
 import { loadMyTasks, type MyTaskRow } from "@/lib/data/tasks";
 import type { JournalEntryLike, ProjectStatus } from "@/lib/domain/types.ts";
@@ -28,9 +29,8 @@ import type { MemoryItemLike, MemoryScope } from "@/lib/domain/insights/memory.t
  * de datos; `context.ts` sigue siendo el único sitio donde ese filtro se
  * aplica (ver D-027).
  *
- * Cubre cuatro dominios: `money`, `time`, `execution` y `habits`. `debt` sigue
- * sin extractor, y por eso `global` tampoco está disponible: un análisis que se
- * anuncia como completo y calla un dominio entero es peor que no tenerlo.
+ * Cubre los cinco dominios —`money`, `debt`, `time`, `execution` y `habits`— y
+ * con ellos el ámbito `global`, que es el único que los cruza.
  */
 export interface AnalyzeResult {
   ok: boolean;
@@ -43,27 +43,6 @@ export interface AnalyzeResult {
 function cycleStart(todayISO: string): string {
   return `${todayISO.slice(0, 7)}-01`;
 }
-
-/**
- * Los ámbitos que ya tienen de dónde sacar hechos.
- *
- * `debt` es el que falta, y `global` está fuera POR ESO: incluye los cinco
- * dominios, así que hoy produciría un análisis que se presenta como la foto
- * completa habiendo mirado cuatro quintas partes. El motor puede decir "no
- * tengo datos de X" cuando el usuario lo apagó —eso es una decisión suya— pero
- * no puede callar que un dominio entero no existe todavía.
- */
-const SCOPES_CON_EXTRACTOR: Scope[] = ["money", "time", "execution", "habits"];
-
-const SIN_EXTRACTOR_REASON: Record<Scope, string> = {
-  money: "",
-  time: "",
-  execution: "",
-  habits: "",
-  debt: "Deudas todavía no tiene extractor de hechos: el motor no tiene nada que citar en ese ámbito.",
-  global:
-    "El análisis global llega cuando Deudas tenga su extractor. Mientras tanto usa los ámbitos sueltos: uno que se anuncia como global y calla un dominio entero engaña más de lo que ayuda."
-};
 
 /**
  * Dónde vive el panel de cada ámbito, para revalidar la ruta que de verdad hay
@@ -209,11 +188,31 @@ async function loadDomainFacts(supabase: Db, userId: string, domain: Domain, tod
       );
     }
 
-    case "debt":
-      // Sin extractor todavía. Se devuelve vacío en vez de lanzar: el ámbito
-      // `debt` ya está atajado antes de llegar aquí, y si algún día `global` lo
-      // incluye por descuido, la ausencia de hechos es más honesta que un error.
-      return [];
+    case "debt": {
+      const [{ data: debts }, { data: pagos }] = await Promise.all([
+        supabase.from("debts").select("id, name, balance, rate, min_payment").eq("user_id", userId),
+        // Solo los gastos YA ligados a una deuda. Un gasto sin `debt_id` no es
+        // un pago de deuda: es un gasto (ver money/actions.ts, que además baja
+        // el saldo al registrarlo).
+        supabase.from("journal_entries").select("debt_id, entry_date").not("debt_id", "is", null)
+      ]);
+
+      return debtFacts(
+        {
+          debts: (debts ?? []).map((d) => ({
+            id: d.id,
+            name: d.name,
+            balance: Number(d.balance),
+            rate: Number(d.rate),
+            minPayment: Number(d.min_payment)
+          })),
+          payments: (pagos ?? [])
+            .filter((p): p is typeof p & { debt_id: string } => Boolean(p.debt_id))
+            .map((p) => ({ debtId: p.debt_id, date: p.entry_date }))
+        },
+        today
+      );
+    }
   }
 }
 
@@ -227,10 +226,6 @@ export async function analyze(scope: Scope): Promise<AnalyzeResult> {
     data: { user }
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, created: 0, reason: "No autenticado" };
-
-  if (!SCOPES_CON_EXTRACTOR.includes(scope)) {
-    return { ok: false, created: 0, reason: SIN_EXTRACTOR_REASON[scope] };
-  }
 
   const today = todayLocal(await getUserTimeZone());
 

@@ -7,10 +7,7 @@ import { DOMAIN_LABEL, type Domain } from "@/lib/domain/insights/types.ts";
 // El orden de la lista, no los nombres: esos son los mismos que usa el motor
 // para explicar por qué un análisis no salió (DOMAIN_LABEL). Escribirlos aquí
 // otra vez es garantizar que un día digan cosas distintas.
-const DOMAINS: Domain[] = ["money", "time", "execution", "habits", "debt"];
-
-/** Los que todavía no tienen de dónde sacar hechos (ver lib/insights/actions.ts). */
-const SIN_EXTRACTOR: Domain[] = ["debt"];
+const DOMAINS: Domain[] = ["money", "debt", "time", "execution", "habits"];
 
 /**
  * Opt-in por dominio (§4.2) y los dos borrados del §4.4.
@@ -34,11 +31,6 @@ export default function AiSettings({ enabled }: { enabled: string[] }) {
           <label key={value} className="flex items-center gap-2 text-sm">
             <input type="checkbox" name={`domain.${value}`} defaultChecked={enabled.includes(value)} />
             {DOMAIN_LABEL[value]}
-            {SIN_EXTRACTOR.includes(value) && (
-              <span className="text-xs" style={{ color: "var(--muted)" }}>
-                (aún sin extractor: encenderlo no envía nada todavía)
-              </span>
-            )}
           </label>
         ))}
         <div>
