@@ -8,7 +8,7 @@
 // aquí mueve la tarea de cuadrante sin salir del tablero.
 import { PRIORITY_META, PRIORITY_ORDER } from "./status-meta";
 import type { Priority } from "@/lib/domain/types.ts";
-import MenuSurface, { useMenuAnchor } from "./MenuSurface";
+import MenuSurface, { useMenuAnchor } from "@/components/MenuSurface";
 
 export default function PriorityMenu({
   priority,

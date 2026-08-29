@@ -10,7 +10,7 @@ import { useState, useTransition } from "react";
 import { IconCalendar } from "@/components/icons";
 import { addDaysISO } from "@/lib/domain/board.ts";
 import { updateTaskDates } from "./actions";
-import MenuSurface, { useMenuAnchor } from "./MenuSurface";
+import MenuSurface, { useMenuAnchor } from "@/components/MenuSurface";
 
 function fmt(d: string | null): string | null {
   if (!d) return null;

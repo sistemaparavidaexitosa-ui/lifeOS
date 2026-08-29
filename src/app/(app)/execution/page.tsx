@@ -5,13 +5,13 @@ import { fdate } from "@/lib/format";
 import { isOverdue, isOpen, type BoardTaskLike } from "@/lib/domain/board.ts";
 import { todayInTimeZone } from "@/lib/domain/datetime.ts";
 import { getUserTimeZone } from "@/lib/data/profile";
-import { listWorkspaces, ROLES_QUE_ADMINISTRAN, ROLES_QUE_CREAN, type WorkspaceSummary } from "@/lib/data/workspaces";
-import { appUrl } from "@/lib/email/send";
+import { listWorkspaces, ROLES_QUE_CREAN, type WorkspaceSummary } from "@/lib/data/workspaces";
 import type { TaskStatus, Priority, ProjectStatus } from "@/lib/domain/types.ts";
 import NewProjectForm from "./NewProjectForm";
 import PortfolioBoard, { type PortfolioProject } from "./PortfolioBoard";
-import WorkspaceSwitcher from "./WorkspaceSwitcher";
-import TeamPanel, { type TeamInvitation, type TeamMember } from "./TeamPanel";
+import WorkspaceSwitcher from "@/components/workspace/WorkspaceSwitcher";
+import WorkspaceTabs from "@/components/workspace/WorkspaceTabs";
+import TeamSection from "@/components/workspace/TeamSection";
 import BoardHeader from "./BoardHeader";
 import BoardShell from "./BoardShell";
 import { isExecutionView, type BoardGroup, type BoardTask, type ExecutionView } from "./board-types";
@@ -115,7 +115,8 @@ export default async function ExecutionPage({
           workspaceNav={
             activeWorkspace && (
               <>
-                <WorkspaceSwitcher workspaces={workspaces} activeId={activeWorkspace.id} />
+                <WorkspaceSwitcher workspaces={workspaces} activeId={activeWorkspace.id} basePath="/execution" />
+                <WorkspaceTabs workspaceId={activeWorkspace.id} />
                 {!activeWorkspace.isPersonal && (
                   <TeamSection workspace={activeWorkspace} userId={user.id} projectCount={portfolio.length} />
                 )}
@@ -292,66 +293,5 @@ async function BoardWorkspace({
         today={today}
       />
     </>
-  );
-}
-
-/**
- * Carga el equipo del espacio activo (miembros + invitaciones) y lo entrega al
- * panel lateral.
- *
- * Se separa de la página en un Server Component propio para que Next pueda
- * hacer streaming de la cartera sin esperar a estas dos consultas: el usuario
- * casi siempre viene a ver proyectos, no a administrar el equipo.
- *
- * El roster completo sale del RPC `list_workspace_members`, NO de un
- * `select * from memberships`: desde el fix 0012 esa tabla solo expone, por
- * SELECT directo, la fila propia del usuario (para eliminar el riesgo de
- * recursión de RLS).
- */
-async function TeamSection({
-  workspace,
-  userId,
-  projectCount
-}: {
-  workspace: WorkspaceSummary;
-  userId: string;
-  projectCount: number;
-}) {
-  const supabase = await createClient();
-
-  const [{ data: memberRows }, { data: invitationRows }] = await Promise.all([
-    supabase.rpc("list_workspace_members", { p_workspace_id: workspace.id }),
-    // RLS (invitations_all_admin) ya limita esto a Owner/Admin: para un Member
-    // la consulta vuelve vacía y el panel simplemente no pinta la sección.
-    supabase.from("invitations").select("id, email, role, token, status, expires_at").eq("workspace_id", workspace.id)
-  ]);
-
-  const members: TeamMember[] = ((memberRows ?? []) as { id: string; user_id: string; user_name: string; role: string }[]).map(
-    (m) => ({ id: m.id, userId: m.user_id, userName: m.user_name, role: m.role })
-  );
-
-  const invitations: TeamInvitation[] = (invitationRows ?? []).map((i) => ({
-    id: i.id,
-    email: i.email,
-    role: i.role,
-    // `status` en la base solo cambia al aceptar/revocar; una Pending vencida
-    // seguía mostrándose como Pending y el admin no entendía por qué el
-    // invitado no podía entrar. El vencimiento se resuelve aquí, al leer.
-    state: i.status === "Pending" && new Date(i.expires_at) < new Date() ? "Expired" : i.status,
-    expiresAt: i.expires_at,
-    inviteUrl: appUrl(`/invite/${i.token}`)
-  }));
-
-  return (
-    <TeamPanel
-      workspaceId={workspace.id}
-      workspaceName={workspace.name}
-      members={members}
-      invitations={invitations}
-      currentUserId={userId}
-      canManage={ROLES_QUE_ADMINISTRAN.includes(workspace.role)}
-      canDelete={workspace.role === "Owner"}
-      projectCount={projectCount}
-    />
   );
 }

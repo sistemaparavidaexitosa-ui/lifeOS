@@ -15,7 +15,7 @@
 // El filtro sigue siendo UNO solo para las 4 vistas: BoardShell filtra con
 // filterTaskTree() y les pasa el resultado ya filtrado.
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import MenuSurface, { useMenuAnchor } from "./MenuSurface";
+import MenuSurface, { useMenuAnchor } from "@/components/MenuSurface";
 import { STATUS_META, STATUS_ORDER, PRIORITY_META, PRIORITY_ORDER } from "./status-meta";
 import { VIEW_LABELS, type ExecutionView } from "./board-types";
 import { EMPTY_FILTERS, type BoardFilters, type DateBucket, type SortKey } from "@/lib/domain/board.ts";
