@@ -15,6 +15,9 @@ export type EffectiveTaskStatus = TaskStatus | "Overdue";
 
 export type Priority = "High" | "Medium" | "Low";
 
+/** Estado de un PROYECTO (enum distinto al de una tarea, ver projects.status). */
+export type ProjectStatus = "Draft" | "Active" | "OnHold" | "Completed" | "Cancelled" | "Archived";
+
 export interface TaskLike {
   id: string;
   status: TaskStatus;

@@ -1406,7 +1406,7 @@ export type Database = {
           target_date: string | null
           title: string
           version: number
-          workspace_id: string | null
+          workspace_id: string
         }
         Insert: {
           area?: string
@@ -1428,7 +1428,7 @@ export type Database = {
           target_date?: string | null
           title: string
           version?: number
-          workspace_id?: string | null
+          workspace_id: string
         }
         Update: {
           area?: string
@@ -1450,7 +1450,7 @@ export type Database = {
           target_date?: string | null
           title?: string
           version?: number
-          workspace_id?: string | null
+          workspace_id?: string
         }
         Relationships: [
           {
@@ -1973,6 +1973,7 @@ export type Database = {
           color: string
           created_at: string
           id: string
+          is_personal: boolean
           name: string
           owner_id: string
         }
@@ -1980,6 +1981,7 @@ export type Database = {
           color?: string
           created_at?: string
           id?: string
+          is_personal?: boolean
           name: string
           owner_id: string
         }
@@ -1987,6 +1989,7 @@ export type Database = {
           color?: string
           created_at?: string
           id?: string
+          is_personal?: boolean
           name?: string
           owner_id?: string
         }
@@ -2004,6 +2007,10 @@ export type Database = {
           ok: boolean
           workspace_id: string
         }[]
+      }
+      can_edit_comment_subject: {
+        Args: { p_subject_id: string; p_subject_type: string }
+        Returns: boolean
       }
       can_edit_project: { Args: { p_project_id: string }; Returns: boolean }
       debug_rls_policies: {

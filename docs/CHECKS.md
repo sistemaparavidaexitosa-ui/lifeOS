@@ -390,3 +390,44 @@ el stub, no el árbol de pruebas. Corregido y vuelto a comprobar.
   protocolo con `curl` no era proporcional; la memoria se sembró por PostgREST,
   que pasa por la misma RLS. Lo que sí se verificó de punta a punta es que la
   memoria vigente llega al prompt y la caducada no.
+
+---
+
+## Workspaces obligatorios (agosto 2026) — migraciones 0030/0031
+
+| Check | Estado | Evidencia |
+|---|---|---|
+| `supabase db reset` (migraciones `0002`→`0031`) | ✅ EJECUTADO OK | Las 26 migraciones aplican de cero, incluidas `0030_workspaces_obligatorios.sql` (backfill + `set not null`) y `0031_rls_acceso_por_workspace.sql`; el seed corre después sin tocar nada a mano |
+| `supabase test db` | ✅ EJECUTADO OK | **82 assertions pgTAP en 11 archivos, todas en verde** |
+| `pnpm typecheck` · `pnpm lint` · `pnpm test:unit` · `pnpm build` | ✅ EJECUTADO OK | 212 pruebas unitarias, build de 31 rutas |
+| Tipos generados coinciden con la base | ✅ EJECUTADO OK | `pnpm gen:types:local` sobre el esquema nuevo devuelve exactamente lo editado a mano (`workspaces.is_personal`, `projects.workspace_id` sin `| null`); la única diferencia fue `can_edit_comment_subject`, un rezago de la migración 0029 que nunca se regeneró |
+| **Membresía = acceso, sobre datos reales** | ✅ EJECUTADO OK | Con el seed: Ana (Member de «Equipo LifeOS», **sin ninguna fila en `project_shares`**) ve «Mudanza de oficina» y `can_edit_project` devuelve `true`; NO ve «Lanzar Life OS MVP», que vive en el espacio personal de Luis. Luis ve los dos |
+| Cero proyectos huérfanos tras el backfill | ✅ EJECUTADO OK | `select count(*) from projects where workspace_id is null` → 0 |
+| El espacio personal se crea solo | ✅ EJECUTADO OK | `0011_workspace_obligatorio.sql`: insertar un usuario en `auth.users` deja su espacio personal **y** su membresía Owner; un segundo espacio personal rebota con `23505` |
+| El espacio personal no admite invitados | ✅ EJECUTADO OK | El `insert` en `invitations` contra un espacio personal falla en la BASE (`P0001`), no solo en la interfaz |
+| Un espacio con proyectos no se borra | ✅ EJECUTADO OK | `delete from workspaces` con un proyecto dentro lanza `P0001` con el conteo en el mensaje |
+
+### Tres pruebas que hubo que reescribir, y por qué
+
+No fue mantenimiento cosmético: sus aserciones **decían lo contrario** del
+modelo nuevo y pasaban por eso.
+
+- `0002_rls_execution_collaboration.sql` — su test central era «un Member NO
+  puede editar un proyecto compartido solo con nivel view». Desde 0031 el
+  Member edita los proyectos de su espacio. Reescrito entero a la tabla por rol
+  (Member, Viewer, Guest con y sin share, Outsider): de 7 assertions a 12.
+- `0004_rls_groups_folders.sql` — el test 4 (`Member SIN project_shares NO ve
+  el grupo del Board`) **falló en la primera corrida**, que es exactamente lo
+  que debía pasar. Se invirtió la expectativa dejando el montaje intacto.
+- `0010_rls_comments_delete.sql` — necesitaba a alguien que viera sin poder
+  editar, papel que hacía un Member con share `view`. Ese rol dejó de existir:
+  ahora lo hace un **Viewer**, el único que ve sin editar.
+
+### Lo que no se verificó
+
+- **El correo de invitación sobre el cable.** Sigue dependiendo de
+  `RESEND_API_KEY`, ausente en esta máquina; el enlace se genera y se muestra
+  igual (D-021), que es la ruta que sí se ejercitó.
+- **El recorrido de UI en el navegador.** Selector de espacio, panel de Equipo,
+  «Mover a otro espacio» y «Acceso de invitados» compilan y tienen sus acciones
+  probadas contra la RLS, pero no se hizo clic en ellos.

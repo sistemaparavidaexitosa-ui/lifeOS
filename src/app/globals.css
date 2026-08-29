@@ -257,6 +257,23 @@ textarea {
   min-height: 44px;
   width: 100%;
 }
+/* La casilla y el radio NO son un campo de texto: heredaban de la regla de
+   arriba el 100 % de ancho y los 44px de alto, y la lista de pasos de una
+   rutina dejaba de leerse como una lista. Se corrige aquí, en el origen, en vez
+   de repetir `style={{ width: "auto", minHeight: "auto" }}` en cada llamada.
+
+   `input:where(...)` pesa lo MISMO que el `input` de arriba (:where no suma
+   especificidad): gana por orden, y cualquier regla de clase —.mb-check,
+   .ex-menu-check, .mb-menu-check— sigue mandando sobre ambas. */
+input:where([type="checkbox"], [type="radio"]) {
+  width: 18px;
+  height: 18px;
+  min-height: auto;
+  padding: 0;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
 input:focus,
 select:focus,
 textarea:focus {
@@ -732,6 +749,44 @@ textarea:focus {
   min-height: auto;
   accent-color: var(--accent);
 }
+/* Ítem de menú del proyecto. Estaba escrito con `style={{...}}` y dos
+   handlers de mouse para el hover — que en táctil no existe. */
+.ex-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 9px 10px;
+  border-radius: 8px;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 13px;
+  min-height: 40px;
+}
+.ex-menu-item:hover {
+  background: var(--surface2);
+}
+.ex-menu-item.danger {
+  color: var(--danger);
+}
+.ex-menu-item.danger:hover {
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+/* Aviso de acción irreversible (borrar proyecto). */
+.ex-danger-note {
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 11px 12px;
+  border-radius: 12px;
+  border-left: 3px solid var(--danger);
+  background: color-mix(in srgb, var(--danger) 9%, var(--surface));
+}
+
 .ex-menu-actions {
   display: flex;
   gap: 8px;
@@ -834,6 +889,38 @@ textarea:focus {
   padding: 6px 10px;
   border-radius: 8px;
 }
+/* El "+" pasó de icono decorativo a botón real (QuickAddRow): tiene que
+   responder al puntero y tener área que pulsar. */
+.mb-quickadd-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  min-height: auto;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.13s ease, color 0.13s ease;
+}
+.mb-quickadd-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent-d);
+}
+.mb-quickadd-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.mb-quickadd-go {
+  flex-shrink: 0;
+  min-height: 30px;
+  padding: 4px 12px;
+  font-size: 12.5px;
+}
 .mb-newgroup {
   display: flex;
   align-items: center;
@@ -850,6 +937,41 @@ textarea:focus {
   min-height: 34px;
   padding: 4px 6px;
   width: 100%;
+}
+.mb-newgroup-btn {
+  flex-shrink: 0;
+}
+
+/* Métricas del grupo (barra de estados + % + vencidas) como un bloque, para
+   que en móvil bajen juntas y no se intercalen con los botones. */
+.mb-group-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Tablero sin ningún grupo: no hay dónde crear una tarea, así que la pantalla
+   tiene que decirlo y ofrecer la salida. */
+.mb-noboard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  padding: 26px 18px;
+  background: var(--surface);
+  border: 1px dashed color-mix(in srgb, var(--accent) 32%, var(--line));
+  border-radius: var(--r2);
+}
+.mb-noboard-icon {
+  font-size: 30px;
+  line-height: 1;
+}
+.mb-noboard p {
+  color: var(--muted);
+  margin: 0;
+  max-width: 46ch;
 }
 
 /* Mobile: cada fila se convierte en tarjeta apilada — nunca tabla con
@@ -880,10 +1002,6 @@ textarea:focus {
   .mb-indent-3 {
     padding-left: 20px;
     border-left: 3px solid var(--surface3);
-  }
-  .mb-menu {
-    left: auto;
-    right: 0;
   }
 }
 
@@ -923,6 +1041,12 @@ textarea:focus {
     min-height: 46px;
     font-size: 16px; /* evita el zoom automático de iOS Safari en focus */
   }
+  /* Área táctil algo mayor para la casilla, sin deformarla. */
+  input:where([type="checkbox"], [type="radio"]) {
+    min-height: auto;
+    width: 20px;
+    height: 20px;
+  }
 }
 
 ::-webkit-scrollbar {
@@ -934,54 +1058,198 @@ textarea:focus {
   border-radius: 999px;
 }
 /* ----------------------------------------------------------------------- */
-/* Execution OS — Workspace de 2 paneles (navegador de tableros + área de   */
-/* trabajo), barra de herramientas, Kanban, Tabla y Timeline.              */
-/* Reutiliza los tokens existentes — cero colores nuevos.                  */
+/* Execution OS — Cartera de proyectos, barra de herramientas, Kanban,      */
+/* Tabla y Timeline. Reutiliza los tokens existentes — cero colores nuevos. */
 /* ----------------------------------------------------------------------- */
-.ex-workspace {
-  display: grid;
-  grid-template-columns: 268px minmax(0, 1fr);
-  gap: 14px;
-  align-items: start;
-}
+/* La fila del tablero ocupa TODO el ancho de su contenedor, y la columna de
+   título es la que lleva el `1fr`: cuanto más ancho, más se estira ese hueco
+   y más lejos quedan los metadatos del nombre al que describen. Bajar la app
+   de 1600 a 1240px no bastó porque 1240 sigue sobrando para 574px de columnas
+   fijas. Aquí se fija la medida del módulo, no la de la app: cabecera, ribbon
+   y filas se estrechan JUNTOS, que es lo que evita que unos queden alineados
+   y otras no. Es el único sitio donde tocar esto. */
 .ex-main {
   min-width: 0;
+  width: 100%;
+  max-width: 1060px;
+  margin-inline: auto;
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-/* --- Navegador de tableros --------------------------------------------- */
-.ex-sidebar {
-  position: sticky;
-  top: calc(var(--topbar-total) + 10px);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r2);
-  padding: 12px;
-  max-height: calc(100dvh - var(--topbar-total) - 24px);
-  overflow: auto;
-}
-.ex-sidebar-toggle {
-  display: none;
-  width: 100%;
-  justify-content: flex-start;
-}
-.ex-sidebar-body {
+/* --- Cartera de proyectos ----------------------------------------------- */
+/* La cartera NO trae rejilla propia: reutiliza .mb-board/.mb-group/.mb-row,
+   así una fila de proyecto y una de tarea son la misma pieza y el
+   comportamiento responsive ya resuelto para tareas vale aquí sin copiarlo.
+   Lo único propio es el juego de columnas —la cartera no tiene "Personas"
+   sino "Avance"— y el título, que es un enlace y no un input. */
+.ex-portfolio {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 12px;
 }
-.ex-sidebar-head {
+.ex-portfolio-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
   flex-wrap: wrap;
 }
-.ex-sidebar-empty {
+.ex-portfolio-search {
+  flex: 1 1 200px;
+  max-width: 320px;
+}
+.ex-portfolio-spacer {
+  flex: 1 1 0;
+}
+/* NewProjectForm sustituye su botón por una tarjeta al abrirse. Sin esto
+   quedaría estrujada como un ítem flex más de la barra, entre el buscador y
+   el espaciador; así se queda con la línea entera. */
+.ex-portfolio-bar > form {
+  flex: 1 1 100%;
+}
+.ex-portfolio-board {
+  --mb-cols: minmax(220px, 1fr) 150px 128px 140px 160px;
+}
+
+/* --- Selector de espacio de trabajo (WorkspaceSwitcher) -------------------
+   Vive en la barra de la cartera, a la izquierda del buscador: desde las
+   migraciones 0030/0031 elegir espacio ES elegir qué proyectos se ven, así
+   que la decisión pertenece a esta barra y no al menú lateral. */
+.ex-ws-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 10px;
+  padding: 5px 9px 5px 5px;
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 700;
+  font-size: 13px;
+  max-width: 260px;
+}
+.ex-ws-trigger:hover {
+  background: var(--surface2);
+}
+.ex-ws-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ex-ws-caret {
+  color: var(--muted);
+  font-size: 10px;
+}
+.ex-ws-badge {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.ex-ws-option {
+  align-items: center;
+}
+.ex-ws-option.active {
+  background: var(--surface2);
+}
+.ex-ws-option-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.ex-ws-option-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ex-ws-option-role {
+  font-size: 11px;
+  font-weight: 600;
   color: var(--muted);
 }
+.ex-ws-create {
+  border-top: 1px solid var(--line);
+  margin-top: 6px;
+  padding-top: 6px;
+}
+.ex-portfolio-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text);
+  border-radius: 8px;
+  padding: 4px 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.ex-portfolio-title:hover {
+  background: var(--surface2);
+  color: var(--accent-d);
+}
+.ex-portfolio-count {
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+/* La barra y el porcentaje comparten celda: el número solo no dice si vas
+   bien, y la barra sola no dice cuánto. */
+.ex-portfolio-progress {
+  align-items: center;
+  gap: 8px;
+}
+.ex-portfolio-progress .progress {
+  flex: 1 1 auto;
+  min-width: 44px;
+}
+.ex-portfolio-progress b {
+  font-size: 11.5px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+/* --- Miga de pan (única vuelta a la cartera, ya sin navegador lateral) --- */
+.ex-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  min-width: 0;
+}
+.ex-crumb-back {
+  font-weight: 700;
+  color: var(--accent-d);
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  white-space: nowrap;
+}
+.ex-crumb-back:hover {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.ex-crumb-sep {
+  color: var(--muted);
+}
+.ex-crumb-current {
+  color: var(--muted);
+  font-weight: 650;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .ex-search {
   min-height: 36px;
   padding: 6px 10px;
@@ -992,43 +1260,13 @@ textarea:focus {
   display: flex;
   gap: 4px;
 }
-.ex-project-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.ex-project {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 9px 10px;
-  border-radius: 10px;
-  color: var(--text);
-  border-left: 3px solid transparent;
-}
-.ex-project:hover {
-  background: var(--surface2);
-}
-.ex-project.active {
-  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
-  border-left-color: var(--accent);
-}
-.ex-project-title {
-  font-weight: 700;
-  font-size: 13.5px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ex-project-meta {
-  color: var(--muted);
-}
-.ex-project-late {
-  color: var(--danger);
-}
-
 /* --- Encabezado del tablero -------------------------------------------- */
+/* El "⋯" se ancla a la esquina: en el flujo ocupaba una FILA entera de la
+   cabecera para un botón de 44px, con todo el ancho restante vacío a su
+   izquierda. Sacarlo del flujo devuelve esa línea al proyecto. El
+   padding-right reserva su hueco para que el título no se le meta debajo. */
 .ex-header {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1036,6 +1274,7 @@ textarea:focus {
   border: 1px solid var(--line);
   border-radius: var(--r2);
   padding: 14px 16px;
+  padding-right: 66px;
 }
 .ex-header-main {
   display: flex;
@@ -1067,11 +1306,20 @@ textarea:focus {
   white-space: nowrap;
 }
 .ex-header-actions {
+  position: absolute;
+  top: 12px;
+  right: 12px;
   display: flex;
-  align-items: flex-start;
-  justify-content: flex-end;
+  align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+}
+.ex-header-more {
+  min-width: 44px;
+  padding: 6px 12px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
 /* --- Barra de herramientas (vistas + filtros + resumen) ----------------- */
@@ -1121,67 +1369,191 @@ textarea:focus {
   color: var(--accent-d);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
 }
-.ex-toolbar-controls {
+
+/* --- Ribbon de acciones (estilo monday: buscar / persona / filtro / …) --- */
+.ex-ribbon {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 2px;
   flex-wrap: wrap;
+  border-top: 1px solid var(--line);
+  padding-top: 7px;
 }
-.ex-toolbar-controls .ex-search {
-  flex: 1;
-  min-width: 160px;
-}
-.ex-sort {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--muted);
-}
-.ex-sort select {
-  min-height: 36px;
-  padding: 5px 8px;
-  border-radius: 10px;
-  width: auto;
-}
-.ex-chips {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.ex-stat-chip {
+/* El ribbon es de iconos: la etiqueta vive en el title/aria-label, no pintada.
+   Seis controles con texto ("Buscar Persona Filtro Ordenar Status Fechas")
+   ocupaban la fila entera y la obligaban a envolver. Sin texto, el botón es
+   cuadrado salvo cuando lleva contador o valor, que sí se ven. */
+.ex-rib-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
-  font-size: 11.5px;
-  font-weight: 650;
-  color: var(--muted);
-  background: var(--surface2);
-  border-radius: 999px;
-  padding: 3px 10px;
-  border-left: 3px solid var(--chip-color, var(--muted));
-}
-.ex-stat-chip b {
+  border: none;
+  background: transparent;
   color: var(--text);
-  font-weight: 850;
+  font-size: 13px;
+  font-weight: 650;
+  padding: 7px;
+  min-width: 36px;
+  border-radius: 10px;
+  min-height: auto;
+  cursor: pointer;
+  transition: background 0.13s ease, color 0.13s ease;
 }
-.ex-filter-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  border-top: 1px solid var(--line);
-  padding-top: 10px;
+/* Con contador o valor deja de ser cuadrado y recupera aire lateral. */
+.ex-rib-btn:has(.ex-rib-count),
+.ex-rib-btn:has(.ex-rib-value),
+.ex-rib-clear {
+  padding-left: 10px;
+  padding-right: 10px;
 }
-.ex-filter-group {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.ex-filter-title {
-  font-size: 11px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+.ex-rib-btn svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
   color: var(--muted);
+}
+.ex-rib-btn:hover,
+.ex-rib-btn.open {
+  background: var(--surface2);
+}
+.ex-rib-btn:hover svg,
+.ex-rib-btn.open svg {
+  color: var(--text);
+}
+/* Un filtro puesto se ve en su propio botón — por eso ya no hace falta el
+   panel de filtros siempre abierto ni la fila de chips de resumen. */
+.ex-rib-btn.active,
+.ex-rib-btn.active:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent-d);
+}
+.ex-rib-btn.active svg {
+  color: var(--accent-d);
+}
+.ex-rib-btn .ex-rib-caret {
+  width: 14px;
+  height: 14px;
+  margin-left: -3px;
+}
+.ex-rib-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 800;
+}
+.ex-rib-value {
+  max-width: 104px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--accent-d);
+  font-weight: 750;
+}
+.ex-rib-clear {
+  margin-left: auto;
+  color: var(--muted);
+}
+.ex-rib-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1 1 190px;
+  max-width: 300px;
+  height: 34px;
+  padding: 0 6px 0 11px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--surface2);
+}
+.ex-rib-search:focus-within {
+  background: var(--surface);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.ex-rib-search svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  color: var(--muted);
+}
+.ex-rib-search input {
+  flex: 1;
+  min-width: 0;
+  min-height: auto;
+  padding: 0;
+  border: none;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+.ex-rib-x {
+  display: inline-flex;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 3px;
+  border-radius: 999px;
+  min-height: auto;
+  cursor: pointer;
+}
+.ex-rib-x:hover {
+  background: var(--surface3);
+  color: var(--text);
+}
+.ex-rib-x svg {
+  width: 14px;
+  height: 14px;
+}
+.ex-rib-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  flex: none;
+}
+.ex-rib-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--surface3);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+/* Opción de valor único dentro de un popover (Ordenar, Fechas). */
+.ex-menu-opt {
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 6px 8px;
+  border-radius: 8px;
+  min-height: auto;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ex-menu-opt:hover {
+  background: var(--surface2);
+}
+.ex-menu-opt.active {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  color: var(--accent-d);
+  font-weight: 750;
 }
 .ex-filter-row {
   display: flex;
@@ -1202,11 +1574,6 @@ textarea:focus {
 .ex-filter-pill.active {
   background: color-mix(in srgb, currentColor 14%, transparent);
   box-shadow: inset 0 0 0 1px currentColor;
-}
-.ex-filter-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
 }
 .ex-alert {
   display: flex;
@@ -1270,47 +1637,6 @@ textarea:focus {
 .ex-bulk-notice {
   width: 100%;
   color: var(--danger);
-}
-
-/* --- Portafolio (sin tablero seleccionado) ------------------------------ */
-.ex-overview {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.ex-overview-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 10px;
-}
-.ex-overview-title {
-  color: var(--muted);
-  margin: 0;
-}
-.ex-overview-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  gap: 10px;
-}
-.ex-overview-card {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  color: var(--text);
-  transition: transform 0.12s ease, border-color 0.12s ease;
-}
-.ex-overview-card:hover {
-  transform: translateY(-2px);
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
-}
-.ex-overview-card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.ex-overview-meta {
-  color: var(--muted);
 }
 
 /* --- Kanban ------------------------------------------------------------- */
@@ -1625,26 +1951,7 @@ textarea:focus {
   border: none;
 }
 
-/* --- Responsive: el workspace se apila y el navegador se pliega --------- */
 @media (max-width: 980px) {
-  .ex-workspace {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .ex-sidebar {
-    position: static;
-    max-height: none;
-    padding: 8px;
-  }
-  .ex-sidebar-toggle {
-    display: inline-flex;
-  }
-  .ex-sidebar .ex-sidebar-body {
-    display: none;
-    padding-top: 8px;
-  }
-  .ex-sidebar.open .ex-sidebar-body {
-    display: flex;
-  }
   .ex-toolbar {
     position: static;
   }
@@ -1661,15 +1968,13 @@ textarea:focus {
     padding: 6px 9px;
     font-size: 12px;
   }
-  .ex-toolbar-controls .ex-search {
+  .ex-rib-btn {
+    padding: 7px 9px;
+    font-size: 12.5px;
+  }
+  .ex-rib-search {
     flex: 1 1 100%;
-  }
-  .ex-sort {
-    flex: 1 1 auto;
-  }
-  .ex-sort select {
-    flex: 1;
-    min-width: 0;
+    max-width: none;
   }
 }
 
@@ -1824,7 +2129,7 @@ textarea:focus {
   /* Columnas más anchas: 104px no alcanzaban para "Sin empezar" ni para un
      rango "12 sep - 30 sep", que se cortaban con puntos suspensivos. El
      título arranca en 240px para que nunca quede reducido a dos palabras. */
-  --mb-cols: minmax(240px, 1fr) 132px 158px 136px 186px;
+  --mb-cols: minmax(220px, 1fr) 120px 150px 128px 176px;
 }
 .mb-group {
   border-radius: 16px;
@@ -1833,7 +2138,7 @@ textarea:focus {
   margin-bottom: 16px;
 }
 .mb-group-head {
-  padding: 11px 14px;
+  padding: 9px 14px;
   gap: 10px;
   font-size: 14px;
   letter-spacing: -0.01em;
@@ -1849,8 +2154,8 @@ textarea:focus {
   background: color-mix(in srgb, var(--surface2) 55%, var(--surface));
 }
 .mb-row {
-  padding: 9px 14px;
-  min-height: 52px;
+  padding: 7px 14px;
+  min-height: 46px;
   border-top-color: color-mix(in srgb, var(--line) 70%, transparent);
   transition: background 0.12s ease, box-shadow 0.12s ease;
 }
@@ -1963,26 +2268,10 @@ textarea:focus {
   color: var(--accent-d);
   box-shadow: var(--shadow-sm);
 }
-.ex-stat-chip {
-  border-radius: 999px;
-  font-size: 11.5px;
-  font-weight: 700;
-}
-
-/* --- Navegador de tableros --------------------------------------------- */
-.ex-sidebar {
-  border-radius: 16px;
-  box-shadow: var(--shadow-sm);
-}
-.ex-project {
-  transition: background 0.12s ease, border-color 0.12s ease;
-}
-.ex-project.active {
-  box-shadow: var(--shadow-sm);
-}
 .ex-header {
   border-radius: 16px;
   padding: 16px 18px;
+  padding-right: 68px;
   box-shadow: var(--shadow-sm);
 }
 .ex-header-title {
@@ -2022,25 +2311,40 @@ textarea:focus {
   .mb-group {
     margin-bottom: 12px;
   }
+  /* DENSIDAD EN MÓVIL. Apilada, la fila medía ~104px: con cinco tareas ya
+     había que hacer scroll para ver el grupo entero. El desglose era
+     revelador — 46px se los llevaba el título, 32px las pastillas, 26px el
+     relleno y los huecos. Se recorta cada parte sin bajar de un área táctil
+     usable, hasta ~72px. */
   .mb-row {
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    gap: 10px;
-    padding: 13px 14px;
+    gap: 5px;
+    padding: 6px 12px;
     min-height: 0;
   }
   .mb-row + .mb-row {
     border-top: 1px solid var(--line);
   }
   .mb-row-item {
-    gap: 8px;
+    gap: 6px;
   }
+  /* EL MAYOR CULPABLE: el título de la fila es un <input>, así que heredaba
+     el `min-height: 46px` que la regla base da a los campos en móvil. Casi la
+     mitad del alto de la fila la ponía un campo con UNA línea de texto —
+     .mb-row-title nunca lo anuló, a diferencia de .mb-group-name. */
   .mb-row-title {
     flex: 1 1 100%;
-    font-size: 14.5px;
+    min-height: auto;
+    font-size: 14px;
     font-weight: 650;
-    padding: 4px 6px;
+    padding: 2px 6px;
+  }
+  /* El asa de arrastre no sirve en táctil —el arrastre HTML5 no existe ahí— y
+     ya se pintaba invisible; ocupando sitio, eso sí. */
+  .mb-drag {
+    display: none;
   }
   /* Las cuatro celdas de metadatos fluyen en una sola línea envolvente, cada
      una con su ancho natural, en vez de repartirse en cuadrantes fijos. */
@@ -2058,7 +2362,7 @@ textarea:focus {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
+    gap: 5px;
   }
   .mb-row-meta .mb-cell {
     display: inline-flex;
@@ -2067,11 +2371,106 @@ textarea:focus {
   .mb-timeline {
     width: auto;
     min-width: 0;
-    padding-left: 11px;
-    padding-right: 11px;
+    min-height: 26px;
+    padding: 3px 10px;
   }
   .mb-row-tools {
     margin-left: auto;
+  }
+  /* Los botones de la fila son acciones secundarias (detalle, subtarea,
+     borrar) y son los que marcan el alto de la primera línea: 30px se pulsan
+     bien y no inflan la fila. Los del grupo se quedan en 38px porque son los
+     únicos de su cabecera. */
+  .mb-row-tools .mb-icon-btn {
+    min-height: 30px;
+    min-width: 30px;
+    padding: 4px 6px;
+  }
+  /* La celda de avance es la única que no es una pastilla: en la línea
+     envolvente necesita ancho propio o la barra queda de dos píxeles. */
+  .ex-portfolio-progress {
+    flex: 1 1 140px;
+  }
+  .ex-portfolio-title {
+    flex: 1 1 100%;
+    font-size: 14px;
+    padding: 2px 6px;
+    white-space: normal;
+  }
+  .ex-portfolio-progress {
+    gap: 6px;
+  }
+  .mb-group-head {
+    padding: 8px 12px;
+  }
+}
+
+/* ======================================================================== */
+/* Móvil: cabecera de grupo y de proyecto                                    */
+/*                                                                           */
+/* La cabecera de grupo era UNA sola fila envolvente con nueve controles:    */
+/* colapsar, casilla, nombre, contador, barra de estados de 120px fijos, %,  */
+/* chip de vencidas y tres botones anclados con `margin-left: auto`. En 360px */
+/* eso envuelve en tres líneas y el `auto` reparte los botones donde caiga:  */
+/* acababan encima de la barra de estados. Ahora el nombre manda en la       */
+/* primera línea con sus acciones, y las métricas bajan enteras a la suya.   */
+/* ======================================================================== */
+@media (max-width: 860px) {
+  .mb-group-head {
+    row-gap: 6px;
+  }
+  .mb-group-name {
+    flex: 1 1 auto;
+    max-width: none;
+    min-width: 0;
+  }
+  .mb-group-stats {
+    flex: 1 1 100%;
+    order: 3;
+  }
+  .mb-statusbar {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 60px;
+  }
+  .mb-group-actions {
+    order: 2;
+  }
+  /* 30px de alto es un objetivo táctil corto: los botones de grupo y de fila
+     se pulsan con el pulgar, no con un ratón. */
+  .mb-icon-btn {
+    min-height: 38px;
+    min-width: 38px;
+    padding: 6px 8px;
+  }
+  .mb-color-dot {
+    width: 22px;
+    height: 22px;
+  }
+
+  /* Alta rápida. El "+" ya es un botón de verdad, así que comparte línea con
+     el campo —el campo se queda con todo lo que sobra— y la confirmación baja
+     a su propia línea, a lo ancho, que es donde el pulgar la busca. */
+  .mb-quickadd,
+  .mb-newgroup {
+    flex-wrap: wrap;
+  }
+  .mb-quickadd input {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 40px;
+  }
+  .mb-quickadd-go {
+    flex: 1 1 100%;
+  }
+  /* El grupo no tiene botón "+" propio: su campo se lleva la línea entera y
+     "Crear grupo" baja debajo. */
+  .mb-newgroup input {
+    flex: 1 1 100%;
+    min-height: 40px;
+  }
+  .mb-newgroup-btn {
+    flex: 1 1 100%;
   }
 }
 
@@ -2093,5 +2492,36 @@ textarea:focus {
   .ex-bulkbar {
     padding: 10px 12px;
     border-radius: 14px;
+  }
+
+  /* Cabecera del proyecto: el título ya va en su propia línea (BoardHeader);
+     aquí se le quita el aire que le sobra y las acciones dejan de alinearse a
+     la derecha, donde "✨ Sugerir secuencia" y "⋯" quedaban descolgados. */
+  .ex-header {
+    padding: 14px;
+    padding-right: 60px;
+  }
+  .ex-header-title {
+    font-size: 1.15rem;
+  }
+  .ex-header-actions {
+    top: 10px;
+    right: 10px;
+  }
+
+  /* La barra de la cartera: buscador arriba, filtro y "+ Nuevo proyecto"
+     repartiéndose la línea de abajo. */
+  .ex-portfolio-search {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+  .ex-portfolio-spacer {
+    display: none;
+  }
+  .ex-portfolio-bar > .ex-scope {
+    flex: 1 1 auto;
+  }
+  .ex-portfolio-bar > .ex-scope .ex-tab {
+    flex: 1;
   }
 }

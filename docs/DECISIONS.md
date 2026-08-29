@@ -324,6 +324,76 @@
   `zod` pasa de `parse` a `safeParse` por lo mismo: un campo vacío producía una
   excepción cruda en vez de un mensaje.
 
+### Los workspaces se vuelven el contenedor de los proyectos (agosto 2026)
+
+- **D-031 Todo proyecto vive en un espacio de trabajo; `projects.workspace_id`
+  es NOT NULL** (migración `0030_workspaces_obligatorios.sql`). Antes había dos
+  clases de proyecto con reglas distintas: el personal (`workspace_id is null`,
+  invisible para cualquier colaborador) y el de workspace. Eso obligaba a que
+  «compartir» fuera una operación especial —la pantalla `/workspaces` movía el
+  proyecto Y creaba una fila en `project_shares`— y dejaba a los espacios como
+  un módulo aparte del menú lateral, al que había que ir y volver para algo que
+  se decide mirando los proyectos. Es el modelo de Notion y monday.com: el
+  espacio contiene, no etiqueta.
+
+  Para no perder la frontera de privacidad que dependía de aquel `null`, se
+  añade `workspaces.is_personal`: cada usuario tiene exactamente uno (índice
+  único parcial), se lo crea el trigger de alta, y no admite invitaciones ni
+  miembros ajenos ni borrado — las tres cosas rechazadas por triggers, no solo
+  por la interfaz. **«Proyecto personal» pasa a significar «proyecto en un
+  espacio personal»**, y con eso BR-012 sobrevive intacta: un resultado clave
+  sigue sin poder medirse contra el trabajo de un equipo.
+
+- **D-032 Membresía = acceso; `project_shares` cambia de trabajo**
+  (migración `0031_rls_acceso_por_workspace.sql`). Ser miembro activo del
+  espacio ya da acceso a sus proyectos:
+
+  | Rol | Ve | Edita |
+  |---|---|---|
+  | Owner / Admin | todo el espacio | sí |
+  | Member | todo el espacio | sí |
+  | Viewer | todo el espacio | nunca |
+  | Guest | solo lo de `project_shares` | solo con share `edit` |
+
+  `project_shares` no se elimina: pasa a ser la llave del **Guest**, el
+  colaborador externo acotado a ciertos proyectos. Dos correcciones que salieron
+  de aquí: `projects_insert_own` solo comprobaba `owner_id`, y con el espacio
+  obligatorio eso permitía plantar un proyecto en un workspace ajeno mandando su
+  id; y el `WITH CHECK` de `projects_update_edit` solo aceptaba dueño u
+  Owner/Admin, así que **un Member pasaba el `USING` y moría en el `CHECK`**:
+  nunca pudo editar de verdad, aunque la política decía que sí.
+
+  Las tablas hijas (`tasks`, `task_groups`, `milestones`, `comments`,
+  `task_files`) no se tocaron: heredan el criterio nuevo porque se apoyan en
+  `has_project_access`/`can_edit_project`, que es exactamente para lo que esos
+  helpers existen. Los cuatro llevan ahora `set row_security = off`, el patrón
+  que 0029 dejó establecido — eso cierra de paso el riesgo residual que 0012
+  documentó sin resolver (`memberships_*_admin` llamando a `workspace_role()`,
+  que vuelve a consultar `memberships` desde una política DE `memberships`).
+
+- **D-033 Un espacio con proyectos dentro no se borra.** `deleteWorkspace` hacía
+  `update projects set workspace_id = null` y eliminaba el espacio: los
+  proyectos de TODOS sus miembros quedaban en un limbo que la interfaz llamaba
+  «personal». Con la columna NOT NULL esa salida ya no existe, y las dos
+  alternativas eran bloquear o borrar en cascada. Se bloquea, con un mensaje que
+  dice cuántos proyectos estorban — es la opción que no puede destruir trabajo
+  ajeno con un clic. La regla vive en el trigger `guard_workspace_delete`, no
+  solo en la Server Action.
+
+  La FK de `projects.workspace_id` quedó en `on delete cascade` y no en
+  `restrict`, que sería lo intuitivo: al borrar una CUENTA, `workspaces` y
+  `projects` caen los dos por cascada desde `auth.users` y el orden entre esas
+  dos cascadas no está garantizado — con `restrict`, borrar una cuenta podía
+  fallar. El trigger se salta a sí mismo cuando el dueño ya no existe, que es
+  como distingue «borrado de cuenta» de «borrado de espacio».
+
+- **D-034 «Equipos y Colaboración» sale del menú lateral.** La ruta
+  `/workspaces` sobrevive únicamente como redirección a `/execution`: los
+  correos de invitación ya enviados apuntan ahí y no pueden terminar en un 404.
+  El espacio activo viaja en `?ws=` —igual que `?project=` y `?view=`— para que
+  el enlace sea compartible y el Server Component pueda filtrar la cartera en la
+  consulta en vez de traerlo todo y esconder lo que no toca.
+
 
 ## Guardrails aplicados literalmente del prompt de build
 

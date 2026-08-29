@@ -6,6 +6,9 @@
 -- Outsider de un mismo workspace, para probar que task_groups/folders
 -- heredan CORRECTAMENTE el acceso vía has_project_access/is_workspace_member
 -- (sin duplicar ninguna función RLS nueva).
+--
+-- Actualizado con la migración 0031 ("membresía = acceso"): el test del Member
+-- pasó de negativo a positivo. Ver la nota en su sección.
 
 begin;
 select plan(8);
@@ -67,15 +70,20 @@ select lives_ok(
 
 reset role;
 
--- Como Member (rol Member, sin project_shares del Board): NEGATIVA — no ve
--- el grupo porque el Board no está compartido explícitamente (mismo
--- comportamiento que ya tienen tasks/milestones para un Member sin share).
+-- Como Member: POSITIVA — ve el grupo del Board por SER MIEMBRO del espacio.
+--
+-- Esta aserción estaba invertida hasta la migración 0031: antes un Member no
+-- veía el Board sin una fila en project_shares, y este test comprobaba esa
+-- ausencia. Con "membresía = acceso" el Board es del espacio y sus grupos se
+-- heredan igual que las tareas — la llave por proyecto quedó reservada al rol
+-- Guest. Se cambia la expectativa, no el montaje: es exactamente el mismo
+-- Member de antes.
 select set_config('request.jwt.claims', json_build_object('sub', 'b2222222-2222-4222-8222-222222222222', 'role', 'authenticated')::text, true);
 set local role authenticated;
 
-select is_empty(
+select isnt_empty(
   $$ select 1 from public.task_groups where id = 'b7777777-7777-4777-8777-777777777777' $$,
-  'Member SIN project_shares NO ve el grupo del Board (RLS negativa, hereda has_project_access)'
+  'Member SÍ ve el grupo del Board de su espacio, sin project_shares (0031, hereda has_project_access)'
 );
 
 -- Pero SÍ ve el folder, porque folders solo depende de ser miembro del

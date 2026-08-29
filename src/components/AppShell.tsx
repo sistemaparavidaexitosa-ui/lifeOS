@@ -16,7 +16,6 @@ function TitleFromPath() {
 export default function AppShell({ userName, children }: { userName: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-  const wide = pathname.startsWith("/execution");
 
   // Cierra el drawer móvil automáticamente al navegar (mejora la experiencia
   // táctil: evita que el menú quede abierto tapando la nueva vista).
@@ -44,12 +43,14 @@ export default function AppShell({ userName, children }: { userName: string; chi
           userName={userName}
           onMenuClick={() => setOpen(true)}
         />
-        {/* El tablero de Ejecución es una rejilla de 5 columnas más el
-            navegador de proyectos: a 1240px las columnas de estado, prioridad
-            y fechas se quedaban sin ancho y el título se reducía a dos
-            palabras. El resto de módulos sí quiere la medida de lectura. */}
+        {/* Ejecución llegó a tener 1600px porque a su tablero de 5 columnas
+            había que sumarle el navegador de proyectos a la izquierda. Ese
+            navegador ya no existe —la cartera es la propia lista de filas—, y
+            sin él las filas se estiraban a lo ancho de la pantalla: 1600px
+            para 884px de columnas dejaba el título de la tarea con 700px
+            muertos. Todos los módulos comparten ahora la misma medida. */}
         <div
-          className={`p-3.5 sm:p-4 md:p-6 w-full mx-auto ${wide ? "max-w-[1600px]" : "max-w-[1240px]"}`}
+          className="p-3.5 sm:p-4 md:p-6 w-full mx-auto max-w-[1240px]"
           style={{ paddingBottom: "calc(24px + env(safe-area-inset-bottom))" }}
         >
           {children}

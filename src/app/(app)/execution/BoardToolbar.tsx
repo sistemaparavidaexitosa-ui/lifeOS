@@ -1,16 +1,36 @@
 "use client";
-// Barra de herramientas del tablero (equivalente a la barra de monday.com:
-// buscar / persona / filtro / ordenar) + pestañas de vista.
+// Ribbon del tablero, al estilo de monday.com: una fila de acciones planas
+// (buscar / persona / filtro / ordenar / status / fechas) debajo de las
+// pestañas de vista.
 //
-// Es la pieza que faltaba en el flujo anterior: la única forma de "encontrar"
-// una tarea era leer el tablero completo. Ahora el mismo filtro aplica a las
-// 4 vistas porque BoardShell filtra UNA vez con filterTaskTree() y les pasa
-// el resultado.
-import { useState } from "react";
+// POR QUÉ ASÍ
+//   - Antes la barra apilaba TRES bloques: pestañas, una fila con input +
+//     botones sueltos, y un resumen de 6 chips de estado. Ocupaba media
+//     pantalla antes de mostrar una sola tarea, y el resumen repetía lo que
+//     el propio tablero ya dice (cada fila lleva su estado y su fecha).
+//   - Ahora cada control es un botón plano con ícono que abre su popover.
+//     Los filtros activos se ven en el propio botón (tinte + contador), así
+//     que no hace falta un panel siempre abierto ni una fila de estadísticas.
+//
+// El filtro sigue siendo UNO solo para las 4 vistas: BoardShell filtra con
+// filterTaskTree() y les pasa el resultado ya filtrado.
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import MenuSurface, { useMenuAnchor } from "./MenuSurface";
 import { STATUS_META, STATUS_ORDER, PRIORITY_META, PRIORITY_ORDER } from "./status-meta";
 import { VIEW_LABELS, type ExecutionView } from "./board-types";
-import { EMPTY_FILTERS, type BoardFilters, type BoardStats, type DateBucket, type SortKey } from "@/lib/domain/board.ts";
+import { EMPTY_FILTERS, type BoardFilters, type DateBucket, type SortKey } from "@/lib/domain/board.ts";
 import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
+import {
+  IconCalendar,
+  IconChevronDown,
+  IconClose,
+  IconFilter,
+  IconSearch,
+  IconSort,
+  IconStatus,
+  IconUser,
+  type IconProps
+} from "@/components/icons";
 
 const DATE_BUCKETS: { key: DateBucket; label: string }[] = [
   { key: "all", label: "Todas" },
@@ -36,8 +56,6 @@ export default function BoardToolbar({
   sort,
   onSortChange,
   members,
-  stats,
-  filteredCount,
   filtersActive
 }: {
   view: ExecutionView;
@@ -47,15 +65,14 @@ export default function BoardToolbar({
   sort: SortKey;
   onSortChange: (s: SortKey) => void;
   members: string[];
-  stats: BoardStats;
-  filteredCount: number;
   filtersActive: boolean;
 }) {
-  const [panelOpen, setPanelOpen] = useState(false);
-
   function toggleIn<T>(list: T[], value: T): T[] {
     return list.includes(value) ? list.filter((x) => x !== value) : [...list, value];
   }
+
+  // "Filtro" recoge lo que no tiene botón propio en el ribbon.
+  const extraFilters = (filters.priorities.length ? 1 : 0) + (filters.hideDone ? 1 : 0);
 
   return (
     <div className="ex-toolbar">
@@ -75,137 +92,305 @@ export default function BoardToolbar({
         ))}
       </div>
 
-      <div className="ex-toolbar-controls">
-        <input
-          className="ex-search"
-          type="search"
-          value={filters.text}
-          onChange={(e) => onFiltersChange({ ...filters, text: e.target.value })}
-          placeholder="Buscar tarea…"
-          aria-label="Buscar tarea"
-        />
-        <button
-          type="button"
-          className={filtersActive ? "btn-primary btn-sm" : "btn-ghost btn-sm"}
-          onClick={() => setPanelOpen((v) => !v)}
-          aria-expanded={panelOpen}
-        >
-          Filtros{filtersActive ? ` · ${filteredCount}/${stats.total}` : ""}
-        </button>
-        <label className="ex-sort">
-          <span className="text-xs">Ordenar</span>
-          <select value={sort} onChange={(e) => onSortChange(e.target.value as SortKey)} aria-label="Ordenar tareas">
-            {SORTS.map((s) => (
-              <option key={s.key} value={s.key}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          type="button"
-          className={filters.hideDone ? "btn-primary btn-sm" : "btn-ghost btn-sm"}
-          onClick={() => onFiltersChange({ ...filters, hideDone: !filters.hideDone })}
-          title="Oculta tareas Hechas y Canceladas"
-        >
-          Solo trabajo vivo
-        </button>
-      </div>
+      <div className="ex-ribbon" role="toolbar" aria-label="Herramientas del tablero">
+        <RibbonSearch value={filters.text} onChange={(text) => onFiltersChange({ ...filters, text })} />
 
-      <div className="ex-chips">
-        <StatChip label="Total" value={stats.total} color="var(--muted)" />
-        <StatChip label={STATUS_META.InProgress.label} value={stats.inProgress} color={STATUS_META.InProgress.color} />
-        <StatChip label={STATUS_META.Blocked.label} value={stats.blocked} color={STATUS_META.Blocked.color} />
-        <StatChip label="Vencidas" value={stats.overdue} color="var(--danger)" />
-        <StatChip label="Vencen ≤3d" value={stats.dueSoon} color="var(--warn)" />
-        <StatChip label={STATUS_META.Completed.label} value={stats.done} color={STATUS_META.Completed.color} />
-      </div>
-
-      {panelOpen && (
-        <div className="ex-filter-panel">
-          <FilterGroup title="Estado">
-            {STATUS_ORDER.map((status: TaskStatus) => (
-              <button
-                key={status}
-                type="button"
-                className={`ex-filter-pill${filters.statuses.includes(status) ? " active" : ""}`}
-                style={{ borderColor: STATUS_META[status].color, color: STATUS_META[status].color }}
-                onClick={() => onFiltersChange({ ...filters, statuses: toggleIn(filters.statuses, status) })}
-              >
-                {STATUS_META[status].label}
-              </button>
-            ))}
-          </FilterGroup>
-
-          <FilterGroup title="Prioridad">
-            {PRIORITY_ORDER.map((priority: Priority) => (
-              <button
-                key={priority}
-                type="button"
-                className={`ex-filter-pill${filters.priorities.includes(priority) ? " active" : ""}`}
-                style={{ borderColor: PRIORITY_META[priority].color, color: PRIORITY_META[priority].color }}
-                onClick={() => onFiltersChange({ ...filters, priorities: toggleIn(filters.priorities, priority) })}
-              >
-                {PRIORITY_META[priority].label}
-              </button>
-            ))}
-          </FilterGroup>
-
-          <FilterGroup title="Fechas">
-            {DATE_BUCKETS.map((bucket) => (
-              <button
-                key={bucket.key}
-                type="button"
-                className={`ex-filter-pill${filters.date === bucket.key ? " active" : ""}`}
-                onClick={() => onFiltersChange({ ...filters, date: bucket.key })}
-              >
-                {bucket.label}
-              </button>
-            ))}
-          </FilterGroup>
-
-          {members.length > 0 && (
-            <FilterGroup title="Personas">
-              {members.map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  className={`ex-filter-pill${filters.people.includes(m) ? " active" : ""}`}
-                  onClick={() => onFiltersChange({ ...filters, people: toggleIn(filters.people, m) })}
-                >
-                  {m}
-                </button>
-              ))}
-            </FilterGroup>
+        <RibbonMenu icon={IconUser} label="Persona" count={filters.people.length} width={230}>
+          {() => (
+            <div className="ex-menu-list">
+              <span className="ex-menu-title">Responsables</span>
+              {members.length === 0 ? (
+                <span className="ex-menu-empty">Este tablero todavía no tiene responsables.</span>
+              ) : (
+                <div className="ex-menu-scroll">
+                  {members.map((m) => (
+                    <label key={m} className="ex-menu-check">
+                      <input
+                        type="checkbox"
+                        checked={filters.people.includes(m)}
+                        onChange={() => onFiltersChange({ ...filters, people: toggleIn(filters.people, m) })}
+                      />
+                      <span className="ex-rib-avatar" aria-hidden>
+                        {initials(m)}
+                      </span>
+                      {m}
+                    </label>
+                  ))}
+                </div>
+              )}
+              {filters.people.length > 0 && (
+                <div className="ex-menu-actions">
+                  <button
+                    type="button"
+                    className="btn-ghost btn-sm"
+                    onClick={() => onFiltersChange({ ...filters, people: [] })}
+                  >
+                    Limpiar
+                  </button>
+                </div>
+              )}
+            </div>
           )}
+        </RibbonMenu>
 
-          <div className="ex-filter-actions">
-            <button type="button" className="btn-ghost btn-sm" onClick={() => onFiltersChange(EMPTY_FILTERS)}>
-              Limpiar filtros
-            </button>
-            <button type="button" className="btn-primary btn-sm" onClick={() => setPanelOpen(false)}>
-              Listo
-            </button>
-          </div>
-        </div>
+        <RibbonMenu icon={IconFilter} label="Filtro" count={extraFilters} caret width={264}>
+          {(close) => (
+            <div className="ex-menu-list">
+              <span className="ex-menu-title">Prioridad</span>
+              <div className="ex-filter-row">
+                {PRIORITY_ORDER.map((priority: Priority) => (
+                  <button
+                    key={priority}
+                    type="button"
+                    className={`ex-filter-pill${filters.priorities.includes(priority) ? " active" : ""}`}
+                    style={{ borderColor: PRIORITY_META[priority].color, color: PRIORITY_META[priority].color }}
+                    onClick={() => onFiltersChange({ ...filters, priorities: toggleIn(filters.priorities, priority) })}
+                  >
+                    {PRIORITY_META[priority].label}
+                  </button>
+                ))}
+              </div>
+
+              <label className="ex-menu-check">
+                <input
+                  type="checkbox"
+                  checked={filters.hideDone}
+                  onChange={() => onFiltersChange({ ...filters, hideDone: !filters.hideDone })}
+                />
+                Solo trabajo vivo
+              </label>
+
+              <div className="ex-menu-actions">
+                <button type="button" className="btn-ghost btn-sm" onClick={() => onFiltersChange(EMPTY_FILTERS)}>
+                  Limpiar todo
+                </button>
+                <button type="button" className="btn-primary btn-sm" onClick={close}>
+                  Listo
+                </button>
+              </div>
+            </div>
+          )}
+        </RibbonMenu>
+
+        <RibbonMenu icon={IconSort} label="Ordenar" value={sort === "manual" ? null : sortLabel(sort)} width={232}>
+          {(close) => (
+            <div className="ex-menu-list">
+              <span className="ex-menu-title">Ordenar por</span>
+              <div className="ex-menu-scroll">
+                {SORTS.map((s) => (
+                  <button
+                    key={s.key}
+                    type="button"
+                    className={`ex-menu-opt${sort === s.key ? " active" : ""}`}
+                    onClick={() => {
+                      onSortChange(s.key);
+                      close();
+                    }}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </RibbonMenu>
+
+        <RibbonMenu icon={IconStatus} label="Status" count={filters.statuses.length} width={214}>
+          {() => (
+            <div className="ex-menu-list">
+              <span className="ex-menu-title">Estado</span>
+              <div className="ex-menu-scroll">
+                {STATUS_ORDER.map((status: TaskStatus) => (
+                  <label key={status} className="ex-menu-check">
+                    <input
+                      type="checkbox"
+                      checked={filters.statuses.includes(status)}
+                      onChange={() => onFiltersChange({ ...filters, statuses: toggleIn(filters.statuses, status) })}
+                    />
+                    <span className="ex-rib-dot" style={{ background: STATUS_META[status].color }} aria-hidden />
+                    {STATUS_META[status].label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+        </RibbonMenu>
+
+        <RibbonMenu
+          icon={IconCalendar}
+          label="Fechas"
+          value={filters.date === "all" ? null : dateLabel(filters.date)}
+          width={206}
+        >
+          {(close) => (
+            <div className="ex-menu-list">
+              <span className="ex-menu-title">Vencimiento</span>
+              <div className="ex-menu-scroll">
+                {DATE_BUCKETS.map((bucket) => (
+                  <button
+                    key={bucket.key}
+                    type="button"
+                    className={`ex-menu-opt${filters.date === bucket.key ? " active" : ""}`}
+                    onClick={() => {
+                      onFiltersChange({ ...filters, date: bucket.key });
+                      close();
+                    }}
+                  >
+                    {bucket.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </RibbonMenu>
+
+        {filtersActive && (
+          <button
+            type="button"
+            className="ex-rib-btn ex-rib-clear"
+            onClick={() => onFiltersChange(EMPTY_FILTERS)}
+            title="Quitar todos los filtros"
+          >
+            <IconClose aria-hidden />
+            <span>Limpiar</span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Buscador estilo monday: es un botón hasta que lo pulsas; ahí se abre el campo. */
+function RibbonSearch({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  // Con texto escrito se queda abierto: cerrar el campo escondería un filtro activo.
+  const expanded = open || value.trim().length > 0;
+
+  useEffect(() => {
+    if (open) inputRef.current?.focus();
+  }, [open]);
+
+  if (!expanded) {
+    return (
+      <button
+        type="button"
+        className="ex-rib-btn"
+        onClick={() => setOpen(true)}
+        title="Buscar tarea"
+        aria-label="Buscar tarea"
+      >
+        <IconSearch aria-hidden />
+      </button>
+    );
+  }
+
+  return (
+    <div className="ex-rib-search">
+      <IconSearch aria-hidden />
+      <input
+        ref={inputRef}
+        type="text"
+        value={value}
+        placeholder="Buscar tarea…"
+        aria-label="Buscar tarea"
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={() => {
+          if (!value.trim()) setOpen(false);
+        }}
+        onKeyDown={(e) => {
+          if (e.key !== "Escape") return;
+          onChange("");
+          setOpen(false);
+        }}
+      />
+      {value.length > 0 && (
+        <button
+          type="button"
+          className="ex-rib-x"
+          aria-label="Limpiar búsqueda"
+          onClick={() => {
+            onChange("");
+            inputRef.current?.focus();
+          }}
+        >
+          <IconClose aria-hidden />
+        </button>
       )}
     </div>
   );
 }
 
-function StatChip({ label, value, color }: { label: string; value: number; color: string }) {
+/**
+ * Botón plano del ribbon + su popover. Cada control lleva su propio anclaje,
+ * así que abrir uno cierra el anterior sin coordinación entre ellos (el
+ * backdrop de MenuSurface se encarga).
+ */
+function RibbonMenu({
+  icon: Icon,
+  label,
+  count = 0,
+  value = null,
+  caret = false,
+  width,
+  children
+}: {
+  icon: (p: IconProps) => ReactNode;
+  label: string;
+  /** Nº de opciones marcadas: pinta el botón como activo y muestra la cifra. */
+  count?: number;
+  /** Alternativa al contador para controles de opción única (orden, fechas). */
+  value?: string | null;
+  caret?: boolean;
+  width?: number;
+  children: (close: () => void) => ReactNode;
+}) {
+  const menu = useMenuAnchor();
+  const active = count > 0 || value !== null;
+  // La etiqueta deja de pintarse y pasa al title/aria-label: seis controles con
+  // texto ocupaban la fila entera y obligaban a envolverla. Lo que SÍ se queda
+  // es el estado —el contador y el valor elegido—, porque sin él un filtro
+  // activo no se distinguiría de uno vacío más que por el tinte del botón.
+  const described = value !== null ? `${label}: ${value}` : count > 0 ? `${label} (${count})` : label;
+
   return (
-    <span className="ex-stat-chip" style={{ "--chip-color": color } as React.CSSProperties}>
-      <b>{value}</b> {label}
-    </span>
+    <>
+      <button
+        type="button"
+        className={`ex-rib-btn${active ? " active" : ""}${menu.open ? " open" : ""}`}
+        onClick={menu.toggle}
+        aria-haspopup="menu"
+        aria-expanded={menu.open}
+        title={described}
+        aria-label={described}
+      >
+        <Icon aria-hidden />
+        {count > 0 && <span className="ex-rib-count">{count}</span>}
+        {value !== null && <span className="ex-rib-value">{value}</span>}
+        {caret && <IconChevronDown className="ex-rib-caret" aria-hidden />}
+      </button>
+      {menu.open && (
+        <MenuSurface anchor={menu.anchor} onClose={menu.close} align="start" width={width} label={label}>
+          {children(menu.close)}
+        </MenuSurface>
+      )}
+    </>
   );
 }
 
-function FilterGroup({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="ex-filter-group">
-      <span className="ex-filter-title">{title}</span>
-      <div className="ex-filter-row">{children}</div>
-    </div>
-  );
+function sortLabel(sort: SortKey): string {
+  return SORTS.find((s) => s.key === sort)?.label ?? "";
+}
+
+function dateLabel(bucket: DateBucket): string {
+  return DATE_BUCKETS.find((b) => b.key === bucket)?.label ?? "";
+}
+
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
 }

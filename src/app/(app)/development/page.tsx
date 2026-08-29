@@ -7,6 +7,7 @@ import { getUserTimeZone } from "@/lib/data/profile";
 import { loadSourceSnapshot } from "@/lib/data/development";
 import { keyResultProgress, goalProgress, goalAtRisk } from "@/lib/domain/development/goals.ts";
 import { routineDueToday, routineProgress, type Frequency } from "@/lib/domain/development/routines.ts";
+import { CardHeader, SectionHeader } from "./FormSheet";
 
 /**
  * Panel del módulo. No calcula nada propio: compone lo que ya resuelven
@@ -70,7 +71,9 @@ export default async function DevelopmentPage() {
     return (
       <Card>
         <EmptyState icon="🌱" text="Empieza definiendo una meta personal o una rutina." />
-        <div className="flex gap-2 justify-center">
+        {/* Dos botones y un texto largo no caben en una línea de 360px: se
+            apilan y solo se emparejan cuando hay ancho. */}
+        <div className="flex flex-col sm:flex-row gap-2 sm:justify-center">
           <Link href="/development/goals" className="btn-primary btn-sm">
             Definir una meta
           </Link>
@@ -84,18 +87,24 @@ export default async function DevelopmentPage() {
 
   return (
     <div className="flex flex-col gap-3.5">
-      <div className="grid gap-2.5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
+      {/* 160px de mínimo caían a UNA columna en pantallas de 320-360px: tres
+          tarjetas de ancho completo empujaban todo el panel bajo el pliegue.
+          Con 132px caben dos incluso en un iPhone SE. */}
+      <div className="grid gap-2.5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 132px), 1fr))" }}>
         <Stat label="Metas activas" value={goalRows.length} />
         <Stat label="Metas en riesgo" value={enRiesgo} kind={enRiesgo > 0 ? "bad" : undefined} />
         <Stat label="Rutinas de hoy" value={`${avanceRutinas}%`} kind={avanceRutinas < 50 ? "warn" : undefined} />
       </div>
 
-      <div className="flex items-center justify-between">
-        <h3 className="font-bold">Rutina de hoy</h3>
-        <Link href="/development/routines" className="btn-ghost btn-sm">
-          Ejecutar
-        </Link>
-      </div>
+      <SectionHeader
+        action={
+          <Link href="/development/routines" className="btn-ghost btn-sm">
+            Ejecutar
+          </Link>
+        }
+      >
+        Rutina de hoy
+      </SectionHeader>
       {!routineRows.length ? (
         <Card>
           <EmptyState icon="🔁" text="Hoy no toca ninguna rutina." />
@@ -103,25 +112,34 @@ export default async function DevelopmentPage() {
       ) : (
         routineRows.map(({ routine, progress }) => (
           <Card key={routine.id}>
-            <div className="flex items-center gap-2 flex-wrap">
-              <b className="grow">{routine.name}</b>
-              <Chip kind="info">{routine.frequency}</Chip>
-              <span className="text-xs" style={{ color: "var(--muted)" }}>
-                {progress.done}/{progress.total} pasos · {progress.remainingMin} min por delante
-              </span>
-            </div>
-            <div className="mt-2">
+            <CardHeader
+              title={routine.name}
+              meta={
+                <>
+                  <Chip kind="info">{routine.frequency}</Chip>
+                  <span className="text-xs" style={{ color: "var(--muted)" }}>
+                    {progress.done}/{progress.total} pasos · {progress.remainingMin} min por delante
+                  </span>
+                </>
+              }
+            />
+            <div className="mt-2.5">
               <Progress pct={progress.pct} />
             </div>
           </Card>
         ))
       )}
 
-      <div className="flex items-center justify-between mt-2">
-        <h3 className="font-bold">Metas activas</h3>
-        <Link href="/development/goals" className="btn-ghost btn-sm">
-          Ver todas
-        </Link>
+      <div className="mt-2">
+        <SectionHeader
+          action={
+            <Link href="/development/goals" className="btn-ghost btn-sm">
+              Ver todas
+            </Link>
+          }
+        >
+          Metas activas
+        </SectionHeader>
       </div>
       {!goalRows.length ? (
         <Card>
@@ -130,15 +148,19 @@ export default async function DevelopmentPage() {
       ) : (
         goalRows.map(({ goal, pct, atRisk, krCount }) => (
           <Card key={goal.id}>
-            <div className="flex items-center gap-2 flex-wrap">
-              <b className="grow">{goal.title}</b>
-              <Chip kind="info">{goal.area}</Chip>
-              {atRisk && <Chip kind="bad">En riesgo</Chip>}
-              <span className="text-xs" style={{ color: "var(--muted)" }}>
-                {krCount} resultado(s) clave{goal.horizon ? ` · horizonte ${goal.horizon}` : ""}
-              </span>
-            </div>
-            <div className="mt-2">
+            <CardHeader
+              title={goal.title}
+              meta={
+                <>
+                  <Chip kind="info">{goal.area}</Chip>
+                  {atRisk && <Chip kind="bad">En riesgo</Chip>}
+                  <span className="text-xs" style={{ color: "var(--muted)" }}>
+                    {krCount} resultado{krCount === 1 ? "" : "s"} clave{goal.horizon ? ` · horizonte ${goal.horizon}` : ""}
+                  </span>
+                </>
+              }
+            />
+            <div className="mt-2.5">
               <Progress pct={pct} kind={atRisk ? "warn" : undefined} />
             </div>
           </Card>

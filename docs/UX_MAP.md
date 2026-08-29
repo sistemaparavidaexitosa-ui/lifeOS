@@ -25,7 +25,7 @@ Server Action real que escribe en Postgres (guardrail NO-MOCK, F8).
 | Bandeja de recomendaciones | `/intelligence` | `intelligence/page.tsx` | `recommendations` | `setRecommendationStatus`,`editRecommendationText` |
 | Memoria del motor | `/intelligence/memory` | `intelligence/memory/page.tsx` | `memory_items` | `upsertMemoryItem`,`deleteMemoryItem` |
 | Opt-in y borrado de IA | `/settings` | `settings/AiSettings.tsx` | `profiles.ai_domains` | `setAiDomains`,`clearAiHistory`,`clearMemory` |
-| Equipos y Colaboración | `/workspaces` | `workspaces/page.tsx` | `workspaces`,`memberships`,`invitations`,`project_shares` | `createWorkspace`,`inviteMember`,`removeMember`,`shareProject`,`deleteWorkspace` |
+| Espacios de trabajo y equipo | `/execution` (selector + panel «Equipo») | `execution/WorkspaceSwitcher.tsx`,`execution/TeamPanel.tsx` | `workspaces`,`memberships`,`invitations`,`project_shares` | `createWorkspace`,`inviteMember`,`revokeInvitation`,`removeMember`,`moveProject`,`shareProjectWithGuest`,`deleteWorkspace` |
 | Dashboard y Gastos | `/money` | `money/page.tsx` | `accounts`,`journal_entries`,`journal_lines`,`budgets` | `createAccount`,`postTransaction`,`reconcileEntry`,`reverseEntry` |
 | Presupuesto (tabular) | `/money/budget` | `budget/page.tsx`,`QuincenalIncomeForm.tsx`,`CreateBudgetButton.tsx` | `budgets` (monthly_cost/q1/q2); `profiles.quincenal_income`; `accounts`+`journal_entries` (conciliación, lectura reutilizada) | `upsertBudgetLine`,`deleteBudgetLine`,`updateQuincenalIncome` |
 | Inversiones | `/investments` | `investments/page.tsx` | `investments` | `upsertInvestment`,`deleteInvestment` |

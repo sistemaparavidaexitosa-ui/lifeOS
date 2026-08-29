@@ -48,9 +48,25 @@ export default function QuickAddRow({
     });
   }
 
+  const empty = !value.trim();
+
   return (
     <div className="mb-quickadd" style={{ marginLeft: indent * 26 }}>
-      <IconPlus />
+      {/* El "+" era un icono decorativo: se veía como un botón y no hacía
+          nada. Ahora es el botón de verdad — con el campo vacío le da el foco
+          (que es lo que se espera al pulsarlo) y con algo escrito crea la
+          tarea, igual que Enter. En táctil esto importa el doble: el teclado
+          no siempre ofrece un Enter que envíe. */}
+      <button
+        type="button"
+        className="mb-quickadd-btn"
+        onClick={() => (empty ? ref.current?.focus() : submit())}
+        disabled={pending}
+        title={empty ? placeholder : "Crear"}
+        aria-label={empty ? placeholder : "Crear"}
+      >
+        <IconPlus />
+      </button>
       <input
         ref={ref}
         value={value}
@@ -60,8 +76,16 @@ export default function QuickAddRow({
         }}
         placeholder={placeholder}
         disabled={pending}
+        aria-label={placeholder}
         style={{ border: "none", background: "transparent", minHeight: "auto", padding: "4px 6px", width: "100%" }}
       />
+      {/* Con texto escrito aparece la confirmación explícita: el "+" solo no
+          dice que ya se puede crear. */}
+      {!empty && (
+        <button type="button" className="btn-primary btn-sm mb-quickadd-go" disabled={pending} onClick={submit}>
+          {pending ? "…" : "Agregar"}
+        </button>
+      )}
     </div>
   );
 }

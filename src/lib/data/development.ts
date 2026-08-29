@@ -4,6 +4,7 @@ import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { todayLocal, addDaysISO } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
+import { getPersonalWorkspaceIds } from "@/lib/data/workspaces";
 import type { SourceSnapshot } from "@/lib/domain/development/goals.ts";
 
 /**
@@ -11,9 +12,12 @@ import type { SourceSnapshot } from "@/lib/domain/development/goals.ts";
  * Envuelto en React `cache()` como getUserTimeZone(): /development y
  * /development/goals lo piden dentro del mismo request.
  *
- * PRIVACIDAD (BR-012): los proyectos se filtran a `workspace_id is null`. Un
- * resultado clave solo puede medirse contra un proyecto PERSONAL — si no, el
- * avance de un equipo se filtraría a un módulo declarado privado.
+ * PRIVACIDAD (BR-012): los proyectos se filtran a los de un WORKSPACE PERSONAL
+ * (workspaces.is_personal, migración 0030). Un resultado clave solo puede
+ * medirse contra un proyecto personal — si no, el avance de un equipo se
+ * filtraría a un módulo declarado privado. Antes el filtro era
+ * `workspace_id is null`, que dejó de existir cuando el workspace se volvió
+ * obligatorio.
  */
 export const loadSourceSnapshot = cache(async (): Promise<SourceSnapshot> => {
   const supabase = await createClient();
@@ -28,7 +32,11 @@ export const loadSourceSnapshot = cache(async (): Promise<SourceSnapshot> => {
   const [{ data: habits }, { data: logs }, { data: projects }, { data: books }, { data: fgoals }] = await Promise.all([
     supabase.from("habits").select("id"),
     supabase.from("habit_logs").select("habit_id, log_date").gte("log_date", from).lte("log_date", today),
-    supabase.from("projects").select("id").is("workspace_id", null),
+    // PROYECTO PERSONAL ya no es "sin workspace" (workspace_id es NOT NULL
+    // desde 0030): es "en un workspace personal". Sin este cambio la consulta
+    // no fallaba — devolvía cero filas, y el avance de los resultados clave
+    // ligados a un proyecto se quedaba en 0% sin decir por qué.
+    supabase.from("projects").select("id").in("workspace_id", await getPersonalWorkspaceIds()),
     supabase.from("books").select("id, current_page"),
     supabase.from("financial_goals").select("id, current_amount")
   ]);

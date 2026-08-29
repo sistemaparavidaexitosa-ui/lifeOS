@@ -3,8 +3,8 @@
 // conocimiento). Server Component puro.
 import { Chip, Progress } from "@/components/ui";
 import ProjectMenu, { type ProjectMenuData } from "./ProjectMenu";
-import SequenceButton from "./SequenceButton";
 import type { LogEntry, KnowledgeItem } from "./logbook-knowledge-actions";
+import type { WorkspaceSummary } from "@/lib/data/workspaces";
 
 export default function BoardHeader({
   project,
@@ -15,7 +15,11 @@ export default function BoardHeader({
   targetDateLabel,
   sequenceTasks,
   logbookEntries,
-  knowledgeItems
+  knowledgeItems,
+  workspaces,
+  currentWorkspaceId,
+  guestAccess,
+  workspaceIsPersonal
 }: {
   project: ProjectMenuData;
   progress: number;
@@ -26,11 +30,18 @@ export default function BoardHeader({
   sequenceTasks: { id: string; title: string }[];
   logbookEntries: LogEntry[];
   knowledgeItems: KnowledgeItem[];
+  /** Espacios donde el usuario puede escribir: destinos válidos para mover. */
+  workspaces: WorkspaceSummary[];
+  currentWorkspaceId: string;
+  /** Nivel del share vigente, o null si ningún invitado alcanza el proyecto. */
+  guestAccess: string | null;
+  workspaceIsPersonal: boolean;
 }) {
   return (
     <header className="ex-header">
+      <h2 className="ex-header-title">{project.title}</h2>
+
       <div className="ex-header-main">
-        <h2 className="ex-header-title">{project.title}</h2>
         <Chip kind={project.status === "Active" ? "accent" : project.status === "Completed" ? "ok" : ""}>{project.status}</Chip>
         <Chip kind={project.priority === "High" ? "bad" : project.priority === "Medium" ? "warn" : ""}>
           Prioridad {project.priority}
@@ -48,9 +59,21 @@ export default function BoardHeader({
         </span>
       </div>
 
+      {/* Una sola acción visible. "✨ Sugerir secuencia" era un botón ancho
+          permanente para algo que se usa de vez en cuando: ahora es una
+          entrada del "⋯" y esta fila deja de estirarse por él. */}
       <div className="ex-header-actions">
-        <SequenceButton projectId={project.id} tasks={sequenceTasks} />
-        <ProjectMenu project={project} logbookEntries={logbookEntries} knowledgeItems={knowledgeItems} />
+        <ProjectMenu
+          project={project}
+          taskCount={taskCount}
+          sequenceTasks={sequenceTasks}
+          logbookEntries={logbookEntries}
+          knowledgeItems={knowledgeItems}
+          workspaces={workspaces}
+          currentWorkspaceId={currentWorkspaceId}
+          guestAccess={guestAccess}
+          workspaceIsPersonal={workspaceIsPersonal}
+        />
       </div>
     </header>
   );

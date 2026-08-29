@@ -22,8 +22,14 @@ insert into public.profiles (user_id, name) values
   ('c2222222-2222-4222-8222-222222222222', 'Outsider3')
 on conflict (user_id) do nothing;
 
-insert into public.projects (id, owner_id, title)
-values ('c3333333-3333-4333-8333-333333333333', 'c1111111-1111-4111-8111-111111111111', 'Board Fase3')
+-- Desde la migración 0030 `projects.workspace_id` es NOT NULL: no existe el
+-- proyecto sin espacio. Se usa el espacio PERSONAL que el trigger de alta
+-- (handle_new_user) creó al insertar el usuario de arriba, que es exactamente
+-- lo que le pasa a un proyecto propio en la app.
+insert into public.projects (id, owner_id, workspace_id, title)
+select 'c3333333-3333-4333-8333-333333333333', 'c1111111-1111-4111-8111-111111111111', w.id, 'Board Fase3'
+from public.workspaces w
+where w.owner_id = 'c1111111-1111-4111-8111-111111111111' and w.is_personal
 on conflict (id) do nothing;
 
 insert into public.tasks (id, project_id, title)

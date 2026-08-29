@@ -36,7 +36,7 @@ export async function acceptInvitation(token: string): Promise<AcceptResult> {
   }
 
   if (row.ok) {
-    revalidatePath("/workspaces");
+    revalidatePath("/execution");
     revalidatePath("/execution");
   }
   return { ok: row.ok, message: row.message, workspaceId: row.workspace_id ?? null };

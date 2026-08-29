@@ -2,6 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getPersonalWorkspace } from "@/lib/data/workspaces";
 import { evaluateTransition } from "@/lib/domain/task-state.ts";
 import { suggestProjectSequence } from "@/lib/domain/project-sequence.ts";
 import type { TaskStatus } from "@/lib/domain/types.ts";
@@ -11,7 +12,12 @@ const projectSchema = z.object({
   objective: z.string().optional().default(""),
   status: z.enum(["Draft", "Active", "OnHold", "Completed", "Cancelled", "Archived"]).default("Active"),
   priority: z.enum(["High", "Medium", "Low"]).default("Medium"),
-  targetDate: z.string().optional().nullable()
+  targetDate: z.string().optional().nullable(),
+  // Desde la migración 0030 no existe el proyecto sin espacio: workspace_id es
+  // NOT NULL. Opcional AQUÍ y no en la base porque el formulario puede no
+  // mandarlo (un enlace viejo, una llamada sin el campo oculto) y en ese caso
+  // el destino correcto es el espacio personal, no un error en la cara.
+  workspaceId: z.string().uuid().optional().nullable()
 });
 
 export async function createProject(formData: FormData) {
@@ -20,7 +26,8 @@ export async function createProject(formData: FormData) {
     objective: formData.get("objective") ?? "",
     status: formData.get("status") ?? "Active",
     priority: formData.get("priority") ?? "Medium",
-    targetDate: formData.get("targetDate") || null
+    targetDate: formData.get("targetDate") || null,
+    workspaceId: formData.get("workspaceId") || null
   });
 
   const supabase = await createClient();
@@ -29,19 +36,84 @@ export async function createProject(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("No autenticado");
 
-  const { error } = await supabase.from("projects").insert({
-    owner_id: user.id,
-    title: parsed.title,
-    objective: parsed.objective,
-    status: parsed.status,
-    priority: parsed.priority,
-    target_date: parsed.targetDate,
-    owner_name: user.email ?? ""
-  });
+  const workspaceId = parsed.workspaceId ?? (await getPersonalWorkspace())?.id;
+  if (!workspaceId) {
+    // Solo pasa si el trigger de alta (0030) no corrió para esta cuenta. Vale
+    // más decirlo que insertar y morir contra el NOT NULL con un mensaje de
+    // Postgres.
+    throw new Error("No encontramos tu espacio personal. Recarga la página o crea un espacio antes de crear el proyecto.");
+  }
+
+  const { data: project, error } = await supabase
+    .from("projects")
+    .insert({
+      owner_id: user.id,
+      workspace_id: workspaceId,
+      title: parsed.title,
+      objective: parsed.objective,
+      status: parsed.status,
+      priority: parsed.priority,
+      target_date: parsed.targetDate,
+      owner_name: user.email ?? ""
+    })
+    .select("id")
+    .single();
   if (error) throw new Error(error.message);
+
+  // El proyecto nace CON su primer grupo. Sin esto el tablero recién creado
+  // salía vacío del todo: "+ Agregar tarea" vive dentro de un grupo, así que
+  // no había ni una sola forma visible de empezar — solo un input suelto de
+  // "Nuevo grupo" al final, que había que descubrir y rematar con Enter.
+  // El backfill de la migración 0019 dejó un grupo "General" a los proyectos
+  // que ya existían; esto hace lo mismo para los nuevos.
+  const { error: groupError } = await supabase
+    .from("task_groups")
+    .insert({ project_id: project.id, name: "General", color: "var(--c-purple)", position: 0 });
+  // Que falle el grupo no puede tumbar el proyecto ya creado: el tablero
+  // tiene un estado vacío que ofrece crearlo a mano.
+  if (groupError) console.error("No se pudo crear el grupo inicial:", groupError.message);
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "project.create", object: parsed.title });
   revalidatePath("/execution");
+
+  // Se devuelve el id para que quien lo crea pueda abrir su tablero: crear un
+  // proyecto y quedarse en la cartera obligaba a buscarlo y volver a hacer clic.
+  return project.id as string;
+}
+
+/**
+ * Borra un proyecto y todo lo que cuelga de él.
+ *
+ * tasks, task_groups, task_assignees y task_files caen por `on delete cascade`
+ * (migraciones 0003/0019/0020). comments NO: su relación es polimórfica
+ * (subject_type/subject_id) y por eso no tiene clave foránea, así que hay que
+ * borrarlos a mano o quedan filas apuntando a tareas que ya no existen.
+ * logbook y knowledge_items son `on delete set null` a propósito: son notas y
+ * aprendizajes del usuario, no del proyecto, y sobreviven a su borrado.
+ */
+export async function deleteProject(projectId: string) {
+  const id = z.string().uuid().parse(projectId);
+
+  const supabase = await createClient();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  const { data: taskRows } = await supabase.from("tasks").select("id").eq("project_id", id);
+  const taskIds = (taskRows ?? []).map((t) => t.id);
+
+  if (taskIds.length) {
+    await supabase.from("comments").delete().eq("subject_type", "task").in("subject_id", taskIds);
+  }
+  await supabase.from("comments").delete().eq("subject_type", "project").eq("subject_id", id);
+
+  const { error } = await supabase.from("projects").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+
+  await supabase.from("audit_log").insert({ user_id: user.id, action: "project.delete", object: id });
+  revalidatePath("/execution");
+  revalidatePath("/home");
 }
 
 const taskSchema = z.object({
@@ -310,6 +382,49 @@ const updateProjectSchema = z.object({
   priority: z.enum(["High", "Medium", "Low"]),
   targetDate: z.string().optional().nullable()
 });
+
+const patchProjectSchema = z.object({
+  projectId: z.string().uuid(),
+  status: z.enum(["Draft", "Active", "OnHold", "Completed", "Cancelled", "Archived"]).optional(),
+  priority: z.enum(["High", "Medium", "Low"]).optional(),
+  targetDate: z.string().nullable().optional()
+});
+
+export type ProjectPatch = Omit<z.infer<typeof patchProjectSchema>, "projectId">;
+
+/**
+ * Cambio parcial de UN campo del proyecto desde su fila en la cartera.
+ *
+ * updateProject() no sirve para esto: exige título, objetivo, estado,
+ * prioridad y fecha en el mismo envío, así que cambiar solo el estado desde
+ * una fila obligaría al cliente a reenviar el resto — y a pisarlo con lo que
+ * tuviera cargado, que es justo cómo se pierde el objetivo de un proyecto sin
+ * que nadie lo edite. Aquí solo viaja lo que cambió.
+ */
+export async function patchProject(projectId: string, patch: ProjectPatch) {
+  const parsed = patchProjectSchema.parse({ projectId, ...patch });
+
+  const supabase = await createClient();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  const { data: project } = await supabase.from("projects").select("version").eq("id", parsed.projectId).single();
+  if (!project) throw new Error("Proyecto no encontrado");
+
+  const update: Record<string, unknown> = { version: project.version + 1 };
+  if (parsed.status !== undefined) update.status = parsed.status;
+  if (parsed.priority !== undefined) update.priority = parsed.priority;
+  if (parsed.targetDate !== undefined) update.target_date = parsed.targetDate;
+
+  const { error } = await supabase.from("projects").update(update).eq("id", parsed.projectId);
+  if (error) throw new Error(error.message);
+
+  await supabase.from("audit_log").insert({ user_id: user.id, action: "project.update", object: parsed.projectId });
+  revalidatePath("/execution");
+  revalidatePath("/home");
+}
 
 export async function updateProject(formData: FormData) {
   const parsed = updateProjectSchema.parse({

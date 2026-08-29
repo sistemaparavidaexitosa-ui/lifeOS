@@ -219,6 +219,31 @@ export const IconCalendar = (p: IconProps) =>
     </>,
     p
   );
+export const IconSearch = (p: IconProps) =>
+  base(
+    <>
+      <circle cx="11" cy="11" r="6.2" />
+      <path d="m15.6 15.6 4.4 4.4" />
+    </>,
+    p
+  );
+export const IconFilter = (p: IconProps) => base(<path d="M4 5.5h16l-6.3 7.4v6.1l-3.4-2v-4.1z" />, p);
+export const IconSort = (p: IconProps) =>
+  base(
+    <>
+      <path d="M7 20V4m0 0L4 7.4M7 4l3 3.4" />
+      <path d="M17 4v16m0 0 3-3.4M17 20l-3-3.4" />
+    </>,
+    p
+  );
+export const IconStatus = (p: IconProps) =>
+  base(
+    <>
+      <circle cx="12" cy="12" r="8.2" />
+      <circle cx="12" cy="12" r="3.1" fill="currentColor" stroke="none" />
+    </>,
+    p
+  );
 export const IconMenu = (p: IconProps) => base(<path d="M4 6h16M4 12h16M4 18h16" />, p);
 export const IconClose = (p: IconProps) => base(<path d="M6 6l12 12M18 6 6 18" />, p);
 export const IconLogout = (p: IconProps) =>

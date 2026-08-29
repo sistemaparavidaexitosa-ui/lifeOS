@@ -89,8 +89,15 @@ export default function GroupHeader({
 
       <span className="mb-badge-count">{rootCount}</span>
 
+      {/* Barra, porcentaje y vencidas van juntos en su propio contenedor: en
+          móvil la cabecera era UNA fila envolvente con nueve controles sueltos
+          (colapsar, casilla, nombre, contador, barra de 120px, %, chip de
+          vencidas y tres botones con `margin-left:auto`), y al envolverse los
+          botones saltaban a mitad de la barra de estados. Agrupados, el bloque
+          de métricas baja entero a su línea y las acciones se quedan donde
+          estaban. */}
       {stats.total > 0 && (
-        <>
+        <span className="mb-group-stats">
           <span className="mb-statusbar" title={`${stats.done} de ${stats.total} completadas`} aria-hidden>
             {STATUS_ORDER.filter((s) => stats.byStatus[s] > 0).map((s) => (
               <i
@@ -105,7 +112,7 @@ export default function GroupHeader({
               {stats.overdue} vencida{stats.overdue > 1 ? "s" : ""}
             </span>
           )}
-        </>
+        </span>
       )}
 
       <div className="mb-group-actions">
