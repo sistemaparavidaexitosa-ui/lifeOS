@@ -5,7 +5,7 @@ import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
 import { loadSourceSnapshot } from "@/lib/data/development";
 import { getPersonalWorkspaceIds } from "@/lib/data/workspaces";
-import { keyResultProgress, goalProgress, goalAtRisk } from "@/lib/domain/development/goals.ts";
+import { keyResultProgress, goalProgress, goalAtRisk, type KeyResultSourceKind } from "@/lib/domain/development/goals.ts";
 import { CardHeader, ModuleNote, SectionHeader } from "../FormSheet";
 import GoalForm from "./GoalForm";
 import KeyResultForm, { type SourceOptions } from "./KeyResultForm";
@@ -18,7 +18,7 @@ export default async function PersonalGoalsPage() {
 
   const personalWorkspaceIds = await getPersonalWorkspaceIds();
 
-  const [{ data: goals }, { data: krs }, { data: habits }, { data: projects }, { data: books }, { data: fgoals }] =
+  const [{ data: goals }, { data: krs }, { data: habits }, { data: projects }, { data: books }, { data: fgoals }, { data: sgoals }] =
     await Promise.all([
       supabase.from("personal_goals").select("*").order("created_at"),
       supabase.from("key_results").select("*").order("position"),
@@ -29,7 +29,8 @@ export default async function PersonalGoalsPage() {
       // de proyecto ya no existe.
       supabase.from("projects").select("id, title").in("workspace_id", personalWorkspaceIds).order("title"),
       supabase.from("books").select("id, title").order("title"),
-      supabase.from("financial_goals").select("id, name").order("name")
+      supabase.from("financial_goals").select("id, name").order("name"),
+      supabase.from("savings_goals").select("id, name").order("name")
     ]);
 
   const today = todayLocal(await getUserTimeZone());
@@ -39,7 +40,8 @@ export default async function PersonalGoalsPage() {
     habit: (habits ?? []).map((h) => ({ id: h.id, label: h.name })),
     project: (projects ?? []).map((p) => ({ id: p.id, label: p.title })),
     book: (books ?? []).map((b) => ({ id: b.id, label: b.title })),
-    financial_goal: (fgoals ?? []).map((g) => ({ id: g.id, label: g.name }))
+    financial_goal: (fgoals ?? []).map((g) => ({ id: g.id, label: g.name })),
+    savings_goal: (sgoals ?? []).map((g) => ({ id: g.id, label: g.name }))
   };
 
   const rows = (goals ?? []).map((g) => {
@@ -49,7 +51,7 @@ export default async function PersonalGoalsPage() {
       p: keyResultProgress(
         {
           id: k.id,
-          sourceKind: k.source_kind as "habit" | "project" | "book" | "financial_goal" | "manual",
+          sourceKind: k.source_kind as KeyResultSourceKind,
           sourceId: k.source_id,
           target: Number(k.target),
           manualCurrent: Number(k.manual_current)

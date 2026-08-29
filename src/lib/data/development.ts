@@ -23,12 +23,12 @@ import { getSessionUser } from "@/lib/data/session";
 export const loadSourceSnapshot = cache(async (): Promise<SourceSnapshot> => {
   const supabase = await createClient();
   const user = await getSessionUser();
-  if (!user) return { habitCompletionPct: {}, projectDonePct: {}, bookPagesRead: {}, financialGoalAmount: {} };
+  if (!user) return { habitCompletionPct: {}, projectDonePct: {}, bookPagesRead: {}, financialGoalAmount: {}, savingsGoalAmount: {} };
 
   const today = todayLocal(await getUserTimeZone());
   const from = addDaysISO(today, -29); // ventana de 30 días para hábitos
 
-  const [{ data: habits }, { data: logs }, { data: projects }, { data: books }, { data: fgoals }] = await Promise.all([
+  const [{ data: habits }, { data: logs }, { data: projects }, { data: books }, { data: fgoals }, { data: sgoals }] = await Promise.all([
     supabase.from("habits").select("id"),
     supabase.from("habit_logs").select("habit_id, log_date").gte("log_date", from).lte("log_date", today),
     // PROYECTO PERSONAL ya no es "sin workspace" (workspace_id es NOT NULL
@@ -37,7 +37,8 @@ export const loadSourceSnapshot = cache(async (): Promise<SourceSnapshot> => {
     // ligados a un proyecto se quedaba en 0% sin decir por qué.
     supabase.from("projects").select("id").in("workspace_id", await getPersonalWorkspaceIds()),
     supabase.from("books").select("id, current_page"),
-    supabase.from("financial_goals").select("id, current_amount")
+    supabase.from("financial_goals").select("id, current_amount"),
+    supabase.from("savings_goals").select("id, current_amount")
   ]);
 
   const habitCompletionPct: Record<string, number> = {};
@@ -63,5 +64,8 @@ export const loadSourceSnapshot = cache(async (): Promise<SourceSnapshot> => {
   const financialGoalAmount: Record<string, number> = {};
   for (const g of fgoals ?? []) financialGoalAmount[g.id] = Number(g.current_amount);
 
-  return { habitCompletionPct, projectDonePct, bookPagesRead, financialGoalAmount };
+  const savingsGoalAmount: Record<string, number> = {};
+  for (const g of sgoals ?? []) savingsGoalAmount[g.id] = Number(g.current_amount);
+
+  return { habitCompletionPct, projectDonePct, bookPagesRead, financialGoalAmount, savingsGoalAmount };
 });

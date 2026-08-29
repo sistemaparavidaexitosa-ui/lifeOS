@@ -8,7 +8,7 @@
 
 import { diffDays } from "../datetime.ts";
 
-export type KeyResultSourceKind = "habit" | "project" | "book" | "financial_goal" | "manual";
+export type KeyResultSourceKind = "habit" | "project" | "book" | "financial_goal" | "savings_goal" | "manual";
 
 export interface KeyResultLike {
   id: string;
@@ -24,6 +24,8 @@ export interface SourceSnapshot {
   projectDonePct: Record<string, number>;
   bookPagesRead: Record<string, number>;
   financialGoalAmount: Record<string, number>;
+  /** Migración 0035: `savings_goals` es hermana de `financial_goals`, no un caso aparte. */
+  savingsGoalAmount: Record<string, number>;
 }
 
 export interface KeyResultProgress {
@@ -39,16 +41,29 @@ function pctOf(current: number, target: number): number {
   return Math.max(0, Math.min(100, Math.round((current / target) * 100)));
 }
 
+/**
+ * De qué tabla del snapshot sale el número de cada fuente. `manual` no aparece:
+ * se atiende antes, porque su valor no viene del snapshot sino del propio
+ * resultado clave.
+ */
+const SOURCE_TABLE: Record<Exclude<KeyResultSourceKind, "manual">, (s: SourceSnapshot) => Record<string, number>> = {
+  habit: (s) => s.habitCompletionPct,
+  project: (s) => s.projectDonePct,
+  book: (s) => s.bookPagesRead,
+  financial_goal: (s) => s.financialGoalAmount,
+  savings_goal: (s) => s.savingsGoalAmount
+};
+
 export function keyResultProgress(kr: KeyResultLike, sources: SourceSnapshot): KeyResultProgress {
   if (kr.sourceKind === "manual") {
     return { current: kr.manualCurrent, target: kr.target, pct: pctOf(kr.manualCurrent, kr.target), stale: false };
   }
 
-  const table =
-    kr.sourceKind === "habit" ? sources.habitCompletionPct
-    : kr.sourceKind === "project" ? sources.projectDonePct
-    : kr.sourceKind === "book" ? sources.bookPagesRead
-    : sources.financialGoalAmount;
+  // Un `switch` exhaustivo y no una cadena de ternarios con un `else` al final:
+  // con el else, añadir una fuente nueva y olvidar su rama la mandaba
+  // silenciosamente a la tabla de la última: el resultado clave mostraba el
+  // número de OTRA cosa. Así, olvidarla no compila.
+  const table = SOURCE_TABLE[kr.sourceKind](sources);
 
   const current = kr.sourceId === null ? undefined : table[kr.sourceId];
   if (current === undefined) return { current: 0, target: kr.target, pct: 0, stale: true };

@@ -14,6 +14,7 @@ export interface SourceOptions {
   project: SourceOption[];
   book: SourceOption[];
   financial_goal: SourceOption[];
+  savings_goal: SourceOption[];
 }
 
 const KIND_LABEL: Record<keyof SourceOptions | "manual", string> = {
@@ -21,6 +22,7 @@ const KIND_LABEL: Record<keyof SourceOptions | "manual", string> = {
   project: "Proyecto personal (% de tareas hechas)",
   book: "Libro (páginas leídas)",
   financial_goal: "Meta financiera (monto acumulado)",
+  savings_goal: "Ahorro (monto acumulado)",
   manual: "Captura manual"
 };
 

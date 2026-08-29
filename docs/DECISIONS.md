@@ -677,6 +677,51 @@
   y tres donde olvidarlo. De paso deja de bloquear: en /money la consulta era
   secuencial y retrasaba el resto del dashboard.
 
+- **D-051 Un ahorro también puede sostener una meta personal, y la cadena de
+  ternarios se vuelve exhaustiva.** `key_results` conocía cuatro fuentes desde
+  0024 —hábito, proyecto, libro y meta financiera— y dejaba Ahorros fuera sin
+  ninguna razón de diseño: `savings_goals` es hermana de `financial_goals`
+  (mismo `current_amount`, mismo `target`), y una meta del tipo "juntar el fondo
+  de emergencia" no se podía medir contra el ahorro que existe exactamente para
+  eso. Había que elegir entre una fuente equivocada o capturar el progreso a
+  mano, que es lo que este módulo existe para evitar.
+
+  Al añadir la quinta fuente se cambió también CÓMO se elige la tabla. Era una
+  cadena de ternarios con un `else` al final, y ese `else` es una trampa: una
+  fuente nueva sin su rama no daba error, caía en `financialGoalAmount` y el
+  resultado clave mostraba el número de otra cosa. Ahora es un `Record`
+  exhaustivo sobre `Exclude<KeyResultSourceKind, "manual">`, así que olvidar una
+  rama no compila. Hay una prueba que lo fija: un ahorro y una meta financiera
+  con el mismo id devuelven números distintos.
+
+  El `check` de la base se prueba en pgTAP y no solo en el dominio, porque es
+  ahí donde está la garantía: si alguien amplía el enum de TypeScript y olvida
+  la migración, el dominio compila y el `insert` revienta en producción.
+
+- **D-052 Se borra `milestones`; `folders` y `automations` se quedan, y conviene
+  decir por qué.** `milestones` la creó 0003 con sus políticas y sus grants, y
+  desde entonces ninguna línea de `src/` la nombra. Lo único que quedaba de ella
+  eran treinta y dos líneas en `database.types.ts` — la peor clase de tabla, la
+  que se lee en el esquema, se supone en uso y no lo está. Los hitos acabaron
+  siendo tareas con `impact` y `due` dentro del tablero, donde el usuario ya
+  trabaja; una tabla aparte obligaba a mantener dos listas del mismo proyecto
+  sincronizadas a mano. Se fue sin nada que perder: cero filas y cero claves
+  foráneas apuntándole.
+
+  Las otras dos NO son lo mismo, y la distinción importa porque "limpiar
+  esquema muerto" es justo la clase de tarea que se hace sin mirar:
+
+  - `folders` (0019) tiene cuatro políticas RLS, dos índices, la columna
+    `projects.folder_id` apuntándole y cuatro aserciones pgTAP que pasan. Es una
+    agrupación de tableros construida y probada a la espera de interfaz —
+    estructuralmente, la misma situación en la que estaban los extractores del
+    motor antes de D-050, y a aquellos se les terminó el trabajo en vez de
+    borrarlos.
+  - `automations` / `automation_runs` (0008) son la mitad no construida de
+    Intelligence OS: el paso de recomendar a proponer una acción con
+    confirmación explícita. Mientras esa decisión de producto siga abierta, se
+    quedan.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo

@@ -13,7 +13,8 @@ const EMPTY: SourceSnapshot = {
   habitCompletionPct: {},
   projectDonePct: {},
   bookPagesRead: {},
-  financialGoalAmount: {}
+  financialGoalAmount: {},
+  savingsGoalAmount: {}
 };
 
 function kr(over: Partial<KeyResultLike> = {}): KeyResultLike {
@@ -35,6 +36,28 @@ test("keyResultProgress: fuente hábito lee el % de cumplimiento", () => {
 
 test("keyResultProgress: fuente borrada devuelve stale, no un 0% que parece dato real", () => {
   const r = keyResultProgress(kr({ sourceKind: "book", sourceId: "b-borrado", target: 300 }), EMPTY);
+  assert.strictEqual(r.stale, true);
+  assert.strictEqual(r.pct, 0);
+});
+
+test("keyResultProgress: fuente ahorro lee el monto acumulado (migración 0035)", () => {
+  const sources: SourceSnapshot = { ...EMPTY, savingsGoalAmount: { s1: 25000 } };
+  const r = keyResultProgress(kr({ sourceKind: "savings_goal", sourceId: "s1", target: 50000 }), sources);
+  assert.strictEqual(r.current, 25000);
+  assert.strictEqual(r.pct, 50);
+  assert.strictEqual(r.stale, false);
+});
+
+test("keyResultProgress: un ahorro NO se confunde con una meta financiera del mismo id", () => {
+  // Antes había un `else` al final de la cadena de ternarios: una fuente nueva
+  // sin rama caía en financialGoalAmount y mostraba el número de otra cosa.
+  const sources: SourceSnapshot = { ...EMPTY, financialGoalAmount: { x1: 999 }, savingsGoalAmount: { x1: 100 } };
+  const r = keyResultProgress(kr({ sourceKind: "savings_goal", sourceId: "x1", target: 200 }), sources);
+  assert.strictEqual(r.current, 100, "debe leer el ahorro, no la meta financiera");
+});
+
+test("keyResultProgress: un ahorro borrado devuelve stale, igual que las demás fuentes", () => {
+  const r = keyResultProgress(kr({ sourceKind: "savings_goal", sourceId: "s-borrado", target: 100 }), EMPTY);
   assert.strictEqual(r.stale, true);
   assert.strictEqual(r.pct, 0);
 });

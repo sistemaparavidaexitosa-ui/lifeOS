@@ -1203,38 +1203,6 @@ export type Database = {
         }
         Relationships: []
       }
-      milestones: {
-        Row: {
-          created_at: string
-          done: boolean
-          id: string
-          project_id: string
-          title: string
-        }
-        Insert: {
-          created_at?: string
-          done?: boolean
-          id?: string
-          project_id: string
-          title: string
-        }
-        Update: {
-          created_at?: string
-          done?: boolean
-          id?: string
-          project_id?: string
-          title?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "milestones_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       net_worth_snapshots: {
         Row: {
           as_of: string

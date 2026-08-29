@@ -1,0 +1,29 @@
+-- 0036_drop_milestones.sql
+--
+-- BORRAR `milestones`, QUE NUNCA LLEGÓ A EXISTIR PARA LA APP.
+--
+-- La creó 0003 con sus dos políticas RLS y sus grants, y desde entonces ninguna
+-- línea de `src/` la nombra: ni una consulta, ni un tipo, ni una pantalla. Lo
+-- único que quedaba de ella eran las filas que `supabase gen types` generaba en
+-- database.types.ts, que es la peor clase de tabla — la que se lee en el
+-- esquema, se supone en uso, y no lo está.
+--
+-- Los hitos de un proyecto acabaron siendo otra cosa: tareas con `impact` y con
+-- `due`, dentro del tablero, donde el usuario ya trabaja. Una tabla aparte para
+-- lo mismo obligaba a mantener dos listas del mismo proyecto sincronizadas a
+-- mano.
+--
+-- Se va SIN datos que perder: cero filas y cero claves foráneas apuntándole.
+--
+-- Lo que NO se borra en esta migración, y conviene dejarlo dicho para que nadie
+-- lo "termine de limpiar" más adelante:
+--
+--   - `folders` (0019) NO está muerta. Tiene cuatro políticas RLS, dos índices,
+--     la columna `projects.folder_id` apuntándole y cuatro aserciones pgTAP que
+--     pasan. Es una agrupación de tableros construida y probada a la espera de
+--     interfaz, no un descarte.
+--   - `automations` / `automation_runs` (0008) son la mitad no construida de
+--     Intelligence OS: el paso de recomendar a proponer una acción con
+--     confirmación. Mientras esa decisión de producto siga abierta, se quedan.
+
+drop table if exists public.milestones cascade;
