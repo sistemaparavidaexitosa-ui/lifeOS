@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -16,6 +17,7 @@ import BoardHeader from "./BoardHeader";
 import BoardShell from "./BoardShell";
 import { isExecutionView, type BoardGroup, type BoardTask, type ExecutionView } from "./board-types";
 import { getProjectLogAndKnowledge } from "./logbook-knowledge-actions";
+import { getSessionUser } from "@/lib/data/session";
 
 // REDISEÑO DEL FLUJO DE PROYECTOS (estilo monday.com / ClickUp)
 //
@@ -54,24 +56,31 @@ export default async function ExecutionPage({
 }) {
   const { project: selectedProjectId, view: rawView, ws: requestedWorkspaceId } = await searchParams;
   const view: ExecutionView = isExecutionView(rawView) ? rawView : "board";
-  // "Hoy" sale de profiles.timezone, no del reloj del servidor (UTC en
+
+  const supabase = await createClient();
+  const user = await getSessionUser();
+  if (!user) redirect("/login");
+
+  // Las cuatro lecturas van en PARALELO: ninguna depende del resultado de otra
+  // y encadenarlas costaba cuatro viajes de ida y vuelta en serie antes del
+  // primer byte de HTML — que en un móvil es justo el rato en el que la
+  // pantalla se queda igual y parece que el toque no registró.
+  //
+  // "Hoy" sale de profiles.timezone y no del reloj del servidor (UTC en
   // Vercel): de lo contrario el conteo de vencidas se corría un día cada
   // tarde. El mismo valor viaja al cliente para que tablero y barra lateral
   // nunca se contradigan. Ver src/lib/domain/datetime.ts.
-  const today = todayInTimeZone(await getUserTimeZone());
-
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const workspaces = await listWorkspaces();
+  //
   // `projects` sigue trayendo TODO lo visible (la RLS ya filtra por membresía):
   // hace falta completo para localizar el proyecto abierto por ?project=, que
   // puede vivir en un espacio distinto del activo. La cartera sí se filtra.
-  const { data: projects } = await supabase.from("projects").select("*").order("created_at", { ascending: false });
-  const { data: allTasks } = await supabase.from("tasks").select("id, project_id, status, due, parent_task_id");
+  const [timeZone, workspaces, { data: projects }, { data: allTasks }] = await Promise.all([
+    getUserTimeZone(),
+    listWorkspaces(),
+    supabase.from("projects").select("*").order("created_at", { ascending: false }),
+    supabase.from("tasks").select("id, project_id, status, due, parent_task_id")
+  ]);
+  const today = todayInTimeZone(timeZone);
 
   const selectedProject = selectedProjectId ? projects?.find((p) => p.id === selectedProjectId) : undefined;
 
@@ -117,8 +126,15 @@ export default async function ExecutionPage({
               <>
                 <WorkspaceSwitcher workspaces={workspaces} activeId={activeWorkspace.id} basePath="/execution" />
                 <WorkspaceTabs workspaceId={activeWorkspace.id} />
+                {/* Suspense de verdad, no de comentario: sin este límite las
+                    dos consultas de TeamSection (roster + invitaciones)
+                    bloqueaban el render de la CARTERA entera. La cabecera del
+                    equipo, que casi nadie mira, retrasaba la lista de
+                    proyectos que mira todo el mundo. */}
                 {!activeWorkspace.isPersonal && (
-                  <TeamSection workspace={activeWorkspace} userId={user.id} projectCount={portfolio.length} />
+                  <Suspense fallback={<span className="btn-ghost btn-sm" aria-hidden>Equipo…</span>}>
+                    <TeamSection workspace={activeWorkspace} userId={user.id} projectCount={portfolio.length} />
+                  </Suspense>
                 )}
               </>
             )

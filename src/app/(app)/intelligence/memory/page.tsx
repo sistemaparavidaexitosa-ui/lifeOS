@@ -6,6 +6,7 @@ import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
 import { isExpired, type MemoryItemLike, type MemoryScope } from "@/lib/domain/insights/memory.ts";
 import MemoryForm from "./MemoryForm";
+import { getSessionUser } from "@/lib/data/session";
 
 const SCOPE_LABEL: Record<MemoryScope, string> = {
   goal: "Meta",
@@ -24,9 +25,7 @@ const SCOPE_LABEL: Record<MemoryScope, string> = {
  */
 export default async function MemoryPage() {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
 
   const today = todayLocal(await getUserTimeZone());

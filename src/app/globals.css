@@ -2928,3 +2928,72 @@ textarea:focus {
     max-height: 52vh;
   }
 }
+
+/* ========================================================================== */
+/* ESQUELETOS DE CARGA (loading.tsx)                                          */
+/*                                                                            */
+/* Todas las rutas de la app son dinámicas: cada navegación es un viaje al    */
+/* servidor. Sin un loading.tsx, el navegador se queda con la pantalla        */
+/* anterior y NADA indica que algo esté pasando — en escritorio se lee como   */
+/* "va lento", pero con el pulgar se lee como "no registró el toque" y la     */
+/* gente vuelve a tocar. Estas piezas son solo para eso: ocupar el hueco      */
+/* con la forma de lo que va a llegar.                                        */
+/* ========================================================================== */
+.sk {
+  background: linear-gradient(90deg, var(--surface2) 25%, var(--surface3) 37%, var(--surface2) 63%);
+  background-size: 400% 100%;
+  animation: sk-pulse 1.4s ease-in-out infinite;
+  border-radius: 8px;
+}
+@keyframes sk-pulse {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+/* Un fondo que late puede marear o disparar síntomas: quien lo pide, lo quita. */
+@media (prefers-reduced-motion: reduce) {
+  .sk {
+    animation: none;
+  }
+}
+.sk-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.sk-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.sk-chip {
+  height: 34px;
+  width: 128px;
+  border-radius: 10px;
+}
+.sk-line {
+  height: 13px;
+}
+.sk-row {
+  height: 58px;
+  border-radius: 14px;
+}
+.sk-tile {
+  height: 118px;
+  border-radius: 16px;
+}
+.sk-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 12px;
+}
+@media (max-width: 640px) {
+  .sk-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+  }
+}

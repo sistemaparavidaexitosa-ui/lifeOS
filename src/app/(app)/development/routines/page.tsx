@@ -13,12 +13,11 @@ import {
 import { CardHeader, ModuleNote, SectionHeader } from "../FormSheet";
 import RoutineForm, { StepForm, type OccupationLite } from "./RoutineForm";
 import RoutineRunner, { type RunnerStep } from "./RoutineRunner";
+import { getSessionUser } from "@/lib/data/session";
 
 export default async function RoutinesPage() {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
 
   // "Hoy" se calcula ANTES de consultar: la ventana de adherencia depende de él.

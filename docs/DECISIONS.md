@@ -461,6 +461,53 @@
   pelea con el teclado y con la barra de gestos.
 
 
+### Rendimiento percibido en móvil (agosto 2026)
+
+- **D-041 `loading.tsx` por sección.** No había ninguno en toda la app, y todas
+  las rutas son dinámicas (`ƒ` en el build, ni una `○`): cada navegación espera
+  al servidor con la pantalla anterior intacta y sin ninguna señal. En un
+  escritorio eso se lee como "va lento"; con el pulgar se lee como "no registró
+  el toque", y la gente vuelve a tocar. Hay uno genérico en `(app)/` y dos con
+  la forma de su destino (`execution/`, `notebooks/`), porque un esqueleto que
+  imita la lista evita el salto que produce reemplazar un spinner centrado por
+  un contenido que estaba en otro sitio.
+
+- **D-042 Una hipótesis de rendimiento que resultó FALSA, y por qué se deja
+  escrita.** Se contaron cinco llamadas a `supabase.auth.getUser()` en el camino
+  de `/execution` (middleware, layout, página, `getUserTimeZone`,
+  `listWorkspaces`) y, sabiendo que `getUser()` hace un `GET /auth/v1/user` de
+  verdad (ver `_getUser` en @supabase/auth-js), se dio por hecho que eran cinco
+  viajes de red por carga.
+
+  **Medido contra el servidor de producción local, contando las peticiones en el
+  log del contenedor de auth: eran 2, antes y después.** Next.js memoiza los
+  `fetch` GET idénticos dentro de un mismo render, así que las cuatro del render
+  ya colapsaban en una; la otra es la del middleware, que corre en otra
+  invocación y no puede compartirla.
+
+  Se conserva `getSessionUser()` (`src/lib/data/session.ts`) igualmente, pero por
+  un motivo distinto del que lo motivó: deja la deduplicación EXPLÍCITA con
+  `cache()` de React en vez de depender de un detalle del framework —el
+  comportamiento de caché de `fetch` ya cambió una vez entre Next 14 y 15— y
+  quita la repetición de cinco sitios. Lo que NO hace es ahorrar red.
+
+- **D-043 Paralelizar y `Suspense`: correctos, pero no demostrables en local.**
+  `/execution` encadenaba cuatro lecturas independientes (`getUserTimeZone`,
+  `listWorkspaces`, proyectos, tareas) y ahora van en un `Promise.all`; y
+  `TeamSection` está por fin dentro de un `<Suspense>` —el comentario que decía
+  que se separaba "para hacer streaming" era falso mientras no lo estuvo, y sus
+  dos consultas bloqueaban el render de la cartera entera.
+
+  Ninguna de las dos cosas se puede medir en local: con Supabase en `127.0.0.1`
+  un viaje de ida y vuelta cuesta menos de 1 ms, así que la mejora se pierde en
+  el ruido (las medianas se movieron ±0.07 s en ambas direcciones entre
+  corridas). Lo que estas dos quitan son viajes EN SERIE, y su efecto aparece
+  cuando cada viaje cuesta decenas de milisegundos — que es el caso real:
+  `vercel.json` fija la región `iad1` y el teléfono está en México.
+
+  El único recorte contable en local es que la ruta del editor de notas dejó de
+  lanzar la consulta de conteo que solo usa la estantería: 8 consultas -> 7.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo

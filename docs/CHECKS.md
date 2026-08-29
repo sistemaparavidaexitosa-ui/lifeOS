@@ -469,3 +469,39 @@ toca, para que la búsqueda pruebe la búsqueda y no el orden de los tests.
   `saveNote` está escrita y razonada, pero no se ha ejercitado con dos sesiones
   simultáneas. Reproducirlo pide abrir la misma nota en dos navegadores y
   guardar en orden.
+
+---
+
+## Rendimiento percibido en móvil (agosto 2026)
+
+Medido contra el build de producción (`pnpm build && pnpm start`) apuntando al
+Supabase local, con sesión real del usuario demo y contando peticiones en el log
+del contenedor de auth y en `pg_stat_statements`.
+
+| Check | Estado | Evidencia |
+|---|---|---|
+| **Llamadas a `/auth/v1/user` por request** | ⚠️ HIPÓTESIS REFUTADA | Se esperaban 5 y **eran 2, antes y después**. Next.js ya memoiza los `fetch` GET idénticos dentro de un render; la segunda es la del middleware, que corre en otra invocación. Ver D-042 |
+| Consultas PostgREST en `/execution?ws=<equipo>` | ✅ MEDIDO | 8 antes y 8 después. No se quita ninguna: lo que cambia es que 4 pasan de ir en serie a ir en paralelo, y 2 (TeamSection) salen del camino crítico |
+| Consultas en el editor de notas | ✅ MEDIDO, MEJORA REAL | 8 → 7. La consulta de conteo de notas solo aparece ya en la estantería, que es la única pantalla que la usa |
+| Tiempo de respuesta en local | ❌ NO CONCLUYENTE | Medianas de 15 requests: `/execution` 0.335 s antes vs 0.306 s después; con `?ws=` 0.258 s vs 0.332 s. Se mueve ±0.07 s **en ambas direcciones** entre corridas — con Supabase en 127.0.0.1 un viaje cuesta <1 ms y no hay latencia que ahorrar. Ver D-043 |
+| `pnpm typecheck` · `lint` · `test:unit` · `supabase test db` | ✅ EJECUTADO OK | 232 unitarias, 91 assertions pgTAP, sin regresiones |
+
+### El bug que apareció al intentar medir
+
+Para contar peticiones hacía falta una sesión real, y **el usuario demo del seed
+no podía iniciar sesión**: `auth.users` se sembraba con `email_change` y otras
+cinco columnas de token en NULL, GoTrue las lee como `string` de Go y devolvía
+500 «Database error querying schema». La causa real solo estaba en su log:
+*"converting NULL to string is unsupported"*. Venía así desde el primer commit
+del seed. Corregido en un commit aparte.
+
+### Lo que NO se pudo verificar
+
+- **Que paralelizar y `Suspense` mejoren el tiempo real.** Es la limitación de
+  medir en local: quitan viajes EN SERIE, y aquí cada viaje cuesta <1 ms. Para
+  verlo hace falta medir contra el despliegue (Vercel `iad1` + Supabase remoto)
+  con el teléfono, no con `curl` a `localhost`.
+- **La región.** `vercel.json` fija `iad1` (Virginia) y el perfil por defecto es
+  `America/Mexico_City`. Cambiarla depende de dónde esté alojado el proyecto de
+  Supabase, que no se puede consultar desde aquí. Queda como pendiente, no como
+  hecho.

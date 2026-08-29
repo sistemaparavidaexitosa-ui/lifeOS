@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
@@ -10,6 +11,7 @@ import NotebookGrid, { type NotebookCard } from "./NotebookGrid";
 import NoteList, { type NoteCard } from "./NoteList";
 import NoteEditor from "./NoteEditor";
 import NotesSearch from "./NotesSearch";
+import { getSessionUser } from "@/lib/data/session";
 
 // NOTEBOOKS — el sitio donde el equipo ESCRIBE.
 //
@@ -34,9 +36,7 @@ export default async function NotebooksPage({
   const { ws: requestedWorkspaceId, notebook: notebookId, note: noteId } = await searchParams;
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
 
   const workspaces = await listWorkspaces();
@@ -67,36 +67,19 @@ export default async function NotebooksPage({
   const notebooks = notebookRows ?? [];
   const openNotebook = notebookId ? notebooks.find((n) => n.id === notebookId) : undefined;
 
-  // Las notas se traen SOLO del cuaderno abierto. Traerlas todas para contar
-  // dejaría el cuerpo completo de cada nota del espacio viajando en cada carga
-  // de la estantería, que es justo lo que no se quiere en una conexión móvil.
-  const { data: counts } = await supabase
-    .from("notes")
-    .select("notebook_id")
-    .in("notebook_id", notebooks.map((n) => n.id).length ? notebooks.map((n) => n.id) : ["00000000-0000-0000-0000-000000000000"]);
-
-  const countByNotebook = new Map<string, number>();
-  for (const row of counts ?? []) {
-    countByNotebook.set(row.notebook_id, (countByNotebook.get(row.notebook_id) ?? 0) + 1);
-  }
-
-  const cards: NotebookCard[] = notebooks.map((n) => ({
-    id: n.id,
-    title: n.title,
-    icon: n.icon,
-    noteCount: countByNotebook.get(n.id) ?? 0,
-    createdByName: n.created_by_name,
-    updatedAt: n.updated_at
-  }));
-
   const header = (
     <div className="nb-bar">
       <WorkspaceSwitcher workspaces={workspaces} activeId={activeWorkspace.id} basePath="/notebooks" />
       <WorkspaceTabs workspaceId={activeWorkspace.id} />
       <span className="nb-bar-spacer" />
       <NotesSearch workspaceId={activeWorkspace.id} />
+      {/* Sin este límite, las dos consultas de TeamSection bloquean el
+          render de la pantalla entera — incluido el editor de una nota, que es
+          justo donde la espera se nota más. */}
       {!activeWorkspace.isPersonal && (
-        <TeamSection workspace={activeWorkspace} userId={user.id} projectCount={0} />
+        <Suspense fallback={<span className="btn-ghost btn-sm" aria-hidden>Equipo…</span>}>
+          <TeamSection workspace={activeWorkspace} userId={user.id} projectCount={notebooks.length} />
+        </Suspense>
       )}
     </div>
   );
@@ -179,6 +162,28 @@ export default async function NotebooksPage({
   // ---------------------------------------------------------------------------
   // Estantería del espacio
   // ---------------------------------------------------------------------------
+  // El conteo de notas se pide AQUÍ y no arriba: es lo único que lo usa. Antes
+  // se consultaba siempre, así que abrir una nota pagaba una consulta entera
+  // para pintar un número que esa pantalla ni siquiera muestra.
+  const { data: counts } = await supabase
+    .from("notes")
+    .select("notebook_id")
+    .in("notebook_id", notebooks.length ? notebooks.map((n) => n.id) : ["00000000-0000-0000-0000-000000000000"]);
+
+  const countByNotebook = new Map<string, number>();
+  for (const row of counts ?? []) {
+    countByNotebook.set(row.notebook_id, (countByNotebook.get(row.notebook_id) ?? 0) + 1);
+  }
+
+  const cards: NotebookCard[] = notebooks.map((n) => ({
+    id: n.id,
+    title: n.title,
+    icon: n.icon,
+    noteCount: countByNotebook.get(n.id) ?? 0,
+    createdByName: n.created_by_name,
+    updatedAt: n.updated_at
+  }));
+
   return (
     <main className="nb-main">
       {header}

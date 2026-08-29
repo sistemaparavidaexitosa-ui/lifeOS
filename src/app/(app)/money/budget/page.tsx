@@ -9,6 +9,7 @@ import { getUserTimeZone } from "@/lib/data/profile";
 import BudgetLineForm from "./BudgetLineForm";
 import QuincenalIncomeForm from "./QuincenalIncomeForm";
 import CreateBudgetButton from "./CreateBudgetButton";
+import { getSessionUser } from "@/lib/data/session";
 
 // PUNTO 4: la columna "Balance" ahora es GASTO − COSTO MENSUAL por ítem
 // (row.expenseVsBudget). Antes reflejaba de facto solo las aportaciones porque
@@ -17,9 +18,7 @@ import CreateBudgetButton from "./CreateBudgetButton";
 // Posted + Reconciled y expone expenseVsBudget para esta columna.
 export default async function BudgetTabPage() {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
 
   const [{ data: profile }, { data: budgets }, { data: categories }, { data: expenseEntries }, { data: accounts }, { data: allEntries }] =

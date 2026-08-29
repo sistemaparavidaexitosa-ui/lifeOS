@@ -4,12 +4,11 @@ import { Card, Chip, EmptyState } from "@/components/ui";
 import { money0, fdate } from "@/lib/format";
 import { savingsProjection } from "@/lib/domain/money.ts";
 import { SavingsGoalForm, ContributeButton } from "./SavingsGoalForm";
+import { getSessionUser } from "@/lib/data/session";
 
 export default async function SavingsPage() {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
 
   const [{ data: profile }, { data: goals }] = await Promise.all([

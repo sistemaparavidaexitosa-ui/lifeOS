@@ -9,12 +9,11 @@ import { keyResultProgress, goalProgress, goalAtRisk } from "@/lib/domain/develo
 import { CardHeader, ModuleNote, SectionHeader } from "../FormSheet";
 import GoalForm from "./GoalForm";
 import KeyResultForm, { type SourceOptions } from "./KeyResultForm";
+import { getSessionUser } from "@/lib/data/session";
 
 export default async function PersonalGoalsPage() {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
 
   const personalWorkspaceIds = await getPersonalWorkspaceIds();

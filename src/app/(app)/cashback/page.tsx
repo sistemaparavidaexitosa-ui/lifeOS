@@ -5,12 +5,11 @@ import { money0 } from "@/lib/format";
 import { cashbackAccrued } from "@/lib/domain/money.ts";
 import CashbackForm from "./CashbackForm";
 import RedeemButton from "./RedeemButton";
+import { getSessionUser } from "@/lib/data/session";
 
 export default async function CashbackPage() {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
 
   const [{ data: profile }, { data: cards }, { data: debts }, { data: categories }, { data: redemptions }] = await Promise.all([

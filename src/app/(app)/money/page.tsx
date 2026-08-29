@@ -11,12 +11,11 @@ import NewTransactionForm from "./NewTransactionForm";
 import NewAccountForm from "./NewAccountForm";
 import TxnRowActions from "./TxnRowActions";
 import InsightPanel, { type RecommendationLite } from "@/components/InsightPanel";
+import { getSessionUser } from "@/lib/data/session";
 
 export default async function MoneyPage() {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
 
   const t0 = todayLocal(await getUserTimeZone());

@@ -3,12 +3,11 @@ import { createClient } from "@/lib/supabase/server";
 import { Card, Chip, EmptyState, Stat } from "@/components/ui";
 import { money0, fdate } from "@/lib/format";
 import FamilyMemberForm from "./FamilyMemberForm";
+import { getSessionUser } from "@/lib/data/session";
 
 export default async function HouseholdPage() {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
 
   const [{ data: profile }, { data: members }, { data: entries }, { data: goals }, { data: investments }] = await Promise.all([

@@ -6,6 +6,7 @@ import { todayLocal, addDaysISO } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
 import { getPersonalWorkspaceIds } from "@/lib/data/workspaces";
 import type { SourceSnapshot } from "@/lib/domain/development/goals.ts";
+import { getSessionUser } from "@/lib/data/session";
 
 /**
  * Valor actual de cada fuente que puede alimentar un resultado clave.
@@ -21,9 +22,7 @@ import type { SourceSnapshot } from "@/lib/domain/development/goals.ts";
  */
 export const loadSourceSnapshot = cache(async (): Promise<SourceSnapshot> => {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { habitCompletionPct: {}, projectDonePct: {}, bookPagesRead: {}, financialGoalAmount: {} };
 
   const today = todayLocal(await getUserTimeZone());

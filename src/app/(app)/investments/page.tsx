@@ -6,12 +6,11 @@ import { Card, Chip, EmptyState } from "@/components/ui";
 import { money, money0, fdate } from "@/lib/format";
 import { investmentReturnPct } from "@/lib/domain/money.ts";
 import InvestmentForm from "./InvestmentForm";
+import { getSessionUser } from "@/lib/data/session";
 
 export default async function InvestmentsPage() {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
 
   const [{ data: profile }, { data: investments }, { data: familyMembers }] = await Promise.all([
