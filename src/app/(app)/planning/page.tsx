@@ -7,12 +7,11 @@ import { getUserTimeZone } from "@/lib/data/profile";
 import DailyPlanForm from "./DailyPlanForm";
 import CloseoutPanel from "./CloseoutPanel";
 import WeeklyReviewPanel from "./WeeklyReviewPanel";
+import { getSessionUser } from "@/lib/data/session";
 
 export default async function PlanningPage() {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
 
   const t0 = todayLocal(await getUserTimeZone());

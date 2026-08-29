@@ -394,6 +394,119 @@
   el enlace sea compartible y el Server Component pueda filtrar la cartera en la
   consulta en vez de traerlo todo y esconder lo que no toca.
 
+### Notebooks: el sitio donde el equipo escribe (agosto 2026)
+
+- **D-035 Los cuadernos cuelgan del ESPACIO, no del proyecto** (migración
+  `0032_notebooks.sql`). Ya existían dos sitios para escribir —`knowledge_items`
+  y `logbook`, desde 0003— y los dos fallan en lo mismo: cuelgan de un proyecto
+  y su RLS es `user_id = auth.uid()`, así que son notas de una sola persona,
+  invisibles hasta para su propio equipo. No había ningún lugar compartido donde
+  redactar. Los notebooks lo son, y por eso su contenedor es el workspace: un
+  acta de dirección o una nota de investigación no pertenece a un proyecto.
+
+  Jerarquía de dos niveles (Notebook → Nota, como Notion) y no de tres (con las
+  secciones de OneNote): cada nivel extra es otra pantalla que atravesar con el
+  pulgar, y esta función se va a usar sobre todo desde un iPhone.
+
+- **D-036 La nota es una página colaborativa, con `version` de verdad.**
+  Cualquiera con permiso de escritura edita la misma nota, y quedan las dos
+  marcas de autoría: quién la creó y quién la editó por última vez. Eso obliga a
+  resolver los choques, porque dos personas pueden estar escribiendo a la vez:
+  `saveNote` hace `update ... where id = $1 and version = $2`, y cero filas
+  significa que alguien se adelantó — entonces se relee para poder decir QUIÉN
+  fue, el editor se bloquea y **no se pisa su texto**. Es el patrón `version`
+  que ya llevaban `projects` y `tasks`, aplicado por primera vez a un texto
+  largo, que es donde de verdad duele perder trabajo.
+
+  `created_by` es nullable con `ON DELETE SET NULL`, a diferencia de
+  `comments.author_id` (NOT NULL + CASCADE). Es deliberado: dar de baja a
+  alguien no puede borrar las actas que escribió. El nombre va denormalizado al
+  lado para que la marca sobreviva a la cuenta, igual que `memberships.user_name`.
+
+- **D-037 El Guest no ve los cuadernos.** Su llave de acceso es
+  `project_shares`, que es POR PROYECTO; los notebooks no tienen equivalente, y
+  dejarlo entrar le abriría de golpe todo lo que el espacio escribe — justo lo
+  contrario de lo que ese rol significa. Un `notebook_shares` para invitados es
+  trabajo aparte. Owner/Admin/Member escriben, Viewer lee, y eso lo fija
+  `supabase/tests/0012_rls_notebooks.sql` rol por rol.
+
+- **D-038 Formato propio en vez de una librería de Markdown, y sin `innerHTML`.**
+  D-008 fija cero dependencias de runtime nuevas y aquí no hay motivo para
+  romperlo: un cuaderno necesita títulos, listas, negrita y enlaces, no tablas ni
+  notas al pie. `src/lib/domain/notes/markup.ts` es una función pura, probada
+  entera, que devuelve un ÁRBOL — no una cadena de HTML. Esa es la parte que
+  importa: el cuerpo lo escribe un colaborador, y si esto produjera HTML alguien
+  tendría que pintarlo con `dangerouslySetInnerHTML` y una nota se convertiría en
+  un vector de XSS contra todo su equipo. `NoteBody.tsx` recorre el árbol creando
+  elementos de React, y el esquema `https?://` está en el propio patrón, así que
+  un `href` con `javascript:` no llega ni a construirse.
+
+- **D-039 La búsqueda vive en la base, en español, y NO es `SECURITY DEFINER`.**
+  Columna generada `to_tsvector('spanish', title || body)` con índice GIN: busca
+  lematizando y sin acentos, así que «direccion» encuentra «dirección». Filtrar
+  en el cliente habría exigido descargar el cuerpo entero de cada nota del
+  espacio en cada pulsación. Y `search_notes()` corre con los privilegios de
+  quien llama a propósito: la RLS se aplica DENTRO de la función, de modo que la
+  búsqueda no puede devolver una nota ajena. Una fuga por búsqueda no la nota
+  nadie, porque no aparece en ninguna pantalla — por eso tiene su propio test.
+
+- **D-040 El editor de notas es una PANTALLA, y guarda solo.** Las dos son
+  decisiones de iPhone. El drawer lateral del tablero ocupa el 92dvh y con el
+  teclado abierto deja poco más de 200px para escribir, así que el editor tiene
+  URL propia (`?note=`) y el gesto de volver del sistema funciona. Y no hay botón
+  de guardar: guarda al parar de escribir, al perder el foco y —lo que de verdad
+  salva trabajo— en `visibilitychange`, porque en iOS bloquear el teléfono o
+  cambiar de app puede congelar la pestaña y es justo el momento en que se pierde
+  lo último escrito. Por lo mismo, las acciones van arriba: una barra fija abajo
+  pelea con el teclado y con la barra de gestos.
+
+
+### Rendimiento percibido en móvil (agosto 2026)
+
+- **D-041 `loading.tsx` por sección.** No había ninguno en toda la app, y todas
+  las rutas son dinámicas (`ƒ` en el build, ni una `○`): cada navegación espera
+  al servidor con la pantalla anterior intacta y sin ninguna señal. En un
+  escritorio eso se lee como "va lento"; con el pulgar se lee como "no registró
+  el toque", y la gente vuelve a tocar. Hay uno genérico en `(app)/` y dos con
+  la forma de su destino (`execution/`, `notebooks/`), porque un esqueleto que
+  imita la lista evita el salto que produce reemplazar un spinner centrado por
+  un contenido que estaba en otro sitio.
+
+- **D-042 Una hipótesis de rendimiento que resultó FALSA, y por qué se deja
+  escrita.** Se contaron cinco llamadas a `supabase.auth.getUser()` en el camino
+  de `/execution` (middleware, layout, página, `getUserTimeZone`,
+  `listWorkspaces`) y, sabiendo que `getUser()` hace un `GET /auth/v1/user` de
+  verdad (ver `_getUser` en @supabase/auth-js), se dio por hecho que eran cinco
+  viajes de red por carga.
+
+  **Medido contra el servidor de producción local, contando las peticiones en el
+  log del contenedor de auth: eran 2, antes y después.** Next.js memoiza los
+  `fetch` GET idénticos dentro de un mismo render, así que las cuatro del render
+  ya colapsaban en una; la otra es la del middleware, que corre en otra
+  invocación y no puede compartirla.
+
+  Se conserva `getSessionUser()` (`src/lib/data/session.ts`) igualmente, pero por
+  un motivo distinto del que lo motivó: deja la deduplicación EXPLÍCITA con
+  `cache()` de React en vez de depender de un detalle del framework —el
+  comportamiento de caché de `fetch` ya cambió una vez entre Next 14 y 15— y
+  quita la repetición de cinco sitios. Lo que NO hace es ahorrar red.
+
+- **D-043 Paralelizar y `Suspense`: correctos, pero no demostrables en local.**
+  `/execution` encadenaba cuatro lecturas independientes (`getUserTimeZone`,
+  `listWorkspaces`, proyectos, tareas) y ahora van en un `Promise.all`; y
+  `TeamSection` está por fin dentro de un `<Suspense>` —el comentario que decía
+  que se separaba "para hacer streaming" era falso mientras no lo estuvo, y sus
+  dos consultas bloqueaban el render de la cartera entera.
+
+  Ninguna de las dos cosas se puede medir en local: con Supabase en `127.0.0.1`
+  un viaje de ida y vuelta cuesta menos de 1 ms, así que la mejora se pierde en
+  el ruido (las medianas se movieron ±0.07 s en ambas direcciones entre
+  corridas). Lo que estas dos quitan son viajes EN SERIE, y su efecto aparece
+  cuando cada viaje cuesta decenas de milisegundos — que es el caso real:
+  `vercel.json` fija la región `iad1` y el teléfono está en México.
+
+  El único recorte contable en local es que la ruta del editor de notas dejó de
+  lanzar la consulta de conteo que solo usa la estantería: 8 consultas -> 7.
 
 ## Guardrails aplicados literalmente del prompt de build
 

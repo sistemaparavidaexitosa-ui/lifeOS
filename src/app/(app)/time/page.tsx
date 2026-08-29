@@ -10,6 +10,7 @@ import ActivityWindowForm from "./ActivityWindowForm";
 import OccupationForm from "./OccupationForm";
 import AssignSlotButton from "./AssignSlotButton";
 import WeekView from "./WeekView";
+import { getSessionUser } from "@/lib/data/session";
 
 // ACTUALIZACIÓN — Autogestión del Tiempo soporta ocupaciones y tareas para
 // CUALQUIER día de la semana (no solo "hoy"):
@@ -29,9 +30,7 @@ import WeekView from "./WeekView";
 export default async function TimePage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
   const { view } = await searchParams;
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
 
   const todayISO = todayLocal(await getUserTimeZone());

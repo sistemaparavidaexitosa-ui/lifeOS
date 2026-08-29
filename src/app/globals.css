@@ -1181,6 +1181,36 @@ textarea:focus {
   margin-top: 6px;
   padding-top: 6px;
 }
+
+/* --- Conmutador Proyectos / Notebooks ------------------------------------
+   Hereda la forma de .ex-tab (la píldora que ya usa el conmutador "En curso /
+   Todos") para que la barra del espacio no tenga dos lenguajes de pestaña
+   distintos a 20px de distancia. Es <a>, no <button>, porque navega. */
+.ws-tabs {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.ws-tab {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 750;
+  color: var(--muted);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.ws-tab:hover {
+  background: var(--surface2);
+  color: var(--text);
+}
+.ws-tab.active {
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  color: var(--accent-d);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
 .ex-portfolio-title {
   font-size: 13.5px;
   font-weight: 700;
@@ -2523,5 +2553,447 @@ textarea:focus {
   }
   .ex-portfolio-bar > .ex-scope .ex-tab {
     flex: 1;
+  }
+}
+
+/* ========================================================================== */
+/* NOTEBOOKS (/notebooks)                                                     */
+/*                                                                            */
+/* Se apoya en lo que ya existe —.card, .ex-search, .ex-tab, .ex-alert— y solo */
+/* añade lo propio del cuaderno. Casi todo lo de móvil ya viene heredado: los  */
+/* 16px en los campos de ≤640px que evitan el zoom de Safari, los objetivos    */
+/* táctiles de 46px y los safe-area del layout.                               */
+/* ========================================================================== */
+.nb-main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.nb-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.nb-bar-spacer {
+  flex: 1 1 0;
+}
+.nb-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* --- Estantería ---------------------------------------------------------- */
+.nb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 12px;
+}
+.nb-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+  min-height: 118px;
+}
+.nb-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  background: var(--surface2);
+}
+.nb-card-icon {
+  font-size: 26px;
+  line-height: 1.1;
+}
+.nb-card-title {
+  font-weight: 800;
+  font-size: 14.5px;
+  overflow-wrap: anywhere;
+}
+.nb-card-meta {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: auto;
+}
+.nb-icon-picker {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.nb-icon-option {
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  font-size: 19px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  cursor: pointer;
+}
+.nb-icon-option.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+}
+
+/* --- Migas y lista de notas ---------------------------------------------- */
+.nb-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+.nb-crumb-back {
+  color: var(--accent-d);
+  font-weight: 700;
+  text-decoration: none;
+}
+.nb-crumb-sep {
+  color: var(--muted);
+}
+.nb-crumb-current {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.nb-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overscroll-behavior: contain;
+}
+.nb-note-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 13px 15px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+}
+.nb-note-row:hover {
+  background: var(--surface2);
+}
+.nb-note-title {
+  font-weight: 750;
+  font-size: 14.5px;
+  overflow-wrap: anywhere;
+}
+.nb-note-excerpt {
+  font-size: 13px;
+  color: var(--muted);
+  /* Dos líneas de resumen y ni una más: con cinco, la lista deja de poder
+     recorrerse de un vistazo y en móvil se convierte en scroll infinito. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.nb-note-meta {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.nb-danger {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+/* --- Editor -------------------------------------------------------------- */
+.nb-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.nb-editor-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.nb-status {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--surface2);
+}
+.nb-status.guardando {
+  color: var(--accent-d);
+}
+.nb-status.sucio {
+  color: var(--warn);
+}
+.nb-status.conflicto,
+.nb-status.error {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, var(--surface));
+}
+.nb-title-input {
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  border: none;
+  background: transparent;
+  padding: 4px 0;
+  min-height: auto;
+}
+.nb-title-input:focus {
+  outline: none;
+  box-shadow: none;
+}
+/* El textarea NO tiene scroll propio: crece con su contenido y quien scrollea
+   es la página. Dos superficies de scroll anidadas en un móvil son una trampa
+   para el pulgar — se arrastra la de fuera cuando se quería la de dentro. */
+.nb-body-input {
+  border: none;
+  background: transparent;
+  padding: 0;
+  resize: none;
+  overflow: hidden;
+  line-height: 1.65;
+  font-size: 15px;
+  font-family: inherit;
+  min-height: 40vh;
+}
+.nb-body-input:focus {
+  outline: none;
+  box-shadow: none;
+}
+.nb-signature {
+  font-size: 11.5px;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+/* --- Vista (lectura) ----------------------------------------------------- */
+.nb-read-title {
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  margin-bottom: 8px;
+  overflow-wrap: anywhere;
+}
+.nb-prose {
+  font-size: 15px;
+  line-height: 1.65;
+}
+.nb-prose h2,
+.nb-prose h3,
+.nb-prose h4 {
+  font-weight: 800;
+  margin: 16px 0 6px;
+  letter-spacing: -0.01em;
+}
+.nb-prose h2 {
+  font-size: 18px;
+}
+.nb-prose h3 {
+  font-size: 16px;
+}
+.nb-prose h4 {
+  font-size: 14.5px;
+}
+/* pre-wrap para respetar los saltos de línea que se escribieron dentro de un
+   mismo párrafo: ver el comentario de parseNote(). */
+.nb-prose p {
+  margin: 8px 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.nb-prose ul,
+.nb-prose ol {
+  margin: 8px 0 8px 22px;
+}
+.nb-prose li {
+  margin: 3px 0;
+}
+.nb-prose ul {
+  list-style: disc;
+}
+.nb-prose ol {
+  list-style: decimal;
+}
+.nb-prose blockquote {
+  margin: 10px 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  border-radius: 0 10px 10px 0;
+  white-space: pre-wrap;
+}
+.nb-prose code {
+  background: var(--surface2);
+  padding: 1px 5px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.nb-prose a {
+  color: var(--info);
+  overflow-wrap: anywhere;
+}
+
+/* --- Búsqueda ------------------------------------------------------------ */
+.nb-search {
+  position: relative;
+  flex: 1 1 180px;
+  max-width: 280px;
+}
+.nb-search .ex-search {
+  width: 100%;
+}
+.nb-search-results {
+  position: absolute;
+  z-index: var(--z-popover);
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  min-width: 260px;
+  max-height: 60vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 18px 44px rgba(20, 20, 60, 0.18);
+  padding: 6px;
+}
+.nb-search-empty {
+  font-size: 12.5px;
+  color: var(--muted);
+  padding: 10px;
+}
+.nb-search-hit {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  color: var(--text);
+  text-decoration: none;
+}
+.nb-search-hit:hover {
+  background: var(--surface2);
+}
+.nb-search-hit-title {
+  font-weight: 750;
+  font-size: 13.5px;
+}
+.nb-search-hit-book {
+  font-size: 11px;
+  color: var(--muted);
+}
+.nb-search-hit-snippet {
+  font-size: 12.5px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .nb-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+  }
+  .nb-title-input {
+    font-size: 19px;
+  }
+  /* 16px exactos en el cuerpo: por debajo, Safari hace zoom al enfocar y
+     descoloca la página entera mientras se escribe. */
+  .nb-body-input {
+    font-size: 16px;
+    min-height: 50vh;
+  }
+  /* El panel de resultados ocupa el ancho de la pantalla: anclado al campo se
+     quedaba en 280px, ilegible para un fragmento de texto. */
+  .nb-search {
+    max-width: none;
+  }
+  .nb-search-results {
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    top: auto;
+    max-height: 52vh;
+  }
+}
+
+/* ========================================================================== */
+/* ESQUELETOS DE CARGA (loading.tsx)                                          */
+/*                                                                            */
+/* Todas las rutas de la app son dinámicas: cada navegación es un viaje al    */
+/* servidor. Sin un loading.tsx, el navegador se queda con la pantalla        */
+/* anterior y NADA indica que algo esté pasando — en escritorio se lee como   */
+/* "va lento", pero con el pulgar se lee como "no registró el toque" y la     */
+/* gente vuelve a tocar. Estas piezas son solo para eso: ocupar el hueco      */
+/* con la forma de lo que va a llegar.                                        */
+/* ========================================================================== */
+.sk {
+  background: linear-gradient(90deg, var(--surface2) 25%, var(--surface3) 37%, var(--surface2) 63%);
+  background-size: 400% 100%;
+  animation: sk-pulse 1.4s ease-in-out infinite;
+  border-radius: 8px;
+}
+@keyframes sk-pulse {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+/* Un fondo que late puede marear o disparar síntomas: quien lo pide, lo quita. */
+@media (prefers-reduced-motion: reduce) {
+  .sk {
+    animation: none;
+  }
+}
+.sk-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.sk-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.sk-chip {
+  height: 34px;
+  width: 128px;
+  border-radius: 10px;
+}
+.sk-line {
+  height: 13px;
+}
+.sk-row {
+  height: 58px;
+  border-radius: 14px;
+}
+.sk-tile {
+  height: 118px;
+  border-radius: 16px;
+}
+.sk-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 12px;
+}
+@media (max-width: 640px) {
+  .sk-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
   }
 }

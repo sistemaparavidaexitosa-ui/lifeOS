@@ -3,14 +3,13 @@ import { createClient } from "@/lib/supabase/server";
 import { Card, EmptyState, Progress } from "@/components/ui";
 import { ModuleNote, SectionHeader } from "../FormSheet";
 import BookForm, { BookCover } from "./BookForm";
+import { getSessionUser } from "@/lib/data/session";
 
 const GROUP_TITLE = { Leyendo: "En curso", "Por leer": "Por leer", Terminado: "Terminados" } as const;
 
 export default async function LibraryPage() {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
 
   const [{ data: books }, { data: allNotes }] = await Promise.all([

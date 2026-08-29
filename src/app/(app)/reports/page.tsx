@@ -5,6 +5,7 @@ import { money0, fdate } from "@/lib/format";
 import { periodStats, accountBalance, netWorth } from "@/lib/domain/money.ts";
 import { addDaysISO, todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
+import { getSessionUser } from "@/lib/data/session";
 
 const PERIODS = [
   { key: "daily", label: "Diario", days: 1 },
@@ -16,9 +17,7 @@ const PERIODS = [
 export default async function ReportsPage({ searchParams }: { searchParams: Promise<{ period?: string }> }) {
   const { period = "weekly" } = await searchParams;
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
 
   const activePeriod = PERIODS.find((p) => p.key === period) ?? PERIODS[1];

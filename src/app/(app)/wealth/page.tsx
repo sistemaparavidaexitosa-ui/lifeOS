@@ -8,12 +8,11 @@ import { money, money0, fdate } from "@/lib/format";
 import { accountBalance, netWorth } from "@/lib/domain/money.ts";
 import AssetForm from "./AssetForm";
 import SnapshotButton from "./SnapshotButton";
+import { getSessionUser } from "@/lib/data/session";
 
 export default async function WealthPage() {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
 
   const [{ data: profile }, { data: accounts }, { data: entries }, { data: investments }, { data: assets }, { data: debts }, { data: liabilities }, { data: snapshots }] =

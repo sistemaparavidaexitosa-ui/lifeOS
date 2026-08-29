@@ -1,12 +1,11 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import EisenhowerBoard from "./Board";
+import { getSessionUser } from "@/lib/data/session";
 
 export default async function EisenhowerPage() {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
 
   const { data: tasks } = await supabase

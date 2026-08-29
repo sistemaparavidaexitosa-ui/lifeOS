@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { DEFAULT_TIMEZONE, isValidTimeZone } from "@/lib/domain/datetime.ts";
+import { getSessionUser } from "@/lib/data/session";
 
 /**
  * Zona horaria del usuario (profiles.timezone). Envuelta en React `cache()`:
@@ -15,9 +16,7 @@ import { DEFAULT_TIMEZONE, isValidTimeZone } from "@/lib/domain/datetime.ts";
 export const getUserTimeZone = cache(async (): Promise<string> => {
   try {
     const supabase = await createClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
+    const user = await getSessionUser();
     if (!user) return DEFAULT_TIMEZONE;
 
     const { data: profile } = await supabase.from("profiles").select("timezone").eq("user_id", user.id).single();

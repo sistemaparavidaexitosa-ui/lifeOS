@@ -25,7 +25,9 @@ Server Action real que escribe en Postgres (guardrail NO-MOCK, F8).
 | Bandeja de recomendaciones | `/intelligence` | `intelligence/page.tsx` | `recommendations` | `setRecommendationStatus`,`editRecommendationText` |
 | Memoria del motor | `/intelligence/memory` | `intelligence/memory/page.tsx` | `memory_items` | `upsertMemoryItem`,`deleteMemoryItem` |
 | Opt-in y borrado de IA | `/settings` | `settings/AiSettings.tsx` | `profiles.ai_domains` | `setAiDomains`,`clearAiHistory`,`clearMemory` |
-| Espacios de trabajo y equipo | `/execution` (selector + panel «Equipo») | `execution/WorkspaceSwitcher.tsx`,`execution/TeamPanel.tsx` | `workspaces`,`memberships`,`invitations`,`project_shares` | `createWorkspace`,`inviteMember`,`revokeInvitation`,`removeMember`,`moveProject`,`shareProjectWithGuest`,`deleteWorkspace` |
+| Notebooks (cuadernos del espacio) | `/notebooks` | `notebooks/page.tsx`,`NotebookGrid.tsx`,`NoteList.tsx`,`NoteEditor.tsx` | `notebooks`,`notes` | `createNotebook`,`renameNotebook`,`deleteNotebook`,`createNote`,`saveNote`,`deleteNote` |
+| Búsqueda de notas | `/notebooks` (cabecera) | `notebooks/NotesSearch.tsx` | RPC `search_notes` sobre `notes.search` (tsvector español) | `searchNotes` |
+| Espacios de trabajo y equipo | `/execution` y `/notebooks` (selector + panel «Equipo») | `components/workspace/WorkspaceSwitcher.tsx`,`TeamPanel.tsx`,`WorkspaceTabs.tsx` | `workspaces`,`memberships`,`invitations`,`project_shares` | `createWorkspace`,`inviteMember`,`revokeInvitation`,`removeMember`,`moveProject`,`shareProjectWithGuest`,`deleteWorkspace` |
 | Dashboard y Gastos | `/money` | `money/page.tsx` | `accounts`,`journal_entries`,`journal_lines`,`budgets` | `createAccount`,`postTransaction`,`reconcileEntry`,`reverseEntry` |
 | Presupuesto (tabular) | `/money/budget` | `budget/page.tsx`,`QuincenalIncomeForm.tsx`,`CreateBudgetButton.tsx` | `budgets` (monthly_cost/q1/q2); `profiles.quincenal_income`; `accounts`+`journal_entries` (conciliación, lectura reutilizada) | `upsertBudgetLine`,`deleteBudgetLine`,`updateQuincenalIncome` |
 | Inversiones | `/investments` | `investments/page.tsx` | `investments` | `upsertInvestment`,`deleteInvestment` |

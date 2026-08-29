@@ -3,12 +3,11 @@ import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui";
 import { updateProfile } from "./actions";
 import AiSettings from "./AiSettings";
+import { getSessionUser } from "@/lib/data/session";
 
 export default async function SettingsPage() {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
 
   const { data: profile } = await supabase.from("profiles").select("*").eq("user_id", user.id).single();

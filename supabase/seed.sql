@@ -22,6 +22,11 @@ declare
   v_ana_id uuid := '00000000-0000-4000-8000-000000000002';
   v_ws_personal uuid;
   v_ws_equipo uuid := '00000000-0000-4000-8000-000000000901';
+  v_nb_equipo uuid := '00000000-0000-4000-8000-000000000911';
+  v_nb_personal uuid := '00000000-0000-4000-8000-000000000912';
+  v_note1 uuid := '00000000-0000-4000-8000-000000000921';
+  v_note2 uuid := '00000000-0000-4000-8000-000000000922';
+  v_note3 uuid := '00000000-0000-4000-8000-000000000923';
   v_prj uuid := '00000000-0000-4000-8000-000000000101';
   v_prj2 uuid := '00000000-0000-4000-8000-000000000102';
   v_t1 uuid := '00000000-0000-4000-8000-000000000201';
@@ -43,12 +48,22 @@ begin
   insert into auth.users (
     id, instance_id, aud, role, email, encrypted_password,
     email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
-    created_at, updated_at, confirmation_token, recovery_token
+    created_at, updated_at,
+    -- Estas seis columnas de token TIENEN que ir a '' y no quedarse en NULL.
+    -- GoTrue las lee como `string` de Go y revienta el login entero con
+    -- "converting NULL to string is unsupported" -> 500 "Database error
+    -- querying schema", un mensaje que no señala a ninguna de ellas. El
+    -- usuario demo del seed llevaba así desde el primer commit: no se podía
+    -- iniciar sesión en local con él. Se destapó al medir el rendimiento,
+    -- intentando entrar como el usuario demo.
+    confirmation_token, recovery_token,
+    email_change, email_change_token_new, email_change_token_current,
+    phone_change, phone_change_token, reauthentication_token
   ) values (
     v_user_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
     'luis.demo@lifeos.local', crypt('LifeosDemo!2026', gen_salt('bf')),
     now(), '{"provider":"email","providers":["email"]}', '{"name":"Luis Vargas (Demo)"}',
-    now(), now(), '', ''
+    now(), now(), '', '', '', '', '', '', '', ''
   )
   on conflict (id) do update set
     email = excluded.email,
@@ -126,12 +141,22 @@ begin
   insert into auth.users (
     id, instance_id, aud, role, email, encrypted_password,
     email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
-    created_at, updated_at, confirmation_token, recovery_token
+    created_at, updated_at,
+    -- Estas seis columnas de token TIENEN que ir a '' y no quedarse en NULL.
+    -- GoTrue las lee como `string` de Go y revienta el login entero con
+    -- "converting NULL to string is unsupported" -> 500 "Database error
+    -- querying schema", un mensaje que no señala a ninguna de ellas. El
+    -- usuario demo del seed llevaba así desde el primer commit: no se podía
+    -- iniciar sesión en local con él. Se destapó al medir el rendimiento,
+    -- intentando entrar como el usuario demo.
+    confirmation_token, recovery_token,
+    email_change, email_change_token_new, email_change_token_current,
+    phone_change, phone_change_token, reauthentication_token
   ) values (
     v_ana_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
     'ana.demo@lifeos.local', crypt('LifeosDemo!2026', gen_salt('bf')),
     now(), '{"provider":"email","providers":["email"]}', '{"name":"Ana Ruiz (Demo)"}',
-    now(), now(), '', ''
+    now(), now(), '', '', '', '', '', '', '', ''
   )
   on conflict (id) do update set email = excluded.email, updated_at = now();
 
@@ -178,6 +203,36 @@ begin
   on conflict (id) do update set
     title = excluded.title, status = excluded.status, priority = excluded.priority, urgent = excluded.urgent,
     due = excluded.due, est = excluded.est, deps = excluded.deps, impact = excluded.impact, version = public.tasks.version + 1;
+
+  -- ---------------------------------------------------------------------
+  -- Cuadernos y notas (migración 0032)
+  --
+  -- Uno del equipo y uno personal, para que se vea la diferencia que hace la
+  -- membresía: Ana alcanza el primero sin ninguna fila de permiso adicional, y
+  -- el segundo no lo ve nadie más que Luis. Una de las notas la firma Ana, que
+  -- es lo que hace visible la marca de autoría.
+  -- ---------------------------------------------------------------------
+  insert into public.notebooks (id, workspace_id, title, icon, created_by, created_by_name)
+  values
+    (v_nb_equipo, v_ws_equipo, 'Actas y decisiones', '📗', v_user_id, 'Luis Vargas (Demo)'),
+    (v_nb_personal, v_ws_personal, 'Ideas sueltas', '💡', v_user_id, 'Luis Vargas (Demo)')
+  on conflict (id) do update set
+    title = excluded.title, icon = excluded.icon, workspace_id = excluded.workspace_id;
+
+  insert into public.notes (id, notebook_id, title, body, created_by, created_by_name, updated_by, updated_by_name)
+  values
+    (v_note1, v_nb_equipo, 'Acta de la reunión de dirección',
+     E'## Asistentes\n- Luis\n- Ana\n\n## Acuerdos\n1. La mudanza de oficina arranca el mes que viene.\n2. Ana coordina el inventario.\n\n> Pendiente de confirmar el presupuesto con administración.',
+     v_user_id, 'Luis Vargas (Demo)', v_user_id, 'Luis Vargas (Demo)'),
+    (v_note2, v_nb_equipo, 'Inventario de la mudanza',
+     E'Lo que hay que empaquetar, por sala.\n\n- Sala grande: 12 monitores, 4 sillas\n- Almacén: material de oficina\n\nDudas en **negrita** para revisarlas en la próxima.',
+     v_ana_id, 'Ana Ruiz (Demo)', v_ana_id, 'Ana Ruiz (Demo)'),
+    (v_note3, v_nb_personal, 'Cosas que probar',
+     E'- Leer sobre presupuestos base cero\n- Revisar el flujo de onboarding\n- Escribir el resumen del trimestre',
+     v_user_id, 'Luis Vargas (Demo)', v_user_id, 'Luis Vargas (Demo)')
+  on conflict (id) do update set
+    title = excluded.title, body = excluded.body, notebook_id = excluded.notebook_id,
+    version = public.notes.version + 1;
 
   -- ---------------------------------------------------------------------
   -- Deudas

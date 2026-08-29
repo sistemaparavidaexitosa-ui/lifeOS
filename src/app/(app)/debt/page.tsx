@@ -5,12 +5,11 @@ import { money, money0 } from "@/lib/format";
 import { netWorth, accountBalance } from "@/lib/domain/money.ts";
 import DebtForm from "./DebtForm";
 import DebtSimulator from "./DebtSimulator";
+import { getSessionUser } from "@/lib/data/session";
 
 export default async function DebtPage() {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
 
   const [{ data: profile }, { data: debts }, { data: assets }, { data: investments }, { data: accounts }, { data: entries }, { data: liabilities }] = await Promise.all([

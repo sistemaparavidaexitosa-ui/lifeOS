@@ -8,7 +8,7 @@
 import { useState, useTransition } from "react";
 import { setTaskAssignees } from "./task-detail-actions";
 import { AvatarStack } from "@/components/ui";
-import MenuSurface, { useMenuAnchor } from "./MenuSurface";
+import MenuSurface, { useMenuAnchor } from "@/components/MenuSurface";
 
 export default function AssigneePopover({
   taskId,

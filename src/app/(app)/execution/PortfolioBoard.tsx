@@ -18,7 +18,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Progress } from "@/components/ui";
 import { IconCalendar, IconTrash } from "@/components/icons";
-import MenuSurface, { useMenuAnchor } from "./MenuSurface";
+import MenuSurface, { useMenuAnchor } from "@/components/MenuSurface";
 import { PRIORITY_META, PRIORITY_ORDER, PROJECT_OPEN_STATUSES, PROJECT_STATUS_META, PROJECT_STATUS_ORDER } from "./status-meta";
 import { deleteProject, patchProject, type ProjectPatch } from "./actions";
 import type { Priority, ProjectStatus } from "@/lib/domain/types.ts";

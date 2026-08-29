@@ -7,7 +7,7 @@ import { useState } from "react";
 import { computeStats } from "@/lib/domain/board.ts";
 import { STATUS_META, STATUS_ORDER, GROUP_COLORS } from "./status-meta";
 import type { BoardGroup, BoardTask } from "./board-types";
-import MenuSurface, { useMenuAnchor } from "./MenuSurface";
+import MenuSurface, { useMenuAnchor } from "@/components/MenuSurface";
 import { IconChevronDown, IconChevronRight, IconTrash } from "@/components/icons";
 
 export default function GroupHeader({

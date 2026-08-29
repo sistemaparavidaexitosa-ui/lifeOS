@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 
 // Espacios de trabajo del usuario.
 //
@@ -45,9 +46,7 @@ function isRole(value: string | null | undefined): value is WorkspaceRole {
  */
 export const listWorkspaces = cache(async (): Promise<WorkspaceSummary[]> => {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return [];
 
   const [{ data: workspaces }, { data: memberships }] = await Promise.all([

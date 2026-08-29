@@ -7,12 +7,11 @@ import { getUserTimeZone } from "@/lib/data/profile";
 import { ModuleNote, SectionHeader } from "../FormSheet";
 import HabitRow from "./HabitRow";
 import HabitForm from "./HabitForm";
+import { getSessionUser } from "@/lib/data/session";
 
 export default async function HabitsPage() {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
 
   const [{ data: habits }, { data: habitLogs }, { data: occupations }] = await Promise.all([

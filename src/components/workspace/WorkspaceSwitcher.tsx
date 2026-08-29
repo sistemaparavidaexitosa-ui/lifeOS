@@ -14,16 +14,24 @@
 // esconder los que no tocan.
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import MenuSurface, { useMenuAnchor } from "./MenuSurface";
-import { createWorkspace } from "./workspace-actions";
+import MenuSurface, { useMenuAnchor } from "@/components/MenuSurface";
+import { createWorkspace } from "@/lib/workspaces/actions";
 import type { WorkspaceSummary } from "@/lib/data/workspaces";
 
 export default function WorkspaceSwitcher({
   workspaces,
-  activeId
+  activeId,
+  basePath
 }: {
   workspaces: WorkspaceSummary[];
   activeId: string;
+  /**
+   * Pantalla sobre la que se está eligiendo espacio (/execution o /notebooks).
+   * Cambiar de espacio tiene que dejarte donde estabas: mandar siempre a la
+   * cartera de proyectos convertiría el selector en un botón de "volver al
+   * inicio" cada vez que alguien cambia de equipo desde sus notas.
+   */
+  basePath: string;
 }) {
   const router = useRouter();
   const menu = useMenuAnchor();
@@ -37,7 +45,7 @@ export default function WorkspaceSwitcher({
 
   function select(id: string) {
     menu.close();
-    router.push(`/execution?ws=${id}`);
+    router.push(`${basePath}?ws=${id}`);
   }
 
   function create() {
@@ -55,7 +63,7 @@ export default function WorkspaceSwitcher({
       menu.close();
       // Directo al espacio nuevo: crearlo y quedarse en el anterior obligaba a
       // volver a abrir el selector para entrar.
-      router.push(`/execution?ws=${result.id}`);
+      router.push(`${basePath}?ws=${result.id}`);
       router.refresh();
     });
   }

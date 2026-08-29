@@ -7,7 +7,7 @@
 // ahora se importan directamente del dominio (una sola tabla, no una copia).
 import { useState, useTransition } from "react";
 import { setTaskStatus } from "./actions";
-import MenuSurface, { useMenuAnchor } from "./MenuSurface";
+import MenuSurface, { useMenuAnchor } from "@/components/MenuSurface";
 import { STATUS_META, TASK_TRANSITIONS } from "./status-meta";
 import type { TaskStatus } from "@/lib/domain/types.ts";
 

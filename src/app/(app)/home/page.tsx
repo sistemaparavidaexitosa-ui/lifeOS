@@ -1,16 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
 import { getHomeData } from "@/lib/data/home";
 import { Card, Chip, Stat, Progress, EmptyState } from "@/components/ui";
 import { money0, fdate } from "@/lib/format";
 import { greetingFor, hourInTimeZone, todayInTimeZone } from "@/lib/domain/datetime.ts";
+import { getSessionUser } from "@/lib/data/session";
 
 export default async function HomePage() {
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
 
   // NO-MOCK (F8): si esto falla (BD desconectada), la página muestra el error

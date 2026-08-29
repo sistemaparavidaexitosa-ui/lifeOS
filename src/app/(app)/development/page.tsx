@@ -8,6 +8,7 @@ import { loadSourceSnapshot } from "@/lib/data/development";
 import { keyResultProgress, goalProgress, goalAtRisk } from "@/lib/domain/development/goals.ts";
 import { routineDueToday, routineProgress, type Frequency } from "@/lib/domain/development/routines.ts";
 import { CardHeader, SectionHeader } from "./FormSheet";
+import { getSessionUser } from "@/lib/data/session";
 
 /**
  * Panel del módulo. No calcula nada propio: compone lo que ya resuelven
@@ -15,9 +16,7 @@ import { CardHeader, SectionHeader } from "./FormSheet";
  */
 export default async function DevelopmentPage() {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
 
   const today = todayLocal(await getUserTimeZone());

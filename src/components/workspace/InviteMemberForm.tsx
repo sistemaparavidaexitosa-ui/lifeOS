@@ -14,7 +14,7 @@
 // de cada invitación pendiente se pinta también desde el servidor en la lista
 // de abajo (page.tsx), que se arma con el token que ya está en la base.
 import { useState, useTransition } from "react";
-import { inviteMember, type InviteResult } from "./workspace-actions";
+import { inviteMember, type InviteResult } from "@/lib/workspaces/actions";
 import InviteLink from "./InviteLink";
 
 export default function InviteMemberForm({ workspaceId }: { workspaceId: string }) {

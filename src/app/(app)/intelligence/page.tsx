@@ -5,6 +5,7 @@ import { Card, Chip, EmptyState } from "@/components/ui";
 import { fdate } from "@/lib/format";
 import { ALL_STATUSES, LIVE_STATUSES, STATUS_LABEL, type RecommendationStatus } from "@/lib/domain/insights/states.ts";
 import RecommendationRow from "./RecommendationRow";
+import { getSessionUser } from "@/lib/data/session";
 
 /**
  * Bandeja histórica del motor (§3.4). A diferencia del panel embebido en
@@ -15,9 +16,7 @@ import RecommendationRow from "./RecommendationRow";
 export default async function IntelligencePage({ searchParams }: { searchParams: Promise<{ estado?: string }> }) {
   const { estado } = await searchParams;
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
 
   const { data: all } = await supabase

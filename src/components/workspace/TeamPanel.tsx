@@ -2,7 +2,7 @@
 // Panel "Equipo": miembros, invitaciones y borrado del espacio activo.
 //
 // Es lo que queda de la pantalla /workspaces, ahora como Drawer lateral sobre
-// la cartera — el mismo patrón (.td-*) que el detalle de tarea y el menú "⋯"
+// la pantalla del espacio (cartera de proyectos o notebooks) — el mismo patrón (.td-*) que el detalle de tarea y el menú "⋯"
 // del proyecto. Administrar el equipo es algo que se hace mirando los
 // proyectos, no navegando a otra sección y volviendo.
 //
@@ -16,7 +16,7 @@ import { IconClose } from "@/components/icons";
 import { fdate } from "@/lib/format";
 import InviteMemberForm from "./InviteMemberForm";
 import InviteLink from "./InviteLink";
-import { deleteWorkspace, removeMember, revokeInvitation } from "./workspace-actions";
+import { deleteWorkspace, removeMember, revokeInvitation } from "@/lib/workspaces/actions";
 
 export interface TeamMember {
   id: string;

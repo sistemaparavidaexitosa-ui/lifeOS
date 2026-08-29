@@ -13,6 +13,16 @@ export interface NavItem {
   group: string;
   icon: NavIconKey;
   color: string; // variable CSS de acento, ver globals.css
+  /**
+   * Fuera del menú lateral, pero presente en esta lista.
+   *
+   * /notebooks se alcanza desde el conmutador del espacio (WorkspaceTabs), no
+   * desde el menú: los cuadernos viven DENTRO del espacio de trabajo, igual
+   * que los proyectos. Aun así tiene que figurar aquí, porque de esta lista
+   * sale el título de la barra superior (AppShell) y sin la entrada la
+   * pantalla se titularía "Life OS".
+   */
+  hidden?: boolean;
 }
 
 export const NAV_ITEMS: NavItem[] = [
@@ -22,6 +32,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/execution/eisenhower", label: "Matriz de Eisenhower", group: "Execution OS", icon: "eisenhower", color: "var(--c-purple)" },
   { href: "/planning", label: "Planeación", group: "Execution OS", icon: "planning", color: "var(--c-purple)" },
   { href: "/time", label: "Autogestión del Tiempo", group: "Execution OS", icon: "time", color: "var(--c-purple)" },
+  { href: "/notebooks", label: "Notebooks", group: "Execution OS", icon: "workspaces", color: "var(--c-purple)", hidden: true },
   // "Equipos y Colaboración" (/workspaces) ya no está aquí: los espacios de
   // trabajo son el contenedor de los proyectos (migraciones 0030/0031), no un
   // módulo aparte, y se administran desde /execution con el selector de
