@@ -16,9 +16,9 @@ export interface NavItem {
   /**
    * Fuera del menú lateral, pero presente en esta lista.
    *
-   * /notebooks se alcanza desde el conmutador del espacio (WorkspaceTabs), no
-   * desde el menú: los cuadernos viven DENTRO del espacio de trabajo, igual
-   * que los proyectos. /intelligence y /intelligence/memory, desde el panel de
+   * /notebooks y /activity se alcanzan desde el conmutador del espacio
+   * (WorkspaceTabs), no desde el menú: los cuadernos y lo que ha pasado viven
+   * DENTRO del espacio de trabajo, igual que los proyectos. /intelligence y /intelligence/memory, desde el panel de
    * /money y desde Configuración, por la razón que se explica más abajo.
    *
    * En los dos casos la entrada tiene que figurar aquí igualmente, porque de
@@ -36,6 +36,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/planning", label: "Planeación", group: "Execution OS", icon: "planning", color: "var(--c-purple)" },
   { href: "/time", label: "Autogestión del Tiempo", group: "Execution OS", icon: "time", color: "var(--c-purple)" },
   { href: "/notebooks", label: "Notebooks", group: "Execution OS", icon: "workspaces", color: "var(--c-purple)", hidden: true },
+  { href: "/activity", label: "Actividad", group: "Execution OS", icon: "workspaces", color: "var(--c-purple)", hidden: true },
   // "Equipos y Colaboración" (/workspaces) ya no está aquí: los espacios de
   // trabajo son el contenedor de los proyectos (migraciones 0030/0031), no un
   // módulo aparte, y se administran desde /execution con el selector de

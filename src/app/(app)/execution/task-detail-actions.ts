@@ -6,6 +6,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { parseMentions, type RosterMember } from "@/lib/domain/execution/mentions.ts";
 import { createClient } from "@/lib/supabase/server";
 import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
 
@@ -59,6 +60,8 @@ export interface TaskDetailResult {
   task: TaskDetailTask;
   projectTitle: string;
   members: string[];
+  /** El mismo roster, con id. Lo necesita el selector de menciones. */
+  roster: RosterMember[];
   depCandidates: TaskDetailDepCandidate[];
   assignees: string[];
   comments: TaskDetailComment[];
@@ -82,14 +85,21 @@ export async function getTaskDetail(taskId: string): Promise<TaskDetailResult> {
     .eq("id", task.project_id)
     .single();
 
-  let members: string[] = [];
+  // El roster se carga UNA vez y sirve a dos cosas: el selector de responsables
+  // (solo nombres, como siempre) y el de menciones, que necesita el id — sin él
+  // la mención vuelve a ser un nombre suelto y la bandeja no sabe a quién avisar.
+  let roster: RosterMember[] = [];
   if (project?.workspace_id) {
     const { data: rows } = await supabase.rpc("list_workspace_members", { p_workspace_id: project.workspace_id });
-    members = (rows ?? []).map((m: { user_name: string }) => m.user_name);
-  } else {
-    const { data: profile } = await supabase.from("profiles").select("name").eq("user_id", user.id).single();
-    if (profile?.name) members = [profile.name];
+    roster = (rows ?? []).map((m: { user_id: string; user_name: string }) => ({ userId: m.user_id, name: m.user_name }));
   }
+  if (!roster.length) {
+    // Red de seguridad para una cuenta anterior a 0030 sin membresía Owner:
+    // sin esto no podría mencionarse ni a sí misma.
+    const { data: profile } = await supabase.from("profiles").select("name").eq("user_id", user.id).single();
+    if (profile?.name) roster = [{ userId: user.id, name: profile.name }];
+  }
+  const members: string[] = roster.map((m) => m.name);
 
   const { data: allTasks } = await supabase
     .from("tasks")
@@ -136,6 +146,7 @@ export async function getTaskDetail(taskId: string): Promise<TaskDetailResult> {
     },
     projectTitle: project?.title ?? "",
     members,
+    roster,
     depCandidates: (allTasks ?? []).map((t) => ({ id: t.id, title: t.title, status: t.status })),
     assignees: (assigneeRows ?? []).map((a) => a.user_name),
     comments: commentRows ?? [],
@@ -256,7 +267,8 @@ export async function setTaskAssignees(taskId: string, userNames: string[]) {
         project_id: task.project_id,
         type: "task.assign",
         text: `Responsables de "${task.title}" actualizados: ${userNames.join(", ") || "ninguno"}`,
-        actor: user.email ?? ""
+        actor: user.email ?? "",
+        actor_id: user.id
       });
     }
   } catch {
@@ -298,7 +310,20 @@ export async function addTaskComment(taskId: string, body: string) {
   if (!task) throw new Error("Tarea no encontrada");
 
   const { data: profile } = await supabase.from("profiles").select("name").eq("user_id", user.id).single();
-  const mentions = (trimmed.match(/@([\wÀ-ÿ]+)/g) ?? []).map((m) => m.slice(1));
+
+  // Las menciones se resuelven contra el ROSTER, no contra un regex sobre el
+  // texto libre. El regex viejo cortaba en el primer espacio: «@Luis Varsa»
+  // guardaba «Luis», y con eso no se puede avisar a nadie. Un nombre que no
+  // esté en el roster no produce mención: no se adivina.
+  const { data: project } = await supabase.from("projects").select("workspace_id").eq("id", task.project_id).single();
+  let roster: RosterMember[] = [];
+  if (project?.workspace_id) {
+    const { data: rows } = await supabase.rpc("list_workspace_members", { p_workspace_id: project.workspace_id });
+    roster = (rows ?? []).map((m: { user_id: string; user_name: string }) => ({ userId: m.user_id, name: m.user_name }));
+  }
+  if (!roster.length && profile?.name) roster = [{ userId: user.id, name: profile.name }];
+
+  const { userIds: mentionedUserIds, names: mentions } = parseMentions(trimmed, roster);
 
   const { error } = await supabase.from("comments").insert({
     subject_type: "task",
@@ -306,21 +331,24 @@ export async function addTaskComment(taskId: string, body: string) {
     author_id: user.id,
     author_name: profile?.name ?? user.email ?? "Usuario",
     body: trimmed,
-    mentions
+    // Las dos: `mentions` sostiene el histórico ya escrito y lo que se pinta;
+    // `mentioned_user_ids` sostiene la bandeja (migración 0037).
+    mentions,
+    mentioned_user_ids: mentionedUserIds
   });
   if (error) throw new Error(error.message);
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "comment.add", object: taskId, meta: { mentions } });
 
   try {
-    const { data: project } = await supabase.from("projects").select("workspace_id").eq("id", task.project_id).single();
     if (project?.workspace_id) {
       await supabase.from("workspace_activity").insert({
         workspace_id: project.workspace_id,
         project_id: task.project_id,
         type: "comment",
         text: `Comentario en "${task.title}"`,
-        actor: user.email ?? ""
+        actor: user.email ?? "",
+        actor_id: user.id
       });
     }
   } catch {

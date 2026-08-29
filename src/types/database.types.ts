@@ -441,6 +441,32 @@ export type Database = {
         }
         Relationships: []
       }
+      comment_reads: {
+        Row: {
+          comment_id: string
+          read_at: string
+          user_id: string
+        }
+        Insert: {
+          comment_id: string
+          read_at?: string
+          user_id: string
+        }
+        Update: {
+          comment_id?: string
+          read_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comment_reads_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "comments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       comments: {
         Row: {
           author_id: string
@@ -448,6 +474,7 @@ export type Database = {
           body: string
           created_at: string
           id: string
+          mentioned_user_ids: string[]
           mentions: string[]
           read: boolean
           subject_id: string
@@ -459,6 +486,7 @@ export type Database = {
           body: string
           created_at?: string
           id?: string
+          mentioned_user_ids?: string[]
           mentions?: string[]
           read?: boolean
           subject_id: string
@@ -470,6 +498,7 @@ export type Database = {
           body?: string
           created_at?: string
           id?: string
+          mentioned_user_ids?: string[]
           mentions?: string[]
           read?: boolean
           subject_id?: string
@@ -2048,6 +2077,7 @@ export type Database = {
       workspace_activity: {
         Row: {
           actor: string
+          actor_id: string | null
           created_at: string
           id: string
           project_id: string | null
@@ -2057,6 +2087,7 @@ export type Database = {
         }
         Insert: {
           actor: string
+          actor_id?: string | null
           created_at?: string
           id?: string
           project_id?: string | null
@@ -2066,6 +2097,7 @@ export type Database = {
         }
         Update: {
           actor?: string
+          actor_id?: string | null
           created_at?: string
           id?: string
           project_id?: string | null

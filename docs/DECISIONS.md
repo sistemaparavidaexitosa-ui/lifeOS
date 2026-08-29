@@ -761,6 +761,73 @@
   nada que haya cambiado. Y el hecho dice las dos lecturas —no se pagó, o no se
   anotó— porque desde aquí no se pueden distinguir.
 
+- **D-054 Una mención se resuelve contra el ROSTER, no contra un regex.** El
+  parseo vivía suelto en la Server Action: `body.match(/@([\wÀ-ÿ]+)/g)`. Corta
+  en el primer espacio, así que a «@Luis Varsa» le guardaba «Luis» — un nombre
+  que no es de nadie. Mientras nadie recibiera un aviso eso no rompía nada
+  visible; en cuanto hay bandeja, entrega el aviso a quien se llame parecido.
+
+  La solución no es un regex mejor: es dejar de adivinar. La interfaz ofrece el
+  roster del espacio (`list_workspace_members`, que ya alimentaba el selector de
+  responsables), el usuario elige de una lista, y `domain/execution/mentions.ts`
+  casa el texto contra nombres CONOCIDOS. Un nombre que no está en el roster no
+  produce mención.
+
+  Se prueban de más largo a más corto, por la misma razón que `pseudonymize`
+  ordena así sus alias en el motor: con «Ana» y «Ana María» en el mismo espacio,
+  empezar por el corto casaría «@Ana María» como «Ana». Y el `@` tiene que ABRIR
+  palabra — eso lo destapó una prueba, porque `mentionQueryAt` lo comprobaba y
+  `parseMentions` no: en «luis@Ana.com» ese arroba es un correo. Es la clase de
+  divergencia que aparece siempre que la misma regla se escribe dos veces.
+
+  `mentions` (nombres) se conserva junto a `mentioned_user_ids`. Del texto
+  «Luis» no sale un uuid, así que el histórico ya escrito no se puede
+  reconstruir: perderlo sería peor que convivir con dos columnas.
+
+- **D-055 Lo leído es de quien lee, y por eso NO se usa `comments.read`.** Esa
+  columna existe desde 0003 y nunca se ha escrito. No es un olvido: es UN
+  booleano en la fila del comentario, así que el primero que lo marcara lo
+  marcaría para todos — en un comentario que menciona a tres personas, eso es
+  sencillamente falso.
+
+  Y hay una segunda razón, de seguridad: escribirla exigiría una política UPDATE
+  sobre `comments`, y una política UPDATE que permita marcar leído permite
+  también reescribir el `body`. El aviso de una mención no puede costar el
+  derecho a editar el comentario de otro. Lo leído vive en `comment_reads`, con
+  clave primaria compuesta (marcar dos veces es idempotente desde el servidor) y
+  RLS por `auth.uid()`. `comments.read` se queda sin uso; quitarla es una
+  decisión aparte.
+
+- **D-056 Los comentarios y el historial son UN hilo.** Se pintaban en dos
+  tarjetas apiladas —toda la conversación, y debajo toda la cronología— con dos
+  relojes que además iban en sentidos opuestos: los comentarios ascendentes y el
+  historial descendente. Para saber si un comentario se escribió antes o después
+  de que la tarea se bloqueara había que cruzar dos listas a ojo.
+
+  Un cambio de estado es lo que en un chat serían los mensajitos grises de
+  sistema: no es ruido, es lo que explica por qué el comentario siguiente dice
+  lo que dice. `mergeThread` (domain/execution/thread.ts) los ordena en una sola
+  corriente ascendente, y desempata por id — al completar una tarea desde el
+  propio hilo, el comentario y la transición se escriben en la misma operación y
+  pueden compartir marca al milisegundo; sin segundo criterio, el orden entre
+  ambos cambiaría entre recargas de la misma pantalla.
+
+- **D-057 El feed del espacio deja de ser una tabla de solo escritura.**
+  `workspace_activity` existe desde 0003: cuatro Server Actions insertaban en
+  ella y ninguna pantalla la leía. Todo lo registrado desde entonces estaba ahí,
+  invisible.
+
+  Vive en `/activity`, como PESTAÑA del espacio junto a Proyectos y Notebooks, no
+  como entrada del menú lateral: es lo que ha pasado DENTRO de este espacio, no
+  un módulo aparte. Mismo criterio que llevó a los cuadernos a esa barra.
+
+  El corte por día se hace sobre la fecha LOCAL y no sobre el prefijo del ISO:
+  un comentario de las 19:00 en Ciudad de México se guarda como la 01:00 UTC del
+  día siguiente y aparecería bajo «mañana». Es el mismo error que la migración
+  0016 arregló en las ocupaciones. Y un `type` desconocido se muestra tal cual:
+  la columna es texto libre en el esquema, así que esconderlo tras un «Otro»
+  borraría la única pista de qué pasó.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo

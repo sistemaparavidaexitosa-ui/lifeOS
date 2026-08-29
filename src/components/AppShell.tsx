@@ -13,7 +13,15 @@ function TitleFromPath() {
   return <>{item?.label ?? "Life OS"}</>;
 }
 
-export default function AppShell({ userName, children }: { userName: string; children: React.ReactNode }) {
+export default function AppShell({
+  userName,
+  bell,
+  children
+}: {
+  userName: string;
+  bell?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
 
@@ -41,6 +49,7 @@ export default function AppShell({ userName, children }: { userName: string; chi
             </Suspense>
           }
           userName={userName}
+          bell={bell}
           onMenuClick={() => setOpen(true)}
         />
         {/* Ejecución llegó a tener 1600px porque a su tablero de 5 columnas
