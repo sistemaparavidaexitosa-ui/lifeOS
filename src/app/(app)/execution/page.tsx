@@ -18,6 +18,7 @@ import BoardShell from "./BoardShell";
 import { isExecutionView, type BoardGroup, type BoardTask, type ExecutionView } from "./board-types";
 import { getProjectLogAndKnowledge } from "./logbook-knowledge-actions";
 import { getSessionUser } from "@/lib/data/session";
+import InsightSection from "@/components/InsightSection";
 
 // REDISEÑO DEL FLUJO DE PROYECTOS (estilo monday.com / ClickUp)
 //
@@ -117,6 +118,7 @@ export default async function ExecutionPage({
   return (
     <main className="ex-main">
       {!selectedProject ? (
+        <>
         <PortfolioBoard
           projects={portfolio}
           view={view}
@@ -144,6 +146,15 @@ export default async function ExecutionPage({
             <NewProjectForm workspaceId={activeWorkspace.id} workspaceName={activeWorkspace.name} />
           )}
         </PortfolioBoard>
+
+        {/* El análisis mira la CARTERA —lo vencido, lo estancado, lo que ya se
+            puede empezar—, así que vive aquí y no dentro del tablero de un
+            proyecto. Y va tras un límite de Suspense por el mismo motivo que
+            TeamSection: su consulta no puede retrasar la lista de proyectos. */}
+        <Suspense fallback={null}>
+          <InsightSection scope="execution" />
+        </Suspense>
+        </>
       ) : (
         <>
           {/* Sin navegador lateral, esta miga de pan es el único camino de

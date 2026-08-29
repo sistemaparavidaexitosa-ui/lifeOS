@@ -5,24 +5,32 @@ import { createClient } from "@/lib/supabase/server";
 import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
 import { moneyFacts, type BudgetLineLike } from "@/lib/domain/insights/facts/money.ts";
-import type { JournalEntryLike } from "@/lib/domain/types.ts";
-import { buildAliasMap, buildContext, restore, type Scope } from "./context";
+import { timeFacts } from "@/lib/domain/insights/facts/time.ts";
+import { executionFacts } from "@/lib/domain/insights/facts/execution.ts";
+import { habitsFacts, type HabitFrequency } from "@/lib/domain/insights/facts/habits.ts";
+import { occupationAppliesOn } from "@/lib/domain/time.ts";
+import { loadMyTasks, type MyTaskRow } from "@/lib/data/tasks";
+import type { JournalEntryLike, ProjectStatus } from "@/lib/domain/types.ts";
+import { allowedDomains, buildAliasMap, buildContext, restore, type Scope } from "./context";
 import { recommend } from "@/lib/ai/recommend";
 import { MODEL } from "@/lib/ai/provider";
 import { recommendationFingerprint } from "@/lib/domain/insights/fingerprint.ts";
 import { canTransition, REJECTION_STATUSES, type RecommendationStatus } from "@/lib/domain/insights/states.ts";
-import type { Domain } from "@/lib/domain/insights/types.ts";
+import { DOMAIN_LABEL, type Domain, type Fact } from "@/lib/domain/insights/types.ts";
 import type { MemoryItemLike, MemoryScope } from "@/lib/domain/insights/memory.ts";
 
 /**
- * Intelligence OS — Fase 1: el análisis lo dispara el usuario, es informativo
- * y solo cubre el ámbito `money`.
+ * Intelligence OS — el análisis lo dispara el usuario y es informativo.
  *
  * El orden importa y es el del spec (§3.5): cargar datos → extraer hechos →
  * filtrar contexto → modelo → validar anclaje → escribir. La carga vive aquí y
  * no en `context.ts` para que el filtro de privacidad se pueda probar sin base
  * de datos; `context.ts` sigue siendo el único sitio donde ese filtro se
  * aplica (ver D-027).
+ *
+ * Cubre cuatro dominios: `money`, `time`, `execution` y `habits`. `debt` sigue
+ * sin extractor, y por eso `global` tampoco está disponible: un análisis que se
+ * anuncia como completo y calla un dominio entero es peor que no tenerlo.
  */
 export interface AnalyzeResult {
   ok: boolean;
@@ -36,6 +44,183 @@ function cycleStart(todayISO: string): string {
   return `${todayISO.slice(0, 7)}-01`;
 }
 
+/**
+ * Los ámbitos que ya tienen de dónde sacar hechos.
+ *
+ * `debt` es el que falta, y `global` está fuera POR ESO: incluye los cinco
+ * dominios, así que hoy produciría un análisis que se presenta como la foto
+ * completa habiendo mirado cuatro quintas partes. El motor puede decir "no
+ * tengo datos de X" cuando el usuario lo apagó —eso es una decisión suya— pero
+ * no puede callar que un dominio entero no existe todavía.
+ */
+const SCOPES_CON_EXTRACTOR: Scope[] = ["money", "time", "execution", "habits"];
+
+const SIN_EXTRACTOR_REASON: Record<Scope, string> = {
+  money: "",
+  time: "",
+  execution: "",
+  habits: "",
+  debt: "Deudas todavía no tiene extractor de hechos: el motor no tiene nada que citar en ese ámbito.",
+  global:
+    "El análisis global llega cuando Deudas tenga su extractor. Mientras tanto usa los ámbitos sueltos: uno que se anuncia como global y calla un dominio entero engaña más de lo que ayuda."
+};
+
+/**
+ * Dónde vive el panel de cada ámbito, para revalidar la ruta que de verdad hay
+ * que repintar. No es "dónde están los datos" sino "dónde está el botón": el
+ * de `habits` se embebe en el panel de Desarrollo Personal, no en la pantalla
+ * de hábitos (ver InsightSection en development/page.tsx).
+ */
+const SCOPE_PATH: Record<Scope, string> = {
+  money: "/money",
+  debt: "/debt",
+  habits: "/development",
+  time: "/time",
+  execution: "/execution",
+  global: "/home"
+};
+
+/** Lo que los extractores necesitan del perfil y no sale de sus propias tablas. */
+interface ProfileBits {
+  quincenalIncome: number;
+  window: { start: string; end: string };
+}
+
+type Db = Awaited<ReturnType<typeof createClient>>;
+
+/**
+ * Carga los datos de cada dominio permitido y devuelve sus hechos.
+ *
+ * Un dominio, una función, y todas en paralelo: el ámbito `execution` incluye
+ * también `time` (allowedDomains), y encadenarlas duplicaría la espera del
+ * análisis sin ganar nada.
+ *
+ * Nótese lo que NO hay aquí: aritmética. Cada bloque carga filas, las traduce a
+ * la forma que pide su extractor y delega. Toda la decisión de qué es anómalo
+ * vive en domain/insights/facts/**, que se prueba sin base de datos.
+ */
+async function loadFacts(supabase: Db, userId: string, domains: Domain[], today: string, profile: ProfileBits): Promise<Fact[]> {
+  const partes = await Promise.all(domains.map((domain) => loadDomainFacts(supabase, userId, domain, today, profile)));
+  return partes.flat();
+}
+
+async function loadDomainFacts(supabase: Db, userId: string, domain: Domain, today: string, profile: ProfileBits): Promise<Fact[]> {
+  switch (domain) {
+    case "money": {
+      const [{ data: budgets }, { data: entries }] = await Promise.all([
+        supabase.from("budgets").select("*").eq("period", "current"),
+        supabase.from("journal_entries").select("*, journal_lines(*)")
+      ]);
+
+      const entriesForDomain: JournalEntryLike[] = (entries ?? []).map((e) => ({
+        id: e.id,
+        type: e.type as JournalEntryLike["type"],
+        date: e.entry_date,
+        category: e.category,
+        status: e.status as JournalEntryLike["status"],
+        lines: (e.journal_lines ?? []).map((l) => ({ account: l.account_id, amount: l.amount }))
+      }));
+
+      const budgetLines: BudgetLineLike[] = (budgets ?? []).map((b) => ({
+        id: b.id,
+        category: b.category,
+        monthlyCost: b.monthly_cost,
+        q1Amount: b.q1_amount,
+        q2Amount: b.q2_amount
+      }));
+
+      return moneyFacts(
+        { budgets: budgetLines, entries: entriesForDomain, quincenalIncome: profile.quincenalIncome, cycleFromISO: cycleStart(today) },
+        today
+      );
+    }
+
+    case "time": {
+      const [{ data: occupations }, tasks] = await Promise.all([
+        supabase.from("occupations").select("*").eq("user_id", userId),
+        loadMyTasks(userId)
+      ]);
+
+      // Mismo filtro por día que /time y que Home: una ocupación no recurrente
+      // pertenece a SU fecha y a ninguna otra (migración 0016).
+      const hoy = (occupations ?? [])
+        .filter((o) => occupationAppliesOn({ recurring: o.recurring, occDate: o.occ_date, days: o.days }, today))
+        .map((o) => ({ id: o.id, title: o.title, start: o.start_time.slice(0, 5), end: o.end_time.slice(0, 5) }));
+
+      return timeFacts({
+        window: profile.window,
+        todayOccupations: hoy,
+        impactTasks: tasks.filter(isOpenTask).filter((t) => t.impact).map((t) => ({ id: t.id, title: t.title, est: t.est }))
+      });
+    }
+
+    case "execution": {
+      const [tasks, { data: projects }] = await Promise.all([
+        loadMyTasks(userId),
+        supabase.from("projects").select("id, title, status")
+      ]);
+
+      // Solo los proyectos donde tengo trabajo. Ser miembro de un espacio da
+      // acceso a proyectos enteros que no llevo yo, y decirle a alguien que el
+      // proyecto de un compañero lleva tres semanas parado no es una
+      // recomendación, es un chisme.
+      const mios = new Set(tasks.map((t) => t.projectId));
+
+      return executionFacts(
+        {
+          projects: (projects ?? [])
+            .filter((p) => mios.has(p.id))
+            .map((p) => ({ id: p.id, title: p.title, status: p.status as ProjectStatus })),
+          tasks: tasks.map((t) => ({
+            id: t.id,
+            title: t.title,
+            projectId: t.projectId,
+            status: t.status,
+            due: t.due,
+            deps: t.deps,
+            completedAtISO: t.completedAtISO
+          }))
+        },
+        today
+      );
+    }
+
+    case "habits": {
+      const [{ data: habits }, { data: logs }, { data: routines }, { data: runs }] = await Promise.all([
+        supabase.from("habits").select("id, name, frequency, occupation_id").eq("user_id", userId),
+        supabase.from("habit_logs").select("habit_id, log_date"),
+        supabase.from("routines").select("id, name, routine_steps(id)").eq("user_id", userId),
+        supabase.from("routine_runs").select("routine_id, local_date")
+      ]);
+
+      return habitsFacts(
+        {
+          habits: (habits ?? []).map((h) => ({
+            id: h.id,
+            name: h.name,
+            frequency: h.frequency as HabitFrequency,
+            occupationId: h.occupation_id
+          })),
+          logs: (logs ?? []).map((l) => ({ habitId: l.habit_id, date: l.log_date })),
+          routines: (routines ?? []).map((r) => ({ id: r.id, name: r.name, stepCount: (r.routine_steps ?? []).length })),
+          routineRuns: (runs ?? []).map((r) => ({ routineId: r.routine_id, date: r.local_date }))
+        },
+        today
+      );
+    }
+
+    case "debt":
+      // Sin extractor todavía. Se devuelve vacío en vez de lanzar: el ámbito
+      // `debt` ya está atajado antes de llegar aquí, y si algún día `global` lo
+      // incluye por descuido, la ausencia de hechos es más honesta que un error.
+      return [];
+  }
+}
+
+function isOpenTask(task: MyTaskRow): boolean {
+  return task.status !== "Completed" && task.status !== "Cancelled";
+}
+
 export async function analyze(scope: Scope): Promise<AnalyzeResult> {
   const supabase = await createClient();
   const {
@@ -43,58 +228,57 @@ export async function analyze(scope: Scope): Promise<AnalyzeResult> {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, created: 0, reason: "No autenticado" };
 
-  if (scope !== "money") {
-    return { ok: false, created: 0, reason: "Por ahora el análisis solo cubre Dinero. Los demás ámbitos llegan en la siguiente fase." };
+  if (!SCOPES_CON_EXTRACTOR.includes(scope)) {
+    return { ok: false, created: 0, reason: SIN_EXTRACTOR_REASON[scope] };
   }
 
   const today = todayLocal(await getUserTimeZone());
 
-  const [{ data: profile }, { data: budgets }, { data: entries }, { data: accounts }, { data: members }, { data: rejected }, { data: memory }] =
-    await Promise.all([
-      supabase.from("profiles").select("quincenal_income, ai_domains").eq("user_id", user.id).single(),
-      supabase.from("budgets").select("*").eq("period", "current"),
-      supabase.from("journal_entries").select("*, journal_lines(*)"),
-      supabase.from("accounts").select("name").order("created_at"),
-      supabase.from("family_members").select("name").order("created_at"),
-      supabase
-        .from("recommendations")
-        .select("status, text")
-        .in("status", REJECTION_STATUSES)
-        .order("created_at", { ascending: false })
-        .limit(20),
-      supabase.from("memory_items").select("*").order("created_at", { ascending: false })
-    ]);
+  const [{ data: profile }, { data: accounts }, { data: members }, { data: rejected }, { data: memory }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("quincenal_income, ai_domains, activity_window_start, activity_window_end")
+      .eq("user_id", user.id)
+      .single(),
+    supabase.from("accounts").select("name").order("created_at"),
+    supabase.from("family_members").select("name").order("created_at"),
+    supabase
+      .from("recommendations")
+      .select("status, text")
+      .in("status", REJECTION_STATUSES)
+      .order("created_at", { ascending: false })
+      .limit(20),
+    supabase.from("memory_items").select("*").order("created_at", { ascending: false })
+  ]);
 
   // Opt-in por dominio (§4.2). Vacío por defecto: nada sale hacia el modelo
   // hasta que el usuario lo encienda en Configuración.
   const enabledDomains = (profile?.ai_domains ?? []) as Domain[];
 
-  const entriesForDomain: JournalEntryLike[] = (entries ?? []).map((e) => ({
-    id: e.id,
-    type: e.type as JournalEntryLike["type"],
-    date: e.entry_date,
-    category: e.category,
-    status: e.status as JournalEntryLike["status"],
-    lines: (e.journal_lines ?? []).map((l) => ({ account: l.account_id, amount: l.amount }))
-  }));
+  // Corte TEMPRANO, antes de cargar nada del dominio. `buildContext` volvería a
+  // filtrar de todas formas, pero para entonces las cifras ya se habrían leído.
+  // Con el opt-in, no preguntar es parte de la promesa: si el usuario no
+  // autorizó este ámbito, sus tablas ni se tocan.
+  const permitidos = allowedDomains(scope).filter((d) => enabledDomains.includes(d));
+  if (!permitidos.length) {
+    const apagados = allowedDomains(scope).map((d) => DOMAIN_LABEL[d]);
+    return {
+      ok: false,
+      created: 0,
+      reason:
+        apagados.length === 1
+          ? `${apagados[0]} está apagado para el análisis. Enciéndelo en Configuración si quieres que sus cifras se envíen al modelo.`
+          : `Ninguno de los dominios de este ámbito (${apagados.join(", ")}) está encendido. Actívalos en Configuración si quieres que sus cifras se envíen al modelo.`
+    };
+  }
 
-  const budgetLines: BudgetLineLike[] = (budgets ?? []).map((b) => ({
-    id: b.id,
-    category: b.category,
-    monthlyCost: b.monthly_cost,
-    q1Amount: b.q1_amount,
-    q2Amount: b.q2_amount
-  }));
-
-  const facts = moneyFacts(
-    {
-      budgets: budgetLines,
-      entries: entriesForDomain,
-      quincenalIncome: profile?.quincenal_income ?? 0,
-      cycleFromISO: cycleStart(today)
-    },
-    today
-  );
+  const facts = await loadFacts(supabase, user.id, permitidos, today, {
+    quincenalIncome: profile?.quincenal_income ?? 0,
+    window: {
+      start: (profile?.activity_window_start ?? "08:00").slice(0, 5),
+      end: (profile?.activity_window_end ?? "18:00").slice(0, 5)
+    }
+  });
 
   // Los nombres reales no salen del servidor (§4.2). El mapa se queda aquí y
   // se usa para devolverlos al escribir la recomendación.
@@ -121,13 +305,14 @@ export async function analyze(scope: Scope): Promise<AnalyzeResult> {
     )
   });
 
-  // Si el usuario no autorizó este dominio, se dice explícitamente en vez de
-  // fingir cobertura y devolver una lista vacía sin explicación (§4.2).
+  // Red de seguridad: el corte temprano ya cubrió este caso, pero `context.ts`
+  // es el único sitio donde el filtro de privacidad manda (D-027) y si algún día
+  // decide dejar la lista vacía por otro motivo, aquí se para igual.
   if (!context.domains.length) {
     return {
       ok: false,
       created: 0,
-      reason: `Dinero está apagado para el análisis. Enciéndelo en Configuración si quieres que sus cifras se envíen al modelo.`
+      reason: "Ningún dominio de este ámbito está autorizado para el análisis. Revísalo en Configuración."
     };
   }
 
@@ -203,7 +388,7 @@ export async function analyze(scope: Scope): Promise<AnalyzeResult> {
     if (error) return { ok: false, created: 0, reason: error.message };
   }
 
-  revalidatePath("/money");
+  revalidatePath(SCOPE_PATH[scope]);
   revalidatePath("/intelligence");
   if (rows.length) return { ok: true, created: rows.length };
   return {
@@ -319,7 +504,10 @@ export async function deleteMemoryItem(id: string): Promise<void> {
  * completa en cada guardado: es una casilla por dominio, no un incremental.
  */
 export async function setAiDomains(formData: FormData): Promise<void> {
-  const domains = ["money", "debt", "habits", "time", "execution"].filter((d) => formData.get(`domain.${d}`) === "on");
+  // La lista sale del tipo, no de una cadena escrita a mano: si mañana aparece
+  // un dominio nuevo y esta línea se queda atrás, su casilla se guardaría como
+  // apagada para siempre sin que nada falle.
+  const domains = (Object.keys(DOMAIN_LABEL) as Domain[]).filter((d) => formData.get(`domain.${d}`) === "on");
 
   const supabase = await createClient();
   const {

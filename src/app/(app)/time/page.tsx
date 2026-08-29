@@ -11,6 +11,7 @@ import OccupationForm from "./OccupationForm";
 import AssignSlotButton from "./AssignSlotButton";
 import WeekView from "./WeekView";
 import { getSessionUser } from "@/lib/data/session";
+import InsightSection from "@/components/InsightSection";
 
 // ACTUALIZACIÓN — Autogestión del Tiempo soporta ocupaciones y tareas para
 // CUALQUIER día de la semana (no solo "hoy"):
@@ -226,6 +227,8 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
           )}
         </>
       )}
+
+      <InsightSection scope="time" />
     </div>
   );
 }

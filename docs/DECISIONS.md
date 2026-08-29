@@ -604,6 +604,79 @@
   /money, pero la memoria solo se alcanzaba a través de la bandeja, y una
   pantalla que depende de pasar por Dinero es una pantalla perdida.
 
+- **D-050 El motor pasa de un dominio a cuatro, y se queda a las puertas del
+  quinto a propósito.** `allowedDomains()` contemplaba cinco ámbitos desde el
+  primer día y `analyze()` rechazaba todo lo que no fuera Dinero: la
+  infraestructura cara —privacidad, seudonimización, anclaje, memoria,
+  historial de rechazos— ya estaba construida y probada, y lo único que faltaba
+  eran los extractores. Ahora hay cuatro: `money`, `time`, `execution` y
+  `habits`.
+
+  `debt` sigue sin extractor, y `global` está deshabilitado POR ESO. Global
+  incluye los cinco dominios, así que hoy daría un análisis que se presenta como
+  la foto completa habiendo mirado cuatro quintas partes. El motor puede decir
+  "no tengo datos de X" cuando el usuario lo apagó —esa es una decisión suya, y
+  `skippedDomains` ya la comunica— pero no puede callar que un dominio entero no
+  existe todavía.
+
+  QUÉ CUENTA COMO HECHO, Y QUÉ NO
+
+  La regla de los tres extractores nuevos es la misma que ya seguía money: pocos
+  hechos buenos. Lo vencido va en UN hecho con el recuento y la más antigua, no
+  en quince; los hábitos sin ancla van en uno agregado y solo si son mayoría.
+  Quince hechos del mismo tipo llenan el tope de contexto (MAX_FACTS = 40) y
+  expulsan a los otros dominios, que es justo lo contrario de para qué se
+  amplió el motor.
+
+  Los umbrales están escogidos contra el falso positivo, no contra el falso
+  negativo, porque un motor así se muere de decir obviedades: un proyecto que
+  nunca completó nada no está estancado (no ha empezado); una rutina que nunca
+  se ejecutó no está abandonada; un hábito creado el jueves no lleva 2 de 30; y
+  una racha se mira desde AYER, no desde hoy, porque avisar a las nueve de la
+  mañana de que rompiste algo que todavía puedes cumplir es la forma más rápida
+  de que el usuario deje de creerle.
+
+  Ningún extractor reimplementa un cálculo que ya exista: `saturationStatus` y
+  `availableSlots` vienen de domain/time.ts, `isOverdue` de task-state.ts,
+  `habitStreak` de habits.ts. Si el motor tuviera su propia aritmética, diría
+  "llevas 12 días" mientras la pantalla dice 11, y el usuario creería a la
+  pantalla — con razón.
+
+  EL CORTE ES ANTES DE LEER, NO DESPUÉS
+
+  `analyze()` comprueba el opt-in ANTES de cargar los datos del dominio.
+  `buildContext` volvería a filtrar de todas formas, pero para entonces las
+  cifras ya se habrían leído. Con un opt-in, no preguntar es parte de la
+  promesa.
+
+  UNA SOLA DEFINICIÓN DE "MI TAREA"
+
+  Los hechos de tiempo y ejecución usan `loadMyTasks` (data/tasks.ts), el mismo
+  cargador que Home. No es comodidad: con un criterio propio, el motor acabaría
+  diciéndome que voy saturado por el trabajo de un compañero. Por lo mismo, los
+  hechos de proyecto solo miran proyectos donde tengo tareas — avisar de que el
+  proyecto de otro lleva tres semanas parado no es una recomendación, es un
+  chisme.
+
+  DÓNDE SE PIDE CADA ANÁLISIS
+
+  El panel se embebe en la pantalla del ámbito —/money, /time, /execution y
+  /development— y no en una bandeja central, que es la misma razón por la que
+  Intelligence OS salió del menú (D-049): un hallazgo sobre tu agenda se
+  entiende mirando tu agenda.
+
+  El de ejecución va en la CARTERA y no dentro del tablero de un proyecto,
+  porque lo que mira es transversal: lo vencido de todo, los proyectos
+  estancados, lo que ya se puede empezar. Y va tras un límite de `Suspense` por
+  el mismo motivo que TeamSection: su consulta no puede retrasar la lista de
+  proyectos.
+
+  La carga de las recomendaciones vivas es un Server Component
+  (`InsightSection`) y no un bloque copiado en cada página. Con cuatro copias,
+  cambiar una columna de `recommendations` sería cuatro sitios donde arreglarlo
+  y tres donde olvidarlo. De paso deja de bloquear: en /money la consulta era
+  secuencial y retrasaba el resto del dashboard.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo
