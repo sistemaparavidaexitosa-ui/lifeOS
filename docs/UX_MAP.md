@@ -22,8 +22,8 @@ Server Action real que escribe en Postgres (guardrail NO-MOCK, F8).
 | Biblioteca (vistas: estado / categoría / todos) | `/development/library?por=` | `development/library/page.tsx`,`LibraryViews.tsx` | `books` (+`category`),`book_notes`,`book_progress` | `upsertBook`,`addBookNote`,`deleteBook` |
 | Buscador de metadatos de libro | `/api/development/book-lookup` | `api/development/book-lookup/route.ts` | Open Library + Google Books (sin tabla) | Prellena `BookForm`; el libro lo guarda `upsertBook` |
 | Recomendaciones (panel de Dinero) | `/money` (al final) | `components/InsightPanel.tsx` | `recommendations` + hechos derivados de `budgets`,`journal_entries`,`profiles` | `analyze`,`setRecommendationStatus` |
-| Bandeja de recomendaciones | `/intelligence` | `intelligence/page.tsx` | `recommendations` | `setRecommendationStatus`,`editRecommendationText` |
-| Memoria del motor | `/intelligence/memory` | `intelligence/memory/page.tsx` | `memory_items` | `upsertMemoryItem`,`deleteMemoryItem` |
+| Bandeja de recomendaciones | `/intelligence` — **fuera del menú** (D-049); se llega desde el panel de `/money` y desde `/settings` | `intelligence/page.tsx` | `recommendations` | `setRecommendationStatus`,`editRecommendationText` |
+| Memoria del motor | `/intelligence/memory` — **fuera del menú** (D-049); se llega desde `/intelligence` y desde `/settings` | `intelligence/memory/page.tsx` | `memory_items` | `upsertMemoryItem`,`deleteMemoryItem` |
 | Opt-in y borrado de IA | `/settings` | `settings/AiSettings.tsx` | `profiles.ai_domains` | `setAiDomains`,`clearAiHistory`,`clearMemory` |
 | Notebooks (cuadernos del espacio) | `/notebooks` | `notebooks/page.tsx`,`NotebookGrid.tsx`,`NoteList.tsx`,`NoteEditor.tsx` | `notebooks`,`notes` | `createNotebook`,`renameNotebook`,`deleteNotebook`,`createNote`,`saveNote`,`deleteNote` |
 | Búsqueda de notas | `/notebooks` (cabecera) | `notebooks/NotesSearch.tsx` | RPC `search_notes` sobre `notes.search` (tsvector español) | `searchNotes` |

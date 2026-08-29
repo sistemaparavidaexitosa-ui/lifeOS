@@ -575,6 +575,35 @@
   Ficción. Por lo mismo Ficción se evalúa antes que Técnico, para que «Science
   Fiction» sea una novela y no un libro de ciencia.
 
+- **D-049 Intelligence OS deja de ser una sección del menú, pero conserva sus
+  dos pantallas.** El menú anunciaba un cerebro central que todavía no existe:
+  el motor está construido para cinco ámbitos —`allowedDomains()` contempla
+  money, debt, habits, time y execution— y `analyze()` rechaza todo salvo
+  Dinero. Una sección propia, con su color y sus dos entradas, prometía una
+  cobertura que ninguna de las dos pantallas puede dar.
+
+  Donde de verdad se leen las recomendaciones es en el panel embebido al final
+  de /money, junto a las cifras que las produjeron. Ese es el sitio: un
+  hallazgo sobre el presupuesto se entiende mirando el presupuesto, no en una
+  bandeja aparte a la que hay que ir a propósito.
+
+  Las pantallas NO se convierten en redirecciones, y esta es la parte que
+  importa: lo que el usuario silencia vuelve como contexto de rechazo del
+  siguiente análisis (D-027). Un rechazo que no se puede revisar ni deshacer es
+  una decisión irreversible tomada con un clic, y el motor iría arrastrando
+  para siempre un "no me sugieras esto" del que ya nadie se acuerda. Así que la
+  bandeja histórica sobrevive, y con ella la memoria.
+
+  Se usa el flag `hidden` de `nav-items.ts`, no el borrado de las entradas: de
+  esa lista sale el título de la barra superior, y sin entrada ambas pantallas
+  se titularían "Life OS". Es el mismo mecanismo que ya usa /notebooks, y
+  distinto del de /workspaces y /habits, que sí son redirecciones porque su
+  contenido se mudó a otra pantalla. Aquí no se mudó nada.
+
+  Acceso desde Configuración además del panel: la bandeja ya se alcanzaba desde
+  /money, pero la memoria solo se alcanzaba a través de la bandeja, y una
+  pantalla que depende de pasar por Dinero es una pantalla perdida.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo
