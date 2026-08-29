@@ -40,7 +40,8 @@ const openLibrarySchema = z.object({
         author_name: z.array(z.string()).optional(),
         number_of_pages_median: z.number().optional(),
         cover_i: z.number().optional(),
-        isbn: z.array(z.string()).optional()
+        isbn: z.array(z.string()).optional(),
+        subject: z.array(z.string()).optional()
       })
     )
     .default([])
@@ -56,7 +57,8 @@ const googleBooksSchema = z.object({
             authors: z.array(z.string()).optional(),
             pageCount: z.number().optional(),
             imageLinks: z.object({ thumbnail: z.string().optional(), smallThumbnail: z.string().optional() }).optional(),
-            industryIdentifiers: z.array(z.object({ type: z.string().optional(), identifier: z.string().optional() })).optional()
+            industryIdentifiers: z.array(z.object({ type: z.string().optional(), identifier: z.string().optional() })).optional(),
+            categories: z.array(z.string()).optional()
           })
           .optional()
       })
@@ -86,7 +88,9 @@ async function searchOpenLibrary(term: string): Promise<BookCandidate[] | null> 
   // decenas de campos que aquí no se usan y solo cuestan ancho de banda.
   const url =
     `https://openlibrary.org/search.json?q=${encodeURIComponent(term)}` +
-    `&fields=title,author_name,number_of_pages_median,cover_i,isbn&limit=${MAX_RESULTS}`;
+    // `subject` se pide explícitamente: sin él la respuesta no lo trae y no
+    // habría con qué proponer la categoría del libro.
+    `&fields=title,author_name,number_of_pages_median,cover_i,isbn,subject&limit=${MAX_RESULTS}`;
   const data = await getJson(url, openLibrarySchema);
   return data ? normalizeOpenLibrary(data.docs).slice(0, MAX_RESULTS) : null;
 }

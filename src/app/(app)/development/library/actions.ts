@@ -5,7 +5,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
-import { isAllowedCoverUrl } from "@/lib/domain/development/book-lookup.ts";
+import { isAllowedCoverUrl, BOOK_CATEGORIES, type BookCategory } from "@/lib/domain/development/book-lookup.ts";
 import { actionFailed, actionOk, type ActionResult } from "@/lib/supabase/errors";
 
 const bookSchema = z.object({
@@ -14,6 +14,9 @@ const bookSchema = z.object({
   status: z.enum(["Por leer", "Leyendo", "Terminado"]),
   currentPage: z.coerce.number().int().min(0).default(0),
   totalPages: z.coerce.number().int().min(0).default(0),
+  // Categoría propia en español (migración 0034). El buscador de metadatos la
+  // PROPONE; aquí llega ya confirmada o cambiada por el usuario.
+  category: z.enum(BOOK_CATEGORIES as unknown as [BookCategory, ...BookCategory[]]).default("Otros"),
   // La portada la propone el buscador de metadatos (§5.1) y viaja en un input
   // oculto, así que aquí NO se confía en ella: solo pasan URLs https de los
   // hosts que la CSP permite pintar. Cualquier otra cosa se guarda como "sin
@@ -37,6 +40,7 @@ interface BookUpsertPayload {
   status: string;
   current_page: number;
   total_pages: number;
+  category: string;
   cover_url: string;
   updated_at: string;
   started_at?: string | null;
@@ -58,6 +62,7 @@ export async function upsertBook(id: string | null, formData: FormData): Promise
     status: formData.get("status"),
     currentPage: formData.get("currentPage") ?? 0,
     totalPages: formData.get("totalPages") ?? 0,
+    category: formData.get("category") ?? "Otros",
     coverUrl: formData.get("coverUrl") ?? ""
   });
   if (!parsed.success) {
@@ -78,20 +83,41 @@ export async function upsertBook(id: string | null, formData: FormData): Promise
     status: book.status,
     current_page: book.currentPage,
     total_pages: book.totalPages,
+    category: book.category,
     cover_url: book.coverUrl,
     updated_at: new Date().toISOString()
   };
 
+  let bookId = id;
+
   if (id) {
-    const { data: prev } = await supabase.from("books").select("status, started_at").eq("id", id).single();
+    const { data: prev } = await supabase.from("books").select("status, started_at, current_page").eq("id", id).single();
     if (book.status === "Leyendo" && prev?.status !== "Leyendo" && !prev?.started_at) payload.started_at = t0;
     if (book.status === "Terminado") payload.finished_at = t0;
     const { error } = await supabase.from("books").update(payload).eq("id", id);
     if (error) return actionFailed(error);
   } else {
     payload.started_at = book.status === "Leyendo" ? t0 : null;
-    const { error } = await supabase.from("books").insert({ ...payload, user_id: user.id });
+    const { data: creado, error } = await supabase.from("books").insert({ ...payload, user_id: user.id }).select("id").single();
     if (error) return actionFailed(error);
+    bookId = creado?.id ?? null;
+  }
+
+  // HISTORIAL DE LECTURA (migración 0034).
+  //
+  // `books.current_page` se sobrescribe, así que sin este punto no queda rastro
+  // de a qué velocidad avanzas y la fecha estimada nunca puede mejorar. Se
+  // escribe un punto por día local: el `unique (book_id, local_date)` hace que
+  // actualizar cinco veces hoy deje solo el último valor, que es justo lo que
+  // necesita el cálculo de ritmo (ver src/lib/domain/development/reading.ts).
+  //
+  // Falla en silencio a propósito: el usuario vino a guardar un libro, y
+  // perder un punto del historial no justifica devolverle un error sobre algo
+  // que ni sabe que existe.
+  if (bookId && book.currentPage > 0) {
+    await supabase
+      .from("book_progress")
+      .upsert({ book_id: bookId, local_date: t0, page: book.currentPage }, { onConflict: "book_id,local_date" });
   }
 
   // La auditoría es un efecto secundario: que falle no invalida el guardado

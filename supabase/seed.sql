@@ -280,13 +280,31 @@ begin
   values (v_occ_lectura, v_user_id, 'Lectura antes de dormir', '20:30', '21:00', 'Personal', true)
   on conflict (id) do update set title = excluded.title, start_time = excluded.start_time, end_time = excluded.end_time;
 
-  insert into public.habits (id, user_id, name, frequency, category, occupation_id)
-  values (v_hab1, v_user_id, 'Leer 20 minutos', 'Diario', 'Aprendizaje', v_occ_lectura)
-  on conflict (id) do update set name = excluded.name, occupation_id = excluded.occupation_id;
+  -- El hábito viene con la forma de «Hábitos atómicos» (migración 0033): la
+  -- señal y la versión de dos minutos, que son lo que se prueba al abrir la
+  -- pantalla. Sin ellas, los campos nuevos se verían siempre vacíos en local.
+  insert into public.habits (id, user_id, name, frequency, category, occupation_id, cue, two_min_version)
+  values (v_hab1, v_user_id, 'Leer 20 minutos', 'Diario', 'Aprendizaje', v_occ_lectura,
+          'Después de meterme a la cama', 'Leer una página')
+  on conflict (id) do update set
+    name = excluded.name, occupation_id = excluded.occupation_id,
+    cue = excluded.cue, two_min_version = excluded.two_min_version;
 
-  insert into public.books (id, user_id, title, author, status, current_page, total_pages, started_at)
-  values (v_bk1, v_user_id, 'Atomic Habits', 'James Clear', 'Leyendo', 120, 280, v_today - 10)
-  on conflict (id) do update set status = excluded.status, current_page = excluded.current_page, total_pages = excluded.total_pages;
+  insert into public.books (id, user_id, title, author, status, current_page, total_pages, started_at, category)
+  values (v_bk1, v_user_id, 'Atomic Habits', 'James Clear', 'Leyendo', 120, 280, v_today - 10, 'Desarrollo personal')
+  on conflict (id) do update set
+    status = excluded.status, current_page = excluded.current_page,
+    total_pages = excluded.total_pages, category = excluded.category;
+
+  -- Tres puntos de historial para que la fecha estimada salga con base
+  -- `historial` desde el primer arranque y no con el respaldo. Con un solo
+  -- libro y cero puntos, la pantalla nueva se vería igual que la vieja.
+  insert into public.book_progress (book_id, local_date, page)
+  values
+    (v_bk1, v_today - 10, 0),
+    (v_bk1, v_today - 5, 60),
+    (v_bk1, v_today, 120)
+  on conflict (book_id, local_date) do update set page = excluded.page;
 
   -- ---------------------------------------------------------------------
   -- Hogar y Dependientes Económicos

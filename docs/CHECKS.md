@@ -505,3 +505,41 @@ del seed. Corregido en un commit aparte.
   `America/Mexico_City`. Cambiarla depende de dónde esté alojado el proyecto de
   Supabase, que no se puede consultar desde aquí. Queda como pendiente, no como
   hecho.
+
+---
+
+## Personal Development OS: plantillas y lectura medida (agosto 2026) — migraciones 0033/0034
+
+| Check | Estado | Evidencia |
+|---|---|---|
+| `supabase db reset` (migraciones `0002`→`0034`) | ✅ EJECUTADO OK | 29 migraciones de cero + seed |
+| `supabase test db` | ✅ EJECUTADO OK | **98 assertions pgTAP en 13 archivos** |
+| `pnpm typecheck` · `lint` · `test:unit` · `build` | ✅ EJECUTADO OK | **270 pruebas unitarias** (29 nuevas), build de 32 rutas |
+| **Fecha estimada, contra el servidor de producción** | ✅ EJECUTADO OK | `/development/library` con sesión real pinta *«Terminarías el 11 sep 2026 · 12 págs./día, según tu ritmo de los últimos días»*. Cuadra a mano: 3 puntos sembrados (0 → 60 → 120 páginas en 10 días) dan 12 págs./día, y las 160 restantes son 14 días |
+| Las tres vistas de la biblioteca | ✅ EJECUTADO OK | `?por=estado` (por defecto), `?por=categoria` (agrupa en «Desarrollo personal» y muestra el estado como dato complementario) y `?por=todos` («Todos · 1 libro») |
+| Campos de «Hábitos atómicos» en la fila | ✅ EJECUTADO OK | `/development/habits` pinta la señal («Después de meterme a la cama») y, al no estar marcado hoy, la salida de emergencia («Si hoy no puedes: leer una página») |
+| Entradas a las plantillas | ✅ EJECUTADO OK | Botón «Plantillas» presente en Rutinas y en Hábitos |
+| Las duraciones de las plantillas suman lo que prometen | ✅ EJECUTADO OK | Prueba unitaria: S.A.V.E.R.S. 60, versión corta 6, 20/20/20 son `[20,20,20]` |
+| El historial de lectura es privado | ✅ EJECUTADO OK | Test 6 de `0013`: otro usuario no ve ni un punto de `book_progress` |
+| No se puede apilar sobre un hábito ajeno ni sobre sí mismo | ✅ EJECUTADO OK | Tests 5 y 7 de `0013`: `23514` para el auto-apilamiento y `P0001` (trigger) para el de otra cuenta, probado **como superusuario** — si la única defensa fuera la RLS, ese UPDATE pasaría |
+
+### Un bug que solo apareció al escribir la prueba
+
+El mapeo de categorías clasificaba **«Juvenile Nonfiction» como Ficción**,
+porque buscaba por subcadena y «nonfiction» contiene «fiction». Lo destapó el
+test de «lo que no reconoce cae en Otros», que es justo el que parecía trivial.
+Se corrigió buscando por inicio de palabra —que además conserva «biograf» →
+«biografía»— y de paso se reordenó Ficción antes que Técnico para que «Science
+Fiction» sea una novela y no un libro de ciencia. Las dos correcciones tienen su
+propia prueba.
+
+### Lo que no se verificó
+
+- **La categoría propuesta contra las APIs reales.** El mapeo está probado con
+  los valores que Open Library y Google Books devuelven habitualmente, pero no
+  se hizo una búsqueda real contra los dos proveedores; Google Books además
+  responde 429 con la cuota anónima compartida (ver D-022).
+- **El recorrido de las plantillas en el navegador.** Crear una rutina desde
+  S.A.V.E.R.S. y comprobar que el paso de lectura queda ligado al hábito «Leer
+  20 minutos» está implementado y con la acción probada por tipos, pero no se
+  hizo clic en él.

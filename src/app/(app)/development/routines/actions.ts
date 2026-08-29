@@ -7,6 +7,8 @@ import { createClient } from "@/lib/supabase/server";
 import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
 import { nextCompletedSteps, habitLogEffect } from "@/lib/domain/development/routines.ts";
+import { getRoutineTemplate, matchHabitForStep } from "@/lib/domain/development/templates.ts";
+import { describeDbError, type ActionResult } from "@/lib/supabase/errors";
 
 const routineSchema = z.object({
   name: z.string().min(1),
@@ -145,4 +147,71 @@ export async function toggleRoutineStep(routineId: string, stepId: string) {
   revalidatePath("/development/habits");
   revalidatePath("/development");
   revalidatePath("/home");
+}
+
+/**
+ * Crea una rutina COPIANDO una plantilla del catálogo.
+ *
+ * Copia y no enlace: a partir de aquí la rutina es del usuario y se edita como
+ * cualquier otra. Cambiar el catálogo en un despliegue futuro no puede
+ * reescribirle los pasos a nadie.
+ *
+ * Dos cosas que aprovechan lo que ya existe:
+ *
+ *   - `occupationId` se pide al crear. Tanto Mañana Milagrosa como el Club de
+ *     las 5 AM tratan de UNA HORA concreta del día; anclarla al bloque horario
+ *     en el momento de crear la rutina es la mitad del método, y después nadie
+ *     vuelve a abrir el formulario para hacerlo.
+ *   - Si un paso corresponde a un hábito que el usuario ya lleva, se liga por
+ *     `routine_steps.habit_id` en vez de duplicarlo. La migración 0024 lo dice:
+ *     así la racha no se bifurca.
+ *
+ * Contrato `{ ok, reason }` (D-030): esta acción la llama un Client Component
+ * que necesita pintar el motivo si algo falla.
+ */
+export async function createRoutineFromTemplate(templateId: string, occupationId: string): Promise<ActionResult & { id?: string }> {
+  const template = getRoutineTemplate(templateId);
+  if (!template) return { ok: false, reason: "Esa plantilla ya no existe." };
+
+  const supabase = await createClient();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, reason: "Tu sesión expiró. Vuelve a iniciar sesión." };
+
+  const { data: routine, error } = await supabase
+    .from("routines")
+    .insert({
+      user_id: user.id,
+      name: template.name,
+      frequency: template.frequency,
+      occupation_id: occupationId || null,
+      active: true
+    })
+    .select("id")
+    .single();
+  if (error || !routine) return { ok: false, reason: describeDbError(error) };
+
+  // Los hábitos del usuario, para intentar ligar los pasos que correspondan.
+  const { data: habits } = await supabase.from("habits").select("id, name");
+
+  const steps = template.steps.map((step, index) => ({
+    routine_id: routine.id,
+    title: step.title,
+    duration_min: step.durationMin,
+    position: index,
+    habit_id: matchHabitForStep(step.habitHint, habits ?? [])
+  }));
+
+  const { error: stepsError } = await supabase.from("routine_steps").insert(steps);
+  if (stepsError) {
+    // Una rutina sin pasos no sirve de nada y es peor que no haberla creado:
+    // el usuario tendría que borrarla a mano para volver a intentarlo.
+    await supabase.from("routines").delete().eq("id", routine.id);
+    return { ok: false, reason: describeDbError(stepsError) };
+  }
+
+  revalidatePath("/development/routines");
+  revalidatePath("/development");
+  return { ok: true, id: routine.id as string };
 }

@@ -21,7 +21,17 @@ export default function HabitRow({
   occupation,
   action
 }: {
-  habit: { id: string; name: string; frequency: string; category: string };
+  habit: {
+    id: string;
+    name: string;
+    frequency: string;
+    category: string;
+    /** «Después de X…» — la intención de implementación (migración 0033). */
+    cue: string;
+    twoMinVersion: string;
+    /** Nombre del hábito ancla, ya resuelto en el servidor. */
+    stackAfterName: string | null;
+  };
   doneToday: boolean;
   streak: number;
   occupation: OccupationLite | null;
@@ -55,6 +65,22 @@ export default function HabitRow({
 
       <div className="grow min-w-0 flex flex-col gap-1">
         <b style={{ overflowWrap: "anywhere" }}>{habit.name}</b>
+
+        {/* La señal se pinta bajo el nombre y no en el formulario, porque su
+            trabajo es recordarte CUÁNDO toca — encerrada en la pantalla de
+            edición no la lee nadie, y entonces las tres columnas de la
+            migración 0033 no habrían servido para nada. */}
+        {(habit.stackAfterName || habit.cue) && (
+          <span className="hb-cue">
+            {habit.stackAfterName ? `Después de: ${habit.stackAfterName}` : habit.cue}
+          </span>
+        )}
+
+        {/* Solo cuando aún no está hecho: una vez marcado, ofrecer la salida
+            de emergencia sobra y solo añade ruido a la fila. */}
+        {!doneToday && habit.twoMinVersion && (
+          <span className="hb-two">Si hoy no puedes: {habit.twoMinVersion}</span>
+        )}
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs" style={{ color: "var(--muted)", overflowWrap: "anywhere" }}>
             {habit.frequency} · {habit.category}
