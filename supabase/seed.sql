@@ -48,12 +48,22 @@ begin
   insert into auth.users (
     id, instance_id, aud, role, email, encrypted_password,
     email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
-    created_at, updated_at, confirmation_token, recovery_token
+    created_at, updated_at,
+    -- Estas seis columnas de token TIENEN que ir a '' y no quedarse en NULL.
+    -- GoTrue las lee como `string` de Go y revienta el login entero con
+    -- "converting NULL to string is unsupported" -> 500 "Database error
+    -- querying schema", un mensaje que no señala a ninguna de ellas. El
+    -- usuario demo del seed llevaba así desde el primer commit: no se podía
+    -- iniciar sesión en local con él. Se destapó al medir el rendimiento,
+    -- intentando entrar como el usuario demo.
+    confirmation_token, recovery_token,
+    email_change, email_change_token_new, email_change_token_current,
+    phone_change, phone_change_token, reauthentication_token
   ) values (
     v_user_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
     'luis.demo@lifeos.local', crypt('LifeosDemo!2026', gen_salt('bf')),
     now(), '{"provider":"email","providers":["email"]}', '{"name":"Luis Vargas (Demo)"}',
-    now(), now(), '', ''
+    now(), now(), '', '', '', '', '', '', '', ''
   )
   on conflict (id) do update set
     email = excluded.email,
@@ -131,12 +141,22 @@ begin
   insert into auth.users (
     id, instance_id, aud, role, email, encrypted_password,
     email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
-    created_at, updated_at, confirmation_token, recovery_token
+    created_at, updated_at,
+    -- Estas seis columnas de token TIENEN que ir a '' y no quedarse en NULL.
+    -- GoTrue las lee como `string` de Go y revienta el login entero con
+    -- "converting NULL to string is unsupported" -> 500 "Database error
+    -- querying schema", un mensaje que no señala a ninguna de ellas. El
+    -- usuario demo del seed llevaba así desde el primer commit: no se podía
+    -- iniciar sesión en local con él. Se destapó al medir el rendimiento,
+    -- intentando entrar como el usuario demo.
+    confirmation_token, recovery_token,
+    email_change, email_change_token_new, email_change_token_current,
+    phone_change, phone_change_token, reauthentication_token
   ) values (
     v_ana_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
     'ana.demo@lifeos.local', crypt('LifeosDemo!2026', gen_salt('bf')),
     now(), '{"provider":"email","providers":["email"]}', '{"name":"Ana Ruiz (Demo)"}',
-    now(), now(), '', ''
+    now(), now(), '', '', '', '', '', '', '', ''
   )
   on conflict (id) do update set email = excluded.email, updated_at = now();
 
