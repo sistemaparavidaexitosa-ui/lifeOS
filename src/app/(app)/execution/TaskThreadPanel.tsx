@@ -13,6 +13,15 @@
 
 import { useMemo, useRef, useState, useTransition } from "react";
 import { addTaskComment } from "./task-detail-actions";
+import { createReminder, pinCommentToLogbook, reactDone, toggleReaction, type PinType } from "./thread-actions";
+import {
+  summarizeReactions,
+  toggleIntent,
+  DONE_EMOJI,
+  REACTION_PALETTE,
+  type ReactionLike
+} from "@/lib/domain/execution/reactions.ts";
+import { PRESET_LABEL, type ReminderPreset } from "@/lib/domain/execution/reminders.ts";
 import { mergeThread, describeTransition } from "@/lib/domain/execution/thread.ts";
 import { matchRoster, mentionQueryAt, splitBody, type RosterMember } from "@/lib/domain/execution/mentions.ts";
 import { STATUS_META } from "./status-meta";
@@ -25,6 +34,12 @@ interface CommentLite {
   author_name: string;
   mentions: string[];
   created_at: string;
+}
+
+interface ReactionLite {
+  comment_id: string;
+  user_id: string;
+  emoji: string;
 }
 
 interface HistoryLite {
@@ -56,16 +71,22 @@ function CommentBody({ body, roster }: { body: string; roster: RosterMember[] })
   );
 }
 
+const PRESETS: ReminderPreset[] = ["manana", "en-3-dias", "proxima-semana"];
+
 export default function TaskThreadPanel({
   taskId,
   comments,
   history,
+  reactions,
+  viewerId,
   roster,
   onSaved
 }: {
   taskId: string;
   comments: CommentLite[];
   history: HistoryLite[];
+  reactions: ReactionLite[];
+  viewerId: string;
   roster: RosterMember[];
   onSaved: () => void;
 }) {
@@ -88,6 +109,44 @@ export default function TaskThreadPanel({
   );
 
   const candidates = useMemo(() => (query === null ? [] : matchRoster(roster, query).slice(0, 6)), [roster, query]);
+
+  const reactionRows: ReactionLike[] = useMemo(
+    () => reactions.map((r) => ({ commentId: r.comment_id, userId: r.user_id, emoji: r.emoji })),
+    [reactions]
+  );
+
+  /** El menú de acciones abierto, si hay alguno: un comentario a la vez. */
+  const [openFor, setOpenFor] = useState<string | null>(null);
+  const [actionAnchor, setActionAnchor] = useState<HTMLElement | null>(null);
+
+  function react(commentId: string, emoji: string) {
+    const intent = toggleIntent(reactionRows, commentId, viewerId, emoji);
+    startTransition(async () => {
+      // El ✅ es el único que además intenta cerrar la tarea; el resto solo
+      // reacciona. Por eso son dos acciones y no una con un `if` dentro.
+      const result = emoji === DONE_EMOJI ? await reactDone(commentId, taskId, intent) : await toggleReaction(commentId, emoji, intent);
+      setError(result.ok ? null : (result.reason ?? "No se pudo reaccionar."));
+      onSaved();
+    });
+  }
+
+  function pin(commentId: string, type: PinType) {
+    setOpenFor(null);
+    setActionAnchor(null);
+    startTransition(async () => {
+      const result = await pinCommentToLogbook(commentId, type);
+      setError(result.ok ? null : (result.reason ?? "No se pudo fijar."));
+    });
+  }
+
+  function remind(commentId: string, preset: ReminderPreset) {
+    setOpenFor(null);
+    setActionAnchor(null);
+    startTransition(async () => {
+      const result = await createReminder("comment", commentId, preset, "");
+      setError(result.ok ? null : (result.reason ?? "No se pudo crear el recordatorio."));
+    });
+  }
 
   function onType(value: string, caret: number) {
     setBody(value);
@@ -146,6 +205,34 @@ export default function TaskThreadPanel({
               <div className="text-sm">
                 <CommentBody body={e.body} roster={roster} />
               </div>
+
+              <div className="flex items-center gap-1.5 flex-wrap" style={{ marginTop: 6 }}>
+                {summarizeReactions(reactionRows, e.id, viewerId).map((rx) => (
+                  <button
+                    key={rx.emoji}
+                    className={`btn-ghost btn-sm${rx.mine ? " btn-primary" : ""}`}
+                    style={{ padding: "2px 8px", minHeight: 26 }}
+                    disabled={pending}
+                    onClick={() => react(e.id, rx.emoji)}
+                    aria-label={`${rx.emoji} · ${rx.count}${rx.mine ? " · reaccionaste" : ""}`}
+                  >
+                    {rx.emoji} {rx.count}
+                  </button>
+                ))}
+                <button
+                  className="btn-ghost btn-sm"
+                  style={{ padding: "2px 8px", minHeight: 26 }}
+                  disabled={pending}
+                  onClick={(ev) => {
+                    setOpenFor(openFor === e.id ? null : e.id);
+                    setActionAnchor(openFor === e.id ? null : ev.currentTarget);
+                  }}
+                  aria-label="Reaccionar, fijar o recordar"
+                >
+                  ⋯
+                </button>
+              </div>
+
               <div className="text-xs" style={{ color: "var(--muted)", marginTop: 3 }}>
                 {e.authorName} · {new Date(e.at).toLocaleString()}
               </div>
@@ -195,6 +282,50 @@ export default function TaskThreadPanel({
           {candidates.map((m) => (
             <button key={m.userId} className="ex-menu-item" onClick={() => pick(m)}>
               {m.name}
+            </button>
+          ))}
+        </MenuSurface>
+      )}
+
+      {openFor && actionAnchor && (
+        <MenuSurface
+          anchor={actionAnchor}
+          align="start"
+          width={228}
+          label="Acciones sobre el comentario"
+          onClose={() => {
+            setOpenFor(null);
+            setActionAnchor(null);
+          }}
+        >
+          <div className="flex gap-1 flex-wrap" style={{ padding: "6px 8px" }}>
+            {REACTION_PALETTE.map((emoji) => (
+              <button
+                key={emoji}
+                className="btn-ghost btn-sm"
+                style={{ padding: "2px 8px", minHeight: 28 }}
+                disabled={pending}
+                onClick={() => {
+                  const id = openFor;
+                  setOpenFor(null);
+                  setActionAnchor(null);
+                  react(id, emoji);
+                }}
+                aria-label={emoji === DONE_EMOJI ? "Marcar como hecho (completa la tarea)" : `Reaccionar con ${emoji}`}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+          <button className="ex-menu-item" disabled={pending} onClick={() => pin(openFor, "decision")}>
+            Fijar como decisión
+          </button>
+          <button className="ex-menu-item" disabled={pending} onClick={() => pin(openFor, "learning")}>
+            Fijar como aprendizaje
+          </button>
+          {PRESETS.map((preset) => (
+            <button key={preset} className="ex-menu-item" disabled={pending} onClick={() => remind(openFor, preset)}>
+              Recordarme: {PRESET_LABEL[preset].toLowerCase()}
             </button>
           ))}
         </MenuSurface>

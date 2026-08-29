@@ -5,6 +5,7 @@ import { Card, Chip, Stat, Progress, EmptyState } from "@/components/ui";
 import { money0, fdate } from "@/lib/format";
 import { greetingFor, hourInTimeZone, todayInTimeZone } from "@/lib/domain/datetime.ts";
 import { getSessionUser } from "@/lib/data/session";
+import RemindersCard from "./RemindersCard";
 import InsightSection from "@/components/InsightSection";
 
 export default async function HomePage() {
@@ -132,6 +133,18 @@ export default async function HomePage() {
           <Link href="/development/library" className="btn-ghost btn-sm mt-2 inline-block">
             Ir a la Biblioteca
           </Link>
+        </Card>
+      )}
+
+      {data.reminders.length > 0 && (
+        <Card>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-bold">Te pediste recordar</h3>
+            <Chip kind={data.reminders.some((r) => r.remindOnISO < data.todayISO) ? "bad" : undefined}>
+              {data.reminders.length}
+            </Chip>
+          </div>
+          <RemindersCard reminders={data.reminders} todayISO={data.todayISO} />
         </Card>
       )}
 

@@ -828,6 +828,57 @@
   la columna es texto libre en el esquema, así que esconderlo tras un «Otro»
   borraría la única pista de qué pasó.
 
+- **D-058 El ✅ completa la tarea, y no puede saltarse ninguna regla.** Reaccionar
+  con ✅ intenta una transición a Completed de verdad, y pasa por
+  `evaluateTransition` como cualquier otro camino: el selector de estado, el
+  Kanban y el arrastre del tablero. No hay validación nueva — la máquina de
+  estados que ya existía protege también esto. Comprobado contra la app real:
+  con una dependencia abierta devuelve «Faltan dependencias» y la tarea se
+  queda como estaba; cerrada la dependencia, la completa y deja fila en
+  `task_history`.
+
+  Cuando la transición se rechaza, la reacción SE QUEDA PUESTA. El usuario
+  expresó algo —«esto ya está»— que sigue siendo cierto; lo que falla es
+  cerrarla. Deshacer las dos cosas escondería el motivo real y parecería que el
+  clic no llegó.
+
+  Y quitar el ✅ no reabre la tarea. Reabrir es una decisión con consecuencias,
+  no la retirada de un gesto: para eso está el selector de estado, con su
+  nombre.
+
+- **D-059 Una reacción es (comentario, persona, emoji), y esa es toda la regla.**
+  `comment_reactions` no tiene `id` propio: la clave primaria compuesta ES la
+  unicidad. Con un id suelto habría que comprobar antes de insertar, y dos clics
+  rápidos crearían dos filas — el contador diría 2 con una sola persona detrás.
+  Por lo mismo, la acción borra SIEMPRE antes de insertar: así es idempotente
+  sin depender de que el cliente sepa el estado actual, que con dos pestañas
+  abiertas no tiene por qué.
+
+  El orden de los botones es el de la paleta, no el de llegada. Si dependiera de
+  quién reaccionó primero, los botones bailarían de sitio entre recargas y
+  pulsar el de al lado sería cuestión de suerte.
+
+- **D-060 Fijar copia el texto, no lo referencia.** La bitácora es el registro
+  de lo que se decidió, y tiene que seguir diciéndolo aunque el comentario se
+  borre después. Se le añade de dónde salió —autor y tarea— porque sin el
+  contexto media bitácora acaba siendo frases sueltas que nadie sabe a qué
+  respondían.
+
+- **D-061 Un recordatorio es una FECHA que Home mira, no una alarma.** No hay
+  ningún proceso que despierte a nadie, así que `reminders.remind_on` es `date`
+  y no `timestamptz`: prometer una hora exacta sería prometer algo que no
+  existe. El día se decide en la zona del perfil (D-016/D-018) — con UTC, un
+  «mañana» pedido esta tarde en México caería pasado mañana.
+
+  Los VENCIDOS siguen apareciendo, no solo los de hoy. Un recordatorio que se
+  quedó atrás porque no abriste la app el martes no puede desaparecer en
+  silencio: es exactamente lo que un recordatorio promete no hacer.
+
+  Tres plazos y no siete: la gracia de un recordatorio rápido es no tener que
+  pensar la fecha. «La próxima semana» son 7 días y no «el lunes que viene» —
+  un lunes fijo amontona en un solo día todo lo que se aplaza durante la semana,
+  y obliga a decidir qué pasa cuando hoy ya es lunes.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo

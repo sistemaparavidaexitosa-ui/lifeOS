@@ -127,6 +127,8 @@ export default function TaskDetailPanel({
                     taskId={detail.task.id}
                     comments={detail.comments}
                     history={detail.history}
+                    reactions={detail.reactions}
+                    viewerId={detail.viewerId}
                     roster={detail.roster}
                     onSaved={load}
                   />

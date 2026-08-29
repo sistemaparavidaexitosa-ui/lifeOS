@@ -40,6 +40,12 @@ export interface TaskDetailHistoryRow {
   ts: string;
 }
 
+export interface TaskDetailReaction {
+  comment_id: string;
+  user_id: string;
+  emoji: string;
+}
+
 export interface TaskDetailDepCandidate {
   id: string;
   title: string;
@@ -66,6 +72,10 @@ export interface TaskDetailResult {
   assignees: string[];
   comments: TaskDetailComment[];
   history: TaskDetailHistoryRow[];
+  /** Reacciones de TODOS los comentarios de la tarea, en una sola consulta. */
+  reactions: TaskDetailReaction[];
+  /** Quién mira. Lo necesita el hilo para saber qué reacciones son suyas. */
+  viewerId: string;
   files: TaskDetailFile[];
 }
 
@@ -116,6 +126,13 @@ export async function getTaskDetail(taskId: string): Promise<TaskDetailResult> {
     .eq("subject_id", taskId)
     .order("created_at", { ascending: true });
 
+  // Una sola consulta para las reacciones de TODOS los comentarios: una por
+  // comentario sería N+1 en un hilo largo.
+  const commentIds = (commentRows ?? []).map((c) => c.id);
+  const { data: reactionRows } = commentIds.length
+    ? await supabase.from("comment_reactions").select("comment_id, user_id, emoji").in("comment_id", commentIds)
+    : { data: [] as TaskDetailReaction[] };
+
   const { data: historyRows } = await supabase
     .from("task_history")
     .select("id, from_state, to_state, ts")
@@ -151,6 +168,8 @@ export async function getTaskDetail(taskId: string): Promise<TaskDetailResult> {
     assignees: (assigneeRows ?? []).map((a) => a.user_name),
     comments: commentRows ?? [],
     history: historyRows ?? [],
+    reactions: reactionRows ?? [],
+    viewerId: user.id,
     files: fileRows ?? []
   };
 }

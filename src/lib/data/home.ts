@@ -5,6 +5,7 @@ import { saturationStatus, occupationAppliesOn } from "@/lib/domain/time.ts";
 import { effectiveStatus } from "@/lib/domain/task-state.ts";
 import { budgetTabRow } from "@/lib/domain/budget.ts";
 import { loadMyTasks } from "./tasks";
+import { dueReminders, type ReminderLike } from "@/lib/domain/execution/reminders.ts";
 import { todayLocal, addDaysISO } from "./dates";
 import { getUserTimeZone } from "./profile";
 
@@ -44,6 +45,7 @@ export async function getHomeData(userId: string) {
     { data: journalEntries },
     { data: budgets },
     { data: occupations },
+    { data: reminderRows },
     { data: currentBook }
   ] = await Promise.all([
     supabase.from("profiles").select("*").eq("user_id", userId).single(),
@@ -53,6 +55,9 @@ export async function getHomeData(userId: string) {
     supabase.from("journal_entries").select("*, journal_lines(*)").eq("user_id", userId).gte("entry_date", from15),
     supabase.from("budgets").select("*").eq("user_id", userId).eq("period", "current"),
     supabase.from("occupations").select("*").eq("user_id", userId),
+    // Pendientes y ya vencidos. El corte por fecha se hace en el dominio: aquí
+    // solo se descartan los hechos, que no vuelven nunca.
+    supabase.from("reminders").select("*").eq("user_id", userId).eq("done", false).order("remind_on"),
     supabase
       .from("books")
       .select("*")
@@ -102,6 +107,28 @@ export async function getHomeData(userId: string) {
     .filter((o) => occupationAppliesOn({ recurring: o.recurring, occDate: o.occ_date, days: o.days }, t0))
     .map((o) => ({ id: o.id, title: o.title, start: o.start_time.slice(0, 5), end: o.end_time.slice(0, 5) }));
 
+  // Los VENCIDOS también entran: un recordatorio que se quedó atrás porque no
+  // abriste la app el martes no puede desaparecer en silencio — es justo lo que
+  // un recordatorio promete no hacer.
+  const reminders = dueReminders(
+    (reminderRows ?? []).map(
+      (r): ReminderLike => ({
+        id: r.id,
+        subjectType: r.subject_type as "task" | "comment",
+        subjectId: r.subject_id,
+        text: r.text,
+        remindOnISO: r.remind_on,
+        done: r.done
+      })
+    ),
+    t0
+  );
+
+  // El título de la tarea a la que apuntan, para que el recordatorio diga de
+  // qué va. Los que apuntan a un comentario se resuelven por su tarea.
+  const reminderTaskIds = reminders.filter((r) => r.subjectType === "task").map((r) => r.subjectId);
+  const titleById = new Map(allTasks.filter((t) => reminderTaskIds.includes(t.id)).map((t) => [t.id, t.title]));
+
   const saturation = saturationStatus(
     { start: profile.activity_window_start.slice(0, 5), end: profile.activity_window_end.slice(0, 5) },
     todayOccupations,
@@ -118,6 +145,8 @@ export async function getHomeData(userId: string) {
     periodStats: stats,
     budgetRemaining,
     saturation,
+    reminders: reminders.map((r) => ({ ...r, subjectTitle: titleById.get(r.subjectId) ?? null })),
+    todayISO: t0,
     currentBook
   };
 }
