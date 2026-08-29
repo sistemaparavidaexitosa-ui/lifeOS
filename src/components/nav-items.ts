@@ -18,8 +18,11 @@ export interface NavItem {
    *
    * /notebooks se alcanza desde el conmutador del espacio (WorkspaceTabs), no
    * desde el menú: los cuadernos viven DENTRO del espacio de trabajo, igual
-   * que los proyectos. Aun así tiene que figurar aquí, porque de esta lista
-   * sale el título de la barra superior (AppShell) y sin la entrada la
+   * que los proyectos. /intelligence y /intelligence/memory, desde el panel de
+   * /money y desde Configuración, por la razón que se explica más abajo.
+   *
+   * En los dos casos la entrada tiene que figurar aquí igualmente, porque de
+   * esta lista sale el título de la barra superior (AppShell) y sin ella la
    * pantalla se titularía "Life OS".
    */
   hidden?: boolean;
@@ -43,8 +46,18 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/development/routines", label: "Rutinas", group: "Personal Development OS", icon: "routines", color: "var(--c-orange)" },
   { href: "/development/habits", label: "Hábitos", group: "Personal Development OS", icon: "habits", color: "var(--c-orange)" },
   { href: "/development/library", label: "Biblioteca", group: "Personal Development OS", icon: "library", color: "var(--c-orange)" },
-  { href: "/intelligence", label: "Recomendaciones", group: "Intelligence OS", icon: "insights", color: "var(--c-teal)" },
-  { href: "/intelligence/memory", label: "Memoria", group: "Intelligence OS", icon: "memory", color: "var(--c-teal)" },
+  // "Intelligence OS" ya no es una sección del menú. Anunciarla como tal
+  // prometía un cerebro central que todavía no existe: el motor está
+  // construido para cinco ámbitos y `analyze()` solo acepta Dinero
+  // (lib/insights/actions.ts). Las recomendaciones se leen donde se generan
+  // —el panel embebido al final de /money—, no en una bandeja aparte.
+  //
+  // Las DOS pantallas siguen vivas, y no por nostalgia: lo que silencias
+  // vuelve como contexto de rechazo del próximo análisis, así que tiene que
+  // haber dónde ver y deshacer lo silenciado. Se llega desde el enlace del
+  // propio panel y desde la tarjeta de Configuración.
+  { href: "/intelligence", label: "Recomendaciones", group: "Intelligence OS", icon: "insights", color: "var(--c-teal)", hidden: true },
+  { href: "/intelligence/memory", label: "Memoria", group: "Intelligence OS", icon: "memory", color: "var(--c-teal)", hidden: true },
   { href: "/money", label: "Dashboard y Gastos", group: "Money OS (privado)", icon: "money", color: "var(--c-green)" },
   { href: "/money/budget", label: "Presupuesto", group: "Money OS (privado)", icon: "budget", color: "var(--c-green)" },
   { href: "/investments", label: "Inversiones", group: "Money OS (privado)", icon: "investments", color: "var(--c-green)" },

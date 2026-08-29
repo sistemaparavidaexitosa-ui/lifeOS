@@ -85,6 +85,21 @@ export default async function SettingsPage() {
       <Card>
         <h3 className="font-bold mb-2">Recomendaciones (Intelligence OS)</h3>
         <AiSettings enabled={(profile.ai_domains ?? []) as string[]} />
+        {/*
+          Intelligence OS dejó de ser una sección del menú lateral (ver
+          nav-items.ts). Sus dos pantallas siguen existiendo y estos son sus
+          accesos estables: la bandeja también se alcanza desde el panel de
+          /money, pero la memoria solo se alcanzaba a través de ella, y una
+          pantalla que depende de pasar por Dinero es una pantalla perdida.
+        */}
+        <div className="flex gap-1.5 flex-wrap" style={{ marginTop: 10 }}>
+          <a href="/intelligence" className="btn-ghost btn-sm">
+            Ver recomendaciones
+          </a>
+          <a href="/intelligence/memory" className="btn-ghost btn-sm">
+            Memoria del motor
+          </a>
+        </div>
       </Card>
 
       {/*
