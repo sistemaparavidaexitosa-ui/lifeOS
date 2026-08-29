@@ -4,6 +4,7 @@
 import { Chip, Progress } from "@/components/ui";
 import ProjectMenu, { type ProjectMenuData } from "./ProjectMenu";
 import type { LogEntry, KnowledgeItem } from "./logbook-knowledge-actions";
+import type { WorkspaceSummary } from "@/lib/data/workspaces";
 
 export default function BoardHeader({
   project,
@@ -14,7 +15,11 @@ export default function BoardHeader({
   targetDateLabel,
   sequenceTasks,
   logbookEntries,
-  knowledgeItems
+  knowledgeItems,
+  workspaces,
+  currentWorkspaceId,
+  guestAccess,
+  workspaceIsPersonal
 }: {
   project: ProjectMenuData;
   progress: number;
@@ -25,6 +30,12 @@ export default function BoardHeader({
   sequenceTasks: { id: string; title: string }[];
   logbookEntries: LogEntry[];
   knowledgeItems: KnowledgeItem[];
+  /** Espacios donde el usuario puede escribir: destinos válidos para mover. */
+  workspaces: WorkspaceSummary[];
+  currentWorkspaceId: string;
+  /** Nivel del share vigente, o null si ningún invitado alcanza el proyecto. */
+  guestAccess: string | null;
+  workspaceIsPersonal: boolean;
 }) {
   return (
     <header className="ex-header">
@@ -58,6 +69,10 @@ export default function BoardHeader({
           sequenceTasks={sequenceTasks}
           logbookEntries={logbookEntries}
           knowledgeItems={knowledgeItems}
+          workspaces={workspaces}
+          currentWorkspaceId={currentWorkspaceId}
+          guestAccess={guestAccess}
+          workspaceIsPersonal={workspaceIsPersonal}
         />
       </div>
     </header>

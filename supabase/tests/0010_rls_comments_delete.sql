@@ -9,11 +9,17 @@
 -- quedaban colgando de tareas que ya no existen.
 --
 -- MONTAJE
--- El mismo de 0002: workspace del Owner, Member dentro del workspace y el
--- proyecto compartido con nivel 'view'. Ese nivel es el que importa aquí — el
--- Member TIENE acceso de lectura (puede leer y escribir comentarios) pero NO
--- puede editar el proyecto, así que borrar su propio comentario solo puede
--- pasar por la rama `author_id = auth.uid()` de la política, aislada.
+-- El mismo de 0002: workspace del Owner y un colaborador dentro del workspace.
+-- Ese colaborador entra con rol VIEWER, y ese detalle es el que importa aquí:
+-- necesitamos a alguien que TENGA acceso de lectura (puede leer y escribir
+-- comentarios) pero NO pueda editar el proyecto, para que borrar su propio
+-- comentario solo pueda pasar por la rama `author_id = auth.uid()` de la
+-- política, aislada.
+--
+-- Antes ese papel lo hacía un Member con `project_shares.access_level = 'view'`.
+-- Dejó de servir con la migración 0031: la membresía por sí sola ya da acceso,
+-- y un Member EDITA los proyectos de su espacio. Viewer es ahora el único rol
+-- que ve sin poder editar.
 --
 -- Un detalle que este archivo fija por escrito: Postgres aplica las políticas
 -- de SELECT al escanear las filas de un DELETE. Por eso "el autor borra lo
@@ -25,13 +31,13 @@ select plan(5);
 
 insert into auth.users (id, instance_id, aud, role, email) values
   ('c1111111-1111-4111-8111-111111111111', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'cowner@test.local'),
-  ('c2222222-2222-4222-8222-222222222222', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'cmember@test.local'),
+  ('c2222222-2222-4222-8222-222222222222', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'cviewer@test.local'),
   ('c3333333-3333-4333-8333-333333333333', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'coutsider@test.local')
 on conflict (id) do nothing;
 
 insert into public.profiles (user_id, name) values
   ('c1111111-1111-4111-8111-111111111111', 'COwner'),
-  ('c2222222-2222-4222-8222-222222222222', 'CMember'),
+  ('c2222222-2222-4222-8222-222222222222', 'CViewer'),
   ('c3333333-3333-4333-8333-333333333333', 'COutsider')
 on conflict (user_id) do nothing;
 
@@ -40,25 +46,24 @@ values ('c9999999-9999-4999-8999-999999999999', 'c1111111-1111-4111-8111-1111111
 on conflict (id) do nothing;
 
 insert into public.memberships (workspace_id, user_id, user_name, role, status)
-values ('c9999999-9999-4999-8999-999999999999', 'c2222222-2222-4222-8222-222222222222', 'CMember', 'Member', 'Active')
+values ('c9999999-9999-4999-8999-999999999999', 'c2222222-2222-4222-8222-222222222222', 'CViewer', 'Viewer', 'Active')
 on conflict (workspace_id, user_id) do nothing;
 
 insert into public.projects (id, owner_id, workspace_id, title, status)
 values ('c4444444-4444-4444-8444-444444444444', 'c1111111-1111-4111-8111-111111111111', 'c9999999-9999-4999-8999-999999999999', 'Proyecto con comentarios', 'Active')
 on conflict (id) do nothing;
 
-insert into public.project_shares (project_id, workspace_id, access_level)
-values ('c4444444-4444-4444-8444-444444444444', 'c9999999-9999-4999-8999-999999999999', 'view')
-on conflict (project_id) do nothing;
+-- Sin project_shares a propósito: desde 0031 esa tabla es el mecanismo del
+-- GUEST, no la llave de acceso de los demás roles.
 
 insert into public.tasks (id, project_id, title, status)
 values ('c5555555-5555-4555-8555-555555555555', 'c4444444-4444-4444-8444-444444444444', 'Tarea comentada', 'Pending')
 on conflict (id) do nothing;
 
--- Un comentario del Owner y otro del Member sobre la misma tarea.
+-- Un comentario del Owner y otro del Viewer sobre la misma tarea.
 insert into public.comments (id, subject_type, subject_id, author_id, author_name, body) values
   ('c6666666-6666-4666-8666-666666666666', 'task', 'c5555555-5555-4555-8555-555555555555', 'c1111111-1111-4111-8111-111111111111', 'COwner', 'del dueño'),
-  ('c7777777-7777-4777-8777-777777777777', 'task', 'c5555555-5555-4555-8555-555555555555', 'c2222222-2222-4222-8222-222222222222', 'CMember', 'del member')
+  ('c7777777-7777-4777-8777-777777777777', 'task', 'c5555555-5555-4555-8555-555555555555', 'c2222222-2222-4222-8222-222222222222', 'CViewer', 'del viewer')
 on conflict (id) do nothing;
 
 -- ---------------------------------------------------------------------------
@@ -77,7 +82,7 @@ select isnt_empty(
 );
 
 -- ---------------------------------------------------------------------------
--- Member (acceso 'view', NO puede editar el proyecto): borra SOLO lo suyo.
+-- Viewer (ve todo el espacio, NO puede editar nada): borra SOLO lo suyo.
 -- ---------------------------------------------------------------------------
 select set_config('request.jwt.claims', json_build_object('sub', 'c2222222-2222-4222-8222-222222222222', 'role', 'authenticated')::text, true);
 set local role authenticated;
@@ -85,7 +90,7 @@ set local role authenticated;
 select is(
   public.can_edit_comment_subject('task', 'c5555555-5555-4555-8555-555555555555'),
   false,
-  'El Member con acceso view NO puede editar el proyecto: la rama de dueño no le aplica'
+  'El Viewer NO puede editar el proyecto: la rama de dueño no le aplica (0031)'
 );
 
 delete from public.comments where id = 'c6666666-6666-4666-8666-666666666666';
@@ -95,12 +100,12 @@ reset role;
 
 select isnt_empty(
   $$ select 1 from public.comments where id = 'c6666666-6666-4666-8666-666666666666' $$,
-  'El Member NO borra el comentario del dueño (no es su autor y no puede editar el proyecto)'
+  'El Viewer NO borra el comentario del dueño (no es su autor y no puede editar el proyecto)'
 );
 
 select is_empty(
   $$ select 1 from public.comments where id = 'c7777777-7777-4777-8777-777777777777' $$,
-  'El Member SÍ borra su PROPIO comentario (RLS positiva por author_id)'
+  'El Viewer SÍ borra su PROPIO comentario (RLS positiva por author_id)'
 );
 
 -- ---------------------------------------------------------------------------

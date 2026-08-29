@@ -2,6 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getPersonalWorkspace } from "@/lib/data/workspaces";
 import { evaluateTransition } from "@/lib/domain/task-state.ts";
 import { suggestProjectSequence } from "@/lib/domain/project-sequence.ts";
 import type { TaskStatus } from "@/lib/domain/types.ts";
@@ -11,7 +12,12 @@ const projectSchema = z.object({
   objective: z.string().optional().default(""),
   status: z.enum(["Draft", "Active", "OnHold", "Completed", "Cancelled", "Archived"]).default("Active"),
   priority: z.enum(["High", "Medium", "Low"]).default("Medium"),
-  targetDate: z.string().optional().nullable()
+  targetDate: z.string().optional().nullable(),
+  // Desde la migración 0030 no existe el proyecto sin espacio: workspace_id es
+  // NOT NULL. Opcional AQUÍ y no en la base porque el formulario puede no
+  // mandarlo (un enlace viejo, una llamada sin el campo oculto) y en ese caso
+  // el destino correcto es el espacio personal, no un error en la cara.
+  workspaceId: z.string().uuid().optional().nullable()
 });
 
 export async function createProject(formData: FormData) {
@@ -20,7 +26,8 @@ export async function createProject(formData: FormData) {
     objective: formData.get("objective") ?? "",
     status: formData.get("status") ?? "Active",
     priority: formData.get("priority") ?? "Medium",
-    targetDate: formData.get("targetDate") || null
+    targetDate: formData.get("targetDate") || null,
+    workspaceId: formData.get("workspaceId") || null
   });
 
   const supabase = await createClient();
@@ -29,10 +36,19 @@ export async function createProject(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("No autenticado");
 
+  const workspaceId = parsed.workspaceId ?? (await getPersonalWorkspace())?.id;
+  if (!workspaceId) {
+    // Solo pasa si el trigger de alta (0030) no corrió para esta cuenta. Vale
+    // más decirlo que insertar y morir contra el NOT NULL con un mensaje de
+    // Postgres.
+    throw new Error("No encontramos tu espacio personal. Recarga la página o crea un espacio antes de crear el proyecto.");
+  }
+
   const { data: project, error } = await supabase
     .from("projects")
     .insert({
       owner_id: user.id,
+      workspace_id: workspaceId,
       title: parsed.title,
       objective: parsed.objective,
       status: parsed.status,

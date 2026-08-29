@@ -22,7 +22,11 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/execution/eisenhower", label: "Matriz de Eisenhower", group: "Execution OS", icon: "eisenhower", color: "var(--c-purple)" },
   { href: "/planning", label: "Planeación", group: "Execution OS", icon: "planning", color: "var(--c-purple)" },
   { href: "/time", label: "Autogestión del Tiempo", group: "Execution OS", icon: "time", color: "var(--c-purple)" },
-  { href: "/workspaces", label: "Equipos y Colaboración", group: "Execution OS", icon: "workspaces", color: "var(--c-purple)" },
+  // "Equipos y Colaboración" (/workspaces) ya no está aquí: los espacios de
+  // trabajo son el contenedor de los proyectos (migraciones 0030/0031), no un
+  // módulo aparte, y se administran desde /execution con el selector de
+  // espacio y el panel de Equipo. El ícono `workspaces` sigue en icons.tsx
+  // porque ese selector lo usa.
   { href: "/development", label: "Panel", group: "Personal Development OS", icon: "development", color: "var(--c-orange)" },
   { href: "/development/goals", label: "Metas Personales", group: "Personal Development OS", icon: "personalGoals", color: "var(--c-orange)" },
   { href: "/development/routines", label: "Rutinas", group: "Personal Development OS", icon: "routines", color: "var(--c-orange)" },

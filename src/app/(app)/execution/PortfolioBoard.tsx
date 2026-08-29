@@ -39,11 +39,17 @@ export interface PortfolioProject {
 export default function PortfolioBoard({
   projects,
   view,
+  workspaceName = "",
+  workspaceNav,
   children
 }: {
   projects: PortfolioProject[];
   /** Vista del tablero a la que se entra al abrir un proyecto. */
   view: string;
+  /** Espacio de trabajo que se está viendo: la cartera es siempre la de UN espacio. */
+  workspaceName?: string;
+  /** Selector de espacio + panel de Equipo, a la izquierda de la barra. */
+  workspaceNav?: React.ReactNode;
   /** Botón "+ Nuevo proyecto" (Client Component, inyectado desde page.tsx). */
   children?: React.ReactNode;
 }) {
@@ -105,13 +111,17 @@ export default function PortfolioBoard({
     return (
       <div className="ex-portfolio">
         <div className="ex-portfolio-bar">
-          <b className="text-sm">Proyectos</b>
+          {workspaceNav}
+          <span className="ex-portfolio-spacer" />
           {children}
         </div>
         <div className="card">
           <div className="text-center py-6" style={{ color: "var(--muted)" }}>
             <div className="text-3xl mb-1.5">📁</div>
-            Crea tu primer proyecto para empezar a trabajar.
+            {/* El estado vacío nombra el espacio: con varios espacios, un
+                "crea tu primer proyecto" a secas hacía dudar de si el sitio
+                estaba vacío o se estaba mirando el espacio equivocado. */}
+            {workspaceName ? `«${workspaceName}» todavía no tiene proyectos.` : "Crea tu primer proyecto para empezar a trabajar."}
           </div>
         </div>
       </div>
@@ -125,6 +135,7 @@ export default function PortfolioBoard({
   return (
     <div className="ex-portfolio">
       <div className="ex-portfolio-bar">
+        {workspaceNav}
         <input
           className="ex-search ex-portfolio-search"
           type="search"

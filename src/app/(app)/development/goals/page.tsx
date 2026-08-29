@@ -4,6 +4,7 @@ import { Card, Chip, EmptyState, Progress } from "@/components/ui";
 import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
 import { loadSourceSnapshot } from "@/lib/data/development";
+import { getPersonalWorkspaceIds } from "@/lib/data/workspaces";
 import { keyResultProgress, goalProgress, goalAtRisk } from "@/lib/domain/development/goals.ts";
 import { CardHeader, ModuleNote, SectionHeader } from "../FormSheet";
 import GoalForm from "./GoalForm";
@@ -16,14 +17,18 @@ export default async function PersonalGoalsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const personalWorkspaceIds = await getPersonalWorkspaceIds();
+
   const [{ data: goals }, { data: krs }, { data: habits }, { data: projects }, { data: books }, { data: fgoals }] =
     await Promise.all([
       supabase.from("personal_goals").select("*").order("created_at"),
       supabase.from("key_results").select("*").order("position"),
       supabase.from("habits").select("id, name").order("name"),
       // BR-012: solo proyectos PERSONALES. Un resultado clave nunca se mide
-      // contra el trabajo de un equipo.
-      supabase.from("projects").select("id, title").is("workspace_id", null).order("title"),
+      // contra el trabajo de un equipo. "Personal" es ahora "en un workspace
+      // personal" (is_personal, 0030), no "sin workspace": esa segunda clase
+      // de proyecto ya no existe.
+      supabase.from("projects").select("id, title").in("workspace_id", personalWorkspaceIds).order("title"),
       supabase.from("books").select("id, title").order("title"),
       supabase.from("financial_goals").select("id, name").order("name")
     ]);

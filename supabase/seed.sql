@@ -19,6 +19,9 @@ declare
   v_acc_nomina uuid := '00000000-0000-4000-8000-0000000000a1';
   v_acc_efectivo uuid := '00000000-0000-4000-8000-0000000000a2';
   v_acc_ahorro uuid := '00000000-0000-4000-8000-0000000000a3';
+  v_ana_id uuid := '00000000-0000-4000-8000-000000000002';
+  v_ws_personal uuid;
+  v_ws_equipo uuid := '00000000-0000-4000-8000-000000000901';
   v_prj uuid := '00000000-0000-4000-8000-000000000101';
   v_prj2 uuid := '00000000-0000-4000-8000-000000000102';
   v_t1 uuid := '00000000-0000-4000-8000-000000000201';
@@ -99,16 +102,73 @@ begin
   on conflict (id) do update set name = excluded.name, type = excluded.type, currency = excluded.currency, opening_balance = excluded.opening_balance;
 
   -- ---------------------------------------------------------------------
+  -- Espacios de trabajo (migración 0030: NO existe el proyecto sin espacio)
+  --
+  -- El personal lo crea el trigger handle_new_user al insertar el usuario de
+  -- arriba, así que aquí se BUSCA en vez de insertarse: crear otro violaría
+  -- el índice único idx_workspaces_one_personal. El `if` cubre el caso de una
+  -- base sembrada antes de que ese trigger existiera.
+  -- ---------------------------------------------------------------------
+  select w.id into v_ws_personal from public.workspaces w where w.owner_id = v_user_id and w.is_personal;
+  if v_ws_personal is null then
+    insert into public.workspaces (owner_id, name, is_personal)
+    values (v_user_id, 'Mi espacio', true)
+    returning id into v_ws_personal;
+  end if;
+
+  insert into public.memberships (workspace_id, user_id, user_name, role, status)
+  values (v_ws_personal, v_user_id, 'Luis Vargas (Demo)', 'Owner', 'Active')
+  on conflict (workspace_id, user_id) do nothing;
+
+  -- Segundo usuario + espacio de equipo: sin esto, el modelo nuevo
+  -- (membresía = acceso) no se puede VER en local. Ana no tiene ninguna fila
+  -- en project_shares y aun así alcanza el proyecto del equipo.
+  insert into auth.users (
+    id, instance_id, aud, role, email, encrypted_password,
+    email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
+    created_at, updated_at, confirmation_token, recovery_token
+  ) values (
+    v_ana_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
+    'ana.demo@lifeos.local', crypt('LifeosDemo!2026', gen_salt('bf')),
+    now(), '{"provider":"email","providers":["email"]}', '{"name":"Ana Ruiz (Demo)"}',
+    now(), now(), '', ''
+  )
+  on conflict (id) do update set email = excluded.email, updated_at = now();
+
+  insert into auth.identities (
+    id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at
+  ) values (
+    v_ana_id, v_ana_id, v_ana_id::text,
+    jsonb_build_object('sub', v_ana_id::text, 'email', 'ana.demo@lifeos.local'),
+    'email', now(), now(), now()
+  )
+  on conflict (provider_id, provider) do nothing;
+
+  insert into public.workspaces (id, owner_id, name, color, is_personal)
+  values (v_ws_equipo, v_user_id, 'Equipo LifeOS', '#6161ff', false)
+  on conflict (id) do update set name = excluded.name, color = excluded.color, is_personal = false;
+
+  insert into public.memberships (workspace_id, user_id, user_name, role, status)
+  values
+    (v_ws_equipo, v_user_id, 'Luis Vargas (Demo)', 'Owner', 'Active'),
+    (v_ws_equipo, v_ana_id, 'Ana Ruiz (Demo)', 'Member', 'Active')
+  on conflict (workspace_id, user_id) do update set role = excluded.role, status = excluded.status;
+
+  -- ---------------------------------------------------------------------
   -- Proyectos + tareas (deja AL MENOS un proyecto "buscable" con tareas —
   -- análogo directo al F13 de "proveedor buscable" del dominio de referencia).
+  --
+  -- Uno personal y otro del equipo, a propósito: es la diferencia que decide
+  -- quién ve qué (0031) y qué proyectos pueden medir un resultado clave
+  -- (BR-012, solo los del espacio personal).
   -- ---------------------------------------------------------------------
   insert into public.projects (id, owner_id, workspace_id, title, objective, description, status, priority, target_date, area, owner_name, tags, results, version)
   values
-    (v_prj, v_user_id, null, 'Lanzar Life OS MVP', 'Construir la experiencia diaria unificada.', 'Ejecución + Dinero + Patrimonio conectados.', 'Active', 'High', v_today + 45, 'Producto', 'Luis Vargas (Demo)', array['mvp','estrategico'], 'Ciclo diario completo funcionando.', 1),
-    (v_prj2, v_user_id, null, 'Mudanza de oficina', 'Reubicar el equipo sin perder productividad.', '', 'Active', 'Medium', v_today + 20, 'Operaciones', 'Luis Vargas (Demo)', '{}', '', 1)
+    (v_prj, v_user_id, v_ws_personal, 'Lanzar Life OS MVP', 'Construir la experiencia diaria unificada.', 'Ejecución + Dinero + Patrimonio conectados.', 'Active', 'High', v_today + 45, 'Producto', 'Luis Vargas (Demo)', array['mvp','estrategico'], 'Ciclo diario completo funcionando.', 1),
+    (v_prj2, v_user_id, v_ws_equipo, 'Mudanza de oficina', 'Reubicar el equipo sin perder productividad.', '', 'Active', 'Medium', v_today + 20, 'Operaciones', 'Luis Vargas (Demo)', '{}', '', 1)
   on conflict (id) do update set
     title = excluded.title, objective = excluded.objective, status = excluded.status, priority = excluded.priority,
-    target_date = excluded.target_date, version = public.projects.version + 1;
+    target_date = excluded.target_date, workspace_id = excluded.workspace_id, version = public.projects.version + 1;
 
   insert into public.tasks (id, project_id, title, status, priority, urgent, due, est, deps, impact, completed_at, version)
   values

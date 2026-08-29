@@ -87,11 +87,24 @@ export async function upsertKeyResult(goalId: string, id: string | null, formDat
   if (parsed.sourceKind !== "manual" && !sourceId) throw new Error("Elige la fuente que va a medir este resultado clave.");
 
   // BR-012: solo proyectos PERSONALES pueden medir un resultado clave. Se
-  // resuelve en el servidor consultando projects.workspace_id, nunca
-  // confiando en un parámetro del cliente.
+  // resuelve en el servidor, nunca confiando en un parámetro del cliente.
+  //
+  // La comprobación cambió con la migración 0030: antes bastaba con que
+  // `workspace_id` fuera null, porque el proyecto personal era el que no
+  // tenía workspace. Ahora TODO proyecto tiene uno, así que lo que hay que
+  // mirar es si ese workspace es el personal del usuario (is_personal).
   if (parsed.sourceKind === "project" && sourceId) {
-    const { data: project } = await supabase.from("projects").select("workspace_id").eq("id", sourceId).single();
-    if (project?.workspace_id) throw new Error("Un resultado clave solo puede medirse contra un proyecto personal, no contra uno de un workspace.");
+    const { data: project } = await supabase
+      .from("projects")
+      .select("workspace_id, workspaces(is_personal)")
+      .eq("id", sourceId)
+      .single();
+    const esPersonal = Array.isArray(project?.workspaces)
+      ? project.workspaces[0]?.is_personal
+      : project?.workspaces?.is_personal;
+    if (!esPersonal) {
+      throw new Error("Un resultado clave solo puede medirse contra un proyecto personal, no contra uno de un espacio de equipo.");
+    }
   }
 
   const payload = {

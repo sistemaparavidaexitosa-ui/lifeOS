@@ -5,9 +5,13 @@ import { fdate } from "@/lib/format";
 import { isOverdue, isOpen, type BoardTaskLike } from "@/lib/domain/board.ts";
 import { todayInTimeZone } from "@/lib/domain/datetime.ts";
 import { getUserTimeZone } from "@/lib/data/profile";
+import { listWorkspaces, ROLES_QUE_ADMINISTRAN, ROLES_QUE_CREAN, type WorkspaceSummary } from "@/lib/data/workspaces";
+import { appUrl } from "@/lib/email/send";
 import type { TaskStatus, Priority, ProjectStatus } from "@/lib/domain/types.ts";
 import NewProjectForm from "./NewProjectForm";
 import PortfolioBoard, { type PortfolioProject } from "./PortfolioBoard";
+import WorkspaceSwitcher from "./WorkspaceSwitcher";
+import TeamPanel, { type TeamInvitation, type TeamMember } from "./TeamPanel";
 import BoardHeader from "./BoardHeader";
 import BoardShell from "./BoardShell";
 import { isExecutionView, type BoardGroup, type BoardTask, type ExecutionView } from "./board-types";
@@ -38,12 +42,17 @@ import { getProjectLogAndKnowledge } from "./logbook-knowledge-actions";
 //      estado: cambiar de vista ya no recarga ni pierde contexto.
 //   3. `view` sigue viviendo en la URL para que el enlace sea compartible;
 //      BoardShell la sincroniza con history.replaceState.
+//   4. Todo proyecto vive en un ESPACIO DE TRABAJO (migración 0030), y ser
+//      miembro del espacio ya da acceso a sus proyectos (0031). Por eso el
+//      selector de espacio y el panel de Equipo están aquí y no en una sección
+//      aparte del menú lateral: elegir espacio ES elegir qué proyectos se ven.
+//      El espacio activo viaja en ?ws= para que el enlace sea compartible.
 export default async function ExecutionPage({
   searchParams
 }: {
-  searchParams: Promise<{ project?: string; view?: string }>;
+  searchParams: Promise<{ project?: string; view?: string; ws?: string }>;
 }) {
-  const { project: selectedProjectId, view: rawView } = await searchParams;
+  const { project: selectedProjectId, view: rawView, ws: requestedWorkspaceId } = await searchParams;
   const view: ExecutionView = isExecutionView(rawView) ? rawView : "board";
   // "Hoy" sale de profiles.timezone, no del reloj del servidor (UTC en
   // Vercel): de lo contrario el conteo de vencidas se corría un día cada
@@ -57,10 +66,25 @@ export default async function ExecutionPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const workspaces = await listWorkspaces();
+  // `projects` sigue trayendo TODO lo visible (la RLS ya filtra por membresía):
+  // hace falta completo para localizar el proyecto abierto por ?project=, que
+  // puede vivir en un espacio distinto del activo. La cartera sí se filtra.
   const { data: projects } = await supabase.from("projects").select("*").order("created_at", { ascending: false });
   const { data: allTasks } = await supabase.from("tasks").select("id, project_id, status, due, parent_task_id");
 
-  const portfolio: PortfolioProject[] = (projects ?? []).map((p) => {
+  const selectedProject = selectedProjectId ? projects?.find((p) => p.id === selectedProjectId) : undefined;
+
+  // Espacio activo: el de ?ws= si el usuario todavía lo alcanza; si no, el del
+  // proyecto abierto; si no, el personal. Nunca "ninguno": desde 0030 no
+  // existe un proyecto sin espacio, así que tampoco una cartera sin espacio.
+  const activeWorkspace: WorkspaceSummary | undefined =
+    workspaces.find((w) => w.id === requestedWorkspaceId) ??
+    workspaces.find((w) => w.id === selectedProject?.workspace_id) ??
+    workspaces.find((w) => w.isPersonal) ??
+    workspaces[0];
+
+  const portfolio: PortfolioProject[] = (projects ?? []).filter((p) => p.workspace_id === activeWorkspace?.id).map((p) => {
     const rootTasks = (allTasks ?? []).filter((t) => t.project_id === p.id && !t.parent_task_id);
     const countable = rootTasks.filter((t) => t.status !== "Cancelled");
     const done = countable.filter((t) => t.status === "Completed").length;
@@ -78,20 +102,40 @@ export default async function ExecutionPage({
     };
   });
 
-  const selectedProject = selectedProjectId ? projects?.find((p) => p.id === selectedProjectId) : undefined;
+  const canCreate = activeWorkspace ? ROLES_QUE_CREAN.includes(activeWorkspace.role) : false;
+  const backHref = selectedProject?.workspace_id ? `/execution?ws=${selectedProject.workspace_id}` : "/execution";
 
   return (
     <main className="ex-main">
       {!selectedProject ? (
-        <PortfolioBoard projects={portfolio} view={view}>
-          <NewProjectForm />
+        <PortfolioBoard
+          projects={portfolio}
+          view={view}
+          workspaceName={activeWorkspace?.name ?? ""}
+          workspaceNav={
+            activeWorkspace && (
+              <>
+                <WorkspaceSwitcher workspaces={workspaces} activeId={activeWorkspace.id} />
+                {!activeWorkspace.isPersonal && (
+                  <TeamSection workspace={activeWorkspace} userId={user.id} projectCount={portfolio.length} />
+                )}
+              </>
+            )
+          }
+        >
+          {canCreate && activeWorkspace && (
+            <NewProjectForm workspaceId={activeWorkspace.id} workspaceName={activeWorkspace.name} />
+          )}
         </PortfolioBoard>
       ) : (
         <>
           {/* Sin navegador lateral, esta miga de pan es el único camino de
-              vuelta: no puede faltar ni esconderse tras un menú. */}
+              vuelta: no puede faltar ni esconderse tras un menú. Vuelve al
+              espacio DEL PROYECTO, no al que estuviera activo: si no, abrir un
+              proyecto de otro espacio y volver dejaba al usuario en una
+              cartera donde ese proyecto no aparece. */}
           <nav className="ex-crumbs" aria-label="Ruta">
-            <Link href="/execution" className="ex-crumb-back">
+            <Link href={backHref} className="ex-crumb-back">
               ← Proyectos
             </Link>
             <span className="ex-crumb-sep">/</span>
@@ -115,13 +159,28 @@ async function BoardWorkspace({
   userId,
   today
 }: {
-  projectRow: { id: string; title: string; objective: string | null; status: string; priority: string; target_date: string | null; workspace_id: string | null };
+  projectRow: { id: string; title: string; objective: string | null; status: string; priority: string; target_date: string | null; workspace_id: string };
   view: ExecutionView;
   userId: string;
   today: string;
 }) {
   const supabase = await createClient();
   const projectId = projectRow.id;
+
+  // Destinos válidos para "Mover a otro espacio": solo donde el usuario puede
+  // crear/escribir. Ofrecer un espacio donde es Viewer sería enseñarle un
+  // botón que la RLS va a rechazar (projects_update_edit, 0031).
+  const allWorkspaces = await listWorkspaces();
+  const moveTargets = allWorkspaces.filter((w) => ROLES_QUE_CREAN.includes(w.role));
+  const projectWorkspace = allWorkspaces.find((w) => w.id === projectRow.workspace_id);
+
+  // Nivel de project_shares vigente: desde 0031 esa fila ya no decide el
+  // acceso del equipo, solo el del rol Guest.
+  const { data: share } = await supabase
+    .from("project_shares")
+    .select("access_level")
+    .eq("project_id", projectId)
+    .maybeSingle();
 
   const TASK_COLUMNS = "id, title, status, priority, due, start_date, est, urgent, parent_task_id, group_id, position";
   let orderingEnabled = true;
@@ -178,11 +237,15 @@ async function BoardWorkspace({
     return acc;
   }, {});
 
-  let members: string[] = [];
-  if (projectRow.workspace_id) {
-    const { data: rows } = await supabase.rpc("list_workspace_members", { p_workspace_id: projectRow.workspace_id });
-    members = (rows ?? []).map((m: { user_name: string }) => m.user_name);
-  } else {
+  // Responsables asignables. Ya no hay rama "proyecto sin workspace": desde
+  // 0030 todo proyecto vive en uno, y en el personal el RPC devuelve al propio
+  // usuario como único miembro, que es exactamente lo que aquella rama
+  // fabricaba a mano consultando `profiles`.
+  const { data: memberRows } = await supabase.rpc("list_workspace_members", { p_workspace_id: projectRow.workspace_id });
+  let members: string[] = ((memberRows ?? []) as { user_name: string }[]).map((m) => m.user_name);
+  if (!members.length) {
+    // Red de seguridad para una cuenta anterior a 0030 cuya membresía Owner no
+    // llegó a crearse: sin esto el selector de responsables saldría vacío.
     const { data: profile } = await supabase.from("profiles").select("name").eq("user_id", userId).single();
     if (profile?.name) members = [profile.name];
   }
@@ -194,6 +257,10 @@ async function BoardWorkspace({
   return (
     <>
       <BoardHeader
+        workspaces={moveTargets}
+        currentWorkspaceId={projectRow.workspace_id}
+        guestAccess={share?.access_level ?? null}
+        workspaceIsPersonal={projectWorkspace?.isPersonal ?? false}
         project={{
           id: projectRow.id,
           title: projectRow.title,
@@ -225,5 +292,66 @@ async function BoardWorkspace({
         today={today}
       />
     </>
+  );
+}
+
+/**
+ * Carga el equipo del espacio activo (miembros + invitaciones) y lo entrega al
+ * panel lateral.
+ *
+ * Se separa de la página en un Server Component propio para que Next pueda
+ * hacer streaming de la cartera sin esperar a estas dos consultas: el usuario
+ * casi siempre viene a ver proyectos, no a administrar el equipo.
+ *
+ * El roster completo sale del RPC `list_workspace_members`, NO de un
+ * `select * from memberships`: desde el fix 0012 esa tabla solo expone, por
+ * SELECT directo, la fila propia del usuario (para eliminar el riesgo de
+ * recursión de RLS).
+ */
+async function TeamSection({
+  workspace,
+  userId,
+  projectCount
+}: {
+  workspace: WorkspaceSummary;
+  userId: string;
+  projectCount: number;
+}) {
+  const supabase = await createClient();
+
+  const [{ data: memberRows }, { data: invitationRows }] = await Promise.all([
+    supabase.rpc("list_workspace_members", { p_workspace_id: workspace.id }),
+    // RLS (invitations_all_admin) ya limita esto a Owner/Admin: para un Member
+    // la consulta vuelve vacía y el panel simplemente no pinta la sección.
+    supabase.from("invitations").select("id, email, role, token, status, expires_at").eq("workspace_id", workspace.id)
+  ]);
+
+  const members: TeamMember[] = ((memberRows ?? []) as { id: string; user_id: string; user_name: string; role: string }[]).map(
+    (m) => ({ id: m.id, userId: m.user_id, userName: m.user_name, role: m.role })
+  );
+
+  const invitations: TeamInvitation[] = (invitationRows ?? []).map((i) => ({
+    id: i.id,
+    email: i.email,
+    role: i.role,
+    // `status` en la base solo cambia al aceptar/revocar; una Pending vencida
+    // seguía mostrándose como Pending y el admin no entendía por qué el
+    // invitado no podía entrar. El vencimiento se resuelve aquí, al leer.
+    state: i.status === "Pending" && new Date(i.expires_at) < new Date() ? "Expired" : i.status,
+    expiresAt: i.expires_at,
+    inviteUrl: appUrl(`/invite/${i.token}`)
+  }));
+
+  return (
+    <TeamPanel
+      workspaceId={workspace.id}
+      workspaceName={workspace.name}
+      members={members}
+      invitations={invitations}
+      currentUserId={userId}
+      canManage={ROLES_QUE_ADMINISTRAN.includes(workspace.role)}
+      canDelete={workspace.role === "Owner"}
+      projectCount={projectCount}
+    />
   );
 }

@@ -19,6 +19,8 @@ import EditProjectForm from "./EditProjectForm";
 import SequencePanel from "./SequencePanel";
 import MenuSurface, { useMenuAnchor } from "./MenuSurface";
 import { deleteProject } from "./actions";
+import { moveProject, shareProjectWithGuest, unshareProjectFromGuests } from "./workspace-actions";
+import type { WorkspaceSummary } from "@/lib/data/workspaces";
 import type { LogEntry, KnowledgeItem } from "./logbook-knowledge-actions";
 import { IconClose, IconTrash } from "@/components/icons";
 
@@ -31,11 +33,13 @@ export interface ProjectMenuData {
   targetDate: string | null;
 }
 
-type Panel = "sequence" | "edit" | "logbook" | "knowledge" | "delete" | null;
+type Panel = "sequence" | "edit" | "move" | "guests" | "logbook" | "knowledge" | "delete" | null;
 
 const PANEL_TITLE: Record<Exclude<Panel, null>, string> = {
   sequence: "Secuencia sugerida",
   edit: "Editar proyecto",
+  move: "Mover a otro espacio",
+  guests: "Acceso de invitados",
   logbook: "Bitácora",
   knowledge: "Base de conocimiento",
   delete: "Eliminar proyecto"
@@ -46,7 +50,11 @@ export default function ProjectMenu({
   taskCount,
   sequenceTasks,
   logbookEntries,
-  knowledgeItems
+  knowledgeItems,
+  workspaces,
+  currentWorkspaceId,
+  guestAccess,
+  workspaceIsPersonal
 }: {
   project: ProjectMenuData;
   /** Cuántas tareas se van con el proyecto: el aviso tiene que decirlo. */
@@ -55,6 +63,13 @@ export default function ProjectMenu({
   sequenceTasks: { id: string; title: string }[];
   logbookEntries: LogEntry[];
   knowledgeItems: KnowledgeItem[];
+  /** Espacios donde el usuario puede escribir: destinos válidos para mover. */
+  workspaces: WorkspaceSummary[];
+  currentWorkspaceId: string;
+  /** Nivel del share vigente, o null si ningún invitado alcanza el proyecto. */
+  guestAccess: string | null;
+  /** En el espacio personal no hay invitados: la opción ni se ofrece. */
+  workspaceIsPersonal: boolean;
 }) {
   const menu = useMenuAnchor();
   const [panel, setPanel] = useState<Panel>(null);
@@ -82,6 +97,21 @@ export default function ProjectMenu({
           <div className="ex-menu-list">
             <MenuItem icon="✨" label="Sugerir secuencia" onClick={() => openPanel("sequence")} />
             <MenuItem icon="✏️" label="Editar proyecto" onClick={() => openPanel("edit")} />
+            {/* Sustituye a la vieja pantalla "Compartir un proyecto personal":
+                desde 0031 la membresía del espacio YA da acceso, así que
+                compartir un proyecto es sencillamente moverlo de espacio. */}
+            {workspaces.length > 1 && (
+              <MenuItem icon="📦" label="Mover a otro espacio" onClick={() => openPanel("move")} />
+            )}
+            {/* Los demás roles entran por membresía (0031); el Guest es el
+                único que necesita esta llave por proyecto. */}
+            {!workspaceIsPersonal && (
+              <MenuItem
+                icon="🔑"
+                label={guestAccess ? `Acceso de invitados (${guestAccess})` : "Acceso de invitados"}
+                onClick={() => openPanel("guests")}
+              />
+            )}
             <MenuItem icon="📓" label="Bitácora" onClick={() => openPanel("logbook")} />
             <MenuItem icon="📚" label="Base de conocimiento" onClick={() => openPanel("knowledge")} />
             <MenuItem icon="🗑️" label="Eliminar proyecto" danger onClick={() => openPanel("delete")} />
@@ -104,6 +134,17 @@ export default function ProjectMenu({
                 <SequencePanel projectId={project.id} tasks={sequenceTasks} onClose={() => setPanel(null)} />
               )}
               {panel === "edit" && <EditProjectForm project={project} onSaved={() => setPanel(null)} />}
+              {panel === "move" && (
+                <MoveProjectPanel
+                  project={project}
+                  workspaces={workspaces}
+                  currentWorkspaceId={currentWorkspaceId}
+                  onDone={() => setPanel(null)}
+                />
+              )}
+              {panel === "guests" && (
+                <GuestAccessPanel project={project} current={guestAccess} onDone={() => setPanel(null)} />
+              )}
               {panel === "logbook" && <LogbookCard projectId={project.id} entries={logbookEntries} />}
               {panel === "knowledge" && <KnowledgeCard projectId={project.id} items={knowledgeItems} />}
               {panel === "delete" && (
@@ -114,6 +155,197 @@ export default function ProjectMenu({
         </>
       )}
     </>
+  );
+}
+
+/**
+ * Mover el proyecto a otro espacio de trabajo.
+ *
+ * Cambiar de espacio cambia QUIÉN VE el proyecto: en un espacio de equipo lo
+ * alcanzan todos sus miembros (0031). Por eso el panel lo dice con todas sus
+ * letras antes de mover, en vez de presentarlo como un cambio de etiqueta.
+ *
+ * Los destinos ya vienen filtrados por rol desde el servidor, pero quien
+ * manda es `projects_update_edit`: su WITH CHECK se evalúa sobre la fila NUEVA
+ * y la base rechaza mover un proyecto a un espacio donde no puedas escribir.
+ */
+function MoveProjectPanel({
+  project,
+  workspaces,
+  currentWorkspaceId,
+  onDone
+}: {
+  project: ProjectMenuData;
+  workspaces: WorkspaceSummary[];
+  currentWorkspaceId: string;
+  onDone: () => void;
+}) {
+  const router = useRouter();
+  const [target, setTarget] = useState(currentWorkspaceId);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const destino = workspaces.find((w) => w.id === target);
+  const cambia = target !== currentWorkspaceId;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <label className="text-xs flex flex-col gap-1" style={{ color: "var(--muted)" }}>
+        Espacio de destino
+        <select value={target} onChange={(e) => setTarget(e.target.value)} aria-label="Espacio de destino">
+          {workspaces.map((w) => (
+            <option key={w.id} value={w.id}>
+              {w.name}
+              {w.isPersonal ? " (personal)" : ""}
+              {w.id === currentWorkspaceId ? " · actual" : ""}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      {destino && cambia && (
+        <p className="text-xs" style={{ color: "var(--muted)" }}>
+          {destino.isPersonal ? (
+            <>
+              <b>{project.title}</b> dejará de ser visible para el equipo: en tu espacio personal solo lo ves tú.
+            </>
+          ) : (
+            <>
+              Todos los miembros de <b>{destino.name}</b> podrán ver <b>{project.title}</b>, y quienes tengan rol
+              Member o superior podrán editarlo.
+            </>
+          )}
+        </p>
+      )}
+
+      {error && (
+        <div className="text-xs" style={{ color: "var(--danger)" }}>
+          {error}
+        </div>
+      )}
+
+      <div className="flex flex-col-reverse sm:flex-row sm:items-center gap-2">
+        <button type="button" className="btn-ghost btn-sm w-full sm:w-auto" onClick={onDone} disabled={pending}>
+          Cancelar
+        </button>
+        <span className="hidden sm:block grow" />
+        <button
+          type="button"
+          className="btn-primary btn-sm w-full sm:w-auto"
+          disabled={!cambia || pending}
+          onClick={() =>
+            startTransition(async () => {
+              const result = await moveProject(project.id, target);
+              if (!result.ok) {
+                setError(result.reason ?? "No se pudo mover el proyecto.");
+                return;
+              }
+              onDone();
+              router.replace(`/execution?project=${project.id}`);
+              router.refresh();
+            })
+          }
+        >
+          {pending ? "Moviendo…" : "Mover proyecto"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Acceso de los invitados (rol Guest) a ESTE proyecto.
+ *
+ * Es lo único que quedó de `project_shares` tras la migración 0031. Owner,
+ * Admin, Member y Viewer ven los proyectos de su espacio por membresía; el
+ * Guest no ve ninguno salvo los que se le abran aquí, y solo escribe si el
+ * nivel es `edit`.
+ */
+function GuestAccessPanel({
+  project,
+  current,
+  onDone
+}: {
+  project: ProjectMenuData;
+  current: string | null;
+  onDone: () => void;
+}) {
+  const router = useRouter();
+  const [level, setLevel] = useState(current ?? "view");
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function apply(action: () => Promise<{ ok: boolean; reason?: string }>) {
+    startTransition(async () => {
+      const result = await action();
+      if (!result.ok) {
+        setError(result.reason ?? "No se pudo guardar el acceso.");
+        return;
+      }
+      onDone();
+      router.refresh();
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-xs" style={{ color: "var(--muted)" }}>
+        {current ? (
+          <>
+            Los invitados (rol <b>Guest</b>) de este espacio alcanzan <b>{project.title}</b> con nivel{" "}
+            <b>{current}</b>.
+          </>
+        ) : (
+          <>
+            Ningún invitado alcanza <b>{project.title}</b>. Los demás roles del espacio ya lo ven por ser miembros;
+            esto es solo para los Guest.
+          </>
+        )}
+      </p>
+
+      <label className="text-xs flex flex-col gap-1" style={{ color: "var(--muted)" }}>
+        Nivel de acceso
+        <select value={level} onChange={(e) => setLevel(e.target.value)} aria-label="Nivel de acceso de invitados">
+          <option value="view">view — solo leer</option>
+          <option value="comment">comment — leer y comentar</option>
+          <option value="edit">edit — leer y editar</option>
+        </select>
+      </label>
+
+      {error && (
+        <div className="text-xs" style={{ color: "var(--danger)" }}>
+          {error}
+        </div>
+      )}
+
+      <div className="flex flex-col-reverse sm:flex-row sm:items-center gap-2">
+        {current && (
+          <button
+            type="button"
+            className="btn-ghost btn-sm w-full sm:w-auto"
+            disabled={pending}
+            onClick={() => apply(() => unshareProjectFromGuests(project.id))}
+          >
+            Quitar acceso
+          </button>
+        )}
+        <span className="hidden sm:block grow" />
+        <button
+          type="button"
+          className="btn-primary btn-sm w-full sm:w-auto"
+          disabled={pending}
+          onClick={() =>
+            apply(() => {
+              const fd = new FormData();
+              fd.set("projectId", project.id);
+              fd.set("accessLevel", level);
+              return shareProjectWithGuest(fd);
+            })
+          }
+        >
+          {pending ? "Guardando…" : current ? "Cambiar nivel" : "Dar acceso"}
+        </button>
+      </div>
+    </div>
   );
 }
 

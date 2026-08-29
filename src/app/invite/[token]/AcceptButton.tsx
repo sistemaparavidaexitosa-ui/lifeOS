@@ -18,7 +18,11 @@ export default function AcceptButton({ token }: { token: string }) {
           startTransition(async () => {
             const result = await acceptInvitation(token);
             if (result.ok) {
-              router.push(result.workspaceId ? `/workspaces?ws=${result.workspaceId}` : "/workspaces");
+              // /workspaces ya no existe como pantalla: los espacios viven
+              // dentro de Proyectos y Tareas. Aterrizar directamente en la
+              // cartera del espacio recién aceptado es además lo que el
+              // invitado espera ver — sus proyectos, no una lista de equipos.
+              router.push(result.workspaceId ? `/execution?ws=${result.workspaceId}` : "/execution");
             } else {
               setError(result.message);
             }

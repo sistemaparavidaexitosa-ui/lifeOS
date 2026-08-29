@@ -1111,6 +1111,76 @@ textarea:focus {
 .ex-portfolio-board {
   --mb-cols: minmax(220px, 1fr) 150px 128px 140px 160px;
 }
+
+/* --- Selector de espacio de trabajo (WorkspaceSwitcher) -------------------
+   Vive en la barra de la cartera, a la izquierda del buscador: desde las
+   migraciones 0030/0031 elegir espacio ES elegir qué proyectos se ven, así
+   que la decisión pertenece a esta barra y no al menú lateral. */
+.ex-ws-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 10px;
+  padding: 5px 9px 5px 5px;
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 700;
+  font-size: 13px;
+  max-width: 260px;
+}
+.ex-ws-trigger:hover {
+  background: var(--surface2);
+}
+.ex-ws-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ex-ws-caret {
+  color: var(--muted);
+  font-size: 10px;
+}
+.ex-ws-badge {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.ex-ws-option {
+  align-items: center;
+}
+.ex-ws-option.active {
+  background: var(--surface2);
+}
+.ex-ws-option-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.ex-ws-option-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ex-ws-option-role {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.ex-ws-create {
+  border-top: 1px solid var(--line);
+  margin-top: 6px;
+  padding-top: 6px;
+}
 .ex-portfolio-title {
   font-size: 13.5px;
   font-weight: 700;

@@ -8,7 +8,17 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createProject } from "./actions";
 
-export default function NewProjectForm() {
+export default function NewProjectForm({
+  workspaceId,
+  workspaceName
+}: {
+  /**
+   * Espacio donde nace el proyecto. Obligatorio desde la migración 0030:
+   * `projects.workspace_id` es NOT NULL y ya no existe el proyecto "suelto".
+   */
+  workspaceId: string;
+  workspaceName: string;
+}) {
   const router = useRouter();
   const ref = useRef<HTMLFormElement>(null);
   const [open, setOpen] = useState(false);
@@ -45,6 +55,14 @@ export default function NewProjectForm() {
       className="card flex flex-col gap-2"
     >
       <b>+ Nuevo proyecto</b>
+      {/* Decir dónde va a caer el proyecto ANTES de crearlo: con varios
+          espacios abiertos en pestañas distintas, crear a ciegas y descubrir
+          después que el equipo entero lo ve (o que nadie lo ve) es el error
+          caro de este formulario. */}
+      <span className="text-xs" style={{ color: "var(--muted)" }}>
+        En el espacio <b>{workspaceName}</b>
+      </span>
+      <input type="hidden" name="workspaceId" value={workspaceId} />
       <input name="title" placeholder="Título del proyecto" required />
       <input name="objective" placeholder="Objetivo (opcional)" />
       <div style={{ display: "flex", gap: 8 }}>
