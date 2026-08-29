@@ -1217,6 +1217,109 @@ export type Database = {
         }
         Relationships: []
       }
+      notebooks: {
+        Row: {
+          color: string
+          created_at: string
+          created_by: string | null
+          created_by_name: string
+          icon: string
+          id: string
+          position: number
+          title: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          created_by?: string | null
+          created_by_name?: string
+          icon?: string
+          id?: string
+          position?: number
+          title: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          created_by?: string | null
+          created_by_name?: string
+          icon?: string
+          id?: string
+          position?: number
+          title?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notebooks_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notes: {
+        Row: {
+          body: string
+          created_at: string
+          created_by: string | null
+          created_by_name: string
+          id: string
+          notebook_id: string
+          position: number
+          search: unknown
+          title: string
+          updated_at: string
+          updated_by: string | null
+          updated_by_name: string
+          version: number
+        }
+        Insert: {
+          body?: string
+          created_at?: string
+          created_by?: string | null
+          created_by_name?: string
+          id?: string
+          notebook_id: string
+          position?: number
+          search?: unknown
+          title?: string
+          updated_at?: string
+          updated_by?: string | null
+          updated_by_name?: string
+          version?: number
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          created_by?: string | null
+          created_by_name?: string
+          id?: string
+          notebook_id?: string
+          position?: number
+          search?: unknown
+          title?: string
+          updated_at?: string
+          updated_by?: string | null
+          updated_by_name?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notes_notebook_id_fkey"
+            columns: ["notebook_id"]
+            isOneToOne: false
+            referencedRelation: "notebooks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       occupations: {
         Row: {
           category: string
@@ -2012,6 +2115,7 @@ export type Database = {
         Args: { p_subject_id: string; p_subject_type: string }
         Returns: boolean
       }
+      can_edit_notebook: { Args: { p_notebook_id: string }; Returns: boolean }
       can_edit_project: { Args: { p_project_id: string }; Returns: boolean }
       debug_rls_policies: {
         Args: never
@@ -2023,6 +2127,7 @@ export type Database = {
           with_check: string
         }[]
       }
+      has_notebook_access: { Args: { p_notebook_id: string }; Returns: boolean }
       has_project_access: { Args: { p_project_id: string }; Returns: boolean }
       invitation_preview: {
         Args: { p_token: string }
@@ -2055,6 +2160,18 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      search_notes: {
+        Args: { p_query: string; p_workspace_id: string }
+        Returns: {
+          id: string
+          notebook_id: string
+          notebook_title: string
+          snippet: string
+          title: string
+          updated_at: string
+          updated_by_name: string
+        }[]
       }
       workspace_role: { Args: { p_workspace_id: string }; Returns: string }
     }

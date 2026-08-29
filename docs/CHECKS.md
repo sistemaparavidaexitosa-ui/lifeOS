@@ -431,3 +431,41 @@ modelo nuevo y pasaban por eso.
 - **El recorrido de UI en el navegador.** Selector de espacio, panel de Equipo,
   «Mover a otro espacio» y «Acceso de invitados» compilan y tienen sus acciones
   probadas contra la RLS, pero no se hizo clic en ellos.
+
+---
+
+## Notebooks del espacio (agosto 2026) — migración 0032
+
+| Check | Estado | Evidencia |
+|---|---|---|
+| `supabase db reset` (migraciones `0002`→`0032`) | ✅ EJECUTADO OK | 27 migraciones de cero + seed, sin intervención manual |
+| `supabase test db` | ✅ EJECUTADO OK | **91 assertions pgTAP en 12 archivos**, todas en verde |
+| `pnpm typecheck` · `pnpm lint` · `pnpm test:unit` · `pnpm build` | ✅ EJECUTADO OK | **232 pruebas unitarias** (20 nuevas del formato de notas), build de 32 rutas |
+| **Membresía = acceso, sobre datos reales** | ✅ EJECUTADO OK | Con el seed, Ana (Member, **sin ninguna fila de permiso adicional**) ve las 2 notas de «Actas y decisiones», `can_edit_notebook` le devuelve `true`, y NO ve «Ideas sueltas», el cuaderno del espacio personal de Luis |
+| Marca de autoría por nota | ✅ EJECUTADO OK | Las notas del cuaderno compartido salen firmadas por quien las escribió: una por Luis y otra por Ana |
+| Búsqueda en español, sin acentos | ✅ EJECUTADO OK | Buscar `direccion` encuentra la nota titulada «Acta de la reunión de dirección»; el índice lematiza (`to_tsvector('spanish', …)`) |
+| **La búsqueda no filtra entre espacios** | ✅ EJECUTADO OK | Test 8 de `0012`: un Outsider llamando a `search_notes()` sobre el workspace ajeno recibe 0 filas. `search_notes` NO es SECURITY DEFINER, así que la RLS se aplica dentro |
+| El Guest queda fuera de los cuadernos | ✅ EJECUTADO OK | Tests 5 y 6 de `0012`: siendo miembro activo del espacio, no ve ni el notebook ni sus notas |
+| El Viewer lee y no escribe | ✅ EJECUTADO OK | Test 4 de `0012`: su `UPDATE` afecta 0 filas |
+| Nada de lo que se escriba puede ejecutarse | ✅ EJECUTADO OK | `tests/domain/notes-markup.test.ts`: `<img src=x onerror=…>` se parsea como TEXTO, y `[x](javascript:alert(1))` no produce ningún enlace. El renderizador crea elementos de React, nunca `dangerouslySetInnerHTML` |
+
+### Un fallo que valió la pena
+
+El test 9 de `0012` (búsqueda con acentos) falló en la primera corrida con
+`have: 0, want: 1`. **No era el código**: el test del Member, más arriba en el
+mismo archivo, reescribe el cuerpo de la nota, y como todo el archivo corre en
+una sola transacción ese cambio seguía vivo al llegar a buscar — la palabra que
+se buscaba ya no existía. Se arregló con una nota aparte que ningún otro test
+toca, para que la búsqueda pruebe la búsqueda y no el orden de los tests.
+
+### Lo que no se verificó
+
+- **El recorrido en un iPhone real.** Las decisiones de móvil del editor
+  (pantalla propia en vez de panel, autoguardado en `visibilitychange`, textarea
+  que crece solo, 16px en el cuerpo para que Safari no haga zoom) están puestas
+  y compilan, pero no se ha escrito una nota con el teclado abierto en un
+  dispositivo. Es la comprobación pendiente más importante de esta entrega.
+- **Dos personas editando la misma nota a la vez.** La rama de conflicto de
+  `saveNote` está escrita y razonada, pero no se ha ejercitado con dos sesiones
+  simultáneas. Reproducirlo pide abrir la misma nota en dos navegadores y
+  guardar en orden.

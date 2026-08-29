@@ -64,7 +64,7 @@ function SidebarInner({ open, onClose }: { open: boolean; onClose: () => void })
       </div>
 
       <nav className="flex flex-col gap-0.5">
-        {NAV_ITEMS.map((item) => {
+        {NAV_ITEMS.filter((item) => !item.hidden).map((item) => {
           const showGroup = item.group !== lastGroup;
           lastGroup = item.group;
           const active = pathname === item.href;
