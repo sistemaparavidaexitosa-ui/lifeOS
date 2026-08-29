@@ -10,7 +10,12 @@ const habitSchema = z.object({
   name: z.string().min(1),
   frequency: z.enum(["Diario", "Semanal", "Entre semana", "Fin de semana"]),
   category: z.enum(["Salud", "Aprendizaje", "Trabajo", "Personal", "Otros"]),
-  occupationId: z.string().uuid().optional().or(z.literal(""))
+  occupationId: z.string().uuid().optional().or(z.literal("")),
+  // Los tres campos de «Hábitos atómicos» (migración 0033). Opcionales: un
+  // hábito sin señal sigue siendo un hábito válido, solo que más frágil.
+  cue: z.string().max(240).optional().default(""),
+  twoMinVersion: z.string().max(240).optional().default(""),
+  stackAfterHabitId: z.string().uuid().optional().or(z.literal(""))
 });
 
 /** FR-HAB-001: crear/editar hábito, opcionalmente ligado a una ocupación. */
@@ -19,7 +24,10 @@ export async function upsertHabit(id: string | null, formData: FormData) {
     name: formData.get("name"),
     frequency: formData.get("frequency"),
     category: formData.get("category"),
-    occupationId: formData.get("occupationId") ?? ""
+    occupationId: formData.get("occupationId") ?? "",
+    cue: formData.get("cue") ?? "",
+    twoMinVersion: formData.get("twoMinVersion") ?? "",
+    stackAfterHabitId: formData.get("stackAfterHabitId") ?? ""
   });
 
   const supabase = await createClient();
@@ -28,7 +36,15 @@ export async function upsertHabit(id: string | null, formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("No autenticado");
 
-  const payload = { name: parsed.name, frequency: parsed.frequency, category: parsed.category, occupation_id: parsed.occupationId || null };
+  const payload = {
+    name: parsed.name,
+    frequency: parsed.frequency,
+    category: parsed.category,
+    occupation_id: parsed.occupationId || null,
+    cue: parsed.cue.trim(),
+    two_min_version: parsed.twoMinVersion.trim(),
+    stack_after_habit_id: parsed.stackAfterHabitId || null
+  };
 
   if (id) {
     const { error } = await supabase.from("habits").update(payload).eq("id", id);

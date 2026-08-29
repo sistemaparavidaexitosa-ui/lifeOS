@@ -12,6 +12,7 @@ import {
 } from "@/lib/domain/development/routines.ts";
 import { CardHeader, ModuleNote, SectionHeader } from "../FormSheet";
 import RoutineForm, { StepForm, type OccupationLite } from "./RoutineForm";
+import RoutineTemplates from "./RoutineTemplates";
 import RoutineRunner, { type RunnerStep } from "./RoutineRunner";
 import { getSessionUser } from "@/lib/data/session";
 
@@ -164,11 +165,20 @@ export default async function RoutinesPage() {
         sigue viviendo en Hábitos. Completar un paso ligado a un hábito lo marca allá, sin duplicarlo.
       </ModuleNote>
 
-      <SectionHeader action={<RoutineForm occupations={occOptions} />}>Rutinas de hoy</SectionHeader>
+      <SectionHeader
+        action={
+          <span className="flex gap-2">
+            <RoutineTemplates occupations={occOptions} />
+            <RoutineForm occupations={occOptions} />
+          </span>
+        }
+      >
+        Rutinas de hoy
+      </SectionHeader>
 
       {!rows.length && (
         <Card>
-          <EmptyState icon="🔁" text="Crea tu primera rutina. Ánclala a un bloque de tu Autogestión del Tiempo y sus pasos pueden ser hábitos que ya llevas." />
+          <EmptyState icon="🔁" text="Crea tu primera rutina, o parte de una plantilla: Mañana Milagrosa (S.A.V.E.R.S.) o el Club de las 5 AM (20/20/20). Ánclala a un bloque de tu Autogestión del Tiempo y sus pasos pueden ser hábitos que ya llevas." />
         </Card>
       )}
 

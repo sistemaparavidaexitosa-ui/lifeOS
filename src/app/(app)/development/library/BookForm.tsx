@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { upsertBook, deleteBook, addBookNote } from "./actions";
-import { coverProxyUrl, type BookCandidate } from "@/lib/domain/development/book-lookup.ts";
+import { coverProxyUrl, BOOK_CATEGORIES, type BookCandidate } from "@/lib/domain/development/book-lookup.ts";
 import FormSheet, { Field, FormActions } from "../FormSheet";
 
 interface NoteLite {
@@ -19,6 +19,7 @@ interface BookLite {
   currentPage: number;
   totalPages: number;
   coverUrl: string;
+  category: string;
 }
 
 /** Portada real cuando el libro tiene una; si no, el mismo emoji de siempre. */
@@ -88,6 +89,9 @@ function BookFields({ book, notes, close }: { book?: BookLite; notes: NoteLite[]
   const [title, setTitle] = useState(book?.title ?? "");
   const [author, setAuthor] = useState(book?.author ?? "");
   const [totalPages, setTotalPages] = useState(book?.totalPages ?? 0);
+  // La categoría es controlada porque el buscador de metadatos la PROPONE:
+  // elegir un candidato tiene que poder cambiarla, y `defaultValue` no lo haría.
+  const [category, setCategory] = useState<string>(book?.category ?? "Otros");
   const [coverUrl, setCoverUrl] = useState(book?.coverUrl ?? "");
 
   const [term, setTerm] = useState("");
@@ -118,6 +122,10 @@ function BookFields({ book, notes, close }: { book?: BookLite; notes: NoteLite[]
     setTitle(candidate.title);
     setAuthor(candidate.author);
     if (candidate.totalPages > 0) setTotalPages(candidate.totalPages);
+    // La categoría propuesta NO se guarda a ciegas: cae en el select y el
+    // usuario la ve antes de guardar. El mapeo se equivoca lo suficiente como
+    // para no confiar en él, y "Otros" es su forma de decir "no supe".
+    setCategory(candidate.suggestedCategory);
     setCoverUrl(candidate.coverUrl);
     setResults([]);
     setLookupMsg(null);
@@ -242,6 +250,16 @@ function BookFields({ book, notes, close }: { book?: BookLite; notes: NoteLite[]
             />
           </Field>
         </div>
+
+        <Field label="Categoría">
+          <select name="category" value={category} onChange={(e) => setCategory(e.target.value)}>
+            {BOOK_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </Field>
 
         {coverUrl && (
           <button

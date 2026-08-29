@@ -8,6 +8,82 @@
 // (src/lib/integrations/books.ts) solo trae el JSON y lo valida; no decide
 // nada. Así el comportamiento se prueba sin salir a internet.
 
+/** Las ocho categorías de `books.category` (migración 0034). */
+export type BookCategory =
+  | "Desarrollo personal"
+  | "Negocios"
+  | "Salud"
+  | "Técnico"
+  | "Ficción"
+  | "Historia"
+  | "Espiritual"
+  | "Otros";
+
+export const BOOK_CATEGORIES: readonly BookCategory[] = [
+  "Desarrollo personal",
+  "Negocios",
+  "Salud",
+  "Técnico",
+  "Ficción",
+  "Historia",
+  "Espiritual",
+  "Otros"
+];
+
+/**
+ * Palabras de los temas que devuelven las APIs, mapeadas a nuestras ocho
+ * categorías. Las dos responden en inglés y con jerarquías propias —Google
+ * manda "Business & Economics" y Open Library "personal finance"—, así que se
+ * busca por INICIO DE PALABRA sobre el texto normalizado.
+ *
+ * Inicio de palabra y no subcadena suelta: "Juvenile Nonfiction" contiene
+ * "fiction" y se clasificaba como Ficción. Y no coincidencia exacta tampoco,
+ * porque entonces "biografía" no encontraría "biograf". Lo destapó el test de
+ * «lo que no reconoce cae en Otros».
+ *
+ * El ORDEN decide cuando un libro trae varios temas, y hay dos casos donde eso
+ * importa de verdad:
+ *   - Ficción va ANTES que Técnico, para que "Science Fiction" sea una novela
+ *     y no un libro de ciencia.
+ *   - Desarrollo personal va primero porque un libro de autoayuda casi siempre
+ *     trae también "psychology", y es más útil verlo en la primera.
+ */
+const CATEGORY_KEYWORDS: readonly { category: BookCategory; keywords: readonly string[] }[] = [
+  { category: "Desarrollo personal", keywords: ["self-help", "self help", "personal growth", "motivational", "success", "habit", "productivity", "autoayuda"] },
+  { category: "Negocios", keywords: ["business", "economics", "management", "leadership", "marketing", "finance", "entrepreneur", "investing", "negocios"] },
+  { category: "Salud", keywords: ["health", "fitness", "medical", "nutrition", "diet", "exercise", "sports", "salud"] },
+  { category: "Ficción", keywords: ["fiction", "novel", "fantasy", "thriller", "mystery", "romance", "poetry", "ficcion", "novela"] },
+  { category: "Técnico", keywords: ["computer", "programming", "technology", "engineering", "mathematics", "science", "software", "data"] },
+  { category: "Espiritual", keywords: ["religion", "spiritual", "philosophy", "meditation", "mindfulness", "buddhis", "christian", "espiritual"] },
+  { category: "Historia", keywords: ["history", "biography", "autobiography", "memoir", "historia", "biograf"] }
+];
+
+/** `\b` solo al inicio: "biograf" encuentra "biografía", "fiction" no encuentra "nonfiction". */
+function mencionaAlgo(texto: string, keywords: readonly string[]): boolean {
+  return keywords.some((k) => new RegExp(`\\b${k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(texto));
+}
+
+/**
+ * Propone una categoría a partir de los temas que trajo el proveedor.
+ *
+ * Cae en "Otros" cuando nada coincide, y eso NO es un fallo: el usuario
+ * confirma o cambia la categoría en el formulario. Adivinar mal y guardarlo a
+ * ciegas sería peor que no adivinar.
+ */
+export function suggestCategory(subjects: string[] | undefined): BookCategory {
+  if (!subjects?.length) return "Otros";
+  const texto = subjects
+    .join(" ")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  for (const { category, keywords } of CATEGORY_KEYWORDS) {
+    if (mencionaAlgo(texto, keywords)) return category;
+  }
+  return "Otros";
+}
+
 /** Un candidato ya normalizado, listo para prellenar el formulario. */
 export interface BookCandidate {
   title: string;
@@ -18,6 +94,8 @@ export interface BookCandidate {
   coverUrl: string;
   /** ISBN-13 o ISBN-10 normalizado, si el proveedor lo trajo. */
   isbn: string;
+  /** Categoría PROPUESTA desde los temas del proveedor. "Otros" si no se pudo. */
+  suggestedCategory: BookCategory;
   source: "openlibrary" | "googlebooks";
 }
 
@@ -54,6 +132,8 @@ export interface OpenLibraryDoc {
   number_of_pages_median?: number;
   cover_i?: number;
   isbn?: string[];
+  /** Temas de la obra. Hay que pedirlo en `&fields=`: no viene por defecto. */
+  subject?: string[];
 }
 
 export function normalizeOpenLibrary(docs: OpenLibraryDoc[]): BookCandidate[] {
@@ -67,6 +147,9 @@ export function normalizeOpenLibrary(docs: OpenLibraryDoc[]): BookCandidate[] {
       // en la respuesta: se arma aquí. `-M` es la talla mediana (~180px).
       coverUrl: d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-M.jpg` : "",
       isbn: d.isbn?.map(cleanIsbn).find((i): i is string => i !== null) ?? "",
+      // Open Library devuelve DECENAS de temas por obra, del más específico al
+      // más general; se pasan todos y gana la primera palabra que mapee.
+      suggestedCategory: suggestCategory(d.subject),
       source: "openlibrary" as const
     }));
 }
@@ -79,6 +162,8 @@ export interface GoogleBooksVolume {
     pageCount?: number;
     imageLinks?: { thumbnail?: string; smallThumbnail?: string };
     industryIdentifiers?: { type?: string; identifier?: string }[];
+    /** Ya viajaba en la respuesta y se estaba descartando: no cuesta una petición más. */
+    categories?: string[];
   };
 }
 
@@ -95,6 +180,7 @@ export function normalizeGoogleBooks(volumes: GoogleBooksVolume[]): BookCandidat
         info.industryIdentifiers
           ?.map((i) => (i.identifier ? cleanIsbn(i.identifier) : null))
           .find((i): i is string => i !== null) ?? "",
+      suggestedCategory: suggestCategory(info.categories),
       source: "googlebooks" as const
     }));
 }
@@ -106,12 +192,13 @@ export function normalizeGoogleBooks(volumes: GoogleBooksVolume[]): BookCandidat
  * libro"—, se completa el primario con el primer candidato del secundario que
  * comparta ISBN, o con el primero a secas cuando ninguno trae ISBN.
  *
- * Nunca sustituye un dato bueno: solo rellena huecos (`0` y `""`).
+ * Nunca sustituye un dato bueno: solo rellena huecos (`0`, `""` y la categoría
+ * "Otros", que es la forma que tiene este módulo de decir "no supe").
  */
 export function fillGaps(primary: BookCandidate[], secondary: BookCandidate[]): BookCandidate[] {
   if (!secondary.length) return primary;
   return primary.map((cand) => {
-    if (cand.totalPages > 0 && cand.coverUrl) return cand;
+    if (cand.totalPages > 0 && cand.coverUrl && cand.suggestedCategory !== "Otros") return cand;
     const match =
       (cand.isbn && secondary.find((s) => s.isbn === cand.isbn)) ||
       (secondary.length === 1 && primary.length === 1 ? secondary[0] : undefined);
@@ -119,7 +206,10 @@ export function fillGaps(primary: BookCandidate[], secondary: BookCandidate[]): 
     return {
       ...cand,
       totalPages: cand.totalPages > 0 ? cand.totalPages : match.totalPages,
-      coverUrl: cand.coverUrl || match.coverUrl
+      coverUrl: cand.coverUrl || match.coverUrl,
+      // Open Library trae muchos temas pero desordenados; Google trae pocos y
+      // más limpios. Que uno rellene al otro es justo para lo que sirve esto.
+      suggestedCategory: cand.suggestedCategory !== "Otros" ? cand.suggestedCategory : match.suggestedCategory
     };
   });
 }

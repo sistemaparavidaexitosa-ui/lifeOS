@@ -2997,3 +2997,153 @@ textarea:focus {
     gap: 10px;
   }
 }
+
+/* ========================================================================== */
+/* PRIMITIVAS NEUTRAS                                                         */
+/*                                                                            */
+/* `.seg` es un control segmentado sin dueño de módulo. Nace aquí porque el    */
+/* prefijo `.ex-` (Ejecución) se fue usando fuera de su módulo hasta dejar de  */
+/* significar nada: reutilizar `.ex-tab` en la biblioteca habría agrandado ese */
+/* problema en vez de empezar a devolverlo a su sitio.                        */
+/* ========================================================================== */
+.seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  max-width: 100%;
+  overflow-x: auto;
+  /* En un móvil estrecho las tres opciones no caben: se desliza en su propia
+     barra en vez de romper la línea o desbordar la página. */
+  scrollbar-width: none;
+}
+.seg::-webkit-scrollbar {
+  display: none;
+}
+.seg-item {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 750;
+  color: var(--muted);
+  text-decoration: none;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+.seg-item:hover {
+  color: var(--text);
+}
+.seg-item.active {
+  background: var(--surface);
+  color: var(--accent-d);
+  box-shadow: 0 1px 3px rgba(20, 20, 60, 0.12);
+}
+
+/* ========================================================================== */
+/* PERSONAL DEVELOPMENT OS — plantillas y hábitos con forma                   */
+/* ========================================================================== */
+
+/* Tarjeta de plantilla, en la hoja de selección. Es un <button>: toda ella se
+   puede tocar, que en un móvil importa más que en un ratón. */
+.ah-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  text-align: left;
+  padding: 11px 13px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  cursor: pointer;
+  color: var(--text);
+}
+.ah-card:hover {
+  background: var(--surface2);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+}
+.ah-card-name {
+  font-weight: 750;
+  font-size: 14px;
+}
+.ah-card-cue {
+  font-size: 12px;
+  color: var(--accent-d);
+}
+.ah-card-two {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Bloque de los tres campos de «Hábitos atómicos» dentro del formulario. Van
+   agrupados y separados del resto porque son los que se piensan, no los que se
+   teclean de corrido. */
+.ah-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--c-orange) 7%, var(--surface));
+  border-left: 3px solid var(--c-orange);
+}
+.ah-why {
+  font-size: 12.5px;
+  line-height: 1.5;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--c-orange) 9%, var(--surface));
+  border-left: 3px solid var(--c-orange);
+}
+
+/* La señal y la versión de dos minutos, en la fila del hábito. */
+.hb-cue {
+  font-size: 12px;
+  color: var(--accent-d);
+  overflow-wrap: anywhere;
+}
+.hb-two {
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+/* Pasos de una plantilla de rutina, al revisarla antes de crearla. */
+.rt-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.rt-steps li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 11px;
+  border-radius: 12px;
+  background: var(--surface2);
+}
+.rt-step-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.rt-step-min {
+  font-size: 11.5px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.rt-step-detail {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.45;
+}

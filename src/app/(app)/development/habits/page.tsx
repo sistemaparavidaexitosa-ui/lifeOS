@@ -7,6 +7,7 @@ import { getUserTimeZone } from "@/lib/data/profile";
 import { ModuleNote, SectionHeader } from "../FormSheet";
 import HabitRow from "./HabitRow";
 import HabitForm from "./HabitForm";
+import HabitTemplates from "./HabitTemplates";
 import { getSessionUser } from "@/lib/data/session";
 
 export default async function HabitsPage() {
@@ -23,6 +24,10 @@ export default async function HabitsPage() {
   const t0 = todayLocal(await getUserTimeZone());
   const logs = (habitLogs ?? []).map((l) => ({ habitId: l.habit_id, date: l.log_date }));
   const occById = new Map((occupations ?? []).map((o) => [o.id, { id: o.id, title: o.title }]));
+  // Nombres de los hábitos, para el selector de apilamiento y para mostrar
+  // "después de X" en la fila del que está apilado.
+  const habitById = new Map((habits ?? []).map((h) => [h.id, h.name]));
+  const habitOptions = (habits ?? []).map((h) => ({ id: h.id, name: h.name }));
   const occOptions = (occupations ?? []).map((o) => ({
     id: o.id,
     title: o.title,
@@ -37,24 +42,51 @@ export default async function HabitsPage() {
         relación con Workspaces (BR-027).
       </ModuleNote>
 
-      <SectionHeader action={<HabitForm occupations={occOptions} />}>Hábitos</SectionHeader>
+      <SectionHeader
+        action={
+          <span className="flex gap-2">
+            <HabitTemplates occupations={occOptions} otherHabits={habitOptions} />
+            <HabitForm occupations={occOptions} otherHabits={habitOptions} />
+          </span>
+        }
+      >
+        Hábitos
+      </SectionHeader>
 
       <Card>
-        {!habits?.length && <EmptyState icon="✅" text="Crea tu primer hábito, opcionalmente ligado a una ocupación." />}
+        {!habits?.length && <EmptyState icon="✅" text="Crea tu primer hábito, o parte de una plantilla: cada una trae su señal («después de qué») y su versión de dos minutos." />}
         {(habits ?? []).map((h) => (
           // El botón de editar va DENTRO de la fila: antes colgaba de una fila
           // propia alineada a la derecha bajo cada hábito, y en móvil la lista
           // se leía como el doble de renglones de los que tiene.
           <HabitRow
             key={h.id}
-            habit={{ id: h.id, name: h.name, frequency: h.frequency, category: h.category }}
+            habit={{
+              id: h.id,
+              name: h.name,
+              frequency: h.frequency,
+              category: h.category,
+              cue: h.cue,
+              twoMinVersion: h.two_min_version,
+              stackAfterName: h.stack_after_habit_id ? habitById.get(h.stack_after_habit_id) ?? null : null
+            }}
             doneToday={habitDoneToday(h.id, logs, t0)}
             streak={habitStreak(h.id, logs, t0)}
             occupation={h.occupation_id ? occById.get(h.occupation_id) ?? null : null}
             action={
               <HabitForm
-                habit={{ id: h.id, name: h.name, frequency: h.frequency, category: h.category, occupationId: h.occupation_id }}
+                habit={{
+                  id: h.id,
+                  name: h.name,
+                  frequency: h.frequency,
+                  category: h.category,
+                  occupationId: h.occupation_id,
+                  cue: h.cue,
+                  twoMinVersion: h.two_min_version,
+                  stackAfterHabitId: h.stack_after_habit_id
+                }}
                 occupations={occOptions}
+                otherHabits={habitOptions}
               />
             }
           />

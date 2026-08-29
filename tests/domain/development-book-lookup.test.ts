@@ -10,6 +10,7 @@ import {
   fillGaps,
   isAllowedCoverUrl,
   coverProxyUrl,
+  suggestCategory,
   type BookCandidate
 } from "../../src/lib/domain/development/book-lookup.ts";
 
@@ -176,4 +177,75 @@ test("coverProxyUrl: sin portada y url no permitida dan lo mismo, cadena vacía"
   assert.strictEqual(coverProxyUrl("https://evil.example/portada.jpg"), "");
   assert.strictEqual(coverProxyUrl("http://covers.openlibrary.org/b/id/1-M.jpg"), "");
   assert.strictEqual(coverProxyUrl("javascript:alert(1)"), "");
+});
+
+// --- Categoría propuesta (migración 0034) -----------------------------------
+
+test("suggestCategory: mapea los temas de la API a nuestras categorías", () => {
+  assert.strictEqual(suggestCategory(["Self-Help", "Personal Growth"]), "Desarrollo personal");
+  assert.strictEqual(suggestCategory(["Business & Economics"]), "Negocios");
+  assert.strictEqual(suggestCategory(["Health & Fitness"]), "Salud");
+  assert.strictEqual(suggestCategory(["Computers", "Programming"]), "Técnico");
+  assert.strictEqual(suggestCategory(["Fiction", "Fantasy"]), "Ficción");
+});
+
+test("suggestCategory: el orden decide cuando un libro trae varios temas", () => {
+  // Un libro de autoayuda casi siempre trae también "psychology"; es más útil
+  // verlo en Desarrollo personal que en cualquier otra parte.
+  assert.strictEqual(suggestCategory(["Psychology", "Self-Help"]), "Desarrollo personal");
+});
+
+test("suggestCategory: ignora acentos y mayúsculas", () => {
+  assert.strictEqual(suggestCategory(["ESPIRITUAL"]), "Espiritual");
+  assert.strictEqual(suggestCategory(["Ficción contemporánea"]), "Ficción");
+});
+
+test("suggestCategory: lo que no reconoce cae en Otros, y eso NO es un fallo", () => {
+  // El usuario confirma la categoría en el formulario. Adivinar mal y guardarlo
+  // a ciegas sería peor que no adivinar.
+  assert.strictEqual(suggestCategory(["Juvenile Nonfiction", "Cooking"]), "Otros");
+  assert.strictEqual(suggestCategory([]), "Otros");
+  assert.strictEqual(suggestCategory(undefined), "Otros");
+});
+
+test("normalizeOpenLibrary y normalizeGoogleBooks proponen categoría", () => {
+  const [ol] = normalizeOpenLibrary([{ title: "Hábitos atómicos", subject: ["Self-Help", "Success"] }]);
+  assert.strictEqual(ol?.suggestedCategory, "Desarrollo personal");
+
+  const [gb] = normalizeGoogleBooks([{ volumeInfo: { title: "El inversor", categories: ["Business & Economics"] } }]);
+  assert.strictEqual(gb?.suggestedCategory, "Negocios");
+});
+
+test("fillGaps: el secundario rellena la categoría cuando el primario no supo", () => {
+  const primario = [
+    { title: "X", author: "", totalPages: 100, coverUrl: "https://c/1.jpg", isbn: "9780000000001", suggestedCategory: "Otros" as const, source: "openlibrary" as const }
+  ];
+  const secundario = [
+    { title: "X", author: "", totalPages: 100, coverUrl: "https://c/1.jpg", isbn: "9780000000001", suggestedCategory: "Negocios" as const, source: "googlebooks" as const }
+  ];
+  assert.strictEqual(fillGaps(primario, secundario)[0]?.suggestedCategory, "Negocios");
+});
+
+test("fillGaps: nunca pisa una categoría que el primario sí reconoció", () => {
+  const primario = [
+    { title: "X", author: "", totalPages: 0, coverUrl: "", isbn: "9780000000001", suggestedCategory: "Salud" as const, source: "openlibrary" as const }
+  ];
+  const secundario = [
+    { title: "X", author: "", totalPages: 200, coverUrl: "https://c/1.jpg", isbn: "9780000000001", suggestedCategory: "Ficción" as const, source: "googlebooks" as const }
+  ];
+  const [resultado] = fillGaps(primario, secundario);
+  assert.strictEqual(resultado?.suggestedCategory, "Salud");
+  assert.strictEqual(resultado?.totalPages, 200); // los huecos sí se rellenan
+});
+
+test("suggestCategory: «Nonfiction» NO es Ficción", () => {
+  // Coincidir por subcadena hacía que "Juvenile Nonfiction" cayera en Ficción,
+  // porque contiene la palabra dentro. Por eso se busca por inicio de palabra.
+  assert.strictEqual(suggestCategory(["Juvenile Nonfiction"]), "Otros");
+  assert.strictEqual(suggestCategory(["Nonfiction", "Cooking"]), "Otros");
+});
+
+test("suggestCategory: «Science Fiction» es una novela, no un libro de ciencia", () => {
+  assert.strictEqual(suggestCategory(["Science Fiction"]), "Ficción");
+  assert.strictEqual(suggestCategory(["Science", "Physics"]), "Técnico");
 });

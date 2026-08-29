@@ -227,9 +227,42 @@ export type Database = {
           },
         ]
       }
+      book_progress: {
+        Row: {
+          book_id: string
+          created_at: string
+          id: string
+          local_date: string
+          page: number
+        }
+        Insert: {
+          book_id: string
+          created_at?: string
+          id?: string
+          local_date: string
+          page: number
+        }
+        Update: {
+          book_id?: string
+          created_at?: string
+          id?: string
+          local_date?: string
+          page?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "book_progress_book_id_fkey"
+            columns: ["book_id"]
+            isOneToOne: false
+            referencedRelation: "books"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       books: {
         Row: {
           author: string
+          category: string
           cover_url: string
           current_page: number
           finished_at: string | null
@@ -243,6 +276,7 @@ export type Database = {
         }
         Insert: {
           author?: string
+          category?: string
           cover_url?: string
           current_page?: number
           finished_at?: string | null
@@ -256,6 +290,7 @@ export type Database = {
         }
         Update: {
           author?: string
+          category?: string
           cover_url?: string
           current_page?: number
           finished_at?: string | null
@@ -683,28 +718,37 @@ export type Database = {
         Row: {
           category: string
           created_at: string
+          cue: string
           frequency: string
           id: string
           name: string
           occupation_id: string | null
+          stack_after_habit_id: string | null
+          two_min_version: string
           user_id: string
         }
         Insert: {
           category?: string
           created_at?: string
+          cue?: string
           frequency?: string
           id?: string
           name: string
           occupation_id?: string | null
+          stack_after_habit_id?: string | null
+          two_min_version?: string
           user_id: string
         }
         Update: {
           category?: string
           created_at?: string
+          cue?: string
           frequency?: string
           id?: string
           name?: string
           occupation_id?: string | null
+          stack_after_habit_id?: string | null
+          two_min_version?: string
           user_id?: string
         }
         Relationships: [
@@ -713,6 +757,13 @@ export type Database = {
             columns: ["occupation_id"]
             isOneToOne: false
             referencedRelation: "occupations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "habits_stack_after_habit_id_fkey"
+            columns: ["stack_after_habit_id"]
+            isOneToOne: false
+            referencedRelation: "habits"
             referencedColumns: ["id"]
           },
         ]

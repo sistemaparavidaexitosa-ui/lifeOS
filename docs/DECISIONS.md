@@ -508,6 +508,73 @@
   El único recorte contable en local es que la ruta del editor de notas dejó de
   lanzar la consulta de conteo que solo usa la estantería: 8 consultas -> 7.
 
+### Personal Development OS: plantillas y lectura medida (agosto 2026)
+
+- **D-044 El catálogo de plantillas vive en código, no en la base.**
+  `src/lib/domain/development/templates.ts` es contenido, no datos del usuario:
+  no tiene dueño, no lleva RLS y no cambia por persona. En código va versionado
+  en git, se prueba sin levantar Postgres y no puede divergir entre entornos,
+  que es justo lo que le pasa a un catálogo sembrado que alguien edita en
+  producción. Al usar una plantilla se **copia** a las tablas del usuario: a
+  partir de ahí es suya, y cambiar el catálogo en un despliegue futuro no le
+  reescribe los pasos a nadie.
+
+  De los libros se usa su **estructura** —un hecho comprobable, como que
+  S.A.V.E.R.S. son seis prácticas o que la fórmula de Sharma parte la hora en
+  tres bloques de veinte minutos— y las descripciones están escritas aquí. No se
+  reproduce texto de ninguna de las obras.
+
+- **D-045 La Mañana Milagrosa lleva DOS plantillas, y la corta no es relleno.**
+  Además de la de sesenta minutos hay una de seis, un minuto por práctica. Sin
+  ella, la de sesenta se abandona el primer día que uno se levanta tarde — y
+  abandonarla un día es como se abandona del todo. La versión mínima es la que
+  sostiene la racha, que es exactamente el mismo argumento que la regla de los
+  dos minutos en los hábitos.
+
+- **D-046 Los hábitos guardan la FORMA del libro, no solo el nombre**
+  (migración `0033_habitos_atomicos.sql`): `cue` (la intención de
+  implementación), `stack_after_habit_id` (el apilamiento) y `two_min_version`.
+  Son las tres reglas de «Hábitos atómicos» que caben en el esquema y que
+  cambian la conducta; el «a qué hora» no se añade porque ya es
+  `occupation_id` desde 0004, y duplicarlo daría dos sitios donde decir lo
+  mismo y ninguna forma de saber cuál manda.
+
+  Dos consecuencias que no son obvias: **la plantilla prellena el formulario, no
+  crea el hábito en silencio** —la señal es personal («después de *mi* café») y
+  guardarla sin editar deja una frase que no dispara nada—, y los tres campos se
+  **pintan en la fila del hábito**, no solo en el formulario. Guardar tres
+  columnas que solo se ven al editar habría sido sumar esquema para nada.
+
+  El trigger `guard_habit_stack_owner` impide apilar sobre el hábito de otra
+  cuenta: las claves foráneas no evalúan RLS, así que sin él la referencia
+  cruzada sería posible mandando el id a mano.
+
+- **D-047 La biblioteca guarda historial, y la estimación dice sobre qué base
+  estima** (migración `0034`). `books.current_page` se sobrescribía: la app
+  sabía en qué página vas y no a qué velocidad avanzas. `book_progress` guarda
+  un punto por día local —`unique (book_id, local_date)`, el patrón de
+  `habit_logs` y `routine_runs`— y de ahí salen el ritmo, la fecha estimada y el
+  aviso de libro estancado.
+
+  `estimatedFinish` devuelve siempre un `basis`: `historial`, `desde el inicio`
+  o `sin datos`. No es decoración. Una fecha calculada sobre un punto no vale lo
+  mismo que una calculada sobre dos semanas, y con `sin datos` **no se muestra
+  ninguna fecha**: una fecha inventada se lee igual que una calculada, y esa es
+  la manera de perderle la confianza a la pantalla entera.
+
+- **D-048 La categoría del libro es una lista propia en español, propuesta por
+  la API pero confirmada por el usuario.** Las dos APIs ya devolvían el tema y
+  se estaba descartando —Google en `categories`, que viajaba por el cable sin
+  usarse, y Open Library en `subject`, que además hay que pedir en `&fields=`—.
+  Guardarlo crudo daría una estantería en inglés, con decenas de grupos casi
+  idénticos y libros repetidos en cinco sitios, así que se mapea a ocho valores
+  con `check`, mismo criterio que `habits.category`.
+
+  El mapeo busca por **inicio de palabra** y no por subcadena, y eso lo destapó
+  una prueba: «Juvenile Nonfiction» contiene «fiction» y se clasificaba como
+  Ficción. Por lo mismo Ficción se evalúa antes que Técnico, para que «Science
+  Fiction» sea una novela y no un libro de ciencia.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo
