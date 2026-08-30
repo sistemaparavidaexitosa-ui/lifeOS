@@ -969,6 +969,56 @@
   que un dominio olvidado aparece igual, al final. El orden es una preferencia;
   que la casilla exista, no.
 
+- **D-068 Las automatizaciones se TIPAN; no se interpretan.** `automations`
+  llevaba desde 0008 con `trigger_text`, `condition_text` y `action_text`: tres
+  campos de texto libre. Eso no es una automatización, es la descripción de una,
+  y nada podía ejecutarla — para correr «cuando cierre una tarea, anótalo en la
+  bitácora» hay que saber qué es «cerrar» y qué es «anotar».
+
+  La otra salida era que el modelo interpretara la frase, y va contra la regla
+  que sostiene Intelligence OS: el modelo no calcula ni decide, recibe hechos ya
+  calculados y los redacta. Una automatización que dispara según lo que un
+  modelo entendió del texto de ayer no es reproducible, y aquí ejecuta acciones
+  reales sobre los datos del usuario. Así que disparador y acción son enums con
+  parámetros en `jsonb`, acotados por `check`. Las columnas de texto se borran:
+  la tabla estaba vacía y dejarlas invitaría a escribir en ellas.
+
+  NO HAY DISPARADORES POR TIEMPO, y no es un recorte de alcance: no existe
+  ningún proceso que despierte a nadie. Ofrecer «cada lunes a las 9» sería
+  prometer algo que no ocurre — el mismo motivo por el que `reminders.remind_on`
+  es `date` y no una alarma (D-061).
+
+- **D-069 La barrera contra los bucles es estructural, y aun así hay una
+  segunda.** `dispatch.ts` ejecuta las acciones DIRECTAMENTE contra la base, no
+  llamando a las Server Actions que a su vez despachan: una automatización no
+  puede provocar una segunda ronda porque no hay ninguna ronda que provocar.
+
+  El dominio pone además una barrera propia —una regla cuya acción repetiría el
+  evento que la disparó se salta— a propósito. La garantía estructural depende
+  de cómo esté escrito el despachador, y eso puede cambiar el día que alguien lo
+  refactorice; la del dominio está probada sin base de datos y no depende de
+  nada.
+
+  Y `set_status` pasa por `evaluateTransition` como todos los demás caminos: una
+  automatización no puede cerrar una tarea con dependencias abiertas por el
+  hecho de ser automática.
+
+- **D-070 FR-AUT-002 distingue por IMPACTO, no por regla.** Anotar en tu
+  bitácora o recordarte algo no necesita permiso: nadie más lo nota y se deshace
+  solo. Crear una tarea o mover un estado sí — aparecen en el tablero del equipo
+  y disparan sus propias consecuencias. Una acción de impacto con
+  `authorized = false` NO se ejecuta: se PROPONE, y queda en `automation_runs`
+  como `proposed` con su motivo.
+
+  `automation_runs` registra también lo que no hizo nada (`skipped`) y lo que
+  falló (`failed`). Una regla que no actuó y no dejó rastro es una regla que el
+  usuario cree rota.
+
+  El despachador NUNCA lanza: se llama al final de acciones que ya hicieron su
+  trabajo —completar una tarea, dejar un comentario— y una automatización rota
+  no puede deshacer eso ni presentarlo como un fallo. Mismo contrato que
+  `sendEmail` (D-021).
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo

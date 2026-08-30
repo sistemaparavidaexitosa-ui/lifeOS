@@ -133,20 +133,29 @@ export type Database = {
       automation_runs: {
         Row: {
           automation_id: string
+          detail: string
           id: string
+          outcome: string
           result: string
+          subject_id: string | null
           ts: string
         }
         Insert: {
           automation_id: string
+          detail?: string
           id?: string
+          outcome?: string
           result: string
+          subject_id?: string | null
           ts?: string
         }
         Update: {
           automation_id?: string
+          detail?: string
           id?: string
+          outcome?: string
           result?: string
+          subject_id?: string | null
           ts?: string
         }
         Relationships: [
@@ -161,36 +170,39 @@ export type Database = {
       }
       automations: {
         Row: {
-          action_text: string
+          action_params: Json
+          action_type: string
           authorized: boolean
-          condition_text: string
           created_at: string
           enabled: boolean
           id: string
           name: string
-          trigger_text: string
+          trigger_params: Json
+          trigger_type: string
           user_id: string
         }
         Insert: {
-          action_text?: string
+          action_params?: Json
+          action_type?: string
           authorized?: boolean
-          condition_text?: string
           created_at?: string
           enabled?: boolean
           id?: string
           name: string
-          trigger_text: string
+          trigger_params?: Json
+          trigger_type?: string
           user_id: string
         }
         Update: {
-          action_text?: string
+          action_params?: Json
+          action_type?: string
           authorized?: boolean
-          condition_text?: string
           created_at?: string
           enabled?: boolean
           id?: string
           name?: string
-          trigger_text?: string
+          trigger_params?: Json
+          trigger_type?: string
           user_id?: string
         }
         Relationships: []

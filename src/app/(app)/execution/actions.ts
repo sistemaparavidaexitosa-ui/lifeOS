@@ -4,6 +4,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getPersonalWorkspace } from "@/lib/data/workspaces";
 import { evaluateTransition } from "@/lib/domain/task-state.ts";
+import { dispatchAutomations } from "@/lib/automations/dispatch";
 import { suggestProjectSequence } from "@/lib/domain/project-sequence.ts";
 import type { TaskStatus } from "@/lib/domain/types.ts";
 
@@ -328,6 +329,11 @@ export async function setTaskStatus(taskId: string, to: TaskStatus) {
 
   await supabase.from("task_history").insert({ task_id: taskId, from_state: task.status, to_state: to });
   await supabase.from("audit_log").insert({ user_id: user.id, action: "task.status", object: taskId, meta: { to } });
+
+  // Al FINAL, y nunca lanza: el cambio de estado ya ocurrió y una regla rota no
+  // puede deshacerlo ni presentarlo como un fallo.
+  await dispatchAutomations({ type: "task.status_changed", taskId, projectId: task.project_id, toStatus: to });
+
   revalidatePath("/execution");
   revalidatePath("/home");
 }

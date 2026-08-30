@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui";
 import { updateProfile } from "./actions";
 import AiSettings from "./AiSettings";
+import Automations, { type AutomationRow } from "./Automations";
+import type { ActionType, TriggerType } from "@/lib/domain/automations/rules.ts";
 import { getSessionUser } from "@/lib/data/session";
 
 export default async function SettingsPage() {
@@ -10,8 +12,24 @@ export default async function SettingsPage() {
   const user = await getSessionUser();
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase.from("profiles").select("*").eq("user_id", user.id).single();
+  const [{ data: profile }, { data: automationRows }] = await Promise.all([
+    supabase.from("profiles").select("*").eq("user_id", user.id).single(),
+    supabase
+      .from("automations")
+      .select("id, name, enabled, authorized, trigger_type, action_type")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+  ]);
   if (!profile) throw new Error("Perfil no encontrado.");
+
+  const automations: AutomationRow[] = (automationRows ?? []).map((r) => ({
+    id: r.id,
+    name: r.name,
+    enabled: r.enabled,
+    authorized: r.authorized,
+    triggerType: r.trigger_type as TriggerType,
+    actionType: r.action_type as ActionType
+  }));
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -80,6 +98,11 @@ export default async function SettingsPage() {
         <a href="/time" className="btn-ghost btn-sm" style={{ marginTop: 10 }}>
           Editar en Autogestión del Tiempo
         </a>
+      </Card>
+
+      <Card>
+        <h3 className="font-bold mb-2">Automatizaciones</h3>
+        <Automations rules={automations} />
       </Card>
 
       <Card>
