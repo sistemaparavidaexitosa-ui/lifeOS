@@ -6,7 +6,12 @@
 // dos veces — si divergieran, una pantalla ofrecería plantillas que la otra no,
 // o diría un número de tareas distinto para la misma.
 
-import { PROJECT_TEMPLATES, templateSummary, getProjectTemplate } from "@/lib/domain/execution/project-templates.ts";
+import {
+  PROJECT_TEMPLATES,
+  TEMPLATE_CATEGORIES,
+  templateSummary,
+  getProjectTemplate
+} from "@/lib/domain/execution/project-templates.ts";
 
 export function TemplateSelect({
   value,
@@ -21,11 +26,23 @@ export function TemplateSelect({
   return (
     <select name={name} value={value} onChange={(e) => onChange(e.target.value)}>
       <option value="">Ninguna · empezar en blanco</option>
-      {PROJECT_TEMPLATES.map((t) => (
-        <option key={t.id} value={t.id}>
-          {t.name}
-        </option>
-      ))}
+      {/* Agrupado por categoría: con once plantillas, una lista plana obliga a
+          leerla entera para descartar diez. El orden de los grupos lo fija
+          TEMPLATE_CATEGORIES, no el del array — así añadir una plantilla al
+          final del catálogo no la manda al bloque equivocado. */}
+      {TEMPLATE_CATEGORIES.map((category) => {
+        const suyas = PROJECT_TEMPLATES.filter((t) => t.category === category);
+        if (!suyas.length) return null;
+        return (
+          <optgroup key={category} label={category}>
+            {suyas.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </optgroup>
+        );
+      })}
     </select>
   );
 }

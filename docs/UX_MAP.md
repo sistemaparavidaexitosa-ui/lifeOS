@@ -10,7 +10,7 @@ Server Action real que escribe en Postgres (guardrail NO-MOCK, F8).
 | Onboarding | `/onboarding` | `onboarding-form.tsx` | `profiles`, `consents` | `completeOnboarding` (Server Action) |
 | Login/Signup | `/login` | `login-form.tsx` | `auth.users` (Supabase Auth) | `signIn`/`signUp` (Server Action) |
 | Home | `/home` | `home/page.tsx` | `profiles`,`daily_plans`,`tasks`,`accounts`,`journal_entries`,`budgets`,`occupations`,`books` | Lectura agregada en `getHomeData()` |
-| Plantillas de proyecto | `/execution` (formulario de nuevo proyecto) y menú del proyecto → «Aplicar plantilla» | `execution/ProjectTemplatePicker.tsx`, `execution/template-actions.ts`; catálogo en `lib/domain/execution/project-templates.ts` | `task_groups`,`tasks`,`task_history` | `createProject` (con `templateId`), `applyProjectTemplate` |
+| Plantillas de proyecto | `/execution` (formulario de nuevo proyecto) y menú del proyecto → «Aplicar plantilla» | `execution/ProjectTemplatePicker.tsx`, `execution/template-actions.ts`; catálogo (11, agrupadas por categoría) en `lib/domain/execution/project-templates.ts` | `task_groups`,`tasks`,`task_history` | `createProject` (con `templateId`), `applyProjectTemplate` |
 | Proyectos y Tareas | `/execution` | `execution/page.tsx` | `projects`,`tasks` | `createProject`,`createTask`,`setTaskStatus` |
 | Matriz de Eisenhower | `/execution/eisenhower` | `eisenhower/Board.tsx` | `tasks` (columna `urgent`) | `changeTaskQuadrant` |
 | Planeación | `/planning` | `planning/page.tsx` | `daily_plans`,`weekly_reviews`,`tasks`,`projects` | `approveDailyPlan`,`closeoutTask`,`saveDailyLearning`,`approveWeeklyReview` |

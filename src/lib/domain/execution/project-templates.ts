@@ -47,9 +47,23 @@ export interface ProjectTemplateGroup {
   tasks: ProjectTemplateTask[];
 }
 
+/**
+ * Para agrupar el selector. Con once plantillas, una lista plana obliga a
+ * leerla entera para descartar diez; agrupada se salta al bloque que toca.
+ */
+export type ProjectTemplateCategory = "Trabajo y producto" | "Negocio" | "Marketing" | "Personal";
+
+export const TEMPLATE_CATEGORIES: readonly ProjectTemplateCategory[] = [
+  "Trabajo y producto",
+  "Negocio",
+  "Marketing",
+  "Personal"
+];
+
 export interface ProjectTemplate {
   id: string;
   name: string;
+  category: ProjectTemplateCategory;
   /** Una línea: qué proyecto es este y cuándo elegirlo. */
   summary: string;
   /** Libro y autor de los que sale la estructura, si los hay. Se atribuye. */
@@ -68,6 +82,7 @@ export const PROJECT_TEMPLATES: readonly ProjectTemplate[] = [
   // ===========================================================================
   {
     id: "software-v1",
+    category: "Trabajo y producto",
     name: "Producto de software · de la idea a la v1",
     summary: "Para construir y sacar la primera versión de algo. Termina donde empieza el uso real, no en el despliegue.",
     groups: [
@@ -139,6 +154,7 @@ export const PROJECT_TEMPLATES: readonly ProjectTemplate[] = [
   // ===========================================================================
   {
     id: "lean-startup",
+    category: "Negocio",
     name: "Validar una idea · Lean Startup",
     source: "El método Lean Startup, de Eric Ries",
     summary:
@@ -196,6 +212,7 @@ export const PROJECT_TEMPLATES: readonly ProjectTemplate[] = [
   // ===========================================================================
   {
     id: "doce-meses",
+    category: "Negocio",
     name: "De cero a un millón · negocio de producto",
     source: "12 Months to $1 Million, de Ryan Daniel Moran",
     summary:
@@ -252,6 +269,7 @@ export const PROJECT_TEMPLATES: readonly ProjectTemplate[] = [
   // ===========================================================================
   {
     id: "servicios",
+    category: "Negocio",
     name: "Negocio de servicios · los primeros 10 clientes",
     summary: "Para vender tu trabajo. Termina cuando tienes diez clientes y sabes qué parte del proceso se repite.",
     groups: [
@@ -298,6 +316,7 @@ export const PROJECT_TEMPLATES: readonly ProjectTemplate[] = [
   // ===========================================================================
   {
     id: "lanzamiento",
+    category: "Marketing",
     name: "Lanzamiento o campaña",
     summary: "Para sacar algo al mundo en una fecha. Corto y con un número que decide si salió bien.",
     groups: [
@@ -342,6 +361,7 @@ export const PROJECT_TEMPLATES: readonly ProjectTemplate[] = [
   // ===========================================================================
   {
     id: "contratar",
+    category: "Trabajo y producto",
     name: "Contratar a alguien",
     summary: "Del hueco a la primera semana. La prueba práctica va pagada, porque trabajar gratis filtra a quien no lo necesita.",
     groups: [
@@ -382,6 +402,269 @@ export const PROJECT_TEMPLATES: readonly ProjectTemplate[] = [
             priority: "High",
             subtasks: ["Accesos y herramientas", "A quién conoce la primera semana", "Qué entrega el primer mes"]
           }
+        ]
+      }
+    ]
+  },
+
+  // ===========================================================================
+  {
+    id: "contenido",
+    category: "Marketing",
+    name: "Motor de contenido · construir audiencia propia",
+    summary:
+      "Para dejar de alquilar la atención. No tiene fecha de fin: termina cuando publicar dejó de depender de la inspiración.",
+    groups: [
+      {
+        name: "Posicionamiento",
+        color: PURPLE,
+        tasks: [
+          { title: "Escribir sobre qué vas a ser la referencia", priority: "High" },
+          { title: "Elegir de tres a cinco temas y no salirte de ellos", priority: "High" },
+          { title: "Decidir a quién le hablas y qué ya sabe" }
+        ]
+      },
+      {
+        name: "El sistema de publicación",
+        color: TEAL,
+        tasks: [
+          { title: "Fijar una frecuencia que puedas sostener el peor mes del año", priority: "High" },
+          {
+            title: "Montar el proceso de una pieza",
+            subtasks: ["De dónde salen las ideas", "Cómo se escribe", "Quién la revisa", "Cómo se publica"]
+          },
+          { title: "Escribir con antelación para no publicar contra el reloj" }
+        ]
+      },
+      {
+        name: "Distribución",
+        color: BLUE,
+        tasks: [
+          { title: "Elegir el canal principal, y uno de reparto", priority: "High" },
+          { title: "Abrir la lista de correo: es la única audiencia que es tuya", priority: "High" },
+          { title: "Reaprovechar cada pieza en los otros formatos" }
+        ]
+      },
+      {
+        name: "Medir y ajustar",
+        color: ORANGE,
+        tasks: [
+          { title: "Elegir UNA métrica que de verdad importe" },
+          { title: "Revisar cada mes qué funcionó y repetir esa forma", priority: "High" },
+          { title: "Podar los temas que no llevan a ninguna parte" }
+        ]
+      }
+    ]
+  },
+
+  // ===========================================================================
+  {
+    id: "embudo",
+    category: "Marketing",
+    name: "Embudo de captación · de desconocido a cliente",
+    source: "las cinco etapas AARRR de Dave McClure",
+    summary:
+      "Ordena el camino completo en cinco etapas y obliga a medir cada una. Sirve para encontrar dónde se está perdiendo la gente.",
+    groups: [
+      {
+        name: "Adquisición · cómo llegan",
+        color: PURPLE,
+        tasks: [
+          { title: "Listar por dónde llega hoy la gente, con números", priority: "High" },
+          { title: "Elegir el canal que vas a trabajar en serio" },
+          { title: "Medir cuánto cuesta traer a una persona" }
+        ]
+      },
+      {
+        name: "Activación · la primera vez",
+        color: TEAL,
+        tasks: [
+          { title: "Definir qué es un buen primer uso, en una frase", priority: "High" },
+          { title: "Quitar todo lo que estorba antes de ese momento", priority: "High" },
+          { title: "Medir cuántos llegan a él" }
+        ]
+      },
+      {
+        name: "Retención · si vuelven",
+        color: BLUE,
+        tasks: [
+          { title: "Medir cuántos vuelven a la semana y al mes", priority: "High" },
+          { title: "Hablar con tres que se fueron" },
+          { title: "Arreglar el motivo que más se repita" }
+        ]
+      },
+      {
+        name: "Recomendación · si lo cuentan",
+        color: GREEN,
+        tasks: [
+          { title: "Preguntar a quien ya volvió si lo recomendaría" },
+          { title: "Ponérselo fácil a quien quiera contarlo" }
+        ]
+      },
+      {
+        name: "Ingreso · si paga",
+        color: ORANGE,
+        tasks: [
+          { title: "Medir cuántos de los activados acaban pagando", priority: "High" },
+          { title: "Comparar lo que cuesta traerlos con lo que dejan", priority: "High" }
+        ]
+      }
+    ]
+  },
+
+  // ===========================================================================
+  {
+    id: "mudanza",
+    category: "Personal",
+    name: "Mudanza",
+    summary: "De decidir el sitio a la primera noche durmiendo bien. Lo que se olvida siempre son los trámites.",
+    groups: [
+      {
+        name: "Decidir y buscar",
+        color: PURPLE,
+        tasks: [
+          { title: "Fijar el presupuesto máximo, todo incluido", priority: "High" },
+          { title: "Escribir lo innegociable y lo que sí se negocia" },
+          { title: "Ver sitios" },
+          { title: "Elegir y firmar", priority: "High" }
+        ]
+      },
+      {
+        name: "Contratar y papeles",
+        color: ORANGE,
+        tasks: [
+          { title: "Pedir tres presupuestos de transporte", priority: "High" },
+          {
+            title: "Dar de alta y de baja los suministros",
+            priority: "High",
+            subtasks: ["Luz", "Agua y gas", "Internet — pedirlo con semanas de margen"]
+          },
+          { title: "Cambiar la dirección donde haga falta" }
+        ]
+      },
+      {
+        name: "Empacar",
+        color: TEAL,
+        tasks: [
+          { title: "Tirar o donar antes de empacar: no se muda lo que no se usa", priority: "High" },
+          { title: "Empacar por habitación y etiquetar por dónde va" },
+          { title: "Preparar la caja del primer día aparte", priority: "High" }
+        ]
+      },
+      {
+        name: "El día y después",
+        color: GREEN,
+        tasks: [
+          { title: "Estado del piso viejo y devolución de llaves" },
+          { title: "Mudanza" },
+          { title: "Montar primero la cama y el baño", priority: "High" },
+          { title: "Revisar que todo llegó entero" }
+        ]
+      }
+    ]
+  },
+
+  // ===========================================================================
+  {
+    id: "empleo",
+    category: "Personal",
+    name: "Buscar trabajo o cambiar de carrera",
+    summary: "Tratarlo como un proyecto y no como una espera. Termina con una decisión, no con una oferta.",
+    groups: [
+      {
+        name: "Enfocar",
+        color: PURPLE,
+        tasks: [
+          { title: "Escribir qué quieres de verdad del siguiente puesto", priority: "High" },
+          { title: "Escribir lo que NO vuelves a aceptar", priority: "High" },
+          { title: "Listar de veinte a treinta sitios donde te verías" }
+        ]
+      },
+      {
+        name: "Materiales",
+        color: BLUE,
+        tasks: [
+          { title: "Currículum contando resultados, no responsabilidades", priority: "High" },
+          { title: "Perfil público al día" },
+          { title: "Preparar la respuesta a «háblame de ti»" }
+        ]
+      },
+      {
+        name: "Buscar y contactar",
+        color: ORANGE,
+        tasks: [
+          { title: "Avisar a quien ya te conoce: por ahí salen la mayoría", priority: "High" },
+          { title: "Aplicar a los de la lista" },
+          { title: "Escribir a una persona concreta, no al buzón general" }
+        ]
+      },
+      {
+        name: "Procesos",
+        color: TEAL,
+        tasks: [
+          {
+            title: "Preparar cada entrevista",
+            priority: "High",
+            subtasks: ["Qué hace la empresa y cómo gana dinero", "Tus tres ejemplos con números", "Tus preguntas para ellos"]
+          },
+          { title: "Escribir después de cada una qué salió mal" },
+          { title: "Llevar la cuenta de en qué punto está cada proceso" }
+        ]
+      },
+      {
+        name: "Decidir",
+        color: GREEN,
+        tasks: [
+          { title: "Negociar la oferta", priority: "High" },
+          { title: "Comparar contra lo que escribiste al principio", priority: "High" },
+          { title: "Salir bien del sitio anterior" }
+        ]
+      }
+    ]
+  },
+
+  // ===========================================================================
+  {
+    id: "certificacion",
+    category: "Personal",
+    name: "Certificación o examen",
+    summary: "Para una fecha fija que no se mueve. El bloque de práctica va antes de terminar el temario, no después.",
+    groups: [
+      {
+        name: "Planear",
+        color: PURPLE,
+        tasks: [
+          { title: "Inscribirse y pagar: la fecha en firme cambia todo", priority: "High" },
+          { title: "Conseguir el temario oficial y saber cómo puntúa" },
+          { title: "Repartir el temario en las semanas que quedan", priority: "High" },
+          { title: "Reservar el hueco de estudio en la agenda, no el rato que sobre", priority: "High" }
+        ]
+      },
+      {
+        name: "Estudiar",
+        color: TEAL,
+        tasks: [
+          { title: "Primera pasada completa al temario" },
+          { title: "Repaso espaciado de lo que ya diste", priority: "High" },
+          { title: "Apuntar aparte lo que se resiste" }
+        ]
+      },
+      {
+        name: "Practicar",
+        color: ORANGE,
+        tasks: [
+          { title: "Primer simulacro completo, cronometrado", priority: "High" },
+          { title: "Corregir y volver solo sobre los fallos" },
+          { title: "Dos simulacros más en condiciones reales" }
+        ]
+      },
+      {
+        name: "La semana del examen",
+        color: GREEN,
+        tasks: [
+          { title: "Repasar solo lo marcado, nada nuevo" },
+          { title: "Comprobar sede, hora y qué hay que llevar", priority: "High" },
+          { title: "Dormir: el último día no se gana estudiando" }
         ]
       }
     ]

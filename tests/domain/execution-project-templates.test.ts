@@ -3,13 +3,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   PROJECT_TEMPLATES,
+  TEMPLATE_CATEGORIES,
   getProjectTemplate,
   templateSummary,
   plannedRows
 } from "../../src/lib/domain/execution/project-templates.ts";
 
-test("el catálogo trae las seis plantillas y ningún id repetido", () => {
-  assert.strictEqual(PROJECT_TEMPLATES.length, 6);
+test("el catálogo trae las once plantillas y ningún id repetido", () => {
+  assert.strictEqual(PROJECT_TEMPLATES.length, 11);
   const ids = PROJECT_TEMPLATES.map((t) => t.id);
   assert.strictEqual(new Set(ids).size, ids.length, "un id repetido haría que getProjectTemplate devolviera la otra");
 });
@@ -37,6 +38,28 @@ test("las plantillas que salen de un libro lo atribuyen", () => {
   // Se usa su estructura; decir de dónde viene es parte del trato.
   assert.match(getProjectTemplate("lean-startup")?.source ?? "", /Eric Ries/);
   assert.match(getProjectTemplate("doce-meses")?.source ?? "", /Ryan Daniel Moran/);
+  assert.match(getProjectTemplate("embudo")?.source ?? "", /Dave McClure/);
+});
+
+test("toda plantilla declara una categoría conocida", () => {
+  // La categoría es lo que agrupa el selector. Una plantilla con categoría
+  // suelta no se pintaría en ningún `optgroup` y sería invisible.
+  for (const t of PROJECT_TEMPLATES) {
+    assert.ok(TEMPLATE_CATEGORIES.includes(t.category), `${t.id} tiene una categoría desconocida: ${t.category}`);
+  }
+});
+
+test("las cuatro categorías tienen al menos una plantilla", () => {
+  // Un `optgroup` vacío no se pinta, pero una categoría declarada y sin nada
+  // dentro es una promesa a medias en el tipo.
+  for (const c of TEMPLATE_CATEGORIES) {
+    assert.ok(PROJECT_TEMPLATES.some((t) => t.category === c), `la categoría "${c}" está vacía`);
+  }
+});
+
+test("hay plantillas de marketing y personales, no solo de trabajo", () => {
+  assert.ok(PROJECT_TEMPLATES.filter((t) => t.category === "Marketing").length >= 2);
+  assert.ok(PROJECT_TEMPLATES.filter((t) => t.category === "Personal").length >= 3);
 });
 
 test("los colores de grupo salen del design system, no son literales", () => {
@@ -53,6 +76,7 @@ test("getProjectTemplate: encuentra la que existe y no inventa la que no", () =>
 test("templateSummary: cuenta grupos, tareas y subtareas", () => {
   const t = {
     id: "x",
+    category: "Personal" as const,
     name: "X",
     summary: "y",
     groups: [
@@ -63,7 +87,7 @@ test("templateSummary: cuenta grupos, tareas y subtareas", () => {
   assert.deepStrictEqual(templateSummary(t), { groups: 2, tasks: 3, subtasks: 2 });
 });
 
-test("templateSummary: las seis del catálogo crean algo que vale la pena", () => {
+test("templateSummary: todas las del catálogo crean algo que vale la pena", () => {
   for (const t of PROJECT_TEMPLATES) {
     const s = templateSummary(t);
     assert.ok(s.tasks >= 6, `${t.id} solo crea ${s.tasks} tareas`);

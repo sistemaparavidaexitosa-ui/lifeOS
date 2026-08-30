@@ -1053,6 +1053,29 @@
   SIN `deps`. Exigen los ids de las tareas ya insertadas y no resuelven nada que
   el orden de los grupos no diga ya. `suggestProjectSequence` sigue estando.
 
+- **D-074 Once plantillas piden agrupar el selector.** Con seis, una lista plana
+  se lee de un vistazo; con once hay que recorrerla entera para descartar diez.
+  Cada plantilla declara `category` —Trabajo y producto, Negocio, Marketing,
+  Personal— y el `<select>` las pinta en `<optgroup>`.
+
+  El orden de los grupos lo fija `TEMPLATE_CATEGORIES` y no el del array: así
+  añadir una plantilla al final del catálogo no la manda al bloque equivocado.
+  Hay pruebas que fallan si una plantilla declara una categoría desconocida
+  —quedaría fuera de todo `optgroup`, invisible— o si una categoría se queda
+  vacía.
+
+  Marketing tiene dos entradas nuevas que no se pisan con «Lanzamiento o
+  campaña»: aquella tiene fecha de fin, y estas no. El motor de contenido
+  termina cuando publicar deja de depender de la inspiración; el embudo ordena
+  las cinco etapas AARRR de Dave McClure, que son un marco con nombre y etapas
+  comprobables, atribuido como los libros.
+
+  Las tres personales son proyectos de verdad —mudanza, búsqueda de trabajo,
+  certificación—, con fecha y muchas tareas discretas. Deliberadamente NO se
+  añadió ninguna de hábitos o salud: eso ya lo cubren las rutinas y los hábitos
+  de Personal Development OS, y duplicarlo en forma de tablero llevaría a llevar
+  la misma cosa en dos sitios.
+
 - **D-073 El catálogo de proyectos vive en código, como el de rutinas.** Mismo
   criterio que D-044: es CONTENIDO, no datos del usuario — sin dueño, sin RLS,
   versionado en git y probable sin levantar Postgres. Al usarla se COPIA: editar
