@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 import { NAV_ITEMS } from "./nav-items";
+import CommandPalette from "./CommandPalette";
 import { usePathname } from "next/navigation";
 import { Suspense } from "react";
 
@@ -16,10 +17,13 @@ function TitleFromPath() {
 export default function AppShell({
   userName,
   bell,
+  workspaceId,
   children
 }: {
   userName: string;
   bell?: React.ReactNode;
+  /** Espacio donde busca la paleta. Null si la cuenta no tiene ninguno. */
+  workspaceId?: string | null;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -33,6 +37,9 @@ export default function AppShell({
 
   return (
     <div className="grid md:grid-cols-[272px_1fr] min-h-dvh">
+      {/* Aquí y no en cada pantalla: Cmd+K tiene que responder desde todas, y
+          este es el único ancestro que las envuelve a todas. */}
+      <CommandPalette workspaceId={workspaceId ?? null} />
       <Sidebar open={open} onClose={() => setOpen(false)} />
       {open && (
         <div

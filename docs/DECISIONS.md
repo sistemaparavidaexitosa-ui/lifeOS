@@ -879,6 +879,61 @@
   un lunes fijo amontona en un solo día todo lo que se aplaza durante la semana,
   y obliga a decidir qué pasa cuando hoy ya es lunes.
 
+- **D-062 La búsqueda es UNA consulta sobre cinco fuentes, no cinco consultas.**
+  `search_workspace` une proyectos, tareas, comentarios, notas y actividad en un
+  solo `union all`. Podrían ser cinco llamadas desde la app, pero entonces el
+  ordenado por relevancia se haría en el cliente sobre cinco listas YA
+  recortadas, y el resultado nº 1 dependería de en qué tabla vivía. Los filtros
+  también van dentro, por lo mismo.
+
+  Como `search_notes` (0032), NO es `security definer`: la RLS se aplica dentro.
+  Hay una prueba pgTAP que llama al RPC con el uuid del espacio desde una cuenta
+  ajena y comprueba que no devuelve nada.
+
+  `tipo:` en vez del `en:` que decía el plan. `en:` filtraba por el nombre del
+  contenedor, y dentro de un espacio ya acotado eso responde a una pregunta que
+  casi nadie se hace; lo que sí se pregunta al buscar es «esto era una tarea o
+  un comentario». Un filtro que no se entiende se DICE en la interfaz en vez de
+  ignorarse, y una palabra con dos puntos que no sea una clave conocida se busca
+  como texto: «13:30» tiene que poder buscarse.
+
+- **D-063 CORRECCIÓN: el índice en español NO garantiza insensibilidad a los
+  acentos.** El comentario de 0032 afirma que «buscar "direccion" encuentra
+  "dirección"», y en ese caso es cierto — pero no es una regla, es una
+  casualidad del stemmer. «dirección» y «direccion» se reducen ambos a
+  `direccion`, mientras que «almacén» da `almacen` y «almacen» da `almac`, que
+  no casan. Lo destapó una prueba pgTAP escrita para afirmarlo.
+
+  No se cambia nada todavía: conseguirlo de verdad pide la extensión `unaccent`
+  y una configuración de texto propia, y eso obliga a regenerar `notes.search`
+  además de las cuatro columnas nuevas. Queda dicho aquí y en la prueba para que
+  nadie vuelva a darlo por hecho.
+
+- **D-064 La paleta crea la tarea REUSANDO `createTask`, no insertando.** Esa
+  acción hace cosas que desde fuera no se ven: asigna el grupo del tablero,
+  escribe la posición y deja la primera fila de `task_history`. Un `insert`
+  propio habría creado tareas de segunda categoría, indistinguibles hasta que
+  algo fallara semanas después.
+
+  El proyecto es el primero del espacio, sin preguntar: el sentido de la paleta
+  es apuntar algo en dos segundos, y el usuario aterriza en el drawer de la
+  tarea recién creada, donde puede moverla.
+
+- **D-065 El realtime avisa, no trae el dato.** La suscripción solo dispara el
+  mismo `onSaved()` que ya se usa tras una acción propia, y este vuelve a pedir
+  el hilo entero por el camino de siempre. Reconstruir el estado desde el
+  payload del evento significaría mantener DOS maneras de armar el mismo hilo, y
+  la del evento no tiene ni el nombre del autor ni el roster para pintar las
+  menciones.
+
+  Solo se publican `comments` y `comment_reactions`. Cada tabla publicada es
+  tráfico que sale en cada escritura: publicar `tasks` haría que cualquier
+  movimiento del tablero se emitiera a todo el mundo, y esa es una decisión
+  aparte.
+
+  Comprobado con dos sesiones reales a la vez: quien tiene acceso recibe el
+  evento y quien no, no recibe nada. Realtime aplica la RLS del suscriptor.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo
