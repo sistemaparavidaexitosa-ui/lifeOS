@@ -19,6 +19,8 @@ import EditProjectForm from "./EditProjectForm";
 import SequencePanel from "./SequencePanel";
 import MenuSurface, { useMenuAnchor } from "@/components/MenuSurface";
 import { deleteProject } from "./actions";
+import { applyProjectTemplate } from "./template-actions";
+import { TemplateSelect, TemplatePreview } from "./ProjectTemplatePicker";
 import { moveProject, shareProjectWithGuest, unshareProjectFromGuests } from "@/lib/workspaces/actions";
 import type { WorkspaceSummary } from "@/lib/data/workspaces";
 import type { LogEntry, KnowledgeItem } from "./logbook-knowledge-actions";
@@ -33,10 +35,11 @@ export interface ProjectMenuData {
   targetDate: string | null;
 }
 
-type Panel = "sequence" | "edit" | "move" | "guests" | "logbook" | "knowledge" | "delete" | null;
+type Panel = "sequence" | "template" | "edit" | "move" | "guests" | "logbook" | "knowledge" | "delete" | null;
 
 const PANEL_TITLE: Record<Exclude<Panel, null>, string> = {
   sequence: "Secuencia sugerida",
+  template: "Aplicar plantilla",
   edit: "Editar proyecto",
   move: "Mover a otro espacio",
   guests: "Acceso de invitados",
@@ -96,6 +99,7 @@ export default function ProjectMenu({
         <MenuSurface anchor={menu.anchor} onClose={menu.close} align="end" width={236} label="Opciones del proyecto">
           <div className="ex-menu-list">
             <MenuItem icon="✨" label="Sugerir secuencia" onClick={() => openPanel("sequence")} />
+            <MenuItem icon="🧩" label="Aplicar plantilla" onClick={() => openPanel("template")} />
             <MenuItem icon="✏️" label="Editar proyecto" onClick={() => openPanel("edit")} />
             {/* Sustituye a la vieja pantalla "Compartir un proyecto personal":
                 desde 0031 la membresía del espacio YA da acceso, así que
@@ -132,6 +136,9 @@ export default function ProjectMenu({
             <div className="td-drawer-body">
               {panel === "sequence" && (
                 <SequencePanel projectId={project.id} tasks={sequenceTasks} onClose={() => setPanel(null)} />
+              )}
+              {panel === "template" && (
+                <ApplyTemplatePanel projectId={project.id} taskCount={taskCount} onDone={() => setPanel(null)} />
               )}
               {panel === "edit" && <EditProjectForm project={project} onSaved={() => setPanel(null)} />}
               {panel === "move" && (
@@ -454,5 +461,82 @@ function MenuItem({
       <span aria-hidden>{icon}</span>
       {label}
     </button>
+  );
+}
+
+/**
+ * Aplicar una plantilla a un proyecto que YA existe.
+ *
+ * AÑADE al final, nunca reemplaza: los grupos nuevos van después de los que hay
+ * y no se borra nada. Por eso aplicar dos veces DUPLICA, y por eso este panel
+ * avisa cuando el proyecto ya tiene tareas — impedirlo sería equivocarse en la
+ * otra dirección, porque repetir una fase es un uso legítimo en un proyecto
+ * largo. El aviso informa; la decisión sigue siendo del usuario.
+ */
+function ApplyTemplatePanel({
+  projectId,
+  taskCount,
+  onDone
+}: {
+  projectId: string;
+  taskCount: number;
+  onDone: () => void;
+}) {
+  const router = useRouter();
+  const [templateId, setTemplateId] = useState("");
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-xs" style={{ color: "var(--muted)" }}>
+        Los grupos de la plantilla se añaden <b>al final</b>. Nada de lo que ya hay se borra ni se mueve.
+      </p>
+
+      {taskCount > 0 && (
+        <div
+          className="text-xs"
+          style={{
+            background: "color-mix(in srgb, var(--c-orange) 12%, var(--surface))",
+            borderLeft: "3px solid var(--c-orange)",
+            borderRadius: "0 10px 10px 0",
+            padding: "8px 10px"
+          }}
+        >
+          Este proyecto ya tiene {taskCount} tarea{taskCount === 1 ? "" : "s"}. La plantilla no las toca, pero si ya la
+          aplicaste antes vas a acabar con los grupos repetidos.
+        </div>
+      )}
+
+      <label className="text-xs font-bold">
+        Plantilla
+        <TemplateSelect value={templateId} onChange={setTemplateId} />
+      </label>
+      <TemplatePreview templateId={templateId} />
+
+      {error && (
+        <div className="text-xs" style={{ color: "var(--danger)" }}>
+          {error}
+        </div>
+      )}
+
+      <button
+        className="btn-primary btn-sm"
+        disabled={pending || !templateId}
+        onClick={() =>
+          startTransition(async () => {
+            const result = await applyProjectTemplate(projectId, templateId);
+            if (!result.ok) {
+              setError(result.reason ?? "No se pudo aplicar la plantilla.");
+              return;
+            }
+            onDone();
+            router.refresh();
+          })
+        }
+      >
+        {pending ? "Aplicando…" : "Aplicar al proyecto"}
+      </button>
+    </div>
   );
 }

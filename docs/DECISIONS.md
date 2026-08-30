@@ -1019,6 +1019,58 @@
   no puede deshacer eso ni presentarlo como un fallo. Mismo contrato que
   `sendEmail` (D-021).
 
+- **D-071 Las plantillas de proyecto AÑADEN, nunca reemplazan.** Aplicarla a un
+  proyecto que ya tiene trabajo pone sus grupos DESPUÉS de los que hay y no
+  borra nada. La alternativa —limpiar el tablero y poner la plantilla— es
+  irreversible: se llevaría las tareas con sus comentarios (que no tienen FK y
+  quedarían huérfanos), sus archivos y sus responsables. Lo que sobre se borra a
+  mano, y eso sí se deshace una fila a la vez.
+
+  Por eso aplicar dos veces DUPLICA, y no se impide: repetir una fase es un uso
+  legítimo en un proyecto largo. Quien avisa es el panel, que ya recibe
+  `taskCount` — el mismo dato que hoy usa el de borrado. El aviso informa; la
+  decisión sigue siendo del usuario.
+
+  `plannedRows(template, { fromGroupPosition })` es lo que hace correcto el
+  «al final»: sin arrancar después de la última posición, dos grupos la
+  comparten y el orden del tablero pasa a depender de cuál devuelva antes la
+  base. Probado con dos plantillas seguidas sobre el mismo proyecto: posiciones
+  0-4 y luego 5-8, todas únicas.
+
+- **D-072 Una plantilla trae estructura, no calendario ni juicio.**
+
+  SIN FECHAS. El horizonte va en el NOMBRE del grupo («Fase 1 · Grind (llegar a
+  25 ventas al día)»), que es honesto porque no promete nada. Poner `due` sería
+  inventar un ritmo que no es de nadie: dos personas con el mismo proyecto no
+  tardan lo mismo, y al mes medio tablero aparecería vencido — contando además
+  como atraso en Home y en el hecho `execution.overdue` del motor.
+
+  SIN `impact`. Ese flag alimenta «tres tareas de impacto» en Home y los minutos
+  comprometidos del día. Cuáles lo son ESTA semana es del usuario; una plantilla
+  que marca ocho rompe las dos cosas. Hay una prueba que falla si alguna tarea
+  del catálogo trae `impact` o fecha.
+
+  SIN `deps`. Exigen los ids de las tareas ya insertadas y no resuelven nada que
+  el orden de los grupos no diga ya. `suggestProjectSequence` sigue estando.
+
+- **D-073 El catálogo de proyectos vive en código, como el de rutinas.** Mismo
+  criterio que D-044: es CONTENIDO, no datos del usuario — sin dueño, sin RLS,
+  versionado en git y probable sin levantar Postgres. Al usarla se COPIA: editar
+  el proyecto no toca el catálogo, y cambiar el catálogo no le reescribe nada a
+  nadie.
+
+  De los libros se usa su ESTRUCTURA, que es un hecho comprobable —que Lean
+  Startup se organiza alrededor del bucle Construir-Medir-Aprender, o que Moran
+  divide el camino en Grind, Growth y Gold—, y todo el texto está escrito con
+  nuestras palabras. No se reproduce nada de ninguna obra, y la plantilla
+  atribuye el libro del que sale.
+
+  Si la plantilla falla al crear un proyecto nuevo, se cae al grupo «General» de
+  siempre en vez de dejar al usuario sin proyecto: un tablero usable vale más
+  que un error. Y si falla a mitad, se borran los grupos recién insertados —
+  solo los nuevos— por el mismo motivo que `createRoutineFromTemplate`: media
+  plantilla obliga a limpiar a mano antes de reintentar.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo
