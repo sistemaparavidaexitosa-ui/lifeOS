@@ -7,10 +7,13 @@ import { Avatar } from "./ui";
 export default function Topbar({
   title,
   userName,
+  bell,
   onMenuClick
 }: {
   title: React.ReactNode;
   userName: string;
+  /** La bandeja de menciones, ya cargada por el layout. */
+  bell?: React.ReactNode;
   onMenuClick: () => void;
 }) {
   return (
@@ -40,6 +43,7 @@ export default function Topbar({
         {title}
       </h1>
       <div className="flex-1" />
+      {bell}
       <span className="hidden sm:inline-flex">
         <Avatar name={userName} size={30} />
       </span>

@@ -9,6 +9,7 @@ import { keyResultProgress, goalProgress, goalAtRisk } from "@/lib/domain/develo
 import { routineDueToday, routineProgress, type Frequency } from "@/lib/domain/development/routines.ts";
 import { CardHeader, SectionHeader } from "./FormSheet";
 import { getSessionUser } from "@/lib/data/session";
+import InsightSection from "@/components/InsightSection";
 
 /**
  * Panel del módulo. No calcula nada propio: compone lo que ya resuelven
@@ -165,6 +166,8 @@ export default async function DevelopmentPage() {
           </Card>
         ))
       )}
+
+      <InsightSection scope="habits" />
     </div>
   );
 }

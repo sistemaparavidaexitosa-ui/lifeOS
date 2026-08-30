@@ -300,7 +300,8 @@ export async function moveProject(projectId: string, workspaceId: string): Promi
       project_id: parsed.data.projectId,
       type: "move",
       text: "Proyecto movido a este espacio",
-      actor: user.email ?? ""
+      actor: user.email ?? "",
+      actor_id: user.id
     });
   }
 
@@ -353,7 +354,8 @@ export async function shareProjectWithGuest(formData: FormData): Promise<ActionR
     project_id: parsed.data.projectId,
     type: "share",
     text: `Proyecto abierto a invitados (${parsed.data.accessLevel})`,
-    actor: user.email ?? ""
+    actor: user.email ?? "",
+    actor_id: user.id
   });
   revalidatePath("/execution");
   return { ok: true };

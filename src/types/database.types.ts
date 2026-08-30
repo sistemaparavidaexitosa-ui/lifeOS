@@ -441,6 +441,61 @@ export type Database = {
         }
         Relationships: []
       }
+      comment_reactions: {
+        Row: {
+          comment_id: string
+          created_at: string
+          emoji: string
+          user_id: string
+        }
+        Insert: {
+          comment_id: string
+          created_at?: string
+          emoji: string
+          user_id: string
+        }
+        Update: {
+          comment_id?: string
+          created_at?: string
+          emoji?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comment_reactions_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "comments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comment_reads: {
+        Row: {
+          comment_id: string
+          read_at: string
+          user_id: string
+        }
+        Insert: {
+          comment_id: string
+          read_at?: string
+          user_id: string
+        }
+        Update: {
+          comment_id?: string
+          read_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comment_reads_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "comments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       comments: {
         Row: {
           author_id: string
@@ -448,6 +503,7 @@ export type Database = {
           body: string
           created_at: string
           id: string
+          mentioned_user_ids: string[]
           mentions: string[]
           read: boolean
           subject_id: string
@@ -459,6 +515,7 @@ export type Database = {
           body: string
           created_at?: string
           id?: string
+          mentioned_user_ids?: string[]
           mentions?: string[]
           read?: boolean
           subject_id: string
@@ -470,6 +527,7 @@ export type Database = {
           body?: string
           created_at?: string
           id?: string
+          mentioned_user_ids?: string[]
           mentions?: string[]
           read?: boolean
           subject_id?: string
@@ -1203,38 +1261,6 @@ export type Database = {
         }
         Relationships: []
       }
-      milestones: {
-        Row: {
-          created_at: string
-          done: boolean
-          id: string
-          project_id: string
-          title: string
-        }
-        Insert: {
-          created_at?: string
-          done?: boolean
-          id?: string
-          project_id: string
-          title: string
-        }
-        Update: {
-          created_at?: string
-          done?: boolean
-          id?: string
-          project_id?: string
-          title?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "milestones_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       net_worth_snapshots: {
         Row: {
           as_of: string
@@ -1674,6 +1700,39 @@ export type Database = {
         }
         Relationships: []
       }
+      reminders: {
+        Row: {
+          created_at: string
+          done: boolean
+          id: string
+          remind_on: string
+          subject_id: string
+          subject_type: string
+          text: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          done?: boolean
+          id?: string
+          remind_on: string
+          subject_id: string
+          subject_type: string
+          text?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          done?: boolean
+          id?: string
+          remind_on?: string
+          subject_id?: string
+          subject_type?: string
+          text?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       routine_runs: {
         Row: {
           completed_at: string | null
@@ -2080,6 +2139,7 @@ export type Database = {
       workspace_activity: {
         Row: {
           actor: string
+          actor_id: string | null
           created_at: string
           id: string
           project_id: string | null
@@ -2089,6 +2149,7 @@ export type Database = {
         }
         Insert: {
           actor: string
+          actor_id?: string | null
           created_at?: string
           id?: string
           project_id?: string | null
@@ -2098,6 +2159,7 @@ export type Database = {
         }
         Update: {
           actor?: string
+          actor_id?: string | null
           created_at?: string
           id?: string
           project_id?: string | null

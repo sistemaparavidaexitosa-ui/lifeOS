@@ -1,7 +1,7 @@
 "use client";
-// Conmutador Proyectos / Notebooks.
+// Conmutador Proyectos / Notebooks / Actividad.
 //
-// Las dos pantallas cuelgan del MISMO espacio de trabajo y se gobiernan con el
+// Las tres pantallas cuelgan del MISMO espacio de trabajo y se gobiernan con el
 // mismo `?ws=`; este componente es lo que hace visible esa hermandad. Se quedan
 // como rutas separadas a propósito, en vez de una sola con `?tab=`: así el
 // enlace a un cuaderno es compartible tal cual, y el gesto de volver del
@@ -11,7 +11,11 @@ import { usePathname } from "next/navigation";
 
 const TABS = [
   { href: "/execution", label: "Proyectos" },
-  { href: "/notebooks", label: "Notebooks" }
+  { href: "/notebooks", label: "Notebooks" },
+  // El feed cuelga del espacio igual que los cuadernos: es LO QUE HA PASADO
+  // aquí dentro, no un módulo aparte. Por eso está en esta barra y no en el
+  // menú lateral.
+  { href: "/activity", label: "Actividad" }
 ] as const;
 
 export default function WorkspaceTabs({ workspaceId }: { workspaceId: string }) {

@@ -6,7 +6,9 @@
 // salida ya calculada y solo la ordena, la conecta y la redacta.
 
 import type { JournalEntryLike } from "../../types.ts";
+import { addDaysISO } from "../../datetime.ts";
 import { clampWeight, type Fact } from "../types.ts";
+import { nextDay, round2, slug } from "./shared.ts";
 
 export interface BudgetLineLike {
   id: string;
@@ -37,20 +39,6 @@ function spentIn(entries: JournalEntryLike[], category: string, fromISO: string,
         e.date < toISO
     )
     .reduce((sum, e) => sum + e.lines.reduce((s, l) => s + Math.max(0, -l.amount), 0), 0);
-}
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}
-
-/** `Alimentos` → `alimentos`; `Casa y hogar` → `casa-y-hogar`. Para ids estables. */
-function slug(category: string): string {
-  return category
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
 }
 
 /**
@@ -101,7 +89,7 @@ function spendSpikeFacts(snapshot: MoneySnapshot, todayISO: string): Fact[] {
     const previous: number[] = [];
     let windowEnd = snapshot.cycleFromISO;
     for (let i = 0; i < 3; i++) {
-      const windowStart = shiftDays(windowEnd, -30);
+      const windowStart = addDaysISO(windowEnd, -30);
       previous.push(spentIn(snapshot.entries, category, windowStart, windowEnd));
       windowEnd = windowStart;
     }
@@ -143,17 +131,6 @@ function unassignedIncomeFact(snapshot: MoneySnapshot): Fact[] {
       refs: [{ table: "profiles", id: "quincenal_income" }]
     }
   ];
-}
-
-/** Aritmética de fechas local al módulo: sin `Date.now()`, entra y sale ISO. */
-function shiftDays(iso: string, days: number): string {
-  const d = new Date(`${iso}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
-function nextDay(iso: string): string {
-  return shiftDays(iso, 1);
 }
 
 /** Todos los hechos de money, ordenados de más a menos anómalo. */

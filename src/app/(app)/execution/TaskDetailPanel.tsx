@@ -24,8 +24,7 @@ import { getTaskDetail, updateTaskDetails, type TaskDetailResult } from "./task-
 import TaskStatusButtons from "./TaskStatusButtons";
 import AssigneesField from "./AssigneesField";
 import DepsField from "./DepsField";
-import TaskCommentsPanel from "./TaskCommentsPanel";
-import TaskHistoryPanel from "./TaskHistoryPanel";
+import TaskThreadPanel from "./TaskThreadPanel";
 import TaskDescriptionField from "./TaskDescriptionField";
 import TaskFilesPanel from "./TaskFilesPanel";
 import { IconClose } from "@/components/icons";
@@ -124,8 +123,15 @@ export default function TaskDetailPanel({
                   <AssigneesField taskId={detail.task.id} members={detail.members} selected={detail.assignees} onSaved={load} />
                   <DepsField taskId={detail.task.id} candidates={detail.depCandidates} selected={detail.task.deps} onSaved={load} />
                   <TaskFilesPanel taskId={detail.task.id} files={detail.files} onSaved={load} />
-                  <TaskCommentsPanel taskId={detail.task.id} comments={detail.comments} onSaved={load} />
-                  <TaskHistoryPanel history={detail.history} />
+                  <TaskThreadPanel
+                    taskId={detail.task.id}
+                    comments={detail.comments}
+                    history={detail.history}
+                    reactions={detail.reactions}
+                    viewerId={detail.viewerId}
+                    roster={detail.roster}
+                    onSaved={load}
+                  />
                 </>
               )}
             </div>

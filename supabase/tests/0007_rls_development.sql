@@ -5,7 +5,7 @@
 -- workspace lo alcanza, y un usuario no ve las filas de otro.
 
 begin;
-select plan(8);
+select plan(10);
 
 insert into auth.users (id, instance_id, aud, role, email) values
   ('11111111-1111-4111-8111-111111111111', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'dev-titular@test.local'),
@@ -61,6 +61,25 @@ select throws_ok(
   '23505',
   null,
   'routine_runs es único por (routine_id, local_date)'
+);
+
+-- Migración 0035: un ahorro puede sostener un resultado clave.
+-- Se prueba aquí y no solo en el dominio porque el `check` es la garantía de la
+-- BASE: si alguien amplía el enum de TypeScript y olvida la migración, el
+-- dominio compila y el insert revienta en producción.
+select lives_ok(
+  $$ insert into public.key_results (goal_id, title, source_kind, source_id, target)
+     values ('33333333-3333-4333-8333-333333333333', 'Fondo de emergencia', 'savings_goal', gen_random_uuid(), 50000) $$,
+  'key_results acepta source_kind = savings_goal (migración 0035)'
+);
+
+-- Y el check sigue cerrado: la lista es de seis valores, no "cualquier texto".
+select throws_ok(
+  $$ insert into public.key_results (goal_id, title, source_kind, source_id, target)
+     values ('33333333-3333-4333-8333-333333333333', 'Inventado', 'criptomoneda', gen_random_uuid(), 1) $$,
+  '23514',
+  null,
+  'key_results sigue rechazando un source_kind que no está en la lista'
 );
 
 -- El otro usuario no ve nada

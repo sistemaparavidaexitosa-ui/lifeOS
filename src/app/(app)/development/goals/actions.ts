@@ -60,7 +60,7 @@ export async function deletePersonalGoal(id: string) {
 
 const krSchema = z.object({
   title: z.string().min(1),
-  sourceKind: z.enum(["habit", "project", "book", "financial_goal", "manual"]),
+  sourceKind: z.enum(["habit", "project", "book", "financial_goal", "savings_goal", "manual"]),
   sourceId: z.string().uuid().optional().or(z.literal("")),
   target: z.coerce.number().min(0).default(0),
   manualCurrent: z.coerce.number().min(0).default(0),

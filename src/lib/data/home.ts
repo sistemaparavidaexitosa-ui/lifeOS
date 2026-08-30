@@ -4,10 +4,10 @@ import { accountBalance, periodStats } from "@/lib/domain/money.ts";
 import { saturationStatus, occupationAppliesOn } from "@/lib/domain/time.ts";
 import { effectiveStatus } from "@/lib/domain/task-state.ts";
 import { budgetTabRow } from "@/lib/domain/budget.ts";
-import { myTasks, myAssigneeNames, tasksAssignedTo } from "@/lib/domain/task-ownership.ts";
+import { loadMyTasks } from "./tasks";
+import { dueReminders, type ReminderLike } from "@/lib/domain/execution/reminders.ts";
 import { todayLocal, addDaysISO } from "./dates";
 import { getUserTimeZone } from "./profile";
-import type { TaskStatus } from "@/lib/domain/types.ts";
 
 /**
  * Agrega TODA la información real de Home en una sola pasada — todo viene de
@@ -25,9 +25,10 @@ import type { TaskStatus } from "@/lib/domain/types.ts";
  * mostraría ocupaciones de OTROS días como si fueran de hoy.
  *
  * FIX (acceso por espacio de trabajo, migración 0031): las tareas ya no se
- * piden por dueño del proyecto. Ver la nota junto a `myProjectIds` más abajo:
- * con los espacios compartidos, "tuyo" dejó de ser sinónimo de "de un proyecto
- * que creaste".
+ * piden por dueño del proyecto — con los espacios compartidos, "tuyo" dejó de
+ * ser sinónimo de "de un proyecto que creaste". Quién decide eso ahora es
+ * `loadMyTasks` (data/tasks.ts), que el motor de recomendaciones también usa
+ * para no inventarse una segunda definición.
  */
 export async function getHomeData(userId: string) {
   const supabase = await createClient();
@@ -39,30 +40,24 @@ export async function getHomeData(userId: string) {
   const [
     { data: profile },
     { data: dailyPlan },
-    { data: tasks },
-    { data: projects },
-    { data: assignees },
-    { data: memberships },
+    allTasks,
     { data: accounts },
     { data: journalEntries },
     { data: budgets },
     { data: occupations },
+    { data: reminderRows },
     { data: currentBook }
   ] = await Promise.all([
     supabase.from("profiles").select("*").eq("user_id", userId).single(),
     supabase.from("daily_plans").select("*").eq("user_id", userId).eq("local_date", t0).maybeSingle(),
-    // Sin filtro: RLS ya decide qué tareas puede ver este usuario. Quién es su
-    // DUEÑO se decide abajo, y solo se piden las columnas que Home pinta.
-    supabase.from("tasks").select("id, title, status, due, est, impact, project_id"),
-    supabase.from("projects").select("id, owner_id"),
-    supabase.from("task_assignees").select("task_id, user_name"),
-    // Solo devuelve las filas propias del usuario (política SELECT de 0012),
-    // que es justo lo que hace falta: cómo se llama uno en cada espacio.
-    supabase.from("memberships").select("user_name"),
+    loadMyTasks(userId),
     supabase.from("accounts").select("*").eq("user_id", userId),
     supabase.from("journal_entries").select("*, journal_lines(*)").eq("user_id", userId).gte("entry_date", from15),
     supabase.from("budgets").select("*").eq("user_id", userId).eq("period", "current"),
     supabase.from("occupations").select("*").eq("user_id", userId),
+    // Pendientes y ya vencidos. El corte por fecha se hace en el dominio: aquí
+    // solo se descartan los hechos, que no vuelven nunca.
+    supabase.from("reminders").select("*").eq("user_id", userId).eq("done", false).order("remind_on"),
     supabase
       .from("books")
       .select("*")
@@ -96,31 +91,8 @@ export async function getHomeData(userId: string) {
   );
   const budgetRemaining = budgetRows.reduce((sum, r) => sum + Math.max(0, r.balance), 0);
 
-  // QUÉ TAREAS SON "MI DÍA".
-  //
-  // Antes esta consulta filtraba `projects.owner_id = userId`. Desde la
-  // migración 0031 el acceso a un proyecto se da por MEMBRESÍA del espacio, no
-  // por propiedad, así que una tarea tuya en un proyecto de un compañero se
-  // veía en /execution y era invisible aquí. Peor que invisible: sus minutos no
-  // entraban en `impactMinutes`, y el widget "Tu tiempo hoy" te decía que
-  // tenías hueco cuando ya no lo tenías.
-  //
-  // La regla —unión de proyectos propios y tareas asignadas— vive en
-  // domain/task-ownership.ts, no aquí: es la parte que puede equivocarse, y allí
-  // se prueba sin base de datos.
-  const myNames = myAssigneeNames(
-    (memberships ?? []).map((m) => m.user_name),
-    profile.name
-  );
-  const allTasks = myTasks(
-    (tasks ?? []).map((t) => ({ ...t, projectId: t.project_id })),
-    {
-      myProjectIds: new Set((projects ?? []).filter((p) => p.owner_id === userId).map((p) => p.id)),
-      assignedToMe: tasksAssignedTo(assignees ?? [], myNames)
-    }
-  );
   const impactTasks = allTasks.filter((t) => t.impact && t.status !== "Completed" && t.status !== "Cancelled").slice(0, 3);
-  const overdueCount = allTasks.filter((t) => effectiveStatus({ status: t.status as TaskStatus, due: t.due }, t0) === "Overdue").length;
+  const overdueCount = allTasks.filter((t) => effectiveStatus({ status: t.status, due: t.due }, t0) === "Overdue").length;
   const openCount = allTasks.filter((t) => t.status !== "Completed" && t.status !== "Cancelled").length;
 
   const impactMinutes = allTasks
@@ -134,6 +106,28 @@ export async function getHomeData(userId: string) {
   const todayOccupations = (occupations ?? [])
     .filter((o) => occupationAppliesOn({ recurring: o.recurring, occDate: o.occ_date, days: o.days }, t0))
     .map((o) => ({ id: o.id, title: o.title, start: o.start_time.slice(0, 5), end: o.end_time.slice(0, 5) }));
+
+  // Los VENCIDOS también entran: un recordatorio que se quedó atrás porque no
+  // abriste la app el martes no puede desaparecer en silencio — es justo lo que
+  // un recordatorio promete no hacer.
+  const reminders = dueReminders(
+    (reminderRows ?? []).map(
+      (r): ReminderLike => ({
+        id: r.id,
+        subjectType: r.subject_type as "task" | "comment",
+        subjectId: r.subject_id,
+        text: r.text,
+        remindOnISO: r.remind_on,
+        done: r.done
+      })
+    ),
+    t0
+  );
+
+  // El título de la tarea a la que apuntan, para que el recordatorio diga de
+  // qué va. Los que apuntan a un comentario se resuelven por su tarea.
+  const reminderTaskIds = reminders.filter((r) => r.subjectType === "task").map((r) => r.subjectId);
+  const titleById = new Map(allTasks.filter((t) => reminderTaskIds.includes(t.id)).map((t) => [t.id, t.title]));
 
   const saturation = saturationStatus(
     { start: profile.activity_window_start.slice(0, 5), end: profile.activity_window_end.slice(0, 5) },
@@ -151,6 +145,8 @@ export async function getHomeData(userId: string) {
     periodStats: stats,
     budgetRemaining,
     saturation,
+    reminders: reminders.map((r) => ({ ...r, subjectTitle: titleById.get(r.subjectId) ?? null })),
+    todayISO: t0,
     currentBook
   };
 }

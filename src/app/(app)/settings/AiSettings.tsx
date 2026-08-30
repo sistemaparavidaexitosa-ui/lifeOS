@@ -2,14 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { clearAiHistory, clearMemory, setAiDomains } from "@/lib/insights/actions";
+import { DOMAIN_LABEL, type Domain } from "@/lib/domain/insights/types.ts";
 
-const DOMAINS: [string, string][] = [
-  ["money", "Dinero"],
-  ["debt", "Deudas"],
-  ["habits", "Hábitos"],
-  ["time", "Tiempo"],
-  ["execution", "Proyectos y tareas"]
-];
+// El orden de la lista, no los nombres: esos son los mismos que usa el motor
+// para explicar por qué un análisis no salió (DOMAIN_LABEL). Escribirlos aquí
+// otra vez es garantizar que un día digan cosas distintas.
+const DOMAINS: Domain[] = ["money", "debt", "time", "execution", "habits"];
 
 /**
  * Opt-in por dominio (§4.2) y los dos borrados del §4.4.
@@ -29,15 +27,10 @@ export default function AiSettings({ enabled }: { enabled: string[] }) {
           Solo los dominios que marques envían sus hechos al modelo, y solo cuando pulses «Analizar». Lo que viaja son
           cifras ya calculadas, en texto, con los nombres de cuentas y personas sustituidos por alias.
         </p>
-        {DOMAINS.map(([value, label]) => (
+        {DOMAINS.map((value) => (
           <label key={value} className="flex items-center gap-2 text-sm">
             <input type="checkbox" name={`domain.${value}`} defaultChecked={enabled.includes(value)} />
-            {label}
-            {value !== "money" && (
-              <span className="text-xs" style={{ color: "var(--muted)" }}>
-                (aún sin extractor: llega en la siguiente fase)
-              </span>
-            )}
+            {DOMAIN_LABEL[value]}
           </label>
         ))}
         <div>

@@ -5,6 +5,8 @@ import { Card, Chip, Stat, Progress, EmptyState } from "@/components/ui";
 import { money0, fdate } from "@/lib/format";
 import { greetingFor, hourInTimeZone, todayInTimeZone } from "@/lib/domain/datetime.ts";
 import { getSessionUser } from "@/lib/data/session";
+import RemindersCard from "./RemindersCard";
+import InsightSection from "@/components/InsightSection";
 
 export default async function HomePage() {
   const user = await getSessionUser();
@@ -134,6 +136,18 @@ export default async function HomePage() {
         </Card>
       )}
 
+      {data.reminders.length > 0 && (
+        <Card>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-bold">Te pediste recordar</h3>
+            <Chip kind={data.reminders.some((r) => r.remindOnISO < data.todayISO) ? "bad" : undefined}>
+              {data.reminders.length}
+            </Chip>
+          </div>
+          <RemindersCard reminders={data.reminders} todayISO={data.todayISO} />
+        </Card>
+      )}
+
       <Card>
         <div className="flex items-center justify-between mb-2">
           <h3 className="font-bold">Tres tareas de impacto</h3>
@@ -158,6 +172,12 @@ export default async function HomePage() {
           ))
         )}
       </Card>
+
+      {/* El ámbito `global` es el único que cruza los cinco dominios, y Home es
+          la única pantalla que no es de ninguno en particular. Es donde una
+          recomendación puede decir algo que ninguna otra puede: que la agenda
+          está llena justo la semana en que vence la tarjeta cara. */}
+      <InsightSection scope="global" />
     </div>
   );
 }

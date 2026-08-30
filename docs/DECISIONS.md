@@ -604,6 +604,281 @@
   /money, pero la memoria solo se alcanzaba a través de la bandeja, y una
   pantalla que depende de pasar por Dinero es una pantalla perdida.
 
+- **D-050 El motor pasa de un dominio a cuatro, y se queda a las puertas del
+  quinto a propósito.** `allowedDomains()` contemplaba cinco ámbitos desde el
+  primer día y `analyze()` rechazaba todo lo que no fuera Dinero: la
+  infraestructura cara —privacidad, seudonimización, anclaje, memoria,
+  historial de rechazos— ya estaba construida y probada, y lo único que faltaba
+  eran los extractores. Ahora hay cuatro: `money`, `time`, `execution` y
+  `habits`.
+
+  `debt` sigue sin extractor, y `global` está deshabilitado POR ESO. Global
+  incluye los cinco dominios, así que hoy daría un análisis que se presenta como
+  la foto completa habiendo mirado cuatro quintas partes. El motor puede decir
+  "no tengo datos de X" cuando el usuario lo apagó —esa es una decisión suya, y
+  `skippedDomains` ya la comunica— pero no puede callar que un dominio entero no
+  existe todavía.
+
+  QUÉ CUENTA COMO HECHO, Y QUÉ NO
+
+  La regla de los tres extractores nuevos es la misma que ya seguía money: pocos
+  hechos buenos. Lo vencido va en UN hecho con el recuento y la más antigua, no
+  en quince; los hábitos sin ancla van en uno agregado y solo si son mayoría.
+  Quince hechos del mismo tipo llenan el tope de contexto (MAX_FACTS = 40) y
+  expulsan a los otros dominios, que es justo lo contrario de para qué se
+  amplió el motor.
+
+  Los umbrales están escogidos contra el falso positivo, no contra el falso
+  negativo, porque un motor así se muere de decir obviedades: un proyecto que
+  nunca completó nada no está estancado (no ha empezado); una rutina que nunca
+  se ejecutó no está abandonada; un hábito creado el jueves no lleva 2 de 30; y
+  una racha se mira desde AYER, no desde hoy, porque avisar a las nueve de la
+  mañana de que rompiste algo que todavía puedes cumplir es la forma más rápida
+  de que el usuario deje de creerle.
+
+  Ningún extractor reimplementa un cálculo que ya exista: `saturationStatus` y
+  `availableSlots` vienen de domain/time.ts, `isOverdue` de task-state.ts,
+  `habitStreak` de habits.ts. Si el motor tuviera su propia aritmética, diría
+  "llevas 12 días" mientras la pantalla dice 11, y el usuario creería a la
+  pantalla — con razón.
+
+  EL CORTE ES ANTES DE LEER, NO DESPUÉS
+
+  `analyze()` comprueba el opt-in ANTES de cargar los datos del dominio.
+  `buildContext` volvería a filtrar de todas formas, pero para entonces las
+  cifras ya se habrían leído. Con un opt-in, no preguntar es parte de la
+  promesa.
+
+  UNA SOLA DEFINICIÓN DE "MI TAREA"
+
+  Los hechos de tiempo y ejecución usan `loadMyTasks` (data/tasks.ts), el mismo
+  cargador que Home. No es comodidad: con un criterio propio, el motor acabaría
+  diciéndome que voy saturado por el trabajo de un compañero. Por lo mismo, los
+  hechos de proyecto solo miran proyectos donde tengo tareas — avisar de que el
+  proyecto de otro lleva tres semanas parado no es una recomendación, es un
+  chisme.
+
+  DÓNDE SE PIDE CADA ANÁLISIS
+
+  El panel se embebe en la pantalla del ámbito —/money, /time, /execution y
+  /development— y no en una bandeja central, que es la misma razón por la que
+  Intelligence OS salió del menú (D-049): un hallazgo sobre tu agenda se
+  entiende mirando tu agenda.
+
+  El de ejecución va en la CARTERA y no dentro del tablero de un proyecto,
+  porque lo que mira es transversal: lo vencido de todo, los proyectos
+  estancados, lo que ya se puede empezar. Y va tras un límite de `Suspense` por
+  el mismo motivo que TeamSection: su consulta no puede retrasar la lista de
+  proyectos.
+
+  La carga de las recomendaciones vivas es un Server Component
+  (`InsightSection`) y no un bloque copiado en cada página. Con cuatro copias,
+  cambiar una columna de `recommendations` sería cuatro sitios donde arreglarlo
+  y tres donde olvidarlo. De paso deja de bloquear: en /money la consulta era
+  secuencial y retrasaba el resto del dashboard.
+
+- **D-051 Un ahorro también puede sostener una meta personal, y la cadena de
+  ternarios se vuelve exhaustiva.** `key_results` conocía cuatro fuentes desde
+  0024 —hábito, proyecto, libro y meta financiera— y dejaba Ahorros fuera sin
+  ninguna razón de diseño: `savings_goals` es hermana de `financial_goals`
+  (mismo `current_amount`, mismo `target`), y una meta del tipo "juntar el fondo
+  de emergencia" no se podía medir contra el ahorro que existe exactamente para
+  eso. Había que elegir entre una fuente equivocada o capturar el progreso a
+  mano, que es lo que este módulo existe para evitar.
+
+  Al añadir la quinta fuente se cambió también CÓMO se elige la tabla. Era una
+  cadena de ternarios con un `else` al final, y ese `else` es una trampa: una
+  fuente nueva sin su rama no daba error, caía en `financialGoalAmount` y el
+  resultado clave mostraba el número de otra cosa. Ahora es un `Record`
+  exhaustivo sobre `Exclude<KeyResultSourceKind, "manual">`, así que olvidar una
+  rama no compila. Hay una prueba que lo fija: un ahorro y una meta financiera
+  con el mismo id devuelven números distintos.
+
+  El `check` de la base se prueba en pgTAP y no solo en el dominio, porque es
+  ahí donde está la garantía: si alguien amplía el enum de TypeScript y olvida
+  la migración, el dominio compila y el `insert` revienta en producción.
+
+- **D-052 Se borra `milestones`; `folders` y `automations` se quedan, y conviene
+  decir por qué.** `milestones` la creó 0003 con sus políticas y sus grants, y
+  desde entonces ninguna línea de `src/` la nombra. Lo único que quedaba de ella
+  eran treinta y dos líneas en `database.types.ts` — la peor clase de tabla, la
+  que se lee en el esquema, se supone en uso y no lo está. Los hitos acabaron
+  siendo tareas con `impact` y `due` dentro del tablero, donde el usuario ya
+  trabaja; una tabla aparte obligaba a mantener dos listas del mismo proyecto
+  sincronizadas a mano. Se fue sin nada que perder: cero filas y cero claves
+  foráneas apuntándole.
+
+  Las otras dos NO son lo mismo, y la distinción importa porque "limpiar
+  esquema muerto" es justo la clase de tarea que se hace sin mirar:
+
+  - `folders` (0019) tiene cuatro políticas RLS, dos índices, la columna
+    `projects.folder_id` apuntándole y cuatro aserciones pgTAP que pasan. Es una
+    agrupación de tableros construida y probada a la espera de interfaz —
+    estructuralmente, la misma situación en la que estaban los extractores del
+    motor antes de D-050, y a aquellos se les terminó el trabajo en vez de
+    borrarlos.
+  - `automations` / `automation_runs` (0008) son la mitad no construida de
+    Intelligence OS: el paso de recomendar a proponer una acción con
+    confirmación explícita. Mientras esa decisión de producto siga abierta, se
+    quedan.
+
+- **D-053 El quinto extractor cierra el motor, y `global` deja de estar
+  bloqueado.** Deudas era el dominio que faltaba, y con él se levanta la
+  restricción de D-050: `global` ya no calla ningún dominio, así que puede
+  ofrecerse. Su panel vive en Home, que es la única pantalla que no pertenece a
+  ningún módulo — donde una recomendación puede decir lo que ninguna otra
+  puede, porque es la única que ve la agenda y la tarjeta a la vez.
+
+  EL HECHO QUE JUSTIFICA EL MÓDULO ENTERO
+
+  Que el pago mínimo no cubra ni los intereses. No es que la deuda tarde: es
+  que CRECE. Nadie lo ve mirando /debt, porque ahí el interés mensual y el pago
+  mínimo son dos números en dos recuadros distintos y la resta hay que hacerla
+  de cabeza. Pesa 1 siempre, sin escala.
+
+  Se separa del hecho de horizonte a propósito: `simulateSingleDebt` tiene un
+  tope de 600 meses, así que este caso saldría por ahí como "tarda 600 meses",
+  que es una manera pésima de decir "nunca" — suena a mucho tiempo, no a
+  imposible.
+
+  LO QUE EL EXTRACTOR NO HACE, Y POR QUÉ
+
+  No compara métodos de pago (avalancha, bola de nieve, cash flow). El orden
+  entre deudas solo cambia algo cuando hay dinero EXTRA que repartir —con solo
+  los mínimos, `runSimulation` da el mismo resultado con cualquier orden— y
+  cuánto extra puede poner el usuario no está en ninguna tabla. Inventar una
+  cifra para que la comparación tuviera gracia es exactamente lo que el motor
+  tiene prohibido. Esa comparación ya vive en el simulador de /debt, donde el
+  usuario pone su propio número.
+
+  EL SILENCIO DE UNA DEUDA SE MIRA SOLO SI ANTES HUBO RUIDO
+
+  "No registra pagos desde hace X" solo se reporta si esa deuda tuvo algún pago
+  ligado alguna vez. Quien paga por fuera y no lo anota no tiene un problema de
+  deuda, tiene otra manera de llevar sus cuentas, y avisarle cada vez es la
+  forma de que deje de leer las recomendaciones. Mismo criterio que el proyecto
+  que nunca completó nada y la rutina que nunca se ejecutó: sin un antes, no hay
+  nada que haya cambiado. Y el hecho dice las dos lecturas —no se pagó, o no se
+  anotó— porque desde aquí no se pueden distinguir.
+
+- **D-054 Una mención se resuelve contra el ROSTER, no contra un regex.** El
+  parseo vivía suelto en la Server Action: `body.match(/@([\wÀ-ÿ]+)/g)`. Corta
+  en el primer espacio, así que a «@Luis Varsa» le guardaba «Luis» — un nombre
+  que no es de nadie. Mientras nadie recibiera un aviso eso no rompía nada
+  visible; en cuanto hay bandeja, entrega el aviso a quien se llame parecido.
+
+  La solución no es un regex mejor: es dejar de adivinar. La interfaz ofrece el
+  roster del espacio (`list_workspace_members`, que ya alimentaba el selector de
+  responsables), el usuario elige de una lista, y `domain/execution/mentions.ts`
+  casa el texto contra nombres CONOCIDOS. Un nombre que no está en el roster no
+  produce mención.
+
+  Se prueban de más largo a más corto, por la misma razón que `pseudonymize`
+  ordena así sus alias en el motor: con «Ana» y «Ana María» en el mismo espacio,
+  empezar por el corto casaría «@Ana María» como «Ana». Y el `@` tiene que ABRIR
+  palabra — eso lo destapó una prueba, porque `mentionQueryAt` lo comprobaba y
+  `parseMentions` no: en «luis@Ana.com» ese arroba es un correo. Es la clase de
+  divergencia que aparece siempre que la misma regla se escribe dos veces.
+
+  `mentions` (nombres) se conserva junto a `mentioned_user_ids`. Del texto
+  «Luis» no sale un uuid, así que el histórico ya escrito no se puede
+  reconstruir: perderlo sería peor que convivir con dos columnas.
+
+- **D-055 Lo leído es de quien lee, y por eso NO se usa `comments.read`.** Esa
+  columna existe desde 0003 y nunca se ha escrito. No es un olvido: es UN
+  booleano en la fila del comentario, así que el primero que lo marcara lo
+  marcaría para todos — en un comentario que menciona a tres personas, eso es
+  sencillamente falso.
+
+  Y hay una segunda razón, de seguridad: escribirla exigiría una política UPDATE
+  sobre `comments`, y una política UPDATE que permita marcar leído permite
+  también reescribir el `body`. El aviso de una mención no puede costar el
+  derecho a editar el comentario de otro. Lo leído vive en `comment_reads`, con
+  clave primaria compuesta (marcar dos veces es idempotente desde el servidor) y
+  RLS por `auth.uid()`. `comments.read` se queda sin uso; quitarla es una
+  decisión aparte.
+
+- **D-056 Los comentarios y el historial son UN hilo.** Se pintaban en dos
+  tarjetas apiladas —toda la conversación, y debajo toda la cronología— con dos
+  relojes que además iban en sentidos opuestos: los comentarios ascendentes y el
+  historial descendente. Para saber si un comentario se escribió antes o después
+  de que la tarea se bloqueara había que cruzar dos listas a ojo.
+
+  Un cambio de estado es lo que en un chat serían los mensajitos grises de
+  sistema: no es ruido, es lo que explica por qué el comentario siguiente dice
+  lo que dice. `mergeThread` (domain/execution/thread.ts) los ordena en una sola
+  corriente ascendente, y desempata por id — al completar una tarea desde el
+  propio hilo, el comentario y la transición se escriben en la misma operación y
+  pueden compartir marca al milisegundo; sin segundo criterio, el orden entre
+  ambos cambiaría entre recargas de la misma pantalla.
+
+- **D-057 El feed del espacio deja de ser una tabla de solo escritura.**
+  `workspace_activity` existe desde 0003: cuatro Server Actions insertaban en
+  ella y ninguna pantalla la leía. Todo lo registrado desde entonces estaba ahí,
+  invisible.
+
+  Vive en `/activity`, como PESTAÑA del espacio junto a Proyectos y Notebooks, no
+  como entrada del menú lateral: es lo que ha pasado DENTRO de este espacio, no
+  un módulo aparte. Mismo criterio que llevó a los cuadernos a esa barra.
+
+  El corte por día se hace sobre la fecha LOCAL y no sobre el prefijo del ISO:
+  un comentario de las 19:00 en Ciudad de México se guarda como la 01:00 UTC del
+  día siguiente y aparecería bajo «mañana». Es el mismo error que la migración
+  0016 arregló en las ocupaciones. Y un `type` desconocido se muestra tal cual:
+  la columna es texto libre en el esquema, así que esconderlo tras un «Otro»
+  borraría la única pista de qué pasó.
+
+- **D-058 El ✅ completa la tarea, y no puede saltarse ninguna regla.** Reaccionar
+  con ✅ intenta una transición a Completed de verdad, y pasa por
+  `evaluateTransition` como cualquier otro camino: el selector de estado, el
+  Kanban y el arrastre del tablero. No hay validación nueva — la máquina de
+  estados que ya existía protege también esto. Comprobado contra la app real:
+  con una dependencia abierta devuelve «Faltan dependencias» y la tarea se
+  queda como estaba; cerrada la dependencia, la completa y deja fila en
+  `task_history`.
+
+  Cuando la transición se rechaza, la reacción SE QUEDA PUESTA. El usuario
+  expresó algo —«esto ya está»— que sigue siendo cierto; lo que falla es
+  cerrarla. Deshacer las dos cosas escondería el motivo real y parecería que el
+  clic no llegó.
+
+  Y quitar el ✅ no reabre la tarea. Reabrir es una decisión con consecuencias,
+  no la retirada de un gesto: para eso está el selector de estado, con su
+  nombre.
+
+- **D-059 Una reacción es (comentario, persona, emoji), y esa es toda la regla.**
+  `comment_reactions` no tiene `id` propio: la clave primaria compuesta ES la
+  unicidad. Con un id suelto habría que comprobar antes de insertar, y dos clics
+  rápidos crearían dos filas — el contador diría 2 con una sola persona detrás.
+  Por lo mismo, la acción borra SIEMPRE antes de insertar: así es idempotente
+  sin depender de que el cliente sepa el estado actual, que con dos pestañas
+  abiertas no tiene por qué.
+
+  El orden de los botones es el de la paleta, no el de llegada. Si dependiera de
+  quién reaccionó primero, los botones bailarían de sitio entre recargas y
+  pulsar el de al lado sería cuestión de suerte.
+
+- **D-060 Fijar copia el texto, no lo referencia.** La bitácora es el registro
+  de lo que se decidió, y tiene que seguir diciéndolo aunque el comentario se
+  borre después. Se le añade de dónde salió —autor y tarea— porque sin el
+  contexto media bitácora acaba siendo frases sueltas que nadie sabe a qué
+  respondían.
+
+- **D-061 Un recordatorio es una FECHA que Home mira, no una alarma.** No hay
+  ningún proceso que despierte a nadie, así que `reminders.remind_on` es `date`
+  y no `timestamptz`: prometer una hora exacta sería prometer algo que no
+  existe. El día se decide en la zona del perfil (D-016/D-018) — con UTC, un
+  «mañana» pedido esta tarde en México caería pasado mañana.
+
+  Los VENCIDOS siguen apareciendo, no solo los de hoy. Un recordatorio que se
+  quedó atrás porque no abriste la app el martes no puede desaparecer en
+  silencio: es exactamente lo que un recordatorio promete no hacer.
+
+  Tres plazos y no siete: la gracia de un recordatorio rápido es no tener que
+  pensar la fecha. «La próxima semana» son 7 días y no «el lunes que viene» —
+  un lunes fijo amontona en un solo día todo lo que se aplaza durante la semana,
+  y obliga a decidir qué pasa cuando hoy ya es lunes.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo

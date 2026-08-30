@@ -29,3 +29,16 @@ export function clampWeight(value: number): number {
   if (Number.isNaN(value)) return 0;
   return Math.max(0, Math.min(1, value));
 }
+
+/**
+ * Cómo se llama cada dominio en español. Vive aquí, junto al tipo, porque lo
+ * leen las dos orillas: la casilla de opt-in en Configuración y el mensaje que
+ * explica por qué un análisis no salió. Tenerlo dos veces es tenerlo mal una.
+ */
+export const DOMAIN_LABEL: Record<Domain, string> = {
+  money: "Dinero",
+  debt: "Deudas",
+  habits: "Hábitos",
+  time: "Tiempo",
+  execution: "Proyectos y tareas"
+};
