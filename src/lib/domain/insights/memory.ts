@@ -32,6 +32,9 @@ const SCOPE_RELEVANCE: Record<string, MemoryScope[]> = {
   habits: ["habit", "goal", "decision", "preference"],
   time: ["time", "decision", "preference"],
   execution: ["project", "goal", "decision", "preference"],
+  // La actividad del equipo se lee con las mismas reglas que los proyectos: un
+  // "no me avises de X" o un "este proyecto lo lleva otro" aplican igual aquí.
+  activity: ["project", "decision", "preference"],
   global: ["goal", "project", "finance", "decision", "preference", "time", "habit"]
 };
 

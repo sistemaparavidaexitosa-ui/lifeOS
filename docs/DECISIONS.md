@@ -934,6 +934,41 @@
   Comprobado con dos sesiones reales a la vez: quien tiene acceso recibe el
   evento y quien no, no recibe nada. Realtime aplica la RLS del suscriptor.
 
+- **D-066 `activity` es el sexto dominio del motor, y NO entra en `global`.**
+  Global es «tu vida» —tus cifras, tu agenda, tus hábitos—; esto es «la semana
+  de tu equipo». Son preguntas distintas, y mezclarlas metería la actividad de
+  otras personas dentro de un análisis que el usuario pidió sobre sí mismo.
+  Tiene su propio ámbito, su propia casilla de opt-in y su panel en /activity.
+
+  NINGÚN HECHO DE ESTE DOMINIO NOMBRA A UNA PERSONA, y es la decisión que
+  ordena todo el archivo. Los otros cinco extractores hablan de los datos del
+  propio usuario; este habla de lo que ha hecho su equipo, y ahí la
+  seudonimización del motor no alcanza: `buildAliasMap` cubre cuentas y
+  dependientes, no a los compañeros de espacio, y `workspace_activity.actor`
+  guarda un correo. Mandar correos o nombres de terceros al modelo para que
+  redacte «Ana lleva dos días sin contestarte» es una línea que no se cruza.
+
+  Así que los hechos cuentan y describen —cuántas menciones, qué proyecto
+  concentra el movimiento, cuántos días de silencio— y el usuario abre el hilo
+  para ver quién. Hay una prueba que recorre todos los hechos y falla si alguno
+  contiene un nombre.
+
+  El hecho que justifica el dominio es «te mencionaron y nadie escribió nada
+  después»: es distinto de «sin leer» —puede que ya lo hayas visto— y es el
+  único que señala una deuda con otra persona. Dos días de gracia, porque una
+  mención de esta mañana sin contestar no es un hallazgo, es una mañana normal.
+
+- **D-067 Un dominio nuevo no puede quedarse sin casilla.** Al añadir `activity`
+  apareció en `DOMAIN_LABEL` y `setAiDomains` empezó a leer `domain.activity`,
+  pero la lista de ORDEN de `AiSettings` estaba escrita a mano y se quedó atrás:
+  la casilla no se pintaba, así que el usuario no podía encender un dominio que
+  el servidor sí esperaba. Apagado para siempre, sin que nada fallara. Lo
+  destapó abrir Configuración en el navegador, no ninguna prueba.
+
+  Ahora la lista es la de orden MÁS las claves de `DOMAIN_LABEL` que falten, así
+  que un dominio olvidado aparece igual, al final. El orden es una preferencia;
+  que la casilla exista, no.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo
