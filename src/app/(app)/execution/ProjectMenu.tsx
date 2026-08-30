@@ -486,6 +486,40 @@ function ApplyTemplatePanel({
   const [templateId, setTemplateId] = useState("");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [hecho, setHecho] = useState<{ groups: number; tasks: number } | null>(null);
+
+  // El panel NO se cierra solo al terminar, y no es una preferencia de estilo.
+  //
+  // Cerrarlo desmonta este componente, que es el dueño del `useTransition` en
+  // el que corre la acción — y una transición cuyo componente desaparece se
+  // abandona, así que el árbol nuevo que el servidor ya había devuelto nunca se
+  // aplicaba. El tablero se quedaba igual y había que salir del proyecto y
+  // volver a entrar. (MoveProjectPanel no lo sufre porque su `router.replace`
+  // es una navegación de verdad, que no depende de esta transición.)
+  //
+  // De paso resuelve algo que faltaba: al terminar se dice QUÉ se creó. Antes
+  // el panel se desvanecía y no había forma de saber si había pasado algo.
+  if (hecho) {
+    return (
+      <div className="flex flex-col gap-3">
+        <div
+          className="text-sm"
+          style={{
+            background: "color-mix(in srgb, var(--c-green) 12%, var(--surface))",
+            borderLeft: "3px solid var(--c-green)",
+            borderRadius: "0 10px 10px 0",
+            padding: "10px 12px"
+          }}
+        >
+          Se añadieron <b>{hecho.groups}</b> grupo{hecho.groups === 1 ? "" : "s"} y <b>{hecho.tasks}</b> tarea
+          {hecho.tasks === 1 ? "" : "s"} al final del tablero.
+        </div>
+        <button className="btn-primary btn-sm" onClick={onDone}>
+          Ver el tablero
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-2">
@@ -530,8 +564,15 @@ function ApplyTemplatePanel({
               setError(result.reason ?? "No se pudo aplicar la plantilla.");
               return;
             }
-            onDone();
+            // La MISMA pareja que usa MoveProjectPanel unas líneas más arriba,
+            // que es la que en esta pantalla está demostrado que repinta: el
+            // `replace` a la misma URL fuerza una navegación de verdad, y el
+            // `refresh` trae el árbol nuevo saltándose la caché del router.
+            // Con `refresh` a secas el tablero se quedaba igual y había que
+            // salir del proyecto y volver a entrar.
+            router.replace(`/execution?project=${projectId}`);
             router.refresh();
+            setHecho(result.created ?? { groups: 0, tasks: 0 });
           })
         }
       >
