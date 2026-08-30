@@ -17,6 +17,8 @@
     "gen:types": "supabase gen types typescript --linked > src/types/database.types.ts",
     "gen:types:local": "supabase gen types typescript --local > src/types/database.types.ts",
     "db:reset": "supabase db reset",
+    "db:push": "supabase db push",
+    "migrar": "supabase db push",
     "db:test": "supabase test db",
     "verify": "pnpm install --frozen-lockfile && pnpm typecheck && pnpm lint && pnpm test:unit && pnpm build && supabase db reset && supabase db test"
   },
