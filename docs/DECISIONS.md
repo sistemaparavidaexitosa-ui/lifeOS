@@ -879,6 +879,221 @@
   un lunes fijo amontona en un solo día todo lo que se aplaza durante la semana,
   y obliga a decidir qué pasa cuando hoy ya es lunes.
 
+- **D-062 La búsqueda es UNA consulta sobre cinco fuentes, no cinco consultas.**
+  `search_workspace` une proyectos, tareas, comentarios, notas y actividad en un
+  solo `union all`. Podrían ser cinco llamadas desde la app, pero entonces el
+  ordenado por relevancia se haría en el cliente sobre cinco listas YA
+  recortadas, y el resultado nº 1 dependería de en qué tabla vivía. Los filtros
+  también van dentro, por lo mismo.
+
+  Como `search_notes` (0032), NO es `security definer`: la RLS se aplica dentro.
+  Hay una prueba pgTAP que llama al RPC con el uuid del espacio desde una cuenta
+  ajena y comprueba que no devuelve nada.
+
+  `tipo:` en vez del `en:` que decía el plan. `en:` filtraba por el nombre del
+  contenedor, y dentro de un espacio ya acotado eso responde a una pregunta que
+  casi nadie se hace; lo que sí se pregunta al buscar es «esto era una tarea o
+  un comentario». Un filtro que no se entiende se DICE en la interfaz en vez de
+  ignorarse, y una palabra con dos puntos que no sea una clave conocida se busca
+  como texto: «13:30» tiene que poder buscarse.
+
+- **D-063 CORRECCIÓN: el índice en español NO garantiza insensibilidad a los
+  acentos.** El comentario de 0032 afirma que «buscar "direccion" encuentra
+  "dirección"», y en ese caso es cierto — pero no es una regla, es una
+  casualidad del stemmer. «dirección» y «direccion» se reducen ambos a
+  `direccion`, mientras que «almacén» da `almacen` y «almacen» da `almac`, que
+  no casan. Lo destapó una prueba pgTAP escrita para afirmarlo.
+
+  No se cambia nada todavía: conseguirlo de verdad pide la extensión `unaccent`
+  y una configuración de texto propia, y eso obliga a regenerar `notes.search`
+  además de las cuatro columnas nuevas. Queda dicho aquí y en la prueba para que
+  nadie vuelva a darlo por hecho.
+
+- **D-064 La paleta crea la tarea REUSANDO `createTask`, no insertando.** Esa
+  acción hace cosas que desde fuera no se ven: asigna el grupo del tablero,
+  escribe la posición y deja la primera fila de `task_history`. Un `insert`
+  propio habría creado tareas de segunda categoría, indistinguibles hasta que
+  algo fallara semanas después.
+
+  El proyecto es el primero del espacio, sin preguntar: el sentido de la paleta
+  es apuntar algo en dos segundos, y el usuario aterriza en el drawer de la
+  tarea recién creada, donde puede moverla.
+
+- **D-065 El realtime avisa, no trae el dato.** La suscripción solo dispara el
+  mismo `onSaved()` que ya se usa tras una acción propia, y este vuelve a pedir
+  el hilo entero por el camino de siempre. Reconstruir el estado desde el
+  payload del evento significaría mantener DOS maneras de armar el mismo hilo, y
+  la del evento no tiene ni el nombre del autor ni el roster para pintar las
+  menciones.
+
+  Solo se publican `comments` y `comment_reactions`. Cada tabla publicada es
+  tráfico que sale en cada escritura: publicar `tasks` haría que cualquier
+  movimiento del tablero se emitiera a todo el mundo, y esa es una decisión
+  aparte.
+
+  Comprobado con dos sesiones reales a la vez: quien tiene acceso recibe el
+  evento y quien no, no recibe nada. Realtime aplica la RLS del suscriptor.
+
+- **D-066 `activity` es el sexto dominio del motor, y NO entra en `global`.**
+  Global es «tu vida» —tus cifras, tu agenda, tus hábitos—; esto es «la semana
+  de tu equipo». Son preguntas distintas, y mezclarlas metería la actividad de
+  otras personas dentro de un análisis que el usuario pidió sobre sí mismo.
+  Tiene su propio ámbito, su propia casilla de opt-in y su panel en /activity.
+
+  NINGÚN HECHO DE ESTE DOMINIO NOMBRA A UNA PERSONA, y es la decisión que
+  ordena todo el archivo. Los otros cinco extractores hablan de los datos del
+  propio usuario; este habla de lo que ha hecho su equipo, y ahí la
+  seudonimización del motor no alcanza: `buildAliasMap` cubre cuentas y
+  dependientes, no a los compañeros de espacio, y `workspace_activity.actor`
+  guarda un correo. Mandar correos o nombres de terceros al modelo para que
+  redacte «Ana lleva dos días sin contestarte» es una línea que no se cruza.
+
+  Así que los hechos cuentan y describen —cuántas menciones, qué proyecto
+  concentra el movimiento, cuántos días de silencio— y el usuario abre el hilo
+  para ver quién. Hay una prueba que recorre todos los hechos y falla si alguno
+  contiene un nombre.
+
+  El hecho que justifica el dominio es «te mencionaron y nadie escribió nada
+  después»: es distinto de «sin leer» —puede que ya lo hayas visto— y es el
+  único que señala una deuda con otra persona. Dos días de gracia, porque una
+  mención de esta mañana sin contestar no es un hallazgo, es una mañana normal.
+
+- **D-067 Un dominio nuevo no puede quedarse sin casilla.** Al añadir `activity`
+  apareció en `DOMAIN_LABEL` y `setAiDomains` empezó a leer `domain.activity`,
+  pero la lista de ORDEN de `AiSettings` estaba escrita a mano y se quedó atrás:
+  la casilla no se pintaba, así que el usuario no podía encender un dominio que
+  el servidor sí esperaba. Apagado para siempre, sin que nada fallara. Lo
+  destapó abrir Configuración en el navegador, no ninguna prueba.
+
+  Ahora la lista es la de orden MÁS las claves de `DOMAIN_LABEL` que falten, así
+  que un dominio olvidado aparece igual, al final. El orden es una preferencia;
+  que la casilla exista, no.
+
+- **D-068 Las automatizaciones se TIPAN; no se interpretan.** `automations`
+  llevaba desde 0008 con `trigger_text`, `condition_text` y `action_text`: tres
+  campos de texto libre. Eso no es una automatización, es la descripción de una,
+  y nada podía ejecutarla — para correr «cuando cierre una tarea, anótalo en la
+  bitácora» hay que saber qué es «cerrar» y qué es «anotar».
+
+  La otra salida era que el modelo interpretara la frase, y va contra la regla
+  que sostiene Intelligence OS: el modelo no calcula ni decide, recibe hechos ya
+  calculados y los redacta. Una automatización que dispara según lo que un
+  modelo entendió del texto de ayer no es reproducible, y aquí ejecuta acciones
+  reales sobre los datos del usuario. Así que disparador y acción son enums con
+  parámetros en `jsonb`, acotados por `check`. Las columnas de texto se borran:
+  la tabla estaba vacía y dejarlas invitaría a escribir en ellas.
+
+  NO HAY DISPARADORES POR TIEMPO, y no es un recorte de alcance: no existe
+  ningún proceso que despierte a nadie. Ofrecer «cada lunes a las 9» sería
+  prometer algo que no ocurre — el mismo motivo por el que `reminders.remind_on`
+  es `date` y no una alarma (D-061).
+
+- **D-069 La barrera contra los bucles es estructural, y aun así hay una
+  segunda.** `dispatch.ts` ejecuta las acciones DIRECTAMENTE contra la base, no
+  llamando a las Server Actions que a su vez despachan: una automatización no
+  puede provocar una segunda ronda porque no hay ninguna ronda que provocar.
+
+  El dominio pone además una barrera propia —una regla cuya acción repetiría el
+  evento que la disparó se salta— a propósito. La garantía estructural depende
+  de cómo esté escrito el despachador, y eso puede cambiar el día que alguien lo
+  refactorice; la del dominio está probada sin base de datos y no depende de
+  nada.
+
+  Y `set_status` pasa por `evaluateTransition` como todos los demás caminos: una
+  automatización no puede cerrar una tarea con dependencias abiertas por el
+  hecho de ser automática.
+
+- **D-070 FR-AUT-002 distingue por IMPACTO, no por regla.** Anotar en tu
+  bitácora o recordarte algo no necesita permiso: nadie más lo nota y se deshace
+  solo. Crear una tarea o mover un estado sí — aparecen en el tablero del equipo
+  y disparan sus propias consecuencias. Una acción de impacto con
+  `authorized = false` NO se ejecuta: se PROPONE, y queda en `automation_runs`
+  como `proposed` con su motivo.
+
+  `automation_runs` registra también lo que no hizo nada (`skipped`) y lo que
+  falló (`failed`). Una regla que no actuó y no dejó rastro es una regla que el
+  usuario cree rota.
+
+  El despachador NUNCA lanza: se llama al final de acciones que ya hicieron su
+  trabajo —completar una tarea, dejar un comentario— y una automatización rota
+  no puede deshacer eso ni presentarlo como un fallo. Mismo contrato que
+  `sendEmail` (D-021).
+
+- **D-071 Las plantillas de proyecto AÑADEN, nunca reemplazan.** Aplicarla a un
+  proyecto que ya tiene trabajo pone sus grupos DESPUÉS de los que hay y no
+  borra nada. La alternativa —limpiar el tablero y poner la plantilla— es
+  irreversible: se llevaría las tareas con sus comentarios (que no tienen FK y
+  quedarían huérfanos), sus archivos y sus responsables. Lo que sobre se borra a
+  mano, y eso sí se deshace una fila a la vez.
+
+  Por eso aplicar dos veces DUPLICA, y no se impide: repetir una fase es un uso
+  legítimo en un proyecto largo. Quien avisa es el panel, que ya recibe
+  `taskCount` — el mismo dato que hoy usa el de borrado. El aviso informa; la
+  decisión sigue siendo del usuario.
+
+  `plannedRows(template, { fromGroupPosition })` es lo que hace correcto el
+  «al final»: sin arrancar después de la última posición, dos grupos la
+  comparten y el orden del tablero pasa a depender de cuál devuelva antes la
+  base. Probado con dos plantillas seguidas sobre el mismo proyecto: posiciones
+  0-4 y luego 5-8, todas únicas.
+
+- **D-072 Una plantilla trae estructura, no calendario ni juicio.**
+
+  SIN FECHAS. El horizonte va en el NOMBRE del grupo («Fase 1 · Grind (llegar a
+  25 ventas al día)»), que es honesto porque no promete nada. Poner `due` sería
+  inventar un ritmo que no es de nadie: dos personas con el mismo proyecto no
+  tardan lo mismo, y al mes medio tablero aparecería vencido — contando además
+  como atraso en Home y en el hecho `execution.overdue` del motor.
+
+  SIN `impact`. Ese flag alimenta «tres tareas de impacto» en Home y los minutos
+  comprometidos del día. Cuáles lo son ESTA semana es del usuario; una plantilla
+  que marca ocho rompe las dos cosas. Hay una prueba que falla si alguna tarea
+  del catálogo trae `impact` o fecha.
+
+  SIN `deps`. Exigen los ids de las tareas ya insertadas y no resuelven nada que
+  el orden de los grupos no diga ya. `suggestProjectSequence` sigue estando.
+
+- **D-074 Once plantillas piden agrupar el selector.** Con seis, una lista plana
+  se lee de un vistazo; con once hay que recorrerla entera para descartar diez.
+  Cada plantilla declara `category` —Trabajo y producto, Negocio, Marketing,
+  Personal— y el `<select>` las pinta en `<optgroup>`.
+
+  El orden de los grupos lo fija `TEMPLATE_CATEGORIES` y no el del array: así
+  añadir una plantilla al final del catálogo no la manda al bloque equivocado.
+  Hay pruebas que fallan si una plantilla declara una categoría desconocida
+  —quedaría fuera de todo `optgroup`, invisible— o si una categoría se queda
+  vacía.
+
+  Marketing tiene dos entradas nuevas que no se pisan con «Lanzamiento o
+  campaña»: aquella tiene fecha de fin, y estas no. El motor de contenido
+  termina cuando publicar deja de depender de la inspiración; el embudo ordena
+  las cinco etapas AARRR de Dave McClure, que son un marco con nombre y etapas
+  comprobables, atribuido como los libros.
+
+  Las tres personales son proyectos de verdad —mudanza, búsqueda de trabajo,
+  certificación—, con fecha y muchas tareas discretas. Deliberadamente NO se
+  añadió ninguna de hábitos o salud: eso ya lo cubren las rutinas y los hábitos
+  de Personal Development OS, y duplicarlo en forma de tablero llevaría a llevar
+  la misma cosa en dos sitios.
+
+- **D-073 El catálogo de proyectos vive en código, como el de rutinas.** Mismo
+  criterio que D-044: es CONTENIDO, no datos del usuario — sin dueño, sin RLS,
+  versionado en git y probable sin levantar Postgres. Al usarla se COPIA: editar
+  el proyecto no toca el catálogo, y cambiar el catálogo no le reescribe nada a
+  nadie.
+
+  De los libros se usa su ESTRUCTURA, que es un hecho comprobable —que Lean
+  Startup se organiza alrededor del bucle Construir-Medir-Aprender, o que Moran
+  divide el camino en Grind, Growth y Gold—, y todo el texto está escrito con
+  nuestras palabras. No se reproduce nada de ninguna obra, y la plantilla
+  atribuye el libro del que sale.
+
+  Si la plantilla falla al crear un proyecto nuevo, se cae al grupo «General» de
+  siempre en vez de dejar al usuario sin proyecto: un tablero usable vale más
+  que un error. Y si falla a mitad, se borran los grupos recién insertados —
+  solo los nuevos— por el mismo motivo que `createRoutineFromTemplate`: media
+  plantilla obliga a limpiar a mano antes de reintentar.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo

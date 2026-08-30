@@ -4,11 +4,13 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
+import { getPersonalWorkspaceIds } from "@/lib/data/workspaces";
 import { moneyFacts, type BudgetLineLike } from "@/lib/domain/insights/facts/money.ts";
 import { timeFacts } from "@/lib/domain/insights/facts/time.ts";
 import { executionFacts } from "@/lib/domain/insights/facts/execution.ts";
 import { habitsFacts, type HabitFrequency } from "@/lib/domain/insights/facts/habits.ts";
 import { debtFacts } from "@/lib/domain/insights/facts/debt.ts";
+import { activityFacts, type UnreadMentionLike } from "@/lib/domain/insights/facts/activity.ts";
 import { occupationAppliesOn } from "@/lib/domain/time.ts";
 import { loadMyTasks, type MyTaskRow } from "@/lib/data/tasks";
 import type { JournalEntryLike, ProjectStatus } from "@/lib/domain/types.ts";
@@ -29,8 +31,11 @@ import type { MemoryItemLike, MemoryScope } from "@/lib/domain/insights/memory.t
  * de datos; `context.ts` sigue siendo el único sitio donde ese filtro se
  * aplica (ver D-027).
  *
- * Cubre los cinco dominios —`money`, `debt`, `time`, `execution` y `habits`— y
- * con ellos el ámbito `global`, que es el único que los cruza.
+ * Cubre los cinco dominios personales —`money`, `debt`, `time`, `execution` y
+ * `habits`— y con ellos el ámbito `global`, que es el único que los cruza.
+ *
+ * `activity` va aparte y NO entra en `global`: habla del equipo, no del usuario
+ * (ver allowedDomains en context.ts).
  */
 export interface AnalyzeResult {
   ok: boolean;
@@ -56,6 +61,7 @@ const SCOPE_PATH: Record<Scope, string> = {
   habits: "/development",
   time: "/time",
   execution: "/execution",
+  activity: "/activity",
   global: "/home"
 };
 
@@ -183,6 +189,78 @@ async function loadDomainFacts(supabase: Db, userId: string, domain: Domain, tod
           logs: (logs ?? []).map((l) => ({ habitId: l.habit_id, date: l.log_date })),
           routines: (routines ?? []).map((r) => ({ id: r.id, name: r.name, stepCount: (r.routine_steps ?? []).length })),
           routineRuns: (runs ?? []).map((r) => ({ routineId: r.routine_id, date: r.local_date }))
+        },
+        today
+      );
+    }
+
+    case "activity": {
+      // La actividad cuelga del ESPACIO, no del usuario, así que hace falta
+      // saber cuál. Se usa el personal —el que siempre existe desde 0030— por
+      // el mismo motivo que la paleta: el ámbito del análisis no viaja en la
+      // llamada, y adivinarlo sería peor que fijar el que todos tienen.
+      const personalIds = await getPersonalWorkspaceIds();
+      const workspaceId = personalIds[0];
+      if (!workspaceId) return [];
+
+      const [{ data: rows }, { data: projects }, { data: mentions }, { data: reads }] = await Promise.all([
+        supabase
+          .from("workspace_activity")
+          .select("id, type, project_id, created_at")
+          .eq("workspace_id", workspaceId)
+          .order("created_at", { ascending: false })
+          .limit(200),
+        supabase.from("projects").select("id, title").eq("workspace_id", workspaceId),
+        supabase
+          .from("comments")
+          .select("id, subject_id, created_at")
+          .eq("subject_type", "task")
+          .contains("mentioned_user_ids", [userId])
+          .neq("author_id", userId)
+          .order("created_at", { ascending: false })
+          .limit(50),
+        supabase.from("comment_reads").select("comment_id").eq("user_id", userId)
+      ]);
+
+      const mencionadas = mentions ?? [];
+      if (!mencionadas.length && !(rows ?? []).length) return [];
+
+      // ¿Alguien escribió DESPUÉS en el mismo hilo? Una sola consulta para
+      // todas las tareas implicadas, no una por mención.
+      const taskIds = [...new Set(mencionadas.map((m) => m.subject_id))];
+      const [{ data: tasks }, { data: posteriores }] = await Promise.all([
+        taskIds.length
+          ? supabase.from("tasks").select("id, title").in("id", taskIds)
+          : Promise.resolve({ data: [] as { id: string; title: string }[] }),
+        taskIds.length
+          ? supabase.from("comments").select("subject_id, created_at").eq("subject_type", "task").in("subject_id", taskIds)
+          : Promise.resolve({ data: [] as { subject_id: string; created_at: string }[] })
+      ]);
+
+      const tituloPorTarea = new Map((tasks ?? []).map((t) => [t.id, t.title]));
+      const leidos = new Set((reads ?? []).map((r) => r.comment_id));
+
+      const sinLeer: UnreadMentionLike[] = mencionadas.flatMap((m) => {
+        if (leidos.has(m.id)) return [];
+        const titulo = tituloPorTarea.get(m.subject_id);
+        // Una mención cuya tarea ya no existe no lleva a ninguna parte.
+        if (!titulo) return [];
+        return [
+          {
+            commentId: m.id,
+            taskId: m.subject_id,
+            taskTitle: titulo,
+            at: m.created_at,
+            answered: (posteriores ?? []).some((c) => c.subject_id === m.subject_id && c.created_at > m.created_at)
+          }
+        ];
+      });
+
+      return activityFacts(
+        {
+          rows: (rows ?? []).map((r) => ({ id: r.id, type: r.type, projectId: r.project_id, at: r.created_at })),
+          mentions: sinLeer,
+          projects: (projects ?? []).map((p) => ({ id: p.id, title: p.title }))
         },
         today
       );

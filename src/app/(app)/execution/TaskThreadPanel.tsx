@@ -27,6 +27,7 @@ import { matchRoster, mentionQueryAt, splitBody, type RosterMember } from "@/lib
 import { STATUS_META } from "./status-meta";
 import type { TaskStatus } from "@/lib/domain/types.ts";
 import MenuSurface from "@/components/MenuSurface";
+import { useThreadRealtime } from "@/lib/hooks/useThreadRealtime";
 
 interface CommentLite {
   id: string;
@@ -109,6 +110,10 @@ export default function TaskThreadPanel({
   );
 
   const candidates = useMemo(() => (query === null ? [] : matchRoster(roster, query).slice(0, 6)), [roster, query]);
+
+  // Lo que escriba un compañero aparece sin recargar. `onSaved` es el mismo
+  // camino que ya se usa tras una acción propia: una sola manera de refrescar.
+  useThreadRealtime(taskId, onSaved);
 
   const reactionRows: ReactionLike[] = useMemo(
     () => reactions.map((r) => ({ commentId: r.comment_id, userId: r.user_id, emoji: r.emoji })),

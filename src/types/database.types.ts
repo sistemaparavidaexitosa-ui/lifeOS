@@ -133,20 +133,29 @@ export type Database = {
       automation_runs: {
         Row: {
           automation_id: string
+          detail: string
           id: string
+          outcome: string
           result: string
+          subject_id: string | null
           ts: string
         }
         Insert: {
           automation_id: string
+          detail?: string
           id?: string
+          outcome?: string
           result: string
+          subject_id?: string | null
           ts?: string
         }
         Update: {
           automation_id?: string
+          detail?: string
           id?: string
+          outcome?: string
           result?: string
+          subject_id?: string | null
           ts?: string
         }
         Relationships: [
@@ -161,36 +170,39 @@ export type Database = {
       }
       automations: {
         Row: {
-          action_text: string
+          action_params: Json
+          action_type: string
           authorized: boolean
-          condition_text: string
           created_at: string
           enabled: boolean
           id: string
           name: string
-          trigger_text: string
+          trigger_params: Json
+          trigger_type: string
           user_id: string
         }
         Insert: {
-          action_text?: string
+          action_params?: Json
+          action_type?: string
           authorized?: boolean
-          condition_text?: string
           created_at?: string
           enabled?: boolean
           id?: string
           name: string
-          trigger_text: string
+          trigger_params?: Json
+          trigger_type?: string
           user_id: string
         }
         Update: {
-          action_text?: string
+          action_params?: Json
+          action_type?: string
           authorized?: boolean
-          condition_text?: string
           created_at?: string
           enabled?: boolean
           id?: string
           name?: string
-          trigger_text?: string
+          trigger_params?: Json
+          trigger_type?: string
           user_id?: string
         }
         Relationships: []
@@ -506,6 +518,7 @@ export type Database = {
           mentioned_user_ids: string[]
           mentions: string[]
           read: boolean
+          search: unknown
           subject_id: string
           subject_type: string
         }
@@ -518,6 +531,7 @@ export type Database = {
           mentioned_user_ids?: string[]
           mentions?: string[]
           read?: boolean
+          search?: unknown
           subject_id: string
           subject_type: string
         }
@@ -530,6 +544,7 @@ export type Database = {
           mentioned_user_ids?: string[]
           mentions?: string[]
           read?: boolean
+          search?: unknown
           subject_id?: string
           subject_type?: string
         }
@@ -1581,6 +1596,7 @@ export type Database = {
           resources: string
           results: string
           risks: string
+          search: unknown
           status: string
           tags: string[]
           target_date: string | null
@@ -1603,6 +1619,7 @@ export type Database = {
           resources?: string
           results?: string
           risks?: string
+          search?: unknown
           status?: string
           tags?: string[]
           target_date?: string | null
@@ -1625,6 +1642,7 @@ export type Database = {
           resources?: string
           results?: string
           risks?: string
+          search?: unknown
           status?: string
           tags?: string[]
           target_date?: string | null
@@ -2036,6 +2054,7 @@ export type Database = {
           position: number
           priority: string
           project_id: string
+          search: unknown
           start_date: string | null
           status: string
           title: string
@@ -2056,6 +2075,7 @@ export type Database = {
           position?: number
           priority?: string
           project_id: string
+          search?: unknown
           start_date?: string | null
           status?: string
           title: string
@@ -2076,6 +2096,7 @@ export type Database = {
           position?: number
           priority?: string
           project_id?: string
+          search?: unknown
           start_date?: string | null
           status?: string
           title?: string
@@ -2143,6 +2164,7 @@ export type Database = {
           created_at: string
           id: string
           project_id: string | null
+          search: unknown
           text: string
           type: string
           workspace_id: string
@@ -2153,6 +2175,7 @@ export type Database = {
           created_at?: string
           id?: string
           project_id?: string | null
+          search?: unknown
           text: string
           type: string
           workspace_id: string
@@ -2163,6 +2186,7 @@ export type Database = {
           created_at?: string
           id?: string
           project_id?: string | null
+          search?: unknown
           text?: string
           type?: string
           workspace_id?: string
@@ -2284,6 +2308,27 @@ export type Database = {
           title: string
           updated_at: string
           updated_by_name: string
+        }[]
+      }
+      search_workspace: {
+        Args: {
+          p_author?: string
+          p_before?: string
+          p_kind?: string
+          p_query: string
+          p_since?: string
+          p_workspace_id: string
+        }
+        Returns: {
+          at: string
+          id: string
+          kind: string
+          notebook_id: string
+          project_id: string
+          rank: number
+          snippet: string
+          task_id: string
+          title: string
         }[]
       }
       workspace_role: { Args: { p_workspace_id: string }; Returns: string }

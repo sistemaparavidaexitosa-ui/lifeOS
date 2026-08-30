@@ -7,6 +7,7 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createProject } from "./actions";
+import { TemplateSelect, TemplatePreview } from "./ProjectTemplatePicker";
 
 export default function NewProjectForm({
   workspaceId,
@@ -24,6 +25,7 @@ export default function NewProjectForm({
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [templateId, setTemplateId] = useState("");
 
   if (!open) {
     return (
@@ -78,6 +80,16 @@ export default function NewProjectForm({
         </select>
       </div>
       <input name="targetDate" type="date" />
+
+      {/* La plantilla va al final y no arriba: primero se decide QUÉ proyecto
+          es, y solo entonces tiene sentido preguntar con qué estructura nace.
+          Por defecto ninguna — un proyecto sigue pudiendo empezar en blanco. */}
+      <label className="text-xs font-bold">
+        Plantilla
+        <TemplateSelect name="templateId" value={templateId} onChange={setTemplateId} />
+      </label>
+      <TemplatePreview templateId={templateId} />
+
       {error && (
         <div className="text-xs" style={{ color: "var(--danger)" }}>
           {error}

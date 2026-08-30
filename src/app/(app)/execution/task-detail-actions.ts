@@ -7,6 +7,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { parseMentions, type RosterMember } from "@/lib/domain/execution/mentions.ts";
+import { dispatchAutomations } from "@/lib/automations/dispatch";
 import { createClient } from "@/lib/supabase/server";
 import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
 
@@ -294,6 +295,17 @@ export async function setTaskAssignees(taskId: string, userNames: string[]) {
     // best-effort, no bloquea el flujo principal
   }
 
+  const { data: propio } = await supabase.from("profiles").select("name").eq("user_id", user.id).single();
+  await dispatchAutomations({
+    type: "task.assigned",
+    taskId,
+    projectId: task.project_id,
+    // La asignación se guarda por NOMBRE (task_assignees.user_name, sin FK), así
+    // que «me asignaron a mí» se resuelve comparando con el del perfil. Es la
+    // misma limitación que documenta loadMyTasks.
+    assignedToMe: Boolean(propio?.name && userNames.includes(propio.name))
+  });
+
   revalidatePath("/execution");
 }
 
@@ -373,6 +385,15 @@ export async function addTaskComment(taskId: string, body: string) {
   } catch {
     // best-effort
   }
+
+  await dispatchAutomations({
+    type: "comment.added",
+    taskId,
+    projectId: task.project_id,
+    // Que el comentario mencione a QUIEN TIENE la regla, no a cualquiera: una
+    // automatización es del usuario, y «cuando me mencionen» significa a él.
+    mentionsMe: mentionedUserIds.includes(user.id)
+  });
 
   revalidatePath("/execution");
 }

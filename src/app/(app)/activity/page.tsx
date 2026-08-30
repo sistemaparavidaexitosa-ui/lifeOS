@@ -8,6 +8,7 @@ import WorkspaceTabs from "@/components/workspace/WorkspaceTabs";
 import { Card, EmptyState } from "@/components/ui";
 import { getSessionUser } from "@/lib/data/session";
 import { activityLabel, groupByDay } from "@/lib/domain/execution/activity.ts";
+import InsightSection from "@/components/InsightSection";
 
 // ACTIVIDAD — lo que ha pasado en el espacio.
 //
@@ -48,6 +49,11 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
       <Suspense fallback={<Card>Cargando actividad…</Card>}>
         <ActivityFeed workspaceId={activeWorkspace.id} />
       </Suspense>
+
+      {/* «¿Qué me perdí?». Es el único ámbito del motor que habla del EQUIPO y
+          no del usuario, y por eso vive aquí y no en Home: la pregunta que
+          responde es de este espacio. */}
+      <InsightSection scope="activity" />
     </div>
   );
 }

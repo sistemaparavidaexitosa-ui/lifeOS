@@ -9,7 +9,7 @@
 import type { Domain, Fact } from "../domain/insights/types.ts";
 import { activeMemory, type MemoryItemLike } from "../domain/insights/memory.ts";
 
-export type Scope = "money" | "debt" | "habits" | "time" | "execution" | "global";
+export type Scope = "money" | "debt" | "habits" | "time" | "execution" | "activity" | "global";
 
 /** Tope de arranque (§3.2). Los hechos de mayor peso son los que sobreviven. */
 export const MAX_FACTS = 40;
@@ -34,6 +34,12 @@ export function allowedDomains(scope: Scope, options: { projectIsWorkspace?: boo
       return ["time"];
     case "execution":
       return options.projectIsWorkspace ? ["execution"] : ["execution", "time"];
+    case "activity":
+      // Solo el suyo, y DELIBERADAMENTE fuera de `global`. Global es «tu vida»
+      // —tus cifras, tu agenda, tus hábitos—; esto es «la semana de tu equipo».
+      // Mezclarlas metería la actividad de otras personas dentro de un análisis
+      // que el usuario pidió sobre sí mismo.
+      return ["activity"];
     case "global":
       return ["money", "debt", "habits", "time", "execution"];
   }

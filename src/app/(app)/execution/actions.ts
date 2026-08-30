@@ -4,6 +4,9 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getPersonalWorkspace } from "@/lib/data/workspaces";
 import { evaluateTransition } from "@/lib/domain/task-state.ts";
+import { dispatchAutomations } from "@/lib/automations/dispatch";
+import { getProjectTemplate } from "@/lib/domain/execution/project-templates.ts";
+import { writeTemplate } from "./template-actions";
 import { suggestProjectSequence } from "@/lib/domain/project-sequence.ts";
 import type { TaskStatus } from "@/lib/domain/types.ts";
 
@@ -13,6 +16,8 @@ const projectSchema = z.object({
   status: z.enum(["Draft", "Active", "OnHold", "Completed", "Cancelled", "Archived"]).default("Active"),
   priority: z.enum(["High", "Medium", "Low"]).default("Medium"),
   targetDate: z.string().optional().nullable(),
+  /** Plantilla opcional. Sin ella, el proyecto nace con el grupo "General". */
+  templateId: z.string().optional().nullable(),
   // Desde la migración 0030 no existe el proyecto sin espacio: workspace_id es
   // NOT NULL. Opcional AQUÍ y no en la base porque el formulario puede no
   // mandarlo (un enlace viejo, una llamada sin el campo oculto) y en ese caso
@@ -27,7 +32,8 @@ export async function createProject(formData: FormData) {
     status: formData.get("status") ?? "Active",
     priority: formData.get("priority") ?? "Medium",
     targetDate: formData.get("targetDate") || null,
-    workspaceId: formData.get("workspaceId") || null
+    workspaceId: formData.get("workspaceId") || null,
+    templateId: formData.get("templateId") || null
   });
 
   const supabase = await createClient();
@@ -60,18 +66,35 @@ export async function createProject(formData: FormData) {
     .single();
   if (error) throw new Error(error.message);
 
-  // El proyecto nace CON su primer grupo. Sin esto el tablero recién creado
-  // salía vacío del todo: "+ Agregar tarea" vive dentro de un grupo, así que
-  // no había ni una sola forma visible de empezar — solo un input suelto de
-  // "Nuevo grupo" al final, que había que descubrir y rematar con Enter.
-  // El backfill de la migración 0019 dejó un grupo "General" a los proyectos
-  // que ya existían; esto hace lo mismo para los nuevos.
-  const { error: groupError } = await supabase
-    .from("task_groups")
-    .insert({ project_id: project.id, name: "General", color: "var(--c-purple)", position: 0 });
-  // Que falle el grupo no puede tumbar el proyecto ya creado: el tablero
-  // tiene un estado vacío que ofrece crearlo a mano.
-  if (groupError) console.error("No se pudo crear el grupo inicial:", groupError.message);
+  // El proyecto nace CON algo dentro. Sin esto el tablero recién creado salía
+  // vacío del todo: "+ Agregar tarea" vive dentro de un grupo, así que no había
+  // ni una sola forma visible de empezar — solo un input suelto de "Nuevo
+  // grupo" al final, que había que descubrir y rematar con Enter.
+  //
+  // Con plantilla, ese "algo" son sus grupos y tareas; sin ella, el grupo
+  // "General" de siempre. El backfill de la migración 0019 dejó ese grupo a los
+  // proyectos que ya existían; esto hace lo mismo para los nuevos.
+  const template = parsed.templateId ? getProjectTemplate(parsed.templateId) : undefined;
+
+  if (template) {
+    const applied = await writeTemplate(supabase, project.id, template, user.id);
+    // Que falle la plantilla no puede tumbar el proyecto ya creado. Se cae al
+    // grupo vacío de siempre, que es un tablero usable, en vez de dejar al
+    // usuario sin proyecto y sin saber por qué.
+    if (!applied.ok) {
+      console.error("No se pudo aplicar la plantilla:", applied.reason);
+      await supabase
+        .from("task_groups")
+        .insert({ project_id: project.id, name: "General", color: "var(--c-purple)", position: 0 });
+    }
+  } else {
+    const { error: groupError } = await supabase
+      .from("task_groups")
+      .insert({ project_id: project.id, name: "General", color: "var(--c-purple)", position: 0 });
+    // Que falle el grupo tampoco tumba el proyecto: el tablero tiene un estado
+    // vacío que ofrece crearlo a mano.
+    if (groupError) console.error("No se pudo crear el grupo inicial:", groupError.message);
+  }
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "project.create", object: parsed.title });
   revalidatePath("/execution");
@@ -328,6 +351,11 @@ export async function setTaskStatus(taskId: string, to: TaskStatus) {
 
   await supabase.from("task_history").insert({ task_id: taskId, from_state: task.status, to_state: to });
   await supabase.from("audit_log").insert({ user_id: user.id, action: "task.status", object: taskId, meta: { to } });
+
+  // Al FINAL, y nunca lanza: el cambio de estado ya ocurrió y una regla rota no
+  // puede deshacerlo ni presentarlo como un fallo.
+  await dispatchAutomations({ type: "task.status_changed", taskId, projectId: task.project_id, toStatus: to });
+
   revalidatePath("/execution");
   revalidatePath("/home");
 }

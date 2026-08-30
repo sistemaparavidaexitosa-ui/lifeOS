@@ -4,10 +4,16 @@ import { useState, useTransition } from "react";
 import { clearAiHistory, clearMemory, setAiDomains } from "@/lib/insights/actions";
 import { DOMAIN_LABEL, type Domain } from "@/lib/domain/insights/types.ts";
 
-// El orden de la lista, no los nombres: esos son los mismos que usa el motor
-// para explicar por qué un análisis no salió (DOMAIN_LABEL). Escribirlos aquí
-// otra vez es garantizar que un día digan cosas distintas.
-const DOMAINS: Domain[] = ["money", "debt", "time", "execution", "habits"];
+// Esta lista solo fija el ORDEN; los nombres salen de DOMAIN_LABEL, que es el
+// mismo mapa que usa el motor para explicar por qué un análisis no salió.
+//
+// Y la unión con las claves de DOMAIN_LABEL no es adorno: al añadir el dominio
+// `activity` esta lista se quedó atrás y su casilla no se pintó, así que el
+// usuario NO PODÍA encenderlo mientras `setAiDomains` sí lo leía — un dominio
+// condenado a estar apagado para siempre, sin que nada fallara. Ahora un
+// dominio que falte aquí aparece igual, al final.
+const ORDEN: Domain[] = ["money", "debt", "time", "execution", "habits", "activity"];
+const DOMAINS: Domain[] = [...ORDEN, ...(Object.keys(DOMAIN_LABEL) as Domain[]).filter((d) => !ORDEN.includes(d))];
 
 /**
  * Opt-in por dominio (§4.2) y los dos borrados del §4.4.
