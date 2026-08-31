@@ -44,6 +44,10 @@ const TYPE_LABEL: Record<string, string> = {
   "group.rename": "Grupo",
   "group.delete": "Grupo borrado",
   "template.apply": "Plantilla",
+  // El plan generado con IA escribe por el mismo camino que una plantilla
+  // (`writeTemplate`), pero se etiqueta aparte: en el feed importa distinguir
+  // los grupos que eligió una persona de los que propuso el modelo.
+  "ai.plan": "Plan con IA",
   share: "Compartido",
   // Las dos claves del mismo evento: la Server Action escribe `move` desde
   // 0003 y esta tabla decía `project.move`, así que el feed llevaba enseñando

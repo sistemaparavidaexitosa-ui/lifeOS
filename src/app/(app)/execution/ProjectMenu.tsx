@@ -20,6 +20,8 @@ import SequencePanel from "./SequencePanel";
 import MenuSurface, { useMenuAnchor } from "@/components/MenuSurface";
 import { deleteProject } from "./actions";
 import { applyProjectTemplate } from "./template-actions";
+import AiPlanPanel from "./AiPlanPanel";
+import { applyAiPlan } from "./ai-plan-actions";
 import { TemplateSelect, TemplatePreview } from "./ProjectTemplatePicker";
 import { moveProject, shareProjectWithGuest, unshareProjectFromGuests } from "@/lib/workspaces/actions";
 import type { WorkspaceSummary } from "@/lib/data/workspaces";
@@ -35,10 +37,11 @@ export interface ProjectMenuData {
   targetDate: string | null;
 }
 
-type Panel = "sequence" | "template" | "edit" | "move" | "guests" | "logbook" | "knowledge" | "delete" | null;
+type Panel = "sequence" | "ai-plan" | "template" | "edit" | "move" | "guests" | "logbook" | "knowledge" | "delete" | null;
 
 const PANEL_TITLE: Record<Exclude<Panel, null>, string> = {
   sequence: "Secuencia sugerida",
+  "ai-plan": "Generar plan con IA",
   template: "Aplicar plantilla",
   edit: "Editar proyecto",
   move: "Mover a otro espacio",
@@ -76,6 +79,8 @@ export default function ProjectMenu({
 }) {
   const menu = useMenuAnchor();
   const [panel, setPanel] = useState<Panel>(null);
+  // Lo necesita el panel de plan con IA para repintar el tablero al aplicar.
+  const router = useRouter();
 
   function openPanel(p: Panel) {
     menu.close();
@@ -99,6 +104,7 @@ export default function ProjectMenu({
         <MenuSurface anchor={menu.anchor} onClose={menu.close} align="end" width={236} label="Opciones del proyecto">
           <div className="ex-menu-list">
             <MenuItem icon="✨" label="Sugerir secuencia" onClick={() => openPanel("sequence")} />
+            <MenuItem icon="🤖" label="Generar plan con IA" onClick={() => openPanel("ai-plan")} />
             <MenuItem icon="🧩" label="Aplicar plantilla" onClick={() => openPanel("template")} />
             <MenuItem icon="✏️" label="Editar proyecto" onClick={() => openPanel("edit")} />
             {/* Sustituye a la vieja pantalla "Compartir un proyecto personal":
@@ -136,6 +142,28 @@ export default function ProjectMenu({
             <div className="td-drawer-body">
               {panel === "sequence" && (
                 <SequencePanel projectId={project.id} tasks={sequenceTasks} onClose={() => setPanel(null)} />
+              )}
+              {panel === "ai-plan" && (
+                <AiPlanPanel
+                  projectId={project.id}
+                  taskCount={taskCount}
+                  defaultObjective={project.objective}
+                  targetDate={project.targetDate}
+                  confirmLabel="Añadir al proyecto"
+                  onConfirm={async (draft, selection) => {
+                    const result = await applyAiPlan(project.id, draft, selection);
+                    if (result.ok) {
+                      // La MISMA pareja que ApplyTemplatePanel y MoveProjectPanel:
+                      // el `replace` fuerza una navegación de verdad y el `refresh`
+                      // trae el árbol nuevo saltándose la caché del router. Con
+                      // `refresh` a secas el tablero se queda igual.
+                      router.replace(`/execution?project=${project.id}`);
+                      router.refresh();
+                    }
+                    return result;
+                  }}
+                  onDone={() => setPanel(null)}
+                />
               )}
               {panel === "template" && (
                 <ApplyTemplatePanel projectId={project.id} taskCount={taskCount} onDone={() => setPanel(null)} />

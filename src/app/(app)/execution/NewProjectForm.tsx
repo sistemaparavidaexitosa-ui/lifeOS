@@ -8,6 +8,8 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createProject } from "./actions";
 import { TemplateSelect, TemplatePreview } from "./ProjectTemplatePicker";
+import AiPlanPanel from "./AiPlanPanel";
+import { planSummary, type AiPlanDraft } from "@/lib/domain/execution/ai-plan.ts";
 
 export default function NewProjectForm({
   workspaceId,
@@ -27,6 +29,28 @@ export default function NewProjectForm({
   const [error, setError] = useState<string | null>(null);
   const [templateId, setTemplateId] = useState("");
 
+  // Objetivo y fecha pasan a ser controlados para poder PRELLENAR con ellos el
+  // panel de IA. Es la única razón: el resto del formulario sigue siendo
+  // campos sueltos que lee el FormData.
+  const [objective, setObjective] = useState("");
+  const [targetDate, setTargetDate] = useState("");
+
+  // El plan de la IA, ya podado y confirmado. Viaja al servidor en un campo
+  // oculto junto con el resto del formulario, así que el proyecto y su
+  // estructura nacen en la MISMA llamada: no hay ventana en la que exista un
+  // proyecto vacío porque la segunda petición falló.
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiPlan, setAiPlan] = useState<{ draft: AiPlanDraft; selection: string[] } | null>(null);
+  const aiCounts = aiPlan ? planSummary(aiPlan.draft, new Set(aiPlan.selection)) : null;
+
+  function reset() {
+    setTemplateId("");
+    setObjective("");
+    setTargetDate("");
+    setAiOpen(false);
+    setAiPlan(null);
+  }
+
   if (!open) {
     return (
       <button type="button" className="btn-primary btn-sm" onClick={() => setOpen(true)}>
@@ -43,6 +67,7 @@ export default function NewProjectForm({
           try {
             const projectId = await createProject(fd);
             ref.current?.reset();
+            reset();
             setOpen(false);
             setError(null);
             // Directo a su tablero: ahí ya está el grupo "General" y su
@@ -66,7 +91,12 @@ export default function NewProjectForm({
       </span>
       <input type="hidden" name="workspaceId" value={workspaceId} />
       <input name="title" placeholder="Título del proyecto" required />
-      <input name="objective" placeholder="Objetivo (opcional)" />
+      <input
+        name="objective"
+        placeholder="Objetivo (opcional)"
+        value={objective}
+        onChange={(e) => setObjective(e.target.value)}
+      />
       <div style={{ display: "flex", gap: 8 }}>
         <select name="status" defaultValue="Active" style={{ flex: 1 }}>
           <option value="Draft">Borrador</option>
@@ -79,16 +109,92 @@ export default function NewProjectForm({
           <option value="Low">Baja</option>
         </select>
       </div>
-      <input name="targetDate" type="date" />
+      <input name="targetDate" type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />
 
-      {/* La plantilla va al final y no arriba: primero se decide QUÉ proyecto
+      {/* La estructura va al final y no arriba: primero se decide QUÉ proyecto
           es, y solo entonces tiene sentido preguntar con qué estructura nace.
-          Por defecto ninguna — un proyecto sigue pudiendo empezar en blanco. */}
+          Por defecto ninguna — un proyecto sigue pudiendo empezar en blanco.
+
+          Plantilla y plan con IA son EXCLUYENTES: elegir uno limpia el otro.
+          Aplicar los dos duplicaría la fase de arranque en casi todos los
+          casos, y quien quiera esa mezcla puede aplicar la plantilla después
+          desde el menú del proyecto, viendo ya lo que la IA propuso. */}
       <label className="text-xs font-bold">
         Plantilla
-        <TemplateSelect name="templateId" value={templateId} onChange={setTemplateId} />
+        <TemplateSelect
+          name="templateId"
+          value={templateId}
+          onChange={(id) => {
+            setTemplateId(id);
+            if (id) {
+              setAiPlan(null);
+              setAiOpen(false);
+            }
+          }}
+        />
       </label>
       <TemplatePreview templateId={templateId} />
+
+      {!aiOpen && !aiPlan && (
+        <button
+          type="button"
+          className="btn-ghost btn-sm"
+          onClick={() => {
+            setAiOpen(true);
+            setTemplateId("");
+          }}
+        >
+          🤖 O deja que la IA proponga el plan
+        </button>
+      )}
+
+      {aiOpen && (
+        <div className="card" style={{ background: "var(--surface-2, var(--surface))" }}>
+          <AiPlanPanel
+            projectId={null}
+            defaultObjective={objective}
+            targetDate={targetDate || null}
+            confirmLabel="Usar este plan"
+            onConfirm={async (draft, selection) => {
+              setAiPlan({ draft, selection });
+              const counts = planSummary(draft, new Set(selection));
+              // No se escribe nada todavía: el plan se guarda aquí y se crea
+              // junto con el proyecto al enviar el formulario. Por eso se
+              // devuelven los conteos a mano en vez de los de la base.
+              return { ok: true, created: { groups: counts.groups, tasks: counts.tasks + counts.subtasks } };
+            }}
+            onDone={() => setAiOpen(false)}
+          />
+        </div>
+      )}
+
+      {aiPlan && aiCounts && !aiOpen && (
+        <div
+          className="text-xs"
+          style={{
+            background: "color-mix(in srgb, var(--c-green) 12%, var(--surface))",
+            borderLeft: "3px solid var(--c-green)",
+            borderRadius: "0 10px 10px 0",
+            padding: "8px 10px",
+            display: "flex",
+            alignItems: "center",
+            gap: 8
+          }}
+        >
+          <span style={{ flex: 1 }}>
+            Plan con IA listo: <b>{aiCounts.groups}</b> grupo{aiCounts.groups === 1 ? "" : "s"} y{" "}
+            <b>{aiCounts.tasks}</b> tarea{aiCounts.tasks === 1 ? "" : "s"}. Se crearán con el proyecto.
+          </span>
+          <button type="button" className="btn-ghost btn-sm" onClick={() => setAiOpen(true)}>
+            Ver
+          </button>
+          <button type="button" className="btn-ghost btn-sm" onClick={() => setAiPlan(null)}>
+            Quitar
+          </button>
+        </div>
+      )}
+
+      <input type="hidden" name="aiPlan" value={aiPlan ? JSON.stringify(aiPlan) : ""} />
 
       {error && (
         <div className="text-xs" style={{ color: "var(--danger)" }}>
@@ -96,7 +202,16 @@ export default function NewProjectForm({
         </div>
       )}
       <div style={{ display: "flex", gap: 8 }}>
-        <button type="button" className="btn-ghost btn-sm" onClick={() => setOpen(false)} disabled={pending} style={{ flex: 1 }}>
+        <button
+          type="button"
+          className="btn-ghost btn-sm"
+          onClick={() => {
+            reset();
+            setOpen(false);
+          }}
+          disabled={pending}
+          style={{ flex: 1 }}
+        >
           Cancelar
         </button>
         <button type="submit" className="btn-primary btn-sm" disabled={pending} style={{ flex: 1 }}>

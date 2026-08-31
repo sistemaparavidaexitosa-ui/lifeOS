@@ -66,6 +66,22 @@ export function requireAnthropicApiKey(): string {
 }
 
 /**
+ * F11: el secreto del generador de planes de proyecto. Mismo criterio que el
+ * de arriba y por el mismo motivo: solo lo exige la Server Action que llama al
+ * modelo. Sin esta variable, «Generar plan con IA» dice que no está
+ * configurado y TODO lo demás de /execution sigue funcionando igual.
+ */
+export function requireOpenAiApiKey(): string {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) {
+    throw new Error(
+      "OPENAI_API_KEY no está definida. Solo se requiere para generar planes de proyecto con IA — ver /docs/DEPLOY.md."
+    );
+  }
+  return key;
+}
+
+/**
  * F11: ejemplo de validación desacoplada por feature. Ninguna acción que NO
  * use el proveedor de email para invitaciones debe exigir esta variable.
  * Si en el futuro se activa el envío de invitaciones por correo (FR-WSP-003),

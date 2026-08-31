@@ -8,6 +8,7 @@ import { evaluateTransition } from "@/lib/domain/task-state.ts";
 import { PRIORITY_META, PROJECT_STATUS_META, STATUS_META } from "./status-meta";
 import { dispatchAutomations } from "@/lib/automations/dispatch";
 import { getProjectTemplate } from "@/lib/domain/execution/project-templates.ts";
+import { templateFromPayload } from "@/lib/domain/execution/ai-plan.ts";
 import { writeTemplate } from "./template-actions";
 import { suggestProjectSequence } from "@/lib/domain/project-sequence.ts";
 import type { TaskStatus } from "@/lib/domain/types.ts";
@@ -20,12 +21,34 @@ const projectSchema = z.object({
   targetDate: z.string().optional().nullable(),
   /** Plantilla opcional. Sin ella, el proyecto nace con el grupo "General". */
   templateId: z.string().optional().nullable(),
+  // El plan generado con IA, ya podado por el usuario, serializado en un campo
+  // oculto del formulario. Viaja AQUÍ y no por una acción aparte porque en el
+  // formulario de alta el proyecto todavía no existe: no hay `projectId` al
+  // que aplicárselo, y crearlo primero para escribirle después dejaría un
+  // tablero a medias si la segunda llamada falla.
+  aiPlan: z.string().optional().nullable(),
   // Desde la migración 0030 no existe el proyecto sin espacio: workspace_id es
   // NOT NULL. Opcional AQUÍ y no en la base porque el formulario puede no
   // mandarlo (un enlace viejo, una llamada sin el campo oculto) y en ese caso
   // el destino correcto es el espacio personal, no un error en la cara.
   workspaceId: z.string().uuid().optional().nullable()
 });
+
+/**
+ * El plan con IA del campo oculto, o `null`.
+ *
+ * `JSON.parse` va envuelto porque el contenido es entrada del usuario: un
+ * campo oculto manipulado no puede tumbar la creación del proyecto, que es lo
+ * que de verdad venía a hacer. Si no se entiende, el proyecto nace en blanco.
+ */
+function parsePlanPayload(raw: string | null | undefined) {
+  if (!raw) return null;
+  try {
+    return templateFromPayload(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
 
 export async function createProject(formData: FormData) {
   const parsed = projectSchema.parse({
@@ -35,7 +58,8 @@ export async function createProject(formData: FormData) {
     priority: formData.get("priority") ?? "Medium",
     targetDate: formData.get("targetDate") || null,
     workspaceId: formData.get("workspaceId") || null,
-    templateId: formData.get("templateId") || null
+    templateId: formData.get("templateId") || null,
+    aiPlan: formData.get("aiPlan") || null
   });
 
   const supabase = await createClient();
@@ -76,7 +100,15 @@ export async function createProject(formData: FormData) {
   // Con plantilla, ese "algo" son sus grupos y tareas; sin ella, el grupo
   // "General" de siempre. El backfill de la migración 0019 dejó ese grupo a los
   // proyectos que ya existían; esto hace lo mismo para los nuevos.
-  const template = parsed.templateId ? getProjectTemplate(parsed.templateId) : undefined;
+  //
+  // La plantilla y el plan con IA son EXCLUYENTES —el formulario limpia uno al
+  // elegir el otro— y aquí la plantilla manda si por lo que sea llegan los dos.
+  // Los dos acaban en el mismo `writeTemplate`: el plan de la IA no estrena un
+  // camino de escritura propio, se convierte en una plantilla y entra por el
+  // que ya existe, con su rollback y su historial.
+  const template = parsed.templateId
+    ? getProjectTemplate(parsed.templateId)
+    : (parsePlanPayload(parsed.aiPlan) ?? undefined);
 
   if (template) {
     const applied = await writeTemplate(supabase, project.id, template, user.id);
