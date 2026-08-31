@@ -3,10 +3,11 @@ import { createClient } from "@/lib/supabase/server";
 import { accountBalance, periodStats } from "@/lib/domain/money.ts";
 import { saturationStatus, occupationAppliesOn } from "@/lib/domain/time.ts";
 import { effectiveStatus } from "@/lib/domain/task-state.ts";
-import { budgetTabRow } from "@/lib/domain/budget.ts";
+import { budgetQuincenaRow } from "@/lib/domain/budget.ts";
+import { quincenaFor } from "@/lib/domain/quincena.ts";
 import { loadMyTasks } from "./tasks";
 import { dueReminders, type ReminderLike } from "@/lib/domain/execution/reminders.ts";
-import { todayLocal, addDaysISO } from "./dates";
+import { todayLocal } from "./dates";
 import { getUserTimeZone } from "./profile";
 
 /**
@@ -35,7 +36,10 @@ export async function getHomeData(userId: string) {
   // "Hoy" en la zona del perfil, no la del servidor: el plan diario se busca
   // por local_date y con UTC se pedía el del día siguiente cada tarde.
   const t0 = todayLocal(await getUserTimeZone());
-  const from15 = addDaysISO(t0, -15);
+  // D-076: el dinero de Home se mide por QUINCENA (Q1 = 1-15, Q2 = 16-fin de
+  // mes), que es el periodo en el que el usuario cobra y presupuesta, no por una
+  // ventana rodante de 15 días que nunca se reinicia el día de pago.
+  const quincena = quincenaFor(t0);
 
   const [
     { data: profile },
@@ -44,6 +48,7 @@ export async function getHomeData(userId: string) {
     { data: accounts },
     { data: journalEntries },
     { data: budgets },
+    { data: carryovers },
     { data: occupations },
     { data: reminderRows },
     { data: currentBook }
@@ -52,8 +57,14 @@ export async function getHomeData(userId: string) {
     supabase.from("daily_plans").select("*").eq("user_id", userId).eq("local_date", t0).maybeSingle(),
     loadMyTasks(userId),
     supabase.from("accounts").select("*").eq("user_id", userId),
-    supabase.from("journal_entries").select("*, journal_lines(*)").eq("user_id", userId).gte("entry_date", from15),
+    // Sin recorte por fecha A PROPÓSITO: el saldo de una cuenta es la suma de
+    // TODOS sus movimientos desde el saldo inicial. Con el `.gte(from15)` que
+    // había aquí, Home mostraba una liquidez calculada sólo con los últimos 15
+    // días y no coincidía con la de /money, que sí los lee todos. Los cortes por
+    // periodo se hacen en el dominio, que filtra por fecha.
+    supabase.from("journal_entries").select("*, journal_lines(*)").eq("user_id", userId),
     supabase.from("budgets").select("*").eq("user_id", userId).eq("period", "current"),
+    supabase.from("budget_carryovers").select("budget_id, amount").eq("user_id", userId).eq("period_key", quincena.key),
     supabase.from("occupations").select("*").eq("user_id", userId),
     // Pendientes y ya vencidos. El corte por fecha se hace en el dominio: aquí
     // solo se descartan los hechos, que no vuelven nunca.
@@ -80,16 +91,21 @@ export async function getHomeData(userId: string) {
   }));
 
   const liquidity = (accounts ?? []).reduce((sum, a) => sum + accountBalance(a.id, a.opening_balance, entries), 0);
-  const stats = periodStats(entries, from15);
+  const stats = periodStats(entries, quincena.fromISO, quincena.toISO);
 
+  // "Presupuesto restante" = lo que queda de ESTA quincena, no del mes ni de una
+  // ventana rodante. Incluye el arrastre que el usuario haya aplicado: si Home
+  // lo ignorara, mostraría una cifra distinta a la de /money/budget, que es
+  // justo la incoherencia que este cambio viene a quitar.
   const budgetRows = (budgets ?? []).map((b) =>
-    budgetTabRow(
+    budgetQuincenaRow(
       { id: b.id, category: b.category, monthlyCost: b.monthly_cost, q1Amount: b.q1_amount, q2Amount: b.q2_amount },
       entries,
-      from15
+      quincena,
+      (carryovers ?? []).find((c) => c.budget_id === b.id)?.amount ?? 0
     )
   );
-  const budgetRemaining = budgetRows.reduce((sum, r) => sum + Math.max(0, r.balance), 0);
+  const budgetRemaining = budgetRows.reduce((sum, r) => sum + Math.max(0, r.remaining), 0);
 
   const impactTasks = allTasks.filter((t) => t.impact && t.status !== "Completed" && t.status !== "Cancelled").slice(0, 3);
   const overdueCount = allTasks.filter((t) => effectiveStatus({ status: t.status, due: t.due }, t0) === "Overdue").length;

@@ -23,10 +23,16 @@ interface BudgetLineLite {
  */
 export default function BudgetLineForm({
   line,
-  existingCategories = []
+  existingCategories = [],
+  defaultCategory,
+  label
 }: {
   line?: BudgetLineLite;
   existingCategories?: string[];
+  /** Precarga el nombre al crear un concepto para una categoría que ya tiene gasto (D-076). */
+  defaultCategory?: string;
+  /** Texto del botón cuando el por defecto ("+ Concepto") no describe la acción. */
+  label?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -48,7 +54,7 @@ export default function BudgetLineForm({
   if (!open) {
     return (
       <button type="button" className="btn-ghost btn-sm" onClick={() => setOpen(true)}>
-        {line ? "Editar" : "+ Concepto"}
+        {label ?? (line ? "Editar" : "+ Concepto")}
       </button>
     );
   }
@@ -82,7 +88,7 @@ export default function BudgetLineForm({
           <label className="text-xs" style={{ color: "var(--muted)" }}>
             Concepto
           </label>
-          <input name="category" list="budget-categories" placeholder="Ej. Alimentación" required />
+          <input name="category" list="budget-categories" placeholder="Ej. Alimentación" defaultValue={defaultCategory} required />
           <datalist id="budget-categories">
             {existingCategories.map((c) => (
               <option key={c} value={c} />

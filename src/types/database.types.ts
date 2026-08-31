@@ -316,6 +316,41 @@ export type Database = {
         }
         Relationships: []
       }
+      budget_carryovers: {
+        Row: {
+          amount: number
+          budget_id: string
+          created_at: string
+          id: string
+          period_key: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          budget_id: string
+          created_at?: string
+          id?: string
+          period_key: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          budget_id?: string
+          created_at?: string
+          id?: string
+          period_key?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "budget_carryovers_budget_id_fkey"
+            columns: ["budget_id"]
+            isOneToOne: false
+            referencedRelation: "budgets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       budgets: {
         Row: {
           amount: number

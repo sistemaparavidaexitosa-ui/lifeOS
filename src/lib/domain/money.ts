@@ -25,12 +25,19 @@ export interface PeriodStats {
   available: number;
 }
 
-export function periodStats(entries: JournalEntryLike[], fromISO: string): PeriodStats {
+/**
+ * `toISO` es opcional para no cambiar el comportamiento de /reports, que trabaja
+ * con un periodo abierto hacia adelante. Los llamadores que miran una QUINCENA
+ * cerrada (D-076) sí lo pasan: sin tope, mirar una quincena pasada arrastraba
+ * todo el gasto posterior y el número dejaba de significar nada.
+ */
+export function periodStats(entries: JournalEntryLike[], fromISO: string, toISO?: string): PeriodStats {
   let income = 0;
   let expense = 0;
   let transfers = 0;
   for (const e of entries) {
     if (e.status === "Reversed" || e.date < fromISO) continue;
+    if (toISO && e.date > toISO) continue;
     if (e.type === "income") income += e.lines.reduce((s, l) => s + Math.max(0, l.amount), 0);
     else if (e.type === "expense") expense += e.lines.reduce((s, l) => s + Math.max(0, -l.amount), 0);
     else transfers += e.lines.reduce((s, l) => s + Math.max(0, l.amount), 0);

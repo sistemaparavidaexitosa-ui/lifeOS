@@ -1196,6 +1196,50 @@ la mitad que ya existía estaba rota.
     vuelve a sanear: `sanitizePlan` es idempotente a propósito para que eso no
     desplace los índices de la selección.
 
+- **D-076 El presupuesto se trabaja por QUINCENA y se resume por mes.** El
+  usuario cobra por quincena y `budgets` guardaba una aportación por quincena
+  desde 0005, pero la app nunca las usó para medir: comparaba el gasto de una
+  ventana **rodante** de 15 días (`hoy − 15`) contra el `monthly_cost`. Esa
+  ventana se desplaza cada día, pisa el final de Q1 y el principio de Q2 y no se
+  reinicia el día de pago, así que lo que se veía era un acumulado Q1+Q2 y la
+  columna "Balance" salía en verde aunque la quincena estuviera agotada. Cuatro
+  decisiones detrás del arreglo:
+  - **Calendario fijo, no días de pago configurables.** Q1 = día 1-15, Q2 = día
+    16-fin de mes (`src/lib/domain/quincena.ts`). Q1 + Q2 = mes natural exacto,
+    de modo que el resumen mensual sigue cuadrando sin una segunda aritmética. La
+    alternativa (dos días de pago en el perfil) daba periodos que cruzan el corte
+    mensual y una pantalla de ajustes más, a cambio de una fidelidad que el
+    usuario no pidió.
+  - **La quincena no es un estado: se deriva de la fecha.** Vive en el
+    querystring (`/money/budget?q=2026-08-Q2`), no en la base ni en el cliente,
+    así que la vista es compartible y el botón "atrás" funciona. Una clave
+    manipulada devuelve `null` y la página cae a la quincena vigente en vez de
+    lanzar.
+  - **El arrastre entre quincenas es una decisión humana, no un cálculo.** Cada
+    quincena arranca con su aportación limpia; el sobrante o el exceso de la
+    anterior se **muestra** por concepto, y sólo entra si el usuario lo aplica —
+    y se puede quitar. Por eso `budget_carryovers`
+    (`0042_presupuesto_quincenal.sql`) existe: es el único dato que no se puede
+    derivar de los movimientos. El monto se **congela** al aplicarlo, porque el
+    usuario aceptó una cifra concreta y su quincena no debe moverse sola si
+    después registra un movimiento atrasado; si el cierre cambia, la pestaña
+    ofrece reaplicar en vez de reescribir en silencio. Y lo recalcula la Server
+    Action, nunca el cliente: un botón que enviara el monto permitiría inventarse
+    presupuesto desde el navegador.
+  - **El gasto fuera de presupuesto cuenta, pero se nombra.** El indicador de la
+    quincena suma TODO el gasto del periodo, también el de categorías sin
+    concepto, y lo desglosa (`en presupuesto` / `fuera de presupuesto`) con acceso
+    directo a crear el concepto que falta. Un indicador que ignorara ese gasto
+    dejaría el "disponible" inflado, que es la forma silenciosa de mentir.
+  - **Un solo significado de "restante".** Antes el mismo objeto publicaba
+    `balance` (costo mensual − gasto) y `expenseVsBudget` (gasto − costo mensual):
+    la misma idea con dos nombres y signo opuesto según la pantalla. Ahora
+    `remaining` = disponible − gasto, positivo = te queda, y la columna "Balance"
+    desaparece. `/home` y `/money` calculan con la misma función
+    (`budgetQuincenaRow`) para que las tres pantallas no puedan discrepar. De
+    paso se corrigió que Home calculaba la **liquidez** con sólo los últimos 15
+    días de movimientos, y por eso no coincidía con la de `/money`.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo
