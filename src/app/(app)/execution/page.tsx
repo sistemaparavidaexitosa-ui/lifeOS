@@ -53,9 +53,9 @@ import InsightSection from "@/components/InsightSection";
 export default async function ExecutionPage({
   searchParams
 }: {
-  searchParams: Promise<{ project?: string; view?: string; ws?: string }>;
+  searchParams: Promise<{ project?: string; view?: string; ws?: string; task?: string }>;
 }) {
-  const { project: selectedProjectId, view: rawView, ws: requestedWorkspaceId } = await searchParams;
+  const { project: requestedProjectId, view: rawView, ws: requestedWorkspaceId, task: requestedTaskId } = await searchParams;
   const view: ExecutionView = isExecutionView(rawView) ? rawView : "board";
 
   const supabase = await createClient();
@@ -82,6 +82,13 @@ export default async function ExecutionPage({
     supabase.from("tasks").select("id, project_id, status, due, parent_task_id")
   ]);
   const today = todayInTimeZone(timeZone);
+
+  // `?task=` lleva años apuntándose desde Home, el buscador y la campana de
+  // menciones, y esta pantalla nunca lo leyó: el enlace abría la cartera y
+  // dejaba al usuario buscando a mano la tarea que le acababan de señalar.
+  // Se traduce a su proyecto, y BoardShell abre el detalle al montar.
+  const taskTarget = requestedTaskId ? (allTasks ?? []).find((t) => t.id === requestedTaskId) : undefined;
+  const selectedProjectId = requestedProjectId ?? taskTarget?.project_id;
 
   const selectedProject = selectedProjectId ? projects?.find((p) => p.id === selectedProjectId) : undefined;
 
@@ -169,7 +176,13 @@ export default async function ExecutionPage({
             <span className="ex-crumb-sep">/</span>
             <span className="ex-crumb-current">{selectedProject.title}</span>
           </nav>
-          <BoardWorkspace projectRow={selectedProject} view={view} userId={user.id} today={today} />
+          <BoardWorkspace
+            projectRow={selectedProject}
+            view={view}
+            userId={user.id}
+            today={today}
+            openTaskId={taskTarget?.id ?? null}
+          />
         </>
       )}
     </main>
@@ -185,12 +198,15 @@ async function BoardWorkspace({
   projectRow,
   view,
   userId,
-  today
+  today,
+  openTaskId
 }: {
   projectRow: { id: string; title: string; objective: string | null; status: string; priority: string; target_date: string | null; workspace_id: string };
   view: ExecutionView;
   userId: string;
   today: string;
+  /** Tarea a abrir en el drawer al montar, cuando se llegó por ?task=. */
+  openTaskId: string | null;
 }) {
   const supabase = await createClient();
   const projectId = projectRow.id;
@@ -201,6 +217,13 @@ async function BoardWorkspace({
   const allWorkspaces = await listWorkspaces();
   const moveTargets = allWorkspaces.filter((w) => ROLES_QUE_CREAN.includes(w.role));
   const projectWorkspace = allWorkspaces.find((w) => w.id === projectRow.workspace_id);
+
+  // «Hilo» solo donde hay equipo. En el espacio personal no hay a quién
+  // mencionar, y una pestaña que abre una conversación con nadie es peor que
+  // no tenerla. Un enlace con ?view=hilo a un proyecto personal —el mismo
+  // proyecto pudo mudarse de espacio— cae en el Tablero en vez de dejar la
+  // pantalla en blanco: ver initialView más abajo.
+  const threadEnabled = !(projectWorkspace?.isPersonal ?? true);
 
   // Nivel de project_shares vigente: desde 0031 esa fila ya no decide el
   // acceso del equipo, solo el del rol Guest.
@@ -315,8 +338,10 @@ async function BoardWorkspace({
         initialAssignees={assigneesByTask}
         commentCountByTask={commentCountByTask}
         members={members}
-        initialView={view}
+        initialView={threadEnabled || view !== "hilo" ? view : "board"}
         orderingEnabled={orderingEnabled}
+        threadEnabled={threadEnabled}
+        openTaskId={openTaskId}
         today={today}
       />
     </>

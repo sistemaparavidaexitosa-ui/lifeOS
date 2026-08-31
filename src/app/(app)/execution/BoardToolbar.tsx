@@ -50,6 +50,7 @@ const SORTS: { key: SortKey; label: string }[] = [
 
 export default function BoardToolbar({
   view,
+  views,
   onViewChange,
   filters,
   onFiltersChange,
@@ -59,6 +60,8 @@ export default function BoardToolbar({
   filtersActive
 }: {
   view: ExecutionView;
+  /** Qué pestañas se ofrecen. Ver VIEWS_CON_HILO/VIEWS_SIN_HILO en board-types. */
+  views: ExecutionView[];
   onViewChange: (v: ExecutionView) => void;
   filters: BoardFilters;
   onFiltersChange: (f: BoardFilters) => void;
@@ -77,7 +80,7 @@ export default function BoardToolbar({
   return (
     <div className="ex-toolbar">
       <div className="ex-tabs" role="tablist" aria-label="Vistas del tablero">
-        {(Object.keys(VIEW_LABELS) as ExecutionView[]).map((key) => (
+        {views.map((key) => (
           <button
             key={key}
             type="button"

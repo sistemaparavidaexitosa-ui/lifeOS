@@ -58,8 +58,16 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
   );
 }
 
-/** Tope del feed. Es un «qué ha pasado», no un archivo histórico. */
-const MAX_ROWS = 100;
+/**
+ * Tope del feed. Es un «qué ha pasado», no un archivo histórico.
+ *
+ * Sube a 200 porque ahora dejan rastro también crear tareas, mover estados y
+ * tocar grupos: con 100, un día de trabajo normal de un equipo se comía el
+ * feed entero y lo de anteayer dejaba de existir. Si llega a molestar, el
+ * siguiente paso es agrupar por tipo dentro del día — no paginar, que
+ * convertiría esto en el archivo que no quiere ser.
+ */
+const MAX_ROWS = 200;
 
 async function ActivityFeed({ workspaceId }: { workspaceId: string }) {
   const supabase = await createClient();
@@ -76,7 +84,7 @@ async function ActivityFeed({ workspaceId }: { workspaceId: string }) {
       <Card>
         <EmptyState
           icon="◷"
-          text="Todavía no ha pasado nada en este espacio. Al comentar, asignar o compartir un proyecto, aparecerá aquí."
+          text="Todavía no ha pasado nada en este espacio. Al crear un proyecto o una tarea, mover un estado o escribir en un hilo, aparecerá aquí con el nombre de quien lo hizo."
         />
       </Card>
     );

@@ -16,6 +16,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { recordActivity } from "@/lib/data/activity";
 import { sendEmail, appUrl } from "@/lib/email/send";
 import { invitationEmail } from "@/lib/email/templates";
 import { fdate } from "@/lib/format";
@@ -295,13 +296,11 @@ export async function moveProject(projectId: string, workspaceId: string): Promi
 
   const { data: workspace } = await supabase.from("workspaces").select("is_personal").eq("id", parsed.data.workspaceId).single();
   if (workspace && !workspace.is_personal) {
-    await supabase.from("workspace_activity").insert({
-      workspace_id: parsed.data.workspaceId,
-      project_id: parsed.data.projectId,
+    await recordActivity({
+      workspaceId: parsed.data.workspaceId,
+      projectId: parsed.data.projectId,
       type: "move",
-      text: "Proyecto movido a este espacio",
-      actor: user.email ?? "",
-      actor_id: user.id
+      text: "movió este proyecto al espacio"
     });
   }
 
@@ -349,13 +348,11 @@ export async function shareProjectWithGuest(formData: FormData): Promise<ActionR
     );
   if (error) return { ok: false, reason: describeDbError(error) };
 
-  await supabase.from("workspace_activity").insert({
-    workspace_id: project.workspace_id,
-    project_id: parsed.data.projectId,
+  await recordActivity({
+    workspaceId: project.workspace_id,
+    projectId: parsed.data.projectId,
     type: "share",
-    text: `Proyecto abierto a invitados (${parsed.data.accessLevel})`,
-    actor: user.email ?? "",
-    actor_id: user.id
+    text: `abrió el proyecto a invitados (${parsed.data.accessLevel})`
   });
   revalidatePath("/execution");
   return { ok: true };

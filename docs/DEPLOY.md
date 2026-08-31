@@ -51,6 +51,27 @@ El análisis lo dispara siempre el usuario con un clic; no hay cron ni llamadas
 en segundo plano, así que el gasto es una llamada por clic. El modelo es
 `claude-opus-5` y está fijado en `src/lib/ai/provider.ts`.
 
+## 1quater) Planes de proyecto con IA (Proyectos y Tareas)
+
+«Generar plan con IA», en `/execution`, llama a la API de OpenAI. Sin esta
+variable la app **no falla**: el panel dice que no está configurado y el resto
+de `/execution` —tablero, plantillas, todo— sigue igual (F11, D-075).
+
+```bash
+OPENAI_API_KEY=sk-proj-xxxxxxxx   # https://platform.openai.com → API keys
+```
+
+Igual que el motor de recomendaciones: lo dispara siempre el usuario con un
+clic, no hay cron ni llamadas en segundo plano, y el gasto es una llamada por
+clic (dos si regenera). El modelo es `gpt-5.6` y está fijado en
+`src/lib/ai/openai-provider.ts`; `gpt-5.6-terra` es ahí el cambio de una línea
+si el coste llega a importar.
+
+⚠️ Lo que sale del servidor es el **objetivo que escribió el usuario** y, en un
+proyecto que ya tiene tareas, los **títulos** de sus grupos y tareas. Nada más:
+ni responsables, ni fechas, ni comentarios, ni ids. El panel lo dice en pantalla
+antes de generar.
+
 ⚠️ Lo que sale del servidor son los **hechos ya calculados**, en texto, con los
 nombres de cuentas y dependientes sustituidos por alias. Nunca filas crudas de
 la base. El filtro vive en un solo archivo, `src/lib/insights/context.ts`.

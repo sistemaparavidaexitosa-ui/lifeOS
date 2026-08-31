@@ -1094,6 +1094,108 @@
   solo los nuevos— por el mismo motivo que `createRoutineFromTemplate`: media
   plantilla obliga a limpiar a mano antes de reintentar.
 
+### El hilo del proyecto, y una actividad que dice quién (agosto 2026)
+
+**Sin tabla nueva.** `comments.subject_type` acepta `'project'` desde la
+migración 0003 y sus políticas de lectura, escritura y borrado ya resolvían las
+dos ramas; simplemente nadie había escrito nunca un comentario de proyecto. Todo
+el hilo vivía dentro de una tarea, así que un mensaje como «@Victor, dejé
+cargado el último commit, favor de aplicar las migraciones» —que no pertenece a
+ninguna tarea concreta— acababa colgado de la que estuviera abierta.
+
+Lo único que faltaba en la base eran las **reacciones**: las políticas de
+`comment_reactions` (0038) resolvían el sujeto con un join literal a
+`public.tasks`, que sobre un comentario de proyecto no casa ninguna fila. Y una
+política que no casa no da error — el `insert` se rechaza en silencio. La
+migración 0041 las reescribe sobre `can_view_comment_subject`, gemela de
+`can_edit_comment_subject` (0029) y con la misma disciplina anti-recursión.
+
+**La pestaña solo aparece en espacios compartidos.** En el personal no hay a
+quién mencionar, y una conversación con nadie es peor que no tenerla. La
+condición vive en un sitio (`page.tsx` calcula `threadEnabled` desde
+`is_personal`) y viaja como lista de pestañas, no como un `if` dentro de la
+barra. Un enlace con `?view=hilo` a un proyecto que ha acabado en un espacio
+personal cae en el Tablero en vez de dejar la pantalla en blanco.
+
+**El feed deja de guardar correos.** `workspace_activity.actor` guardaba
+`user.email` en las cuatro Server Actions que escribían en ella, cada una con su
+bloque copiado. Ahora hay un solo `recordActivity` (`src/lib/data/activity.ts`)
+que resuelve el nombre (`profiles.name` → `memberships.user_name` → correo como
+último recurso) y nunca lanza: el feed es un efecto secundario, y una excepción
+ahí tumbaría el cambio de estado que ya ocurrió. Las filas ya guardadas con
+correo **no se reescriben**, mismo criterio que 0037 tomó con `comments.mentions`.
+
+Con eso, crear una tarea, mover un estado, borrar, editar el proyecto, tocar un
+grupo o aplicar una plantilla dejan rastro — cosas que hasta ahora no lo dejaban.
+Las acciones masivas escriben **una** fila por proyecto y no una por tarea: mover
+diez tareas de golpe es un gesto, y diez líneas idénticas entierran el feed.
+
+**El mensaje del hilo tiene su propio tipo** (`comment.project`). No es
+burocracia: el propio hilo excluye esos eventos al pintarse —el mensaje del que
+hablan está dos líneas más abajo— y sin un tipo que los distinga habría que
+adivinarlo por el texto. En `/activity` se lee como cualquier comentario.
+
+**`?task=` se leyó por fin.** Home, el buscador y la campana de menciones
+apuntaban a `/execution?task=<id>` desde hacía versiones, y `page.tsx` nunca leyó
+ese parámetro: el enlace abría la cartera y dejaba al usuario buscando a mano la
+tarea que le acababan de señalar. Ahora se traduce a su proyecto y el drawer se
+abre al montar. Salió al ampliar la bandeja de menciones al hilo del proyecto —
+la mitad que ya existía estaba rota.
+
+- **D-075 El plan de proyecto con IA: segundo proveedor, cero fechas y ningún
+  camino de escritura nuevo.** «Generar plan con IA» toma un objetivo y un plazo
+  y propone la estructura del proyecto. Cuatro decisiones que no se ven en el
+  código y sin las cuales parece incoherente:
+  - **Conviven DOS proveedores de IA, y es deliberado.** El motor de
+    recomendaciones (D-027) corre sobre `@anthropic-ai/sdk` y funciona;
+    migrarlo para unificar sería reescribir código probado sin ganar nada, y
+    dejar el planificador en Anthropic era gratis pero se pidió OpenAI. Cada
+    uno vive en su archivo (`src/lib/ai/provider.ts` y `openai-provider.ts`),
+    con su secreto y su validación perezosa (F11): si falta uno, la feature del
+    otro ni se entera. `openai` es la segunda dependencia de runtime que rompe
+    D-008 a propósito, por el mismo motivo que la primera — la salida
+    estructurada validada contra un esquema es justo lo que impide que el
+    modelo invente formas, y reimplementarla sobre `fetch` sería reescribir la
+    pieza de la que depende todo lo demás.
+  - **`plan-project.ts` importa `zod` CLÁSICA, y `recommend.ts` importa
+    `zod/v4`. No es un descuido y no se debe "arreglar".** El
+    `zodOutputFormat` de Anthropic convierte el esquema con el núcleo v4 y
+    revienta con uno v3 (D-027); el `zodTextFormat` de OpenAI va por
+    `zod-to-json-schema` y revienta con uno v4 (openai/openai-node#1602). Cada
+    archivo importa el que su SDK admite. `openai@7` pide `zod ^3.25 || ^4.0`
+    y el repo ya estaba en `3.25.76`: **no hubo que tocar zod**.
+  - **El plan NO lleva fechas. Ninguna, en ningún campo.** Es la misma razón que
+    documenta el catálogo de plantillas y la que sostiene D-044: un plazo
+    repartido en fechas inventadas deja medio tablero vencido al mes siguiente,
+    y ese atraso falso se cuela en Home y en el hecho `execution.overdue` del
+    motor. El plazo vive en el NOMBRE de la fase («Fase 2 · Construcción
+    (semanas 4-9)»), que informa sin prometer. Lo prohíbe el prompt, pero quien
+    lo GARANTIZA es `sanitizePlan`, que construye tareas nuevas con tres campos
+    en vez de copiar lo que llegó — y hay un test que falla si alguna fecha
+    sobrevive.
+  - **La IA produce un `ProjectTemplate` y escribe por `writeTemplate`.** No
+    estrena camino de inserción propio. Así hereda gratis lo que ya estaba
+    resuelto para las plantillas: añadir al final sin tocar lo existente, el
+    rollback si algo falla a mitad, el primer punto de `task_history` de cada
+    tarea y el `audit_log`. Un segundo camino equivalente estaría condenado a
+    divergir del primero al siguiente cambio de esquema.
+  - **Dónde vive cada cosa, y por qué el reparto.** `sanitizePlan` y
+    `selectionToTemplate` son dominio PURO
+    (`src/lib/domain/execution/ai-plan.ts`), probados sin red y sin Postgres,
+    porque son la última línea de defensa entre el modelo y la base — mismo
+    criterio que `insights/anchoring.ts`. El esquema de zod garantiza la FORMA;
+    el dominio garantiza las REGLAS (topes, colores del design system, cero
+    fechas), que ningún esquema puede garantizar. Y el borrador **no se guarda
+    en ninguna tabla**: vive en el estado del cliente hasta que se confirma, así
+    que un plan descartado no deja filas que limpiar.
+  - **En el alta, el plan viaja en el propio formulario.** `createProject` gana
+    un campo `aiPlan` con el plan serializado, gemelo de `templateId`. Crear el
+    proyecto y escribirle el plan en dos llamadas dejaría un tablero vacío si la
+    segunda falla; en una sola, o nacen juntos o el proyecto nace en blanco, que
+    es un estado usable. Y como el JSON pasa por el navegador, el servidor lo
+    vuelve a sanear: `sanitizePlan` es idempotente a propósito para que eso no
+    desplace los índices de la selección.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo

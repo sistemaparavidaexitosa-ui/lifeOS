@@ -146,18 +146,34 @@ export async function pinCommentToLogbook(commentId: string, type: PinType): Pro
     .select("body, author_name, subject_id, subject_type")
     .eq("id", commentId)
     .single();
-  if (!comment || comment.subject_type !== "task") return { ok: false, reason: "Comentario no encontrado." };
+  if (!comment) return { ok: false, reason: "Comentario no encontrado." };
 
-  const { data: task } = await supabase.from("tasks").select("project_id, title").eq("id", comment.subject_id).single();
-  if (!task) return { ok: false, reason: "La tarea de ese comentario ya no existe." };
+  // El sujeto puede ser una tarea o el propio proyecto (hilo de proyecto).
+  // Antes esto cortaba en seco con `subject_type !== "task"`, así que fijar una
+  // decisión tomada en el hilo del proyecto —justo donde se toman— devolvía
+  // «Comentario no encontrado», que además es falso: ahí estaba.
+  let projectId: string;
+  let donde: string;
+
+  if (comment.subject_type === "task") {
+    const { data: task } = await supabase.from("tasks").select("project_id, title").eq("id", comment.subject_id).single();
+    if (!task) return { ok: false, reason: "La tarea de ese comentario ya no existe." };
+    projectId = task.project_id;
+    donde = task.title;
+  } else {
+    const { data: project } = await supabase.from("projects").select("id, title").eq("id", comment.subject_id).single();
+    if (!project) return { ok: false, reason: "El proyecto de ese comentario ya no existe." };
+    projectId = project.id;
+    donde = `el hilo de ${project.title}`;
+  }
 
   const { error } = await supabase.from("logbook").insert({
     user_id: user.id,
-    project_id: task.project_id,
+    project_id: projectId,
     type,
     // Se anota de dónde salió: sin el contexto, media bitácora acaba siendo
     // frases sueltas que nadie sabe a qué respondían.
-    text: `${comment.body} — ${comment.author_name}, en «${task.title}»`
+    text: `${comment.body} — ${comment.author_name}, en «${donde}»`
   });
   if (error) return { ok: false, reason: error.message };
 

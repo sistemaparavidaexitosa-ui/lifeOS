@@ -26,7 +26,10 @@ export default function MentionsMenu({ mentions }: { mentions: MentionRow[] }) {
     // leído, y pedir un segundo gesto para confirmarlo sobra.
     startTransition(async () => {
       await markMentionRead(mention.commentId);
-      router.push(`/execution?task=${mention.taskId}`);
+      // La URL la arma quien carga la bandeja: sabe si la mención fue en una
+      // tarea o en el hilo de un proyecto, y aquí no hay por qué volver a
+      // decidirlo.
+      router.push(mention.href);
     });
   }
 
@@ -85,7 +88,7 @@ export default function MentionsMenu({ mentions }: { mentions: MentionRow[] }) {
                   disabled={pending}
                   onClick={() => open(m)}
                 >
-                  <b className="text-sm block truncate">{m.taskTitle}</b>
+                  <b className="text-sm block truncate">{m.subjectTitle}</b>
                   <span className="text-xs block" style={{ color: "var(--muted)" }}>
                     {m.authorName}: {m.body.length > 70 ? `${m.body.slice(0, 70)}…` : m.body}
                   </span>

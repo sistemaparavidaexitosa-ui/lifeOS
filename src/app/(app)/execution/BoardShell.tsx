@@ -29,7 +29,7 @@ import {
 } from "@/lib/domain/board.ts";
 import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
 import type { BoardApi, BoardGroup, BoardTask, ExecutionView, MoveTarget } from "./board-types";
-import { VIEW_LABELS } from "./board-types";
+import { VIEW_LABELS, VIEWS_CON_HILO, VIEWS_SIN_HILO } from "./board-types";
 import BoardToolbar from "./BoardToolbar";
 import BulkActionBar from "./BulkActionBar";
 import MondayBoard from "./MondayBoard";
@@ -37,6 +37,7 @@ import KanbanBoard from "./KanbanBoard";
 import TableView from "./TableView";
 import TimelineView from "./TimelineView";
 import TaskDetailPanel from "./TaskDetailPanel";
+import ProjectThreadPanel from "./ProjectThreadPanel";
 import { deleteTask as deleteTaskAction } from "./actions";
 import { moveTaskToGroup, reorderTasks, setTaskPriority } from "./board-actions";
 import { setTaskParent } from "./tree-actions";
@@ -50,6 +51,8 @@ export default function BoardShell({
   members,
   initialView,
   orderingEnabled,
+  threadEnabled,
+  openTaskId,
   today
 }: {
   projectId: string;
@@ -60,6 +63,10 @@ export default function BoardShell({
   members: string[];
   initialView: ExecutionView;
   orderingEnabled: boolean;
+  /** Solo en espacios compartidos: en el personal no hay con quién conversar. */
+  threadEnabled: boolean;
+  /** Tarea señalada por ?task= (campana de menciones, Home, buscador). */
+  openTaskId: string | null;
   /** "Hoy" en la zona horaria del PERFIL, calculado en el servidor. */
   today: string;
 }) {
@@ -70,7 +77,11 @@ export default function BoardShell({
   const [filters, setFilters] = useState<BoardFilters>(EMPTY_FILTERS);
   const [sort, setSort] = useState<SortKey>("manual");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
+  // Se abre YA con la tarea que venía en la URL: llegar desde una mención y
+  // tener que buscarla en el tablero es exactamente el paso que el aviso
+  // pretendía ahorrar. Como estado inicial y no como efecto, para que cerrar el
+  // drawer no lo vuelva a abrir en el siguiente render.
+  const [detailTaskId, setDetailTaskId] = useState<string | null>(openTaskId);
   const [error, setError] = useState<string | null>(null);
 
   // Nota: page.tsx monta este componente con key={projectId}, así que cambiar
@@ -250,6 +261,7 @@ export default function BoardShell({
     <div className="ex-board">
       <BoardToolbar
         view={view}
+        views={threadEnabled ? VIEWS_CON_HILO : VIEWS_SIN_HILO}
         onViewChange={changeView}
         filters={filters}
         onFiltersChange={setFilters}
@@ -293,6 +305,9 @@ export default function BoardShell({
       {view === "kanban" && <KanbanBoard api={api} tasks={filteredTasks} today={today} />}
       {view === "table" && <TableView api={api} tasks={filteredTasks} sort={sort} onSortChange={setSort} today={today} />}
       {view === "timeline" && <TimelineView api={api} tasks={filteredTasks} today={today} />}
+      {/* El hilo no recibe `api`: no muta tareas ni comparte selección con las
+          demás vistas. Solo necesita saber de qué proyecto se habla. */}
+      {view === "hilo" && <ProjectThreadPanel projectId={projectId} />}
 
       <BulkActionBar api={api} tasks={tasks} onTasksChange={setTasks} />
 

@@ -71,12 +71,23 @@ export interface ProjectTemplate {
   groups: ProjectTemplateGroup[];
 }
 
-const PURPLE = "var(--c-purple)";
-const BLUE = "var(--c-blue)";
-const TEAL = "var(--c-teal)";
-const GREEN = "var(--c-green)";
-const ORANGE = "var(--c-orange)";
-const PINK = "var(--c-pink)";
+/**
+ * La paleta de grupos, en el orden en que se reparte.
+ *
+ * Se exporta porque el plan generado con IA (`ai-plan.ts`) cicla esta MISMA
+ * lista para colorear sus grupos. El color no lo elige el modelo: dejarle
+ * inventar un `#hex` rompe el tema claro/oscuro, que se apoya en los tokens.
+ */
+export const GROUP_COLORS = [
+  "var(--c-purple)",
+  "var(--c-blue)",
+  "var(--c-teal)",
+  "var(--c-orange)",
+  "var(--c-green)",
+  "var(--c-pink)"
+] as const;
+
+const [PURPLE, BLUE, TEAL, ORANGE, GREEN, PINK] = GROUP_COLORS;
 
 export const PROJECT_TEMPLATES: readonly ProjectTemplate[] = [
   // ===========================================================================
