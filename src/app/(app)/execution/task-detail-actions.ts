@@ -9,6 +9,7 @@ import { z } from "zod";
 import { parseMentions, type RosterMember } from "@/lib/domain/execution/mentions.ts";
 import { dispatchAutomations } from "@/lib/automations/dispatch";
 import { createClient } from "@/lib/supabase/server";
+import { recordActivity } from "@/lib/data/activity";
 import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
 
 export interface TaskDetailTask {
@@ -279,21 +280,11 @@ export async function setTaskAssignees(taskId: string, userNames: string[]) {
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "task.assignees", object: taskId, meta: { assignees: userNames } });
 
-  try {
-    const { data: project } = await supabase.from("projects").select("workspace_id").eq("id", task.project_id).single();
-    if (project?.workspace_id) {
-      await supabase.from("workspace_activity").insert({
-        workspace_id: project.workspace_id,
-        project_id: task.project_id,
-        type: "task.assign",
-        text: `Responsables de "${task.title}" actualizados: ${userNames.join(", ") || "ninguno"}`,
-        actor: user.email ?? "",
-        actor_id: user.id
-      });
-    }
-  } catch {
-    // best-effort, no bloquea el flujo principal
-  }
+  await recordActivity({
+    projectId: task.project_id,
+    type: "task.assign",
+    text: `cambió los responsables de "${task.title}": ${userNames.join(", ") || "ninguno"}`
+  });
 
   const { data: propio } = await supabase.from("profiles").select("name").eq("user_id", user.id).single();
   await dispatchAutomations({
@@ -371,20 +362,12 @@ export async function addTaskComment(taskId: string, body: string) {
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "comment.add", object: taskId, meta: { mentions } });
 
-  try {
-    if (project?.workspace_id) {
-      await supabase.from("workspace_activity").insert({
-        workspace_id: project.workspace_id,
-        project_id: task.project_id,
-        type: "comment",
-        text: `Comentario en "${task.title}"`,
-        actor: user.email ?? "",
-        actor_id: user.id
-      });
-    }
-  } catch {
-    // best-effort
-  }
+  await recordActivity({
+    workspaceId: project?.workspace_id ?? null,
+    projectId: task.project_id,
+    type: "comment",
+    text: `comentó en "${task.title}"`
+  });
 
   await dispatchAutomations({
     type: "comment.added",

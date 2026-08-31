@@ -29,8 +29,27 @@ export interface ActivityDay {
  */
 const TYPE_LABEL: Record<string, string> = {
   comment: "Comentario",
+  // El mensaje escrito en el hilo de un PROYECTO. Tipo aparte para que ese
+  // hilo pueda excluirlo al pintarse sin adivinar por el texto; aquí se lee
+  // igual que cualquier comentario.
+  "comment.project": "Comentario",
+  "task.create": "Tarea",
+  "task.status": "Estado",
   "task.assign": "Responsables",
+  "task.delete": "Tarea borrada",
+  "project.create": "Proyecto",
+  "project.update": "Proyecto",
+  "project.delete": "Proyecto borrado",
+  "group.create": "Grupo",
+  "group.rename": "Grupo",
+  "group.delete": "Grupo borrado",
+  "template.apply": "Plantilla",
   share: "Compartido",
+  // Las dos claves del mismo evento: la Server Action escribe `move` desde
+  // 0003 y esta tabla decía `project.move`, así que el feed llevaba enseñando
+  // «move» en crudo. Se mapean ambas en vez de reescribir las filas ya
+  // guardadas — mismo criterio que 0037 tomó con `comments.mentions`.
+  move: "Movido",
   "project.move": "Movido",
   "member.invite": "Invitación",
   "member.remove": "Baja"

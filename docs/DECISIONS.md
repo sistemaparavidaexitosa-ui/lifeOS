@@ -1094,6 +1094,54 @@
   solo los nuevos— por el mismo motivo que `createRoutineFromTemplate`: media
   plantilla obliga a limpiar a mano antes de reintentar.
 
+### El hilo del proyecto, y una actividad que dice quién (agosto 2026)
+
+**Sin tabla nueva.** `comments.subject_type` acepta `'project'` desde la
+migración 0003 y sus políticas de lectura, escritura y borrado ya resolvían las
+dos ramas; simplemente nadie había escrito nunca un comentario de proyecto. Todo
+el hilo vivía dentro de una tarea, así que un mensaje como «@Victor, dejé
+cargado el último commit, favor de aplicar las migraciones» —que no pertenece a
+ninguna tarea concreta— acababa colgado de la que estuviera abierta.
+
+Lo único que faltaba en la base eran las **reacciones**: las políticas de
+`comment_reactions` (0038) resolvían el sujeto con un join literal a
+`public.tasks`, que sobre un comentario de proyecto no casa ninguna fila. Y una
+política que no casa no da error — el `insert` se rechaza en silencio. La
+migración 0041 las reescribe sobre `can_view_comment_subject`, gemela de
+`can_edit_comment_subject` (0029) y con la misma disciplina anti-recursión.
+
+**La pestaña solo aparece en espacios compartidos.** En el personal no hay a
+quién mencionar, y una conversación con nadie es peor que no tenerla. La
+condición vive en un sitio (`page.tsx` calcula `threadEnabled` desde
+`is_personal`) y viaja como lista de pestañas, no como un `if` dentro de la
+barra. Un enlace con `?view=hilo` a un proyecto que ha acabado en un espacio
+personal cae en el Tablero en vez de dejar la pantalla en blanco.
+
+**El feed deja de guardar correos.** `workspace_activity.actor` guardaba
+`user.email` en las cuatro Server Actions que escribían en ella, cada una con su
+bloque copiado. Ahora hay un solo `recordActivity` (`src/lib/data/activity.ts`)
+que resuelve el nombre (`profiles.name` → `memberships.user_name` → correo como
+último recurso) y nunca lanza: el feed es un efecto secundario, y una excepción
+ahí tumbaría el cambio de estado que ya ocurrió. Las filas ya guardadas con
+correo **no se reescriben**, mismo criterio que 0037 tomó con `comments.mentions`.
+
+Con eso, crear una tarea, mover un estado, borrar, editar el proyecto, tocar un
+grupo o aplicar una plantilla dejan rastro — cosas que hasta ahora no lo dejaban.
+Las acciones masivas escriben **una** fila por proyecto y no una por tarea: mover
+diez tareas de golpe es un gesto, y diez líneas idénticas entierran el feed.
+
+**El mensaje del hilo tiene su propio tipo** (`comment.project`). No es
+burocracia: el propio hilo excluye esos eventos al pintarse —el mensaje del que
+hablan está dos líneas más abajo— y sin un tipo que los distinga habría que
+adivinarlo por el texto. En `/activity` se lee como cualquier comentario.
+
+**`?task=` se leyó por fin.** Home, el buscador y la campana de menciones
+apuntaban a `/execution?task=<id>` desde hacía versiones, y `page.tsx` nunca leyó
+ese parámetro: el enlace abría la cartera y dejaba al usuario buscando a mano la
+tarea que le acababan de señalar. Ahora se traduce a su proyecto y el drawer se
+abre al montar. Salió al ampliar la bandeja de menciones al hilo del proyecto —
+la mitad que ya existía estaba rota.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo

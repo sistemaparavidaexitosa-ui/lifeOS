@@ -13,7 +13,9 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { recordActivity } from "@/lib/data/activity";
 import { evaluateTransition } from "@/lib/domain/task-state.ts";
+import { STATUS_META } from "./status-meta";
 import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
 
 const idListSchema = z.array(z.string().uuid()).min(1).max(500);
@@ -212,7 +214,10 @@ export async function bulkSetTaskStatus(ids: string[], status: TaskStatus): Prom
   const parsed = bulkStatusSchema.parse({ ids, status });
   const { supabase, user } = await requireUser();
 
-  const { data: tasks, error: readErr } = await supabase.from("tasks").select("id, title, status, deps, version").in("id", parsed.ids);
+  const { data: tasks, error: readErr } = await supabase
+    .from("tasks")
+    .select("id, title, status, deps, version, project_id")
+    .in("id", parsed.ids);
   if (readErr) throw new Error(readErr.message);
 
   const depIds = [...new Set((tasks ?? []).flatMap((t) => t.deps ?? []))];
@@ -223,6 +228,10 @@ export async function bulkSetTaskStatus(ids: string[], status: TaskStatus): Prom
   }
 
   const result: BulkResult = { updated: [], failures: [] };
+  // UNA fila de actividad por proyecto, no una por tarea: mover diez tareas de
+  // golpe es un gesto, y diez líneas idénticas en el feed lo entierran.
+  const movidasPorProyecto = new Map<string, number>();
+
   for (const task of tasks ?? []) {
     if (task.status === parsed.status) continue;
     const check = evaluateTransition({ status: task.status as TaskStatus, deps: task.deps ?? [] }, parsed.status, depStatuses);
@@ -244,6 +253,7 @@ export async function bulkSetTaskStatus(ids: string[], status: TaskStatus): Prom
     }
     await supabase.from("task_history").insert({ task_id: task.id, from_state: task.status, to_state: parsed.status });
     result.updated.push(task.id);
+    movidasPorProyecto.set(task.project_id, (movidasPorProyecto.get(task.project_id) ?? 0) + 1);
   }
 
   if (result.updated.length) {
@@ -253,6 +263,13 @@ export async function bulkSetTaskStatus(ids: string[], status: TaskStatus): Prom
       object: result.updated.join(","),
       meta: { to: parsed.status, count: result.updated.length }
     });
+    for (const [projectId, count] of movidasPorProyecto) {
+      await recordActivity({
+        projectId,
+        type: "task.status",
+        text: `movió ${count} ${count === 1 ? "tarea" : "tareas"} a ${STATUS_META[parsed.status].label}`
+      });
+    }
     revalidatePath("/execution");
     revalidatePath("/home");
   }
@@ -289,6 +306,9 @@ export async function bulkDeleteTasks(ids: string[]) {
   const parsed = idListSchema.parse(ids);
   const { supabase, user } = await requireUser();
 
+  // Antes del borrado: después no queda fila de la que sacar el proyecto.
+  const { data: doomed } = await supabase.from("tasks").select("project_id").in("id", parsed);
+
   const { error } = await supabase.from("tasks").delete().in("id", parsed);
   if (error) throw new Error(error.message);
 
@@ -298,6 +318,16 @@ export async function bulkDeleteTasks(ids: string[]) {
     object: parsed.join(","),
     meta: { count: parsed.length }
   });
+
+  const borradasPorProyecto = new Map<string, number>();
+  for (const t of doomed ?? []) borradasPorProyecto.set(t.project_id, (borradasPorProyecto.get(t.project_id) ?? 0) + 1);
+  for (const [projectId, count] of borradasPorProyecto) {
+    await recordActivity({
+      projectId,
+      type: "task.delete",
+      text: `borró ${count} ${count === 1 ? "tarea" : "tareas"}`
+    });
+  }
   revalidatePath("/execution");
   revalidatePath("/home");
 }

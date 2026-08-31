@@ -1,120 +1,95 @@
 "use client";
-// El HILO de una tarea: comentarios y cambios de estado en una sola corriente.
+// LA PESTAÑA «HILO» DE UN PROYECTO.
 //
-// Antes eran dos tarjetas apiladas —toda la conversación, y debajo toda la
-// cronología— con dos relojes que además iban en sentidos opuestos. Para saber
-// si un comentario se escribió antes o después de que la tarea se bloqueara
-// había que cruzar dos listas a ojo. Son el mismo hilo: un cambio de estado es
-// lo que en un chat serían los mensajitos grises de sistema, y es justo lo que
-// explica por qué el comentario siguiente dice lo que dice.
+// POR QUÉ EXISTE
+// La conversación del equipo solo cabía DENTRO de una tarea. Un mensaje como
+// «@Victor, dejé cargado el último commit, favor de aplicar las migraciones» no
+// pertenece a ninguna tarea concreta, así que acababa colgado de una cualquiera
+// —la que estuviera abierta— y allí se perdía. Aquí tiene su sitio.
 //
-// El orden y el formato viven en domain/execution/thread.ts, probados sin
-// React. Aquí solo se pinta.
+// Y NO ES SOLO UN CHAT
+// Se intercalan los eventos del proyecto: quién creó una tarea, quién movió un
+// estado, quién aplicó una plantilla. Es la misma idea que el hilo de una tarea
+// con sus mensajitos grises — lo que explica por qué el siguiente mensaje dice
+// lo que dice. El orden vive en domain/execution/project-thread.ts, probado sin
+// React; aquí solo se pinta.
+//
+// Solo aparece en espacios COMPARTIDOS (ver BoardShell/page.tsx): en el
+// personal no hay con quién conversar ni a quién mencionar.
 
-import { useMemo, useState, useTransition } from "react";
-import { addTaskComment } from "./task-detail-actions";
-import { createReminder, pinCommentToLogbook, reactDone, toggleReaction, type PinType } from "./thread-actions";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { getProjectThread, addProjectComment, type ProjectThreadResult } from "./project-thread-actions";
+import { createReminder, pinCommentToLogbook, toggleReaction, type PinType } from "./thread-actions";
 import {
   summarizeReactions,
   toggleIntent,
-  DONE_EMOJI,
   REACTION_PALETTE,
   type ReactionLike
 } from "@/lib/domain/execution/reactions.ts";
 import { PRESET_LABEL, type ReminderPreset } from "@/lib/domain/execution/reminders.ts";
-import { mergeThread, describeTransition } from "@/lib/domain/execution/thread.ts";
-import type { RosterMember } from "@/lib/domain/execution/mentions.ts";
-import { STATUS_META } from "./status-meta";
-import type { TaskStatus } from "@/lib/domain/types.ts";
+import { mergeProjectThread, describeEvent } from "@/lib/domain/execution/project-thread.ts";
+import { activityLabel } from "@/lib/domain/execution/activity.ts";
 import MenuSurface from "@/components/MenuSurface";
 import { CommentBody, MentionComposer } from "./mention-ui";
 import { useThreadRealtime } from "@/lib/hooks/useThreadRealtime";
 
-interface CommentLite {
-  id: string;
-  body: string;
-  author_name: string;
-  mentions: string[];
-  created_at: string;
-}
-
-interface ReactionLite {
-  comment_id: string;
-  user_id: string;
-  emoji: string;
-}
-
-interface HistoryLite {
-  id: string;
-  from_state: string | null;
-  to_state: string;
-  ts: string;
-}
-
-/** El nombre legible de un estado, o el crudo si algún día aparece uno nuevo. */
-function stateLabel(state: string): string {
-  return STATUS_META[state as TaskStatus]?.label ?? state;
-}
-
 const PRESETS: ReminderPreset[] = ["manana", "en-3-dias", "proxima-semana"];
 
-export default function TaskThreadPanel({
-  taskId,
-  comments,
-  history,
-  reactions,
-  viewerId,
-  roster,
-  onSaved
-}: {
-  taskId: string;
-  comments: CommentLite[];
-  history: HistoryLite[];
-  reactions: ReactionLite[];
-  viewerId: string;
-  roster: RosterMember[];
-  onSaved: () => void;
-}) {
+export default function ProjectThreadPanel({ projectId }: { projectId: string }) {
+  const [data, setData] = useState<ProjectThreadResult | null>(null);
   const [body, setBody] = useState("");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-
-  const entries = useMemo(
-    () =>
-      mergeThread(
-        comments.map((c) => ({ id: c.id, body: c.body, authorName: c.author_name, createdAt: c.created_at })),
-        history.map((h) => ({ id: h.id, fromState: h.from_state, toState: h.to_state, ts: h.ts }))
-      ),
-    [comments, history]
-  );
-
-  // Lo que escriba un compañero aparece sin recargar. `onSaved` es el mismo
-  // camino que ya se usa tras una acción propia: una sola manera de refrescar.
-  useThreadRealtime(taskId, onSaved);
-
-  const reactionRows: ReactionLike[] = useMemo(
-    () => reactions.map((r) => ({ commentId: r.comment_id, userId: r.user_id, emoji: r.emoji })),
-    [reactions]
-  );
-
-  /** El menú de acciones abierto, si hay alguno: un comentario a la vez. */
   const [openFor, setOpenFor] = useState<string | null>(null);
   const [actionAnchor, setActionAnchor] = useState<HTMLElement | null>(null);
 
+  const load = useCallback(() => {
+    getProjectThread(projectId)
+      .then((result) => {
+        setData(result);
+        setError(null);
+      })
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "No se pudo cargar el hilo."));
+  }, [projectId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // Lo que escriba un compañero aparece sin recargar, por el MISMO camino que
+  // una acción propia: una sola manera de refrescar.
+  useThreadRealtime(projectId, load);
+
+  const entries = useMemo(
+    () => (data ? mergeProjectThread(data.comments, data.events) : []),
+    [data]
+  );
+
+  const reactionRows: ReactionLike[] = useMemo(
+    () => (data ?? { reactions: [] }).reactions.map((r) => ({ commentId: r.comment_id, userId: r.user_id, emoji: r.emoji })),
+    [data]
+  );
+
+  function closeMenu() {
+    setOpenFor(null);
+    setActionAnchor(null);
+  }
+
   function react(commentId: string, emoji: string) {
-    const intent = toggleIntent(reactionRows, commentId, viewerId, emoji);
+    if (!data) return;
+    const intent = toggleIntent(reactionRows, commentId, data.viewerId, emoji);
     startTransition(async () => {
-      // El ✅ es el único que además intenta cerrar la tarea; el resto solo
-      // reacciona. Por eso son dos acciones y no una con un `if` dentro.
-      const result = emoji === DONE_EMOJI ? await reactDone(commentId, taskId, intent) : await toggleReaction(commentId, emoji, intent);
+      // Aquí el ✅ es una reacción y nada más. En el hilo de una TAREA además
+      // la completa (reactDone); sobre un proyecto no hay tarea que cerrar, y
+      // cerrar el proyecto entero con un emoji sería otra cosa muy distinta.
+      const result = await toggleReaction(commentId, emoji, intent);
       setError(result.ok ? null : (result.reason ?? "No se pudo reaccionar."));
-      onSaved();
+      load();
     });
   }
 
   function pin(commentId: string, type: PinType) {
-    setOpenFor(null);
-    setActionAnchor(null);
+    closeMenu();
     startTransition(async () => {
       const result = await pinCommentToLogbook(commentId, type);
       setError(result.ok ? null : (result.reason ?? "No se pudo fijar."));
@@ -122,8 +97,7 @@ export default function TaskThreadPanel({
   }
 
   function remind(commentId: string, preset: ReminderPreset) {
-    setOpenFor(null);
-    setActionAnchor(null);
+    closeMenu();
     startTransition(async () => {
       const result = await createReminder("comment", commentId, preset, "");
       setError(result.ok ? null : (result.reason ?? "No se pudo crear el recordatorio."));
@@ -133,30 +107,48 @@ export default function TaskThreadPanel({
   function send() {
     startTransition(async () => {
       try {
-        await addTaskComment(taskId, body);
+        await addProjectComment(projectId, body);
         setBody("");
         setError(null);
-        onSaved();
+        load();
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Error");
+        setError(e instanceof Error ? e.message : "No se pudo enviar el mensaje.");
       }
     });
   }
 
+  if (!data) {
+    return (
+      <div className="card" style={{ background: "var(--surface)" }}>
+        <span className="text-sm" style={{ color: "var(--muted)" }}>
+          {error ?? "Cargando hilo…"}
+        </span>
+      </div>
+    );
+  }
+
   return (
-    <div className="card" style={{ background: "var(--surface)", marginTop: 8 }}>
-      <b className="text-sm">Hilo</b>
+    <div className="card" style={{ background: "var(--surface)" }}>
+      <div className="flex items-baseline gap-2 flex-wrap">
+        <b className="text-sm">Hilo del proyecto</b>
+        <span className="text-xs" style={{ color: "var(--muted)" }}>
+          {data.roster.length === 1
+            ? "1 persona en este espacio"
+            : `${data.roster.length} personas en este espacio`}
+        </span>
+      </div>
+
       {!entries.length && (
         <div className="text-xs" style={{ color: "var(--muted)", margin: "6px 0" }}>
-          Sin actividad todavía. Usa @ para mencionar a alguien del espacio.
+          Nadie ha escrito todavía. Usa @ para mencionar a alguien del espacio; le llegará a su campana.
         </div>
       )}
 
       <div style={{ marginTop: 6 }}>
         {entries.map((e) =>
-          e.kind === "system" ? (
+          e.kind === "event" ? (
             <div key={e.id} className="text-xs" style={{ color: "var(--muted)", margin: "8px 0 8px 2px" }}>
-              {describeTransition(e.fromState && stateLabel(e.fromState), stateLabel(e.toState))} ·{" "}
+              <b style={{ color: "var(--c-purple)" }}>{activityLabel(e.type)}</b> · {describeEvent(e.actor, e.text)} ·{" "}
               {new Date(e.at).toLocaleString()}
             </div>
           ) : (
@@ -165,11 +157,11 @@ export default function TaskThreadPanel({
               style={{ background: "var(--surface2)", borderRadius: 12, padding: "9px 11px", margin: "8px 0" }}
             >
               <div className="text-sm">
-                <CommentBody body={e.body} roster={roster} />
+                <CommentBody body={e.body} roster={data.roster} />
               </div>
 
               <div className="flex items-center gap-1.5 flex-wrap" style={{ marginTop: 6 }}>
-                {summarizeReactions(reactionRows, e.id, viewerId).map((rx) => (
+                {summarizeReactions(reactionRows, e.id, data.viewerId).map((rx) => (
                   <button
                     key={rx.emoji}
                     className={`btn-ghost btn-sm${rx.mine ? " btn-primary" : ""}`}
@@ -186,8 +178,9 @@ export default function TaskThreadPanel({
                   style={{ padding: "2px 8px", minHeight: 26 }}
                   disabled={pending}
                   onClick={(ev) => {
-                    setOpenFor(openFor === e.id ? null : e.id);
-                    setActionAnchor(openFor === e.id ? null : ev.currentTarget);
+                    const abierto = openFor === e.id;
+                    setOpenFor(abierto ? null : e.id);
+                    setActionAnchor(abierto ? null : ev.currentTarget);
                   }}
                   aria-label="Reaccionar, fijar o recordar"
                 >
@@ -204,12 +197,12 @@ export default function TaskThreadPanel({
       </div>
 
       <MentionComposer
-        roster={roster}
+        roster={data.roster}
         value={body}
         onChange={setBody}
         onSend={send}
         pending={pending}
-        placeholder="Escribe un comentario, usa @ para mencionar…"
+        placeholder="Escribe al equipo, usa @ para mencionar…"
       />
 
       {openFor && actionAnchor && (
@@ -217,11 +210,8 @@ export default function TaskThreadPanel({
           anchor={actionAnchor}
           align="start"
           width={228}
-          label="Acciones sobre el comentario"
-          onClose={() => {
-            setOpenFor(null);
-            setActionAnchor(null);
-          }}
+          label="Acciones sobre el mensaje"
+          onClose={closeMenu}
         >
           <div className="flex gap-1 flex-wrap" style={{ padding: "6px 8px" }}>
             {REACTION_PALETTE.map((emoji) => (
@@ -232,11 +222,10 @@ export default function TaskThreadPanel({
                 disabled={pending}
                 onClick={() => {
                   const id = openFor;
-                  setOpenFor(null);
-                  setActionAnchor(null);
+                  closeMenu();
                   react(id, emoji);
                 }}
-                aria-label={emoji === DONE_EMOJI ? "Marcar como hecho (completa la tarea)" : `Reaccionar con ${emoji}`}
+                aria-label={`Reaccionar con ${emoji}`}
               >
                 {emoji}
               </button>

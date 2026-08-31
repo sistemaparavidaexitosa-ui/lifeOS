@@ -2254,6 +2254,10 @@ export type Database = {
       }
       can_edit_notebook: { Args: { p_notebook_id: string }; Returns: boolean }
       can_edit_project: { Args: { p_project_id: string }; Returns: boolean }
+      can_view_comment_subject: {
+        Args: { p_subject_id: string; p_subject_type: string }
+        Returns: boolean
+      }
       debug_rls_policies: {
         Args: never
         Returns: {

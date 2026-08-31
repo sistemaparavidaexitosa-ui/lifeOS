@@ -14,6 +14,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { recordActivity } from "@/lib/data/activity";
 
 const setParentSchema = z.object({
   taskId: z.string().uuid(),
@@ -125,6 +126,7 @@ export async function createTaskGroup(input: { projectId: string; name: string; 
   if (error) throw new Error(error.message);
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "group.create", object: data.id, meta: { name: parsed.name } });
+  await recordActivity({ projectId: parsed.projectId, type: "group.create", text: `creó el grupo "${data.name}"` });
   revalidatePath("/execution");
   return data;
 }
@@ -143,10 +145,21 @@ export async function renameTaskGroup(groupId: string, name: string) {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("No autenticado");
 
+  // El nombre anterior y el proyecto se leen antes del update: «renombró el
+  // grupo a X» sin decir cuál era obliga a adivinar qué cambió.
+  const { data: antes } = await supabase.from("task_groups").select("name, project_id").eq("id", parsed.groupId).single();
+
   const { error } = await supabase.from("task_groups").update({ name: parsed.name.trim() }).eq("id", parsed.groupId);
   if (error) throw new Error(error.message);
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "group.rename", object: parsed.groupId });
+  if (antes) {
+    await recordActivity({
+      projectId: antes.project_id,
+      type: "group.rename",
+      text: `renombró el grupo "${antes.name}" a "${parsed.name.trim()}"`
+    });
+  }
   revalidatePath("/execution");
 }
 
@@ -173,6 +186,8 @@ export async function deleteTaskGroup(groupId: string, fallbackGroupId: string) 
   } = await supabase.auth.getUser();
   if (!user) throw new Error("No autenticado");
 
+  const { data: doomed } = await supabase.from("task_groups").select("name, project_id").eq("id", parsed.groupId).single();
+
   const { error: moveErr } = await supabase
     .from("tasks")
     .update({ group_id: parsed.fallbackGroupId })
@@ -183,5 +198,12 @@ export async function deleteTaskGroup(groupId: string, fallbackGroupId: string) 
   if (delErr) throw new Error(delErr.message);
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "group.delete", object: parsed.groupId, meta: { fallbackGroupId: parsed.fallbackGroupId } });
+  if (doomed) {
+    await recordActivity({
+      projectId: doomed.project_id,
+      type: "group.delete",
+      text: `borró el grupo "${doomed.name}" y movió sus tareas a otro`
+    });
+  }
   revalidatePath("/execution");
 }

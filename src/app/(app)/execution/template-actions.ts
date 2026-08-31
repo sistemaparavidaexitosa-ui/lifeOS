@@ -14,6 +14,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { recordActivity } from "@/lib/data/activity";
 import { getProjectTemplate, plannedRows } from "@/lib/domain/execution/project-templates.ts";
 
 export interface TemplateResult {
@@ -40,6 +41,14 @@ export async function applyProjectTemplate(projectId: string, templateId: string
 
   const result = await writeTemplate(supabase, parsed.data.projectId, template, user.id);
   if (result.ok) {
+    // Solo aquí, y no dentro de writeTemplate: `createProject` la reusa, y ahí
+    // el evento que importa es «creó el proyecto», no «aplicó una plantilla» a
+    // un tablero que acaba de nacer.
+    await recordActivity({
+      projectId: parsed.data.projectId,
+      type: "template.apply",
+      text: `aplicó la plantilla «${template.name}» (${result.created?.groups ?? 0} grupos, ${result.created?.tasks ?? 0} tareas)`
+    });
     revalidatePath("/execution");
     revalidatePath("/home");
   }

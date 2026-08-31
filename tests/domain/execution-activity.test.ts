@@ -18,6 +18,32 @@ test("activityLabel: traduce los tipos conocidos", () => {
   assert.strictEqual(activityLabel("task.assign"), "Responsables");
 });
 
+test("activityLabel: traduce lo que ahora deja rastro y antes no lo dejaba", () => {
+  assert.strictEqual(activityLabel("task.create"), "Tarea");
+  assert.strictEqual(activityLabel("task.status"), "Estado");
+  assert.strictEqual(activityLabel("task.delete"), "Tarea borrada");
+  assert.strictEqual(activityLabel("project.create"), "Proyecto");
+  assert.strictEqual(activityLabel("project.update"), "Proyecto");
+  assert.strictEqual(activityLabel("project.delete"), "Proyecto borrado");
+  assert.strictEqual(activityLabel("group.create"), "Grupo");
+  assert.strictEqual(activityLabel("group.rename"), "Grupo");
+  assert.strictEqual(activityLabel("group.delete"), "Grupo borrado");
+  assert.strictEqual(activityLabel("template.apply"), "Plantilla");
+});
+
+test("activityLabel: el mensaje del hilo de proyecto se lee como comentario", () => {
+  // Es un tipo aparte solo para que el propio hilo pueda excluirlo al pintarse
+  // (el mensaje ya está en su tarjeta). En el feed no hay tal duplicado.
+  assert.strictEqual(activityLabel("comment.project"), "Comentario");
+});
+
+test("activityLabel: `move` se traduce igual que `project.move`", () => {
+  // La Server Action escribe `move`; el mapa solo conocía `project.move`, así
+  // que el feed llevaba enseñando «move» en crudo desde 0003.
+  assert.strictEqual(activityLabel("move"), "Movido");
+  assert.strictEqual(activityLabel("project.move"), "Movido");
+});
+
 test("activityLabel: un tipo desconocido se devuelve tal cual, no como 'Otro'", () => {
   // `workspace_activity.type` es texto libre en el esquema: una acción futura
   // puede escribir algo que este mapa no conozca, y esconderlo borraría la
