@@ -11,11 +11,14 @@
 // nada; esto empieza a devolverle su sitio en vez de agrandar el problema.
 import Link from "next/link";
 
-export type LibraryView = "estado" | "categoria" | "todos";
+export type LibraryView = "estado" | "categoria" | "todos" | "plan";
 
 const VISTAS: { value: LibraryView; label: string }[] = [
   { value: "estado", label: "Por estado" },
   { value: "categoria", label: "Por categoría" },
+  // "Plan" agrupa por SEMANA en vez de por un atributo del libro: es la única
+  // vista que contesta "¿qué toca ahora?" en lugar de "¿qué tengo?".
+  { value: "plan", label: "Plan" },
   { value: "todos", label: "Todos" }
 ];
 

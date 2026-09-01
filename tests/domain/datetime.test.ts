@@ -7,7 +7,8 @@ import {
   greetingFor,
   hourInTimeZone,
   isValidTimeZone,
-  todayInTimeZone
+  todayInTimeZone,
+  weekStartISO
 } from "../../src/lib/domain/datetime.ts";
 
 // 21-ago-2026 19:30 UTC = 13:30 en Ciudad de México (UTC-6, horario de verano).
@@ -68,4 +69,18 @@ test("addDaysISO y diffDays operan sobre fechas calendario", () => {
   assert.strictEqual(addDaysISO("2026-08-21", 7), "2026-08-28");
   assert.strictEqual(addDaysISO("2026-08-31", 1), "2026-09-01");
   assert.strictEqual(diffDays("2026-08-21", "2026-08-28"), 7);
+});
+
+// El lunes es el ancla de semana de TODO el OS: routineDueToday("Semanal") lo
+// usa, /planning arranca ahí y la cola de lectura (migración 0042) lo impone
+// con un check en la columna. Una sola función para que no haya dos criterios.
+test("weekStartISO devuelve el lunes de la semana que contiene la fecha", () => {
+  assert.strictEqual(weekStartISO("2026-09-01"), "2026-08-31"); // martes
+  assert.strictEqual(weekStartISO("2026-09-06"), "2026-08-31"); // domingo: MISMA semana
+  assert.strictEqual(weekStartISO("2026-09-07"), "2026-09-07"); // lunes: se queda igual
+});
+
+test("weekStartISO cruza el fin de año sin romperse", () => {
+  // 1-ene-2027 es viernes; su lunes cae en el año anterior.
+  assert.strictEqual(weekStartISO("2027-01-01"), "2026-12-28");
 });

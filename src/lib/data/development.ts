@@ -6,6 +6,22 @@ import { todayLocal, addDaysISO } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
 import { getPersonalWorkspaceIds } from "@/lib/data/workspaces";
 import type { SourceSnapshot } from "@/lib/domain/development/goals.ts";
+import {
+  focusBook,
+  planStatus,
+  requiredPace,
+  type PlanEntry,
+  type PlannedBook,
+  type FocusReason,
+  type PlanState,
+  type RequiredPace
+} from "@/lib/domain/development/reading-plan.ts";
+import {
+  readingVelocity,
+  estimatedFinish,
+  type ProgressPoint,
+  type FinishEstimate
+} from "@/lib/domain/development/reading.ts";
 import { getSessionUser } from "@/lib/data/session";
 
 /**
@@ -68,4 +84,103 @@ export const loadSourceSnapshot = cache(async (): Promise<SourceSnapshot> => {
   for (const g of sgoals ?? []) savingsGoalAmount[g.id] = Number(g.current_amount);
 
   return { habitCompletionPct, projectDonePct, bookPagesRead, financialGoalAmount, savingsGoalAmount };
+});
+
+/**
+ * El libro que Home, el Panel de Desarrollo y la Biblioteca deben enseñar, ya
+ * resuelto: quién es, por qué, cuánto llevas y a qué ritmo tendrías que ir.
+ *
+ * UNA SOLA FUENTE, A PROPÓSITO. Las tres pantallas podrían consultar por su
+ * cuenta —de hecho Home lo hacía, con su propio `select` a books— pero entonces
+ * nada garantiza que coincidan: el Panel diría un libro y Home otro en la misma
+ * sesión, y el usuario no tendría manera de saber cuál le miente.
+ */
+export interface ReadingFocus {
+  book: {
+    id: string;
+    title: string;
+    author: string;
+    coverUrl: string;
+    currentPage: number;
+    totalPages: number;
+    status: string;
+  };
+  pct: number;
+  /** Por qué es el foco. Home cambia el título de su tarjeta con esto. */
+  reason: FocusReason;
+  planState: PlanState;
+  /** Ritmo que EXIGE el plan. `null` sin plan o sin total de páginas. */
+  pace: RequiredPace | null;
+  /** Ritmo REAL de los últimos días. 0 cuando no hay historial suficiente. */
+  actualPagesPerDay: number;
+  estimate: FinishEstimate;
+}
+
+/**
+ * Envuelta en `cache()` igual que loadSourceSnapshot(): /development la pide
+ * una vez para el Stat y otra para la tarjeta dentro del mismo request.
+ */
+export const loadReadingFocus = cache(async (): Promise<ReadingFocus | null> => {
+  const supabase = await createClient();
+  const user = await getSessionUser();
+  if (!user) return null;
+
+  const today = todayLocal(await getUserTimeZone());
+
+  // Los terminados no se consultan: no pueden ser el foco y solo engordarían
+  // una respuesta que se pide en cada carga de Home.
+  const [{ data: books }, { data: plan }, { data: progress }] = await Promise.all([
+    supabase.from("books").select("*").neq("status", "Terminado"),
+    supabase.from("reading_plan_weeks").select("book_id, week_start, position"),
+    supabase.from("book_progress").select("book_id, local_date, page")
+  ]);
+
+  const candidatos: PlannedBook[] = (books ?? []).map((b) => ({
+    id: b.id,
+    status: b.status,
+    currentPage: b.current_page,
+    totalPages: b.total_pages,
+    updatedAt: b.updated_at
+  }));
+  const entradas: PlanEntry[] = (plan ?? []).map((p) => ({
+    bookId: p.book_id,
+    weekStart: p.week_start,
+    position: p.position
+  }));
+
+  const foco = focusBook(entradas, candidatos, today);
+  if (!foco) return null;
+
+  const fila = (books ?? []).find((b) => b.id === foco.bookId);
+  const elegido = candidatos.find((b) => b.id === foco.bookId);
+  if (!fila || !elegido) return null;
+
+  const suyas = entradas.filter((e) => e.bookId === foco.bookId);
+  const puntos: ProgressPoint[] = (progress ?? [])
+    .filter((p) => p.book_id === foco.bookId)
+    .map((p) => ({ date: p.local_date, page: p.page }));
+
+  return {
+    book: {
+      id: fila.id,
+      title: fila.title,
+      author: fila.author,
+      coverUrl: fila.cover_url,
+      currentPage: fila.current_page,
+      totalPages: fila.total_pages,
+      status: fila.status
+    },
+    pct: fila.total_pages ? Math.round((fila.current_page / fila.total_pages) * 100) : 0,
+    reason: foco.reason,
+    planState: planStatus(suyas, elegido, today),
+    pace: requiredPace(elegido, suyas, today),
+    // Se redondea aquí y no en la pantalla: "14.333333 págs./día" no lo lee
+    // nadie, y tres pantallas redondeando por su cuenta acabarían discrepando.
+    actualPagesPerDay: Math.round(readingVelocity(puntos) * 10) / 10,
+    estimate: estimatedFinish(
+      { currentPage: fila.current_page, totalPages: fila.total_pages, status: fila.status, startedAt: fila.started_at },
+      puntos,
+      today
+    )
+  };
 });

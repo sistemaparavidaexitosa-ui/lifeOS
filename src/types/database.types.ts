@@ -1667,6 +1667,38 @@ export type Database = {
           },
         ]
       }
+      reading_plan_weeks: {
+        Row: {
+          book_id: string
+          created_at: string
+          id: string
+          position: number
+          week_start: string
+        }
+        Insert: {
+          book_id: string
+          created_at?: string
+          id?: string
+          position?: number
+          week_start: string
+        }
+        Update: {
+          book_id?: string
+          created_at?: string
+          id?: string
+          position?: number
+          week_start?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reading_plan_weeks_book_id_fkey"
+            columns: ["book_id"]
+            isOneToOne: false
+            referencedRelation: "books"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       recommendations: {
         Row: {
           actions: Json

@@ -3,10 +3,22 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { todayLocal } from "@/lib/data/dates";
+import { todayLocal, weekStartISO } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
 import { isAllowedCoverUrl, BOOK_CATEGORIES, type BookCategory } from "@/lib/domain/development/book-lookup.ts";
+import { planWeeks, MAX_PLAN_WEEKS } from "@/lib/domain/development/reading-plan.ts";
 import { actionFailed, actionOk, type ActionResult } from "@/lib/supabase/errors";
+
+/**
+ * Las tres pantallas donde aparece el libro foco. Cualquier acción que mueva
+ * página o plan tiene que revalidar las tres, o el Panel enseñaría un libro y
+ * Home otro hasta la siguiente navegación.
+ */
+function revalidarLectura() {
+  revalidatePath("/development/library");
+  revalidatePath("/development");
+  revalidatePath("/home");
+}
 
 const bookSchema = z.object({
   title: z.string().min(1),
@@ -103,37 +115,137 @@ export async function upsertBook(id: string | null, formData: FormData): Promise
     bookId = creado?.id ?? null;
   }
 
-  // HISTORIAL DE LECTURA (migración 0034).
-  //
-  // `books.current_page` se sobrescribe, así que sin este punto no queda rastro
-  // de a qué velocidad avanzas y la fecha estimada nunca puede mejorar. Se
-  // escribe un punto por día local: el `unique (book_id, local_date)` hace que
-  // actualizar cinco veces hoy deje solo el último valor, que es justo lo que
-  // necesita el cálculo de ritmo (ver src/lib/domain/development/reading.ts).
-  //
-  // Falla en silencio a propósito: el usuario vino a guardar un libro, y
-  // perder un punto del historial no justifica devolverle un error sobre algo
-  // que ni sabe que existe.
-  if (bookId && book.currentPage > 0) {
-    await supabase
-      .from("book_progress")
-      .upsert({ book_id: bookId, local_date: t0, page: book.currentPage }, { onConflict: "book_id,local_date" });
-  }
+  if (bookId) await registrarPunto(supabase, bookId, book.currentPage, t0);
 
   // La auditoría es un efecto secundario: que falle no invalida el guardado
   // del libro, que ya ocurrió. No se propaga al usuario.
   await supabase.from("audit_log").insert({ user_id: user.id, action: "book.update", object: id ?? "" });
-  revalidatePath("/development/library");
-  revalidatePath("/home");
+  revalidarLectura();
+  return actionOk;
+}
+
+/**
+ * HISTORIAL DE LECTURA (migración 0034).
+ *
+ * `books.current_page` se sobrescribe, así que sin este punto no queda rastro
+ * de a qué velocidad avanzas y la fecha estimada nunca puede mejorar. Se
+ * escribe un punto por día local: el `unique (book_id, local_date)` hace que
+ * actualizar cinco veces hoy deje solo el último valor, que es justo lo que
+ * necesita el cálculo de ritmo (ver src/lib/domain/development/reading.ts).
+ *
+ * Falla en silencio a propósito: el usuario vino a guardar un libro o a mover
+ * la página, y perder un punto del historial no justifica devolverle un error
+ * sobre algo que ni sabe que existe.
+ *
+ * Vive aparte porque lo llaman DOS acciones —el formulario completo y el
+ * avance rápido— y duplicarlo garantizaba que un día solo una de las dos
+ * alimentara el historial.
+ */
+async function registrarPunto(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  bookId: string,
+  page: number,
+  t0: string
+): Promise<void> {
+  if (page <= 0) return;
+  await supabase
+    .from("book_progress")
+    .upsert({ book_id: bookId, local_date: t0, page }, { onConflict: "book_id,local_date" });
+}
+
+/**
+ * Avance rápido desde la tarjeta de la Biblioteca, sin abrir el formulario.
+ *
+ * Existe porque el cálculo de ritmo depende de que alguien lo alimente: si la
+ * única forma de registrar una página es abrir "Abrir" y guardar seis campos,
+ * `book_progress` se queda casi vacío y `estimatedFinish` contesta siempre "sin
+ * datos suficientes". Un input y un botón cambian eso.
+ *
+ * `updated_at` se toca a propósito: es el desempate del respaldo de focusBook()
+ * cuando no hay ningún plan.
+ */
+export async function updateBookPage(bookId: string, page: number): Promise<ActionResult> {
+  if (!Number.isInteger(page) || page < 0) return { ok: false, reason: "La página tiene que ser un número entero." };
+
+  const supabase = await createClient();
+  const { data: libro } = await supabase.from("books").select("total_pages").eq("id", bookId).single();
+  // Con `total_pages = 0` el libro aún no sabe cuánto mide y no hay tope que
+  // imponer; con total conocido, una página más allá del final es un dedazo.
+  if (libro && libro.total_pages > 0 && page > libro.total_pages) {
+    return { ok: false, reason: `Ese libro tiene ${libro.total_pages} páginas.` };
+  }
+
+  const t0 = todayLocal(await getUserTimeZone());
+  const { error } = await supabase
+    .from("books")
+    .update({ current_page: page, updated_at: new Date().toISOString() })
+    .eq("id", bookId);
+  if (error) return actionFailed(error);
+
+  await registrarPunto(supabase, bookId, page, t0);
+  revalidarLectura();
+  return actionOk;
+}
+
+const planSchema = z.object({
+  firstWeek: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Elige una semana válida."),
+  weeks: z.coerce.number().int().min(1).max(MAX_PLAN_WEEKS)
+});
+
+/**
+ * Programar un libro: primera semana + cuántas semanas.
+ *
+ * El formulario multiplica y la tabla se queda tonta — tres semanas son tres
+ * filas (ver el comentario de la migración 0042). `ignoreDuplicates` hace que
+ * reprogramar por encima de un plan existente sea idempotente en vez de
+ * reventar contra el `unique (book_id, week_start)`: el usuario que amplía de
+ * dos a cuatro semanas espera cuatro, no un error.
+ */
+export async function scheduleBook(bookId: string, formData: FormData): Promise<ActionResult> {
+  const parsed = planSchema.safeParse({
+    firstWeek: formData.get("firstWeek"),
+    weeks: formData.get("weeks")
+  });
+  if (!parsed.success) {
+    return { ok: false, reason: parsed.error.issues[0]?.message ?? "Datos del plan inválidos." };
+  }
+
+  // Se normaliza a lunes aquí Y la columna lo exige con un check: la app no es
+  // el único camino a la tabla.
+  const semanas = planWeeks(weekStartISO(parsed.data.firstWeek), parsed.data.weeks);
+  if (!semanas.length) return { ok: false, reason: "Indica al menos una semana." };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("reading_plan_weeks")
+    .upsert(
+      semanas.map((week_start, i) => ({ book_id: bookId, week_start, position: i })),
+      { onConflict: "book_id,week_start", ignoreDuplicates: true }
+    );
+  if (error) return actionFailed(error);
+
+  revalidarLectura();
+  return actionOk;
+}
+
+/** Quita una semana del plan; sin `weekStart`, quita el plan entero del libro. */
+export async function unscheduleBook(bookId: string, weekStart?: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const query = supabase.from("reading_plan_weeks").delete().eq("book_id", bookId);
+  const { error } = await (weekStart ? query.eq("week_start", weekStart) : query);
+  if (error) return actionFailed(error);
+
+  revalidarLectura();
   return actionOk;
 }
 
 export async function deleteBook(id: string): Promise<ActionResult> {
   const supabase = await createClient();
+  // El plan y el historial se van con el libro por `on delete cascade`
+  // (migraciones 0034 y 0042): no hay nada que limpiar a mano aquí.
   const { error } = await supabase.from("books").delete().eq("id", id);
   if (error) return actionFailed(error);
-  revalidatePath("/development/library");
-  revalidatePath("/home");
+  revalidarLectura();
   return actionOk;
 }
 

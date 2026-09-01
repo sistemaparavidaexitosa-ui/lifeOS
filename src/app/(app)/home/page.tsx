@@ -5,6 +5,8 @@ import { Card, Chip, Stat, Progress, EmptyState } from "@/components/ui";
 import { money0, fdate } from "@/lib/format";
 import { greetingFor, hourInTimeZone, todayInTimeZone } from "@/lib/domain/datetime.ts";
 import { getSessionUser } from "@/lib/data/session";
+import { FOCUS_TITLE } from "@/lib/domain/development/reading-plan.ts";
+import { BookCover } from "../development/library/BookForm";
 import RemindersCard from "./RemindersCard";
 import InsightSection from "@/components/InsightSection";
 
@@ -108,26 +110,42 @@ export default async function HomePage() {
         </Link>
       </Card>
 
-      {data.currentBook && (
+      {data.readingFocus && (
         <Card>
-          <div className="flex items-center justify-between">
-            <h3 className="font-bold">Hoy estás leyendo</h3>
-            <Chip kind="purple">
-              {data.currentBook.total_pages ? Math.round((data.currentBook.current_page / data.currentBook.total_pages) * 100) : 0}%
-            </Chip>
-          </div>
-          <div className="flex items-center gap-3 mt-2">
-            <div
-              className="w-11 h-15 rounded-lg grid place-items-center text-white font-black"
-              style={{ background: "linear-gradient(145deg, var(--accent2), var(--accent))" }}
-            >
-              📖
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            {/* El título lo decide el PORQUÉ del foco, no la pantalla. Con un
+                plan detrás dice "el libro de esta semana"; sin plan, solo lo
+                que de verdad sabe: que es lo último que estabas leyendo.
+                Prometer un plan que no existe es la forma rápida de que el
+                usuario deje de creerle a la tarjeta. */}
+            <h3 className="font-bold">{FOCUS_TITLE[data.readingFocus.reason]}</h3>
+            <div className="flex items-center gap-2">
+              {data.readingFocus.planState === "Atrasado" && <Chip kind="bad">Atrasado</Chip>}
+              <Chip kind="purple">{data.readingFocus.pct}%</Chip>
             </div>
-            <div>
-              <b>{data.currentBook.title}</b>
-              <div className="text-xs" style={{ color: "var(--muted)" }}>
-                {data.currentBook.author} · página {data.currentBook.current_page} de {data.currentBook.total_pages}
+          </div>
+          <div className="flex items-start gap-3 mt-2">
+            {/* La portada real, que ya vive en books.cover_url: aquí se estaba
+                pintando un 📖 fijo aunque el libro tuviera la suya. */}
+            <BookCover url={data.readingFocus.book.coverUrl} />
+            <div className="grow min-w-0">
+              <b style={{ overflowWrap: "anywhere" }}>{data.readingFocus.book.title}</b>
+              <div className="text-xs" style={{ color: "var(--muted)", overflowWrap: "anywhere" }}>
+                {data.readingFocus.book.author}
+                {data.readingFocus.book.author ? " · " : ""}
+                página {data.readingFocus.book.currentPage} de {data.readingFocus.book.totalPages}
               </div>
+              {/* Barra y no solo el Chip: el resto de Home mide con barra, y
+                  un 34% suelto no se compara con nada de un vistazo. */}
+              <div className="mt-2">
+                <Progress pct={data.readingFocus.pct} kind={data.readingFocus.planState === "Atrasado" ? "warn" : undefined} />
+              </div>
+              {data.readingFocus.pace && (
+                <div className="text-xs mt-1.5" style={{ color: "var(--muted)" }}>
+                  Para acabar el <b>{fdate(data.readingFocus.pace.lastDay)}</b> necesitas{" "}
+                  <b>{data.readingFocus.pace.pagesPerDay}</b> págs./día.
+                </div>
+              )}
             </div>
           </div>
           <Link href="/development/library" className="btn-ghost btn-sm mt-2 inline-block">

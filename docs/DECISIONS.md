@@ -1196,6 +1196,63 @@ la mitad que ya existía estaba rota.
     vuelve a sanear: `sanitizePlan` es idempotente a propósito para que eso no
     desplace los índices de la selección.
 
+- **D-076 · Plan de lectura: una cola SEMANAL, y una fila por (libro, semana).**
+  - **Por qué semanas y no una fecha objetivo por libro.** "Termina este libro
+    el 30 de septiembre" mide, pero no contesta la pregunta que el usuario hace
+    de verdad, que es *qué leo ahora*. La semana es la unidad en la que se
+    piensa la lectura ("este mes me leo dos") y la única que permite decir
+    literalmente «el libro de esta semana es X» en Inicio.
+  - **Una fila por (libro, semana), no un rango `desde`/`hasta`.** El rango
+    ahorra filas y cobra aritmética de solapamiento en CADA lectura. Con una
+    fila por semana, "los libros de esta semana" es un `where week_start = ?`
+    indexado y sin cálculo, y mover o quitar una semana es tocar una fila. El
+    formulario multiplica (primera semana + cuántas) y la tabla se queda tonta.
+    Es el patrón que ya usan `habit_logs`, `routine_runs` y `book_progress`:
+    una fila por unidad de tiempo, con un `unique` que vuelve idempotente el
+    doble clic.
+  - **El lunes es una restricción, no una convención.** `routineDueToday`
+    ('Semanal') ya ancla al lunes y /planning arranca ahí. `week_start` lo
+    impone con `check (extract(dow from week_start) = 1)` en vez de confiar en
+    que cada llamador normalice: una fila escrita desde SQL o desde una versión
+    futura de la acción rompería la agrupación EN SILENCIO, y el bug aparecería
+    semanas después como "un libro que no sale en ninguna semana".
+  - **Qué es "urgente" en una cola.** Una cola no mide si vas a tiempo, pero sí
+    sabe que una semana YA PASÓ. `focusBook` elige en tres escalones —atrasado,
+    esta semana, y de respaldo el libro `Leyendo` más reciente— y devuelve
+    SIEMPRE el porqué. Ese porqué llega hasta la UI: Inicio dice «El libro de
+    esta semana» solo cuando hay plan detrás, y «Hoy estás leyendo» cuando es
+    el respaldo. Prometer un plan que no existe es la forma rápida de que el
+    usuario deje de creerle a la tarjeta — mismo criterio que el `basis` de
+    `estimatedFinish`.
+  - **Lo decide la ÚLTIMA semana programada, no la primera.** Un plan de tres
+    semanas que arrancó la semana pasada y llega hasta la que viene va en hora.
+    Marcarlo "Atrasado" por haber empezado antes convertiría el aviso en ruido,
+    y un aviso que salta siempre deja de leerse.
+  - **Una sola fuente para el libro foco.** `loadReadingFocus()`
+    (`src/lib/data/development.ts`, envuelta en `cache()`). Antes Inicio elegía
+    su libro con su propio `select ... order by updated_at`: eso señalaba el
+    que tocaste al final, no el que decidiste leer, y con el Panel consultando
+    por su cuenta las dos pantallas podían enseñar libros distintos en la misma
+    sesión, sin que el usuario supiera cuál le miente.
+  - **El avance rápido no es una comodidad, es lo que alimenta el cálculo.**
+    Toda la Biblioteca mide sobre `book_progress`, y la única forma de escribir
+    ahí era abrir el formulario completo y guardar seis campos. Un cálculo que
+    nadie alimenta contesta siempre "sin datos suficientes": el problema no era
+    la fórmula, era el trámite.
+
+- **D-077 · `fdate` formateaba las fechas de calendario en la zona del proceso,
+  y les quitaba un día.** `new Date("2026-08-31")` se interpreta como medianoche
+  UTC, e Intl lo formateaba en la zona local: en México (UTC-6) esa medianoche
+  son las 18:00 del día anterior, así que una columna `date` con `2026-08-31` se
+  pintaba **"30 ago 2026"**. Afectaba a TODA fecha pura de la app —vencimientos
+  de tareas, horizontes de metas, cortes de reporte, la fecha estimada de
+  término de un libro— y se destapó con las semanas del plan de lectura, donde
+  una semana anclada al lunes se anunciaba empezando en domingo. Una fecha de
+  calendario no tiene zona horaria: el 31 de agosto es el 31 de agosto en
+  Tijuana y en Madrid, así que se formatea en UTC, que es como se guardó. Un
+  instante completo (`...T12:00:00Z`) sí la tiene y conserva el comportamiento
+  de siempre. Cubierto por `tests/domain/format.test.ts`.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo
