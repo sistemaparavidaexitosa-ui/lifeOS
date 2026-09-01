@@ -8,6 +8,7 @@ import { loadMyTasks } from "./tasks";
 import { dueReminders, type ReminderLike } from "@/lib/domain/execution/reminders.ts";
 import { todayLocal, addDaysISO } from "./dates";
 import { getUserTimeZone } from "./profile";
+import { loadReadingFocus } from "./development";
 
 /**
  * Agrega TODA la información real de Home en una sola pasada — todo viene de
@@ -46,7 +47,7 @@ export async function getHomeData(userId: string) {
     { data: budgets },
     { data: occupations },
     { data: reminderRows },
-    { data: currentBook }
+    readingFocus
   ] = await Promise.all([
     supabase.from("profiles").select("*").eq("user_id", userId).single(),
     supabase.from("daily_plans").select("*").eq("user_id", userId).eq("local_date", t0).maybeSingle(),
@@ -58,14 +59,13 @@ export async function getHomeData(userId: string) {
     // Pendientes y ya vencidos. El corte por fecha se hace en el dominio: aquí
     // solo se descartan los hechos, que no vuelven nunca.
     supabase.from("reminders").select("*").eq("user_id", userId).eq("done", false).order("remind_on"),
-    supabase
-      .from("books")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("status", "Leyendo")
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle()
+    // Ya no se elige el libro aquí con `updated_at` más reciente: eso señalaba
+    // el que tocaste al final, no el que decidiste leer, y el Panel de
+    // Desarrollo podía acabar enseñando otro distinto en la misma sesión.
+    // loadReadingFocus() (data/development.ts) es la ÚNICA fuente: aplica la
+    // cola semanal de la migración 0042 y cae a esta misma heurística solo
+    // cuando no hay ningún plan.
+    loadReadingFocus()
   ]);
 
   if (!profile) throw new Error("No se encontró el perfil del usuario (revisa RLS/seed).");
@@ -147,6 +147,6 @@ export async function getHomeData(userId: string) {
     saturation,
     reminders: reminders.map((r) => ({ ...r, subjectTitle: titleById.get(r.subjectId) ?? null })),
     todayISO: t0,
-    currentBook
+    readingFocus
   };
 }

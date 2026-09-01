@@ -4,11 +4,13 @@ import { createClient } from "@/lib/supabase/server";
 import { Card, Chip, EmptyState, Progress, Stat } from "@/components/ui";
 import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
-import { loadSourceSnapshot } from "@/lib/data/development";
+import { loadSourceSnapshot, loadReadingFocus } from "@/lib/data/development";
 import { keyResultProgress, goalProgress, goalAtRisk } from "@/lib/domain/development/goals.ts";
 import { routineDueToday, routineProgress, type Frequency } from "@/lib/domain/development/routines.ts";
 import { CardHeader, SectionHeader } from "./FormSheet";
+import { BookCover } from "./library/BookForm";
 import { getSessionUser } from "@/lib/data/session";
+import { fdate } from "@/lib/format";
 import InsightSection from "@/components/InsightSection";
 
 /**
@@ -22,6 +24,10 @@ export default async function DevelopmentPage() {
 
   const today = todayLocal(await getUserTimeZone());
   const sources = await loadSourceSnapshot();
+  // Ya viene resuelto de la capa de datos —quién es el foco, por qué, y a qué
+  // ritmo tendría que ir— para no repetir aquí aritmética que vive en el
+  // dominio, ni discrepar con lo que Home enseña en la misma sesión.
+  const lectura = await loadReadingFocus();
 
   const [{ data: goals }, { data: krs }, { data: routines }, { data: steps }, { data: runs }] = await Promise.all([
     supabase.from("personal_goals").select("*").eq("status", "Activa").order("created_at"),
@@ -67,7 +73,10 @@ export default async function DevelopmentPage() {
     ? Math.round(routineRows.reduce((sum, r) => sum + r.progress.pct, 0) / routineRows.length)
     : 0;
 
-  if (!goalRows.length && !routineRows.length && !(routines ?? []).length) {
+  // `!lectura` entra en la condición: con un libro en curso el panel YA tiene
+  // algo que contar, y mandarte a "define una meta" mientras lees sería
+  // esconder el único dato vivo que hay.
+  if (!goalRows.length && !routineRows.length && !(routines ?? []).length && !lectura) {
     return (
       <Card>
         <EmptyState icon="🌱" text="Empieza definiendo una meta personal o una rutina." />
@@ -94,6 +103,13 @@ export default async function DevelopmentPage() {
         <Stat label="Metas activas" value={goalRows.length} />
         <Stat label="Metas en riesgo" value={enRiesgo} kind={enRiesgo > 0 ? "bad" : undefined} />
         <Stat label="Rutinas de hoy" value={`${avanceRutinas}%`} kind={avanceRutinas < 50 ? "warn" : undefined} />
+        {/* Con guion cuando no hay libro, no con "0%": cero por ciento es un
+            libro que no has empezado, no la ausencia de libro. */}
+        <Stat
+          label="Lectura"
+          value={lectura ? `${lectura.pct}%` : "—"}
+          kind={lectura?.planState === "Atrasado" ? "bad" : undefined}
+        />
       </div>
 
       <SectionHeader
@@ -128,6 +144,65 @@ export default async function DevelopmentPage() {
             </div>
           </Card>
         ))
+      )}
+
+      <div className="mt-2">
+        <SectionHeader
+          action={
+            <Link href="/development/library?por=plan" className="btn-ghost btn-sm">
+              Ver el plan
+            </Link>
+          }
+        >
+          Leyendo ahora
+        </SectionHeader>
+      </div>
+      {!lectura ? (
+        <Card>
+          <EmptyState icon="📚" text="No tienes ningún libro en curso." />
+          <div className="flex justify-center">
+            <Link href="/development/library" className="btn-ghost btn-sm">
+              Ir a la Biblioteca
+            </Link>
+          </div>
+        </Card>
+      ) : (
+        <Card>
+          <div className="flex items-start gap-3">
+            <BookCover url={lectura.book.coverUrl} />
+            <div className="grow min-w-0">
+              <CardHeader
+                title={lectura.book.title}
+                meta={
+                  <>
+                    {/* "Sin plan" no se pinta: es la ausencia de una decisión,
+                        no un estado que el usuario tenga que atender. */}
+                    {lectura.planState === "Atrasado" && <Chip kind="bad">Atrasado</Chip>}
+                    {lectura.planState === "Esta semana" && <Chip kind="info">Esta semana</Chip>}
+                    <span className="text-xs" style={{ color: "var(--muted)" }}>
+                      {lectura.book.author}
+                      {lectura.book.author ? " · " : ""}
+                      página {lectura.book.currentPage} de {lectura.book.totalPages}
+                    </span>
+                  </>
+                }
+              />
+              <div className="mt-2.5">
+                <Progress pct={lectura.pct} kind={lectura.planState === "Atrasado" ? "warn" : undefined} />
+              </div>
+              {lectura.pace && (
+                <div className="text-xs mt-1.5" style={{ color: "var(--muted)" }}>
+                  Para acabar el <b>{fdate(lectura.pace.lastDay)}</b> necesitas <b>{lectura.pace.pagesPerDay}</b>{" "}
+                  págs./día
+                  {/* El ritmo real solo se enseña cuando de verdad se midió.
+                      Con 0 págs./día por falta de historial, decir "vas a 0"
+                      sería acusar al usuario de un dato que no existe. */}
+                  {lectura.actualPagesPerDay > 0 ? `, y vas a ${lectura.actualPagesPerDay}` : ""}.
+                </div>
+              )}
+            </div>
+          </div>
+        </Card>
       )}
 
       <div className="mt-2">

@@ -84,3 +84,19 @@ export function diffDays(a: string, b: string): number {
   const db = Date.parse(`${b}T00:00:00Z`);
   return Math.round((db - da) / 86_400_000);
 }
+
+/**
+ * Lunes de la semana que contiene `iso`.
+ *
+ * El lunes es el ancla de semana de TODO el OS y no una preferencia de este
+ * módulo: `routineDueToday("Semanal")` lo usa para decidir si una rutina toca
+ * hoy, /planning arranca la semana ahí, y la cola de lectura (migración 0042)
+ * lo impone con un `check` en la columna. Una sola función para que no acaben
+ * conviviendo dos criterios de "qué semana es esta".
+ */
+export function weekStartISO(iso: string): string {
+  const dow = new Date(`${iso}T00:00:00Z`).getUTCDay(); // 0 = domingo
+  // El domingo pertenece a la semana que EMPEZÓ el lunes anterior, seis días
+  // atrás — no al lunes siguiente.
+  return addDaysISO(iso, dow === 0 ? -6 : 1 - dow);
+}
