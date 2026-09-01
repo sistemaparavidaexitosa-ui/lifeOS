@@ -90,7 +90,7 @@ export function diffDays(a: string, b: string): number {
  *
  * El lunes es el ancla de semana de TODO el OS y no una preferencia de este
  * módulo: `routineDueToday("Semanal")` lo usa para decidir si una rutina toca
- * hoy, /planning arranca la semana ahí, y la cola de lectura (migración 0042)
+ * hoy, /planning arranca la semana ahí, y la cola de lectura (migración 0043)
  * lo impone con un `check` en la columna. Una sola función para que no acaben
  * conviviendo dos criterios de "qué semana es esta".
  */

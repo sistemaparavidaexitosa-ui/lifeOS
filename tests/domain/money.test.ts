@@ -43,6 +43,23 @@ test("periodStats: calcula disponible = ingreso - gasto dentro del periodo", () 
   assert.strictEqual(stats.available, 14150);
 });
 
+test("periodStats: con tope superior no cuenta lo que cae después del periodo (quincena)", () => {
+  const entries = [
+    { id: "j1", type: "expense" as const, date: "2026-08-20", category: "Otros", status: "Posted" as const, lines: [{ account: "a1", amount: -500 }] },
+    { id: "j2", type: "expense" as const, date: "2026-09-02", category: "Otros", status: "Posted" as const, lines: [{ account: "a1", amount: -800 }] }
+  ];
+  const stats = periodStats(entries, "2026-08-16", "2026-08-31");
+  assert.strictEqual(stats.expense, 500);
+});
+
+test("periodStats: sin tope superior conserva el comportamiento abierto que usa /reports", () => {
+  const entries = [
+    { id: "j1", type: "expense" as const, date: "2026-08-20", category: "Otros", status: "Posted" as const, lines: [{ account: "a1", amount: -500 }] },
+    { id: "j2", type: "expense" as const, date: "2026-09-02", category: "Otros", status: "Posted" as const, lines: [{ account: "a1", amount: -800 }] }
+  ];
+  assert.strictEqual(periodStats(entries, "2026-08-16").expense, 1300);
+});
+
 test("netWorth: activos - pasivos (BR-003)", () => {
   assert.strictEqual(netWorth(500000, 120000), 380000);
 });

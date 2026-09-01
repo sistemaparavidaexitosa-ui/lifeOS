@@ -1,6 +1,6 @@
 "use client";
 
-// Programar un libro en la cola semanal (migración 0042).
+// Programar un libro en la cola semanal (migración 0043).
 //
 // Dos campos y nada más: en qué semana empiezas y cuántas semanas le das. El
 // resto —las filas, una por semana, normalizadas a lunes— lo deriva

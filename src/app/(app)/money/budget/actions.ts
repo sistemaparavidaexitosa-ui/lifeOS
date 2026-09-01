@@ -2,7 +2,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { round2 } from "@/lib/domain/budget.ts";
+import { round2, carryoverOffered } from "@/lib/domain/budget.ts";
+import { quincenaFromKey, shiftQuincena } from "@/lib/domain/quincena.ts";
 
 // PUNTO 5 (fix del error "An error occurred in the Server Components render"
 // al EDITAR un ítem de presupuesto):
@@ -127,6 +128,130 @@ export async function deleteBudgetLine(id: string) {
   if (error) throw new Error(error.message);
   revalidatePath("/money/budget");
   revalidatePath("/money");
+}
+
+/**
+ * D-076: calcula el cierre de la quincena ANTERIOR a `periodKey` para un concepto.
+ *
+ * Se recalcula aquí, en el servidor, a partir de los movimientos: el cliente
+ * nunca manda el monto. Un botón que enviara la cifra permitiría inventarse el
+ * arrastre desde el navegador, y este número altera el presupuesto disponible.
+ *
+ * Incluye el arrastre que el usuario hubiera aplicado a ESA quincena anterior:
+ * si arrastró un sobrante a Q1, el cierre de Q1 lo tiene que contemplar.
+ */
+async function computeCarryoverAmount(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  budgetId: string,
+  periodKey: string
+): Promise<number> {
+  const target = quincenaFromKey(periodKey);
+  if (!target) throw new Error("Quincena inválida");
+  const previous = shiftQuincena(target, -1);
+
+  const { data: line } = await supabase
+    .from("budgets")
+    .select("id, category, monthly_cost, q1_amount, q2_amount, created_at")
+    .eq("id", budgetId)
+    .single();
+  if (!line) throw new Error("Concepto no encontrado");
+
+  const [{ data: entries }, { data: previousCarry }] = await Promise.all([
+    supabase
+      .from("journal_entries")
+      .select("id, type, entry_date, category, status, journal_lines(account_id, amount)")
+      .eq("type", "expense")
+      .eq("category", line.category)
+      .gte("entry_date", previous.fromISO)
+      .lte("entry_date", previous.toISO),
+    supabase.from("budget_carryovers").select("amount").eq("budget_id", budgetId).eq("period_key", previous.key).maybeSingle()
+  ]);
+
+  // Misma regla que la pestaña usa para OFRECER el arrastre (carryoverOffered):
+  // si los dos lados no calcularan igual, el botón diría una cifra y el servidor
+  // guardaría otra.
+  return carryoverOffered(
+    { id: line.id, category: line.category, monthlyCost: line.monthly_cost, q1Amount: line.q1_amount, q2Amount: line.q2_amount },
+    (entries ?? []).map((e) => ({
+      id: e.id,
+      type: e.type as "income" | "expense" | "transfer",
+      date: e.entry_date,
+      category: e.category,
+      status: e.status as "Posted" | "Reconciled" | "Reversed",
+      lines: (e.journal_lines ?? []).map((l) => ({ account: l.account_id, amount: l.amount }))
+    })),
+    previous,
+    previousCarry?.amount ?? 0,
+    line.created_at
+  );
+}
+
+const carryoverSchema = z.object({
+  budgetId: z.string().uuid(),
+  periodKey: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])-Q[12]$/, "Quincena inválida")
+});
+
+/**
+ * Aplica a la quincena `periodKey` el sobrante (o el exceso) que dejó la
+ * quincena anterior en ese concepto. El monto queda CONGELADO: el usuario
+ * aceptó una cifra concreta y su quincena no debe moverse sola si después
+ * registra un movimiento atrasado (ver 0042_presupuesto_quincenal.sql).
+ */
+export async function applyCarryover(budgetId: string, periodKey: string) {
+  const parsed = carryoverSchema.parse({ budgetId, periodKey });
+
+  const supabase = await createClient();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  const amount = await computeCarryoverAmount(supabase, parsed.budgetId, parsed.periodKey);
+
+  const { error } = await supabase.from("budget_carryovers").upsert(
+    { user_id: user.id, budget_id: parsed.budgetId, period_key: parsed.periodKey, amount: round2(amount) },
+    { onConflict: "user_id,budget_id,period_key" }
+  );
+  if (error) throw new Error(error.message);
+
+  await supabase.from("audit_log").insert({
+    user_id: user.id,
+    action: "budget.carryover.apply",
+    object: parsed.budgetId,
+    meta: { periodKey: parsed.periodKey, amount: round2(amount) }
+  });
+  revalidatePath("/money/budget");
+  revalidatePath("/money");
+  revalidatePath("/home");
+}
+
+/** Quita el arrastre: la quincena vuelve a su aportación limpia. */
+export async function removeCarryover(budgetId: string, periodKey: string) {
+  const parsed = carryoverSchema.parse({ budgetId, periodKey });
+
+  const supabase = await createClient();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  const { error } = await supabase
+    .from("budget_carryovers")
+    .delete()
+    .eq("user_id", user.id)
+    .eq("budget_id", parsed.budgetId)
+    .eq("period_key", parsed.periodKey);
+  if (error) throw new Error(error.message);
+
+  await supabase.from("audit_log").insert({
+    user_id: user.id,
+    action: "budget.carryover.remove",
+    object: parsed.budgetId,
+    meta: { periodKey: parsed.periodKey }
+  });
+  revalidatePath("/money/budget");
+  revalidatePath("/money");
+  revalidatePath("/home");
 }
 
 const incomeSchema = z.object({

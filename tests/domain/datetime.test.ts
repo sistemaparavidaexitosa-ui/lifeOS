@@ -72,7 +72,7 @@ test("addDaysISO y diffDays operan sobre fechas calendario", () => {
 });
 
 // El lunes es el ancla de semana de TODO el OS: routineDueToday("Semanal") lo
-// usa, /planning arranca ahí y la cola de lectura (migración 0042) lo impone
+// usa, /planning arranca ahí y la cola de lectura (migración 0043) lo impone
 // con un check en la columna. Una sola función para que no haya dos criterios.
 test("weekStartISO devuelve el lunes de la semana que contiene la fecha", () => {
   assert.strictEqual(weekStartISO("2026-09-01"), "2026-08-31"); // martes
