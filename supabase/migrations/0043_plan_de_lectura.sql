@@ -1,4 +1,4 @@
--- 0042_plan_de_lectura.sql
+-- 0043_plan_de_lectura.sql
 --
 -- QUE LA BIBLIOTECA SEPA QUÉ PENSABAS LEER, Y NO SOLO DÓNDE VAS.
 --

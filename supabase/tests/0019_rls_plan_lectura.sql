@@ -1,4 +1,4 @@
--- 0019_rls_plan_lectura.sql — pgTAP: migración 0042 (cola semanal de lectura).
+-- 0019_rls_plan_lectura.sql — pgTAP: migración 0043 (cola semanal de lectura).
 --
 -- Dos cosas que la aplicación no puede garantizar por sí sola:
 --
@@ -34,7 +34,7 @@ on conflict (book_id, week_start) do nothing;
 -- ---------------------------------------------------------------------------
 -- Estructura
 -- ---------------------------------------------------------------------------
-select has_table('public', 'reading_plan_weeks', 'reading_plan_weeks existe (0042)');
+select has_table('public', 'reading_plan_weeks', 'reading_plan_weeks existe (0043)');
 select has_column('public', 'reading_plan_weeks', 'week_start', 'reading_plan_weeks.week_start existe');
 
 -- El lunes es una restricción, no una convención de la capa de aplicación.

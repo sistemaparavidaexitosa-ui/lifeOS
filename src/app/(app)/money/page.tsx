@@ -4,7 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 import { Card, Chip, Progress, EmptyState } from "@/components/ui";
 import { money, money0, fdate } from "@/lib/format";
 import { accountBalance, periodStats } from "@/lib/domain/money.ts";
-import { addDaysISO, todayLocal } from "@/lib/data/dates";
+import { budgetQuincenaRow } from "@/lib/domain/budget.ts";
+import { quincenaFor } from "@/lib/domain/quincena.ts";
+import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
 import { todayInTimeZone } from "@/lib/domain/datetime.ts";
 import NewTransactionForm from "./NewTransactionForm";
@@ -19,14 +21,18 @@ export default async function MoneyPage() {
   if (!user) redirect("/login");
 
   const t0 = todayLocal(await getUserTimeZone());
-  const from15 = addDaysISO(t0, -15);
+  // D-076: el periodo de Money OS es la QUINCENA en curso (Q1 = 1-15, Q2 = 16-fin
+  // de mes), no una ventana rodante de 15 días. Antes esta página y /money/budget
+  // medían periodos distintos y no cuadraban entre sí.
+  const quincena = quincenaFor(t0);
 
-  const [{ data: profile }, { data: accounts }, { data: entries }, { data: budgets }, { data: categories }, { data: debts }, { data: familyMembers }] =
+  const [{ data: profile }, { data: accounts }, { data: entries }, { data: budgets }, { data: carryovers }, { data: categories }, { data: debts }, { data: familyMembers }] =
     await Promise.all([
       supabase.from("profiles").select("currency, locale").eq("user_id", user.id).single(),
       supabase.from("accounts").select("*").order("created_at"),
       supabase.from("journal_entries").select("*, journal_lines(*)").order("entry_date", { ascending: false }),
       supabase.from("budgets").select("*").eq("period", "current"),
+      supabase.from("budget_carryovers").select("budget_id, amount").eq("period_key", quincena.key),
       supabase.from("categories").select("name"),
       supabase.from("debts").select("id, name"),
       supabase.from("family_members").select("id, name, relationship")
@@ -46,14 +52,20 @@ export default async function MoneyPage() {
   }));
 
   const liquidity = (accounts ?? []).reduce((sum, a) => sum + accountBalance(a.id, a.opening_balance, entriesForDomain), 0);
-  const stats = periodStats(entriesForDomain, from15);
+  const stats = periodStats(entriesForDomain, quincena.fromISO, quincena.toISO);
 
-  const budgetSpent = new Map<string, number>();
-  for (const e of entries ?? []) {
-    if (e.status === "Reversed" || e.type !== "expense" || e.entry_date < from15) continue;
-    const amt = (e.journal_lines ?? []).reduce((s, l) => s + Math.max(0, -l.amount), 0);
-    budgetSpent.set(e.category ?? "", (budgetSpent.get(e.category ?? "") ?? 0) + amt);
-  }
+  // Mismo cálculo que /money/budget (budgetQuincenaRow): aportación de ESTA
+  // quincena más el arrastre que el usuario aplicó, contra el gasto de ESTA
+  // quincena. Antes esta barra usaba `budgets.amount` (monthly_cost/2, un campo
+  // heredado) contra un gasto de 15 días rodantes: era quincenal por accidente.
+  const budgetRows = (budgets ?? []).map((b) =>
+    budgetQuincenaRow(
+      { id: b.id, category: b.category, monthlyCost: b.monthly_cost, q1Amount: b.q1_amount, q2Amount: b.q2_amount },
+      entriesForDomain,
+      quincena,
+      (carryovers ?? []).find((c) => c.budget_id === b.id)?.amount ?? 0
+    )
+  );
 
   const familyById = new Map((familyMembers ?? []).map((m) => [m.id, m.name]));
   const debtById = new Map((debts ?? []).map((d) => [d.id, d.name]));
@@ -72,11 +84,11 @@ export default async function MoneyPage() {
         </Card>
         <div className="grid grid-cols-2 gap-3.5">
           <div className="stat card" style={{ padding: 15 }}>
-            <span className="text-xs" style={{ color: "var(--muted)" }}>Ingreso (periodo)</span>
+            <span className="text-xs" style={{ color: "var(--muted)" }}>Ingreso ({quincena.label})</span>
             <b className="block text-xl">{money0(stats.income, currency, locale)}</b>
           </div>
           <div className="stat card" style={{ padding: 15 }}>
-            <span className="text-xs" style={{ color: "var(--muted)" }}>Gasto (periodo)</span>
+            <span className="text-xs" style={{ color: "var(--muted)" }}>Gasto ({quincena.label})</span>
             <b className="block text-xl">{money0(stats.expense, currency, locale)}</b>
           </div>
           <div className="stat card" style={{ padding: 15 }}>
@@ -109,29 +121,30 @@ export default async function MoneyPage() {
 
         <Card>
           <div className="flex items-center justify-between mb-2">
-            <h3 className="font-bold">Resumen de presupuesto</h3>
+            <div>
+              <h3 className="font-bold">Presupuesto · {quincena.label}</h3>
+              <p className="text-xs" style={{ color: "var(--muted)" }}>
+                Gasto de esta quincena contra lo que le asignaste.
+              </p>
+            </div>
             <Link href="/money/budget" className="btn-ghost btn-sm">
               Ver pestaña completa
             </Link>
           </div>
-          {!budgets?.length && <EmptyState icon="💰" text="Genera tu presupuesto quincenal desde la pestaña de Presupuesto." />}
+          {!budgetRows.length && <EmptyState icon="💰" text="Genera tu presupuesto quincenal desde la pestaña de Presupuesto." />}
           {/* PUNTO 3: el resumen de presupuesto ahora es scrollable (no crece indefinidamente). */}
           <div style={{ maxHeight: 260, overflowY: "auto", paddingRight: 4 }}>
-            {(budgets ?? []).map((b) => {
-              const spent = budgetSpent.get(b.category) ?? 0;
-              const pct = b.amount ? Math.round((spent / b.amount) * 100) : 0;
-              return (
-                <div key={b.id} className="my-2.5">
-                  <div className="flex justify-between text-sm">
-                    <span>{b.category}</span>
-                    <span>
-                      {money0(spent, currency, locale)} / {money0(b.amount, currency, locale)}
-                    </span>
-                  </div>
-                  <Progress pct={pct} kind={pct >= 100 ? "bad" : pct >= 85 ? "warn" : undefined} />
+            {budgetRows.map((r) => (
+              <div key={r.id} className="my-2.5">
+                <div className="flex justify-between text-sm">
+                  <span>{r.category}</span>
+                  <span>
+                    {money0(r.spent, currency, locale)} / {money0(r.available, currency, locale)}
+                  </span>
                 </div>
-              );
-            })}
+                <Progress pct={r.pct} kind={r.status === "over" ? "bad" : r.status === "warn" ? "warn" : undefined} />
+              </div>
+            ))}
           </div>
         </Card>
       </div>

@@ -35,7 +35,7 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
     // El historial de lectura (migración 0034). Sin él la fecha estimada cae al
     // promedio desde el inicio y no puede avisar de un libro estancado.
     supabase.from("book_progress").select("book_id, local_date, page"),
-    // La cola semanal (migración 0042).
+    // La cola semanal (migración 0043).
     supabase.from("reading_plan_weeks").select("book_id, week_start, position"),
     getUserTimeZone()
   ]);

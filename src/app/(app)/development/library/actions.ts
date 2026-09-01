@@ -196,7 +196,7 @@ const planSchema = z.object({
  * Programar un libro: primera semana + cuántas semanas.
  *
  * El formulario multiplica y la tabla se queda tonta — tres semanas son tres
- * filas (ver el comentario de la migración 0042). `ignoreDuplicates` hace que
+ * filas (ver el comentario de la migración 0043). `ignoreDuplicates` hace que
  * reprogramar por encima de un plan existente sea idempotente en vez de
  * reventar contra el `unique (book_id, week_start)`: el usuario que amplía de
  * dos a cuatro semanas espera cuatro, no un error.
@@ -242,7 +242,7 @@ export async function unscheduleBook(bookId: string, weekStart?: string): Promis
 export async function deleteBook(id: string): Promise<ActionResult> {
   const supabase = await createClient();
   // El plan y el historial se van con el libro por `on delete cascade`
-  // (migraciones 0034 y 0042): no hay nada que limpiar a mano aquí.
+  // (migraciones 0034 y 0043): no hay nada que limpiar a mano aquí.
   const { error } = await supabase.from("books").delete().eq("id", id);
   if (error) return actionFailed(error);
   revalidarLectura();
