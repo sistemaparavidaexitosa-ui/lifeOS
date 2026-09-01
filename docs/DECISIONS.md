@@ -1196,6 +1196,19 @@ la mitad que ya existía estaba rota.
     vuelve a sanear: `sanitizePlan` es idempotente a propósito para que eso no
     desplace los índices de la selección.
 
+- **D-077 · `fdate` formateaba las fechas de calendario en la zona del proceso,
+  y les quitaba un día.** `new Date("2026-08-31")` se interpreta como medianoche
+  UTC, e Intl lo formateaba en la zona local: en México (UTC-6) esa medianoche
+  son las 18:00 del día anterior, así que una columna `date` con `2026-08-31` se
+  pintaba **"30 ago 2026"**. Afectaba a TODA fecha pura de la app —vencimientos
+  de tareas, horizontes de metas, cortes de reporte, la fecha estimada de
+  término de un libro— y se destapó con las semanas del plan de lectura, donde
+  una semana anclada al lunes se anunciaba empezando en domingo. Una fecha de
+  calendario no tiene zona horaria: el 31 de agosto es el 31 de agosto en
+  Tijuana y en Madrid, así que se formatea en UTC, que es como se guardó. Un
+  instante completo (`...T12:00:00Z`) sí la tiene y conserva el comportamiento
+  de siempre. Cubierto por `tests/domain/format.test.ts`.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo
