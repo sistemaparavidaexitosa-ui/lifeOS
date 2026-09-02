@@ -827,10 +827,11 @@ export type Database = {
           category: string
           created_at: string
           cue: string
-          frequency: string
+          duration_min: number
           id: string
           name: string
-          occupation_id: string | null
+          position: number
+          routine_id: string
           stack_after_habit_id: string | null
           two_min_version: string
           user_id: string
@@ -839,10 +840,11 @@ export type Database = {
           category?: string
           created_at?: string
           cue?: string
-          frequency?: string
+          duration_min?: number
           id?: string
           name: string
-          occupation_id?: string | null
+          position?: number
+          routine_id: string
           stack_after_habit_id?: string | null
           two_min_version?: string
           user_id: string
@@ -851,20 +853,21 @@ export type Database = {
           category?: string
           created_at?: string
           cue?: string
-          frequency?: string
+          duration_min?: number
           id?: string
           name?: string
-          occupation_id?: string | null
+          position?: number
+          routine_id?: string
           stack_after_habit_id?: string | null
           two_min_version?: string
           user_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "habits_occupation_id_fkey"
-            columns: ["occupation_id"]
+            foreignKeyName: "habits_routine_id_fkey"
+            columns: ["routine_id"]
             isOneToOne: false
-            referencedRelation: "occupations"
+            referencedRelation: "routines"
             referencedColumns: ["id"]
           },
           {
@@ -1821,7 +1824,6 @@ export type Database = {
       routine_runs: {
         Row: {
           completed_at: string | null
-          completed_step_ids: string[]
           id: string
           local_date: string
           routine_id: string
@@ -1829,7 +1831,6 @@ export type Database = {
         }
         Insert: {
           completed_at?: string | null
-          completed_step_ids?: string[]
           id?: string
           local_date: string
           routine_id: string
@@ -1837,7 +1838,6 @@ export type Database = {
         }
         Update: {
           completed_at?: string | null
-          completed_step_ids?: string[]
           id?: string
           local_date?: string
           routine_id?: string
@@ -1853,54 +1853,13 @@ export type Database = {
           },
         ]
       }
-      routine_steps: {
-        Row: {
-          duration_min: number
-          habit_id: string | null
-          id: string
-          position: number
-          routine_id: string
-          title: string
-        }
-        Insert: {
-          duration_min?: number
-          habit_id?: string | null
-          id?: string
-          position?: number
-          routine_id: string
-          title: string
-        }
-        Update: {
-          duration_min?: number
-          habit_id?: string | null
-          id?: string
-          position?: number
-          routine_id?: string
-          title?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "routine_steps_habit_id_fkey"
-            columns: ["habit_id"]
-            isOneToOne: false
-            referencedRelation: "habits"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "routine_steps_routine_id_fkey"
-            columns: ["routine_id"]
-            isOneToOne: false
-            referencedRelation: "routines"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       routines: {
         Row: {
           active: boolean
           created_at: string
           frequency: string
           id: string
+          identity: string
           name: string
           occupation_id: string | null
           position: number
@@ -1911,6 +1870,7 @@ export type Database = {
           created_at?: string
           frequency?: string
           id?: string
+          identity?: string
           name: string
           occupation_id?: string | null
           position?: number
@@ -1921,6 +1881,7 @@ export type Database = {
           created_at?: string
           frequency?: string
           id?: string
+          identity?: string
           name?: string
           occupation_id?: string | null
           position?: number
