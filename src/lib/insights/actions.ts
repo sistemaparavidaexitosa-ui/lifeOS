@@ -172,9 +172,9 @@ async function loadDomainFacts(supabase: Db, userId: string, domain: Domain, tod
 
     case "habits": {
       const [{ data: habits }, { data: logs }, { data: routines }, { data: runs }] = await Promise.all([
-        supabase.from("habits").select("id, name, frequency, occupation_id").eq("user_id", userId),
+        supabase.from("habits").select("id, name, routine_id, routines(frequency)").eq("user_id", userId),
         supabase.from("habit_logs").select("habit_id, log_date"),
-        supabase.from("routines").select("id, name, routine_steps(id)").eq("user_id", userId),
+        supabase.from("routines").select("id, name, habits(id)").eq("user_id", userId),
         supabase.from("routine_runs").select("routine_id, local_date")
       ]);
 
@@ -183,11 +183,11 @@ async function loadDomainFacts(supabase: Db, userId: string, domain: Domain, tod
           habits: (habits ?? []).map((h) => ({
             id: h.id,
             name: h.name,
-            frequency: h.frequency as HabitFrequency,
-            occupationId: h.occupation_id
+            routineId: h.routine_id,
+            routineFrequency: (h.routines?.frequency ?? "Diario") as HabitFrequency
           })),
           logs: (logs ?? []).map((l) => ({ habitId: l.habit_id, date: l.log_date })),
-          routines: (routines ?? []).map((r) => ({ id: r.id, name: r.name, stepCount: (r.routine_steps ?? []).length })),
+          routines: (routines ?? []).map((r) => ({ id: r.id, name: r.name, habitCount: (r.habits ?? []).length })),
           routineRuns: (runs ?? []).map((r) => ({ routineId: r.routine_id, date: r.local_date }))
         },
         today

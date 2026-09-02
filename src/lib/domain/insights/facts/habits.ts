@@ -17,15 +17,19 @@ export type HabitFrequency = "Diario" | "Semanal" | "Entre semana" | "Fin de sem
 export interface HabitFactLike {
   id: string;
   name: string;
-  frequency: HabitFrequency;
-  /** `habits.occupation_id`: el bloque horario que lo ancla, si lo tiene. */
-  occupationId: string | null;
+  /** La rutina a la que pertenece (0045): un hábito no existe fuera de una. */
+  routineId: string;
+  /**
+   * La frecuencia de esa rutina. El hábito ya no tiene una propia: toca cuando
+   * toca su rutina, y ese es el dato con el que se puede juzgar su adherencia.
+   */
+  routineFrequency: HabitFrequency;
 }
 
 export interface RoutineFactLike {
   id: string;
   name: string;
-  stepCount: number;
+  habitCount: number;
 }
 
 export interface RoutineRunLike {
@@ -86,9 +90,11 @@ function brokenStreakFacts(snapshot: HabitsSnapshot, todayISO: string): Fact[] {
 /**
  * Un hábito diario que se cumple menos de la mitad de los días.
  *
- * Solo se juzgan los `Diario`: para los demás el esquema no guarda qué días
- * tocaban, así que contar 8 de 30 en un hábito semanal diría que va fatal
- * cuando va perfecto. Preferimos no opinar antes que opinar mal.
+ * Solo se juzgan los de rutina `Diario`: para los demás el esquema no guarda
+ * qué días tocaban, así que contar 8 de 30 en un hábito semanal diría que va
+ * fatal cuando va perfecto. Preferimos no opinar antes que opinar mal. Desde
+ * 0045 el hábito ya no tiene frecuencia propia —la pone su rutina—, así que se
+ * juzga por la de `routineFrequency`.
  *
  * Y solo si el hábito lleva vivo la ventana entera —hay algún registro
  * anterior—, porque un hábito creado el jueves lleva 2 de 30 por definición.
@@ -100,7 +106,7 @@ function lowAdherenceFacts(snapshot: HabitsSnapshot, todayISO: string): Fact[] {
   const facts: Fact[] = [];
 
   for (const habit of snapshot.habits) {
-    if (habit.frequency !== "Diario") continue;
+    if (habit.routineFrequency !== "Diario") continue;
 
     const suyos = snapshot.logs.filter((l) => l.habitId === habit.id);
     if (!suyos.length) continue;
@@ -130,9 +136,9 @@ function lowAdherenceFacts(snapshot: HabitsSnapshot, todayISO: string): Fact[] {
 /**
  * Una rutina que se dejó de ejecutar.
  *
- * Una rutina abandonada pesa distinto que un hábito suelto: son varios pasos
- * que alguien se molestó en escribir, y suele arrastrar consigo los hábitos que
- * la componían. Por eso el peso llega al máximo antes (dos semanas, no un mes).
+ * Una rutina abandonada pesa distinto que un hábito suelto: son varios hábitos
+ * que alguien encadenó a propósito, y se dejan de cumplir todos juntos. Por eso
+ * el peso llega al máximo antes (dos semanas, no un mes).
  *
  * Una rutina que NUNCA se ejecutó no entra por la misma razón que el proyecto
  * recién creado en execution: no está abandonada, no ha empezado.
@@ -152,7 +158,7 @@ function abandonedRoutineFacts(snapshot: HabitsSnapshot, todayISO: string): Fact
     facts.push({
       id: `habits.routine-abandoned.${routine.id}`,
       domain: "habits",
-      label: `La rutina "${routine.name}" (${routine.stepCount} pasos) no se ejecuta desde hace ${days(sinCorrer)}`,
+      label: `La rutina "${routine.name}" (${routine.habitCount} hábitos) no se ejecuta desde hace ${days(sinCorrer)}`,
       weight: clampWeight(sinCorrer / 14),
       refs: [{ table: "routines", id: routine.id }]
     });
@@ -160,44 +166,11 @@ function abandonedRoutineFacts(snapshot: HabitsSnapshot, todayISO: string): Fact
   return facts;
 }
 
-/**
- * Hábitos sin bloque horario que los ancle, en UN solo hecho agregado.
- *
- * El "a qué hora" no es un campo más: `habits.occupation_id` existe desde la
- * migración 0004 justo porque un hábito sin hora concreta es un propósito. Pero
- * emitir un hecho por cada hábito sin anclar llenaría el contexto con la misma
- * frase repetida, así que va el recuento y hasta tres nombres.
- *
- * Solo se reporta si es MAYORÍA: con dos de nueve sin anclar, el usuario ya
- * sabe lo que hace.
- */
-function noAnchorFacts(snapshot: HabitsSnapshot): Fact[] {
-  if (!snapshot.habits.length) return [];
-  const sinAncla = snapshot.habits.filter((h) => !h.occupationId);
-  const proporcion = sinAncla.length / snapshot.habits.length;
-  if (proporcion <= 0.5) return [];
-
-  return [
-    {
-      id: "habits.no-anchor",
-      domain: "habits",
-      label:
-        `${sinAncla.length} de ${snapshot.habits.length} hábitos no tienen un bloque horario asignado: ` +
-        sinAncla.slice(0, 3).map((h) => `"${h.name}"`).join(", "),
-      // Todos sin anclar pesa 0.5: es un patrón que conviene contar, no una
-      // emergencia. Nunca debe desplazar a una racha rota de dos semanas.
-      weight: clampWeight(proporcion / 2),
-      refs: sinAncla.slice(0, 5).map((h) => ({ table: "habits", id: h.id }))
-    }
-  ];
-}
-
 /** Todos los hechos de hábitos, ordenados de más a menos anómalo. */
 export function habitsFacts(snapshot: HabitsSnapshot, todayISO: string): Fact[] {
   return [
     ...brokenStreakFacts(snapshot, todayISO),
     ...lowAdherenceFacts(snapshot, todayISO),
-    ...abandonedRoutineFacts(snapshot, todayISO),
-    ...noAnchorFacts(snapshot)
+    ...abandonedRoutineFacts(snapshot, todayISO)
   ].sort((a, b) => b.weight - a.weight);
 }
