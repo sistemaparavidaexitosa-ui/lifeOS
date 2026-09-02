@@ -4,19 +4,11 @@ import { useState, useTransition } from "react";
 import { upsertHabit, deleteHabit } from "./actions";
 import FormSheet, { Field, FormActions } from "../FormSheet";
 
-interface OccupationLite {
-  id: string;
-  title: string;
-  start: string;
-  end: string;
-}
-
-interface HabitLite {
+export interface HabitLite {
   id: string;
   name: string;
-  frequency: string;
   category: string;
-  occupationId: string | null;
+  durationMin: number;
   cue: string;
   twoMinVersion: string;
   stackAfterHabitId: string | null;
@@ -37,23 +29,25 @@ export interface HabitOption {
 export interface HabitPrefill {
   name: string;
   category: string;
-  frequency: string;
   cue: string;
   twoMinVersion: string;
 }
 
 export default function HabitForm({
+  routineId,
   habit,
-  occupations,
   otherHabits = [],
   prefill,
-  label
+  label,
+  position = 0
 }: {
+  routineId: string;
   habit?: HabitLite;
-  occupations: OccupationLite[];
   otherHabits?: HabitOption[];
   prefill?: HabitPrefill;
   label?: string;
+  /** Posición por defecto de un hábito nuevo: el final de la rutina. */
+  position?: number;
 }) {
   return (
     <FormSheet
@@ -62,23 +56,32 @@ export default function HabitForm({
       variant={habit ? "ghost" : "primary"}
     >
       {(close) => (
-        <HabitFields habit={habit} occupations={occupations} otherHabits={otherHabits} prefill={prefill} close={close} />
+        <HabitFields
+          routineId={routineId}
+          habit={habit}
+          otherHabits={otherHabits}
+          prefill={prefill}
+          position={position}
+          close={close}
+        />
       )}
     </FormSheet>
   );
 }
 
 export function HabitFields({
+  routineId,
   habit,
-  occupations,
   otherHabits,
   prefill,
+  position,
   close
 }: {
+  routineId: string;
   habit?: HabitLite;
-  occupations: OccupationLite[];
   otherHabits: HabitOption[];
   prefill?: HabitPrefill;
+  position: number;
   close: () => void;
 }) {
   const [pending, startTransition] = useTransition();
@@ -89,7 +92,7 @@ export function HabitFields({
       action={(fd) =>
         startTransition(async () => {
           try {
-            await upsertHabit(habit?.id ?? null, fd);
+            await upsertHabit(routineId, habit?.id ?? null, fd);
             setError(null);
             close();
           } catch (e) {
@@ -104,14 +107,6 @@ export function HabitFields({
       </Field>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <Field label="Frecuencia">
-          <select name="frequency" defaultValue={habit?.frequency ?? prefill?.frequency ?? "Diario"}>
-            <option>Diario</option>
-            <option>Semanal</option>
-            <option>Entre semana</option>
-            <option>Fin de semana</option>
-          </select>
-        </Field>
         <Field label="Categoría">
           <select name="category" defaultValue={habit?.category ?? prefill?.category ?? "Salud"}>
             <option>Salud</option>
@@ -121,21 +116,20 @@ export function HabitFields({
             <option>Otros</option>
           </select>
         </Field>
+        <Field label="Minutos">
+          <input name="durationMin" type="number" min={1} defaultValue={habit?.durationMin ?? 5} required />
+        </Field>
       </div>
 
-      <Field label="Bloque de Autogestión del Tiempo">
-        <select name="occupationId" defaultValue={habit?.occupationId ?? ""}>
-          <option value="">— sin ligar —</option>
-          {occupations.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.title} ({o.start}–{o.end})
-            </option>
-          ))}
-        </select>
+      <Field label="Orden dentro de la rutina">
+        <input name="position" type="number" min={0} defaultValue={position} />
       </Field>
+      <p className="text-xs" style={{ color: "var(--muted)" }}>
+        El orden ES el apilamiento: cada hábito se dispara después del anterior.
+      </p>
 
       <p className="text-xs" style={{ color: "var(--muted)" }}>
-        Conecta el hábito con un bloque de tu Autogestión del Tiempo (FR-HAB-001).
+        La frecuencia y el bloque horario los pone la rutina: este hábito toca cuando toca ella.
       </p>
 
       {/* Los tres campos de «Hábitos atómicos» (migración 0033). Van juntos y
