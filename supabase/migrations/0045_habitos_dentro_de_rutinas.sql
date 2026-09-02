@@ -62,13 +62,20 @@ begin
   -- `position`, y a igualdad la más antigua. Se descarta duplicar el hábito
   -- para ponerlo en las dos, que bifurcaría la racha — justo lo que 0024
   -- evitó al inventar `routine_steps.habit_id`.
+  --
+  -- `rt.id` cierra el orden al final. Sin él el desempate no es total: dos
+  -- rutinas creadas en la misma transacción comparten `created_at` —`now()` es
+  -- el instante de la transacción, no el de la fila— y las dos nacen con
+  -- `position` 0. Ahí el ganador lo elegiría el plan de ejecución, y la misma
+  -- base migrada dos veces podría dar dos respuestas distintas. Con `rt.id` el
+  -- resultado es reproducible aunque el criterio siga siendo arbitrario.
   with elegido as (
     select distinct on (s.habit_id)
            s.habit_id, s.routine_id, s.position, s.duration_min
       from public.routine_steps s
       join public.routines rt on rt.id = s.routine_id
      where s.habit_id is not null
-     order by s.habit_id, rt.position, rt.created_at, s.position
+     order by s.habit_id, rt.position, rt.created_at, s.position, rt.id
   )
   update public.habits h
      set routine_id = e.routine_id,
@@ -95,7 +102,15 @@ begin
              order by count(*) desc, (h2.frequency <> 'Diario'), h2.frequency
              limit 1) as freq
       from public.habits h
-      join public.occupations o on o.id = h.occupation_id
+      -- `o.user_id = h.user_id` no es redundante con la clave foránea. Las
+      -- claves foráneas no evalúan RLS y `habits.occupation_id` nunca tuvo un
+      -- guard de propiedad como el que 0033 le puso al apilamiento: un hábito
+      -- tuyo podía apuntar legalmente al bloque de otra cuenta. Sin esta
+      -- cláusula ese hábito estrenaría una rutina con el TÍTULO del bloque
+      -- ajeno y anclada a él, que es filtrar por backfill lo que la aplicación
+      -- nunca dejó ver. Con ella cae al paso 3 y se agrupa por frecuencia, que
+      -- no revela nada de nadie.
+      join public.occupations o on o.id = h.occupation_id and o.user_id = h.user_id
      where h.routine_id is null
      group by h.user_id, h.occupation_id, o.title
   loop
@@ -116,10 +131,17 @@ begin
 
   -- Paso 3. Los sueltos sin bloque se agrupan por frecuencia, que es el único
   -- dato que queda sobre cuándo tocaban. Sin esto perderían ese «cuándo».
+  --
+  -- No filtra por `occupation_id is null`: es el cajón de sastre, y tiene que
+  -- serlo. Tras el paso 2 queda sin rutina el que no tenía bloque y también el
+  -- que apuntaba al bloque de otra cuenta, que el paso 2 dejó pasar a
+  -- propósito. Si este paso mirara el bloque, ese segundo hábito no lo
+  -- recogería nadie y el `set not null` del final tumbaría la migración
+  -- entera por un dato que sí se sabe colocar.
   for r in
     select user_id, frequency
       from public.habits
-     where routine_id is null and occupation_id is null
+     where routine_id is null
      group by user_id, frequency
   loop
     insert into public.routines (user_id, name, frequency, occupation_id, active, position)
@@ -140,7 +162,6 @@ begin
               from public.habits
              where routine_id is null
                and user_id = r.user_id
-               and occupation_id is null
                and frequency = r.frequency) sub
      where h.id = sub.id;
   end loop;

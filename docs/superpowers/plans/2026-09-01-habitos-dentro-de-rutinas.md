@@ -31,7 +31,10 @@
 **Base de datos**
 - Crear `supabase/migrations/0045_habitos_dentro_de_rutinas.sql` — esquema, backfill y trigger de propiedad.
 - Crear `supabase/tests/0021_habitos_en_rutinas.sql` — pgTAP del modelo nuevo.
-- Crear `supabase/tests/backfill/0045_fixture.sql` y `supabase/tests/backfill/0045_asserts.sql` — datos legados y aserciones del backfill.
+- Crear `scripts/backfill/0045_fixture.sql` y `scripts/backfill/0045_asserts.sql` — datos legados y aserciones del backfill.
+  Van en `scripts/` y **no** en `supabase/tests/` porque `supabase test db` le entrega a pg_prove el árbol entero de
+  `supabase/tests`, subcarpetas incluidas: un `.sql` ahí dentro que no emita TAP tumba la suite completa. Y CI
+  (`.github/workflows/ci.yml`) y `pnpm verify` lo invocan sin ruta, así que no hay forma de excluirlos.
 - Crear `scripts/verificar-backfill-0045.sh` — aplica el backfill sobre datos legados y comprueba el resultado.
 - Modificar `supabase/tests/0003_rls_habits_household_budget.sql`, `supabase/tests/0007_rls_development.sql`, `supabase/tests/0013_rls_desarrollo_personal.sql` — insertan hábitos sin rutina y dejarían de pasar.
 - Modificar `supabase/seed.sql`.
@@ -276,8 +279,8 @@ EOF
 **Archivos:**
 - Crear: `supabase/migrations/0045_habitos_dentro_de_rutinas.sql`
 - Crear: `supabase/tests/0021_habitos_en_rutinas.sql`
-- Crear: `supabase/tests/backfill/0045_fixture.sql`
-- Crear: `supabase/tests/backfill/0045_asserts.sql`
+- Crear: `scripts/backfill/0045_fixture.sql`
+- Crear: `scripts/backfill/0045_asserts.sql`
 - Crear: `scripts/verificar-backfill-0045.sh`
 - Modificar: `supabase/tests/0003_rls_habits_household_budget.sql`
 - Modificar: `supabase/tests/0007_rls_development.sql`
@@ -294,10 +297,10 @@ EOF
 
 - [ ] **Paso 1: Escribir el fixture de datos legados**
 
-Crea `supabase/tests/backfill/0045_fixture.sql`. Se ejecuta contra el esquema **anterior** a 0045, así que usa las columnas viejas (`habits.frequency`, `habits.occupation_id`, `routine_steps`):
+Crea `scripts/backfill/0045_fixture.sql`. Se ejecuta contra el esquema **anterior** a 0045, así que usa las columnas viejas (`habits.frequency`, `habits.occupation_id`, `routine_steps`):
 
 ```sql
--- supabase/tests/backfill/0045_fixture.sql
+-- scripts/backfill/0045_fixture.sql
 -- Datos con la forma ANTERIOR a la migración 0045, para comprobar que el
 -- backfill coloca cada hábito donde la spec dice. Lo corre
 -- scripts/verificar-backfill-0045.sh, no `supabase test db`: una prueba pgTAP
@@ -364,10 +367,10 @@ insert into public.routine_steps (id, routine_id, position, title, duration_min,
 
 - [ ] **Paso 2: Escribir las aserciones del backfill**
 
-Crea `supabase/tests/backfill/0045_asserts.sql`. Se ejecuta **después** de aplicar 0045 y revienta con una excepción si algo no cuadra:
+Crea `scripts/backfill/0045_asserts.sql`. Se ejecuta **después** de aplicar 0045 y revienta con una excepción si algo no cuadra:
 
 ```sql
--- supabase/tests/backfill/0045_asserts.sql
+-- scripts/backfill/0045_asserts.sql
 -- Corre DESPUÉS de aplicar 0045 sobre el fixture. Cada bloque cubre un caso de
 -- la sección «Backfill» de la spec.
 
@@ -518,13 +521,13 @@ echo "→ Reconstruyendo la base en el estado anterior a 0045…"
 supabase db reset
 
 echo "→ Sembrando datos con la forma vieja…"
-correr supabase/tests/backfill/0045_fixture.sql
+correr scripts/backfill/0045_fixture.sql
 
 echo "→ Aplicando 0045…"
 correr "$TMP/0045.sql"
 
 echo "→ Comprobando…"
-correr supabase/tests/backfill/0045_asserts.sql
+correr scripts/backfill/0045_asserts.sql
 
 echo "✓ Backfill verificado."
 ```
@@ -930,7 +933,7 @@ Si `supabase db reset` falla, será en `seed.sql`, que todavía inserta hábitos
 ```bash
 git add supabase/migrations/0045_habitos_dentro_de_rutinas.sql \
         supabase/tests/0021_habitos_en_rutinas.sql \
-        supabase/tests/backfill/ \
+        scripts/backfill/ \
         scripts/verificar-backfill-0045.sh \
         supabase/tests/0003_rls_habits_household_budget.sql \
         supabase/tests/0007_rls_development.sql \

@@ -11,7 +11,8 @@
 
 insert into auth.users (id, instance_id, aud, role, email) values
   ('aaaaaaaa-0000-4000-8000-000000000001', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'backfill-a@test.local'),
-  ('bbbbbbbb-0000-4000-8000-000000000002', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'backfill-b@test.local')
+  ('bbbbbbbb-0000-4000-8000-000000000002', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'backfill-b@test.local'),
+  ('cccccccc-0000-4000-8000-000000000003', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'backfill-c@test.local')
 on conflict (id) do nothing;
 
 -- ---------------------------------------------------------------------------
@@ -65,3 +66,34 @@ values ('b2000000-0000-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-0000000
 insert into public.routine_steps (id, routine_id, position, title, duration_min, habit_id) values
   ('b3000000-0000-4000-8000-000000000001', 'b1000000-0000-4000-8000-000000000001', 0, 'Beber agua', 1, 'b2000000-0000-4000-8000-000000000001'),
   ('b3000000-0000-4000-8000-000000000002', 'b1000000-0000-4000-8000-000000000002', 0, 'Beber agua', 2, 'b2000000-0000-4000-8000-000000000001');
+
+-- El bloque de B, y un hábito de A que apunta a él. El esquema viejo lo
+-- permitía: `habits.occupation_id` no tenía guard de propiedad y las claves
+-- foráneas no evalúan RLS. El backfill no puede bautizar la rutina de A con el
+-- título del bloque de B ni anclarla ahí, así que este hábito tiene que caer al
+-- paso 3 y agruparse por frecuencia. De paso estrena la rama 'Entre semana'
+-- del `case`.
+insert into public.occupations (id, user_id, title, start_time, end_time, category, occ_date)
+values ('b0000000-0000-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-000000000002',
+        'Bloque privado de B', '09:00', '10:00', 'Trabajo', current_date);
+
+insert into public.habits (id, user_id, name, frequency, category, occupation_id)
+values ('a2000000-0000-4000-8000-000000000006', 'aaaaaaaa-0000-4000-8000-000000000001',
+        'Revisar pendientes', 'Entre semana', 'Trabajo', 'b0000000-0000-4000-8000-000000000001');
+
+-- ---------------------------------------------------------------------------
+-- USUARIO C — hábitos y CERO rutinas
+-- ---------------------------------------------------------------------------
+-- No es un caso rebuscado: es la forma que tenía la base local de este
+-- proyecto justo antes de migrar (1 hábito, 0 rutinas). Es el único usuario que
+-- hace pasar por la rama NULL del
+-- `coalesce((select max(position) + 1 from public.routines …), 0)`, que sin
+-- este usuario no la ejecutaba nadie.
+--
+-- Uno de ellos es 'Fin de semana' a propósito: es la cuarta rama del `case`
+-- que nombra las rutinas por frecuencia, y la única que ningún otro caso del
+-- fixture toca. Sin él, una errata en ese `when` se publicaría en silencio.
+insert into public.habits (id, user_id, name, frequency, category, created_at) values
+  ('c2000000-0000-4000-8000-000000000001', 'cccccccc-0000-4000-8000-000000000003', 'Repasar la semana', 'Fin de semana', 'Personal', now() - interval '3 days'),
+  ('c2000000-0000-4000-8000-000000000002', 'cccccccc-0000-4000-8000-000000000003', 'Preparar la comida', 'Fin de semana', 'Personal', now() - interval '1 day'),
+  ('c2000000-0000-4000-8000-000000000003', 'cccccccc-0000-4000-8000-000000000003', 'Tomar agua', 'Diario', 'Salud', now());
