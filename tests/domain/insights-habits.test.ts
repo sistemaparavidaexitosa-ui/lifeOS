@@ -101,7 +101,7 @@ test("no opina sobre un hábito cuya rutina no es diaria", () => {
 test("habitsFacts: una rutina sin ejecutar en más de una semana se reporta", () => {
   const facts = habitsFacts(
     snapshot({
-      routines: [{ id: "r1", name: "Mañana Milagrosa", habitCount: 6 }],
+      routines: [{ id: "r1", name: "Mañana Milagrosa", habitCount: 6, occupationId: "o1" }],
       routineRuns: [{ routineId: "r1", date: addDaysISO(HOY, -10) }]
     }),
     HOY
@@ -112,14 +112,17 @@ test("habitsFacts: una rutina sin ejecutar en más de una semana se reporta", ()
 });
 
 test("habitsFacts: una rutina que nunca se ejecutó no está abandonada, no ha empezado", () => {
-  const facts = habitsFacts(snapshot({ routines: [{ id: "r1", name: "Nueva", habitCount: 3 }] }), HOY);
+  const facts = habitsFacts(
+    snapshot({ routines: [{ id: "r1", name: "Nueva", habitCount: 3, occupationId: "o1" }] }),
+    HOY
+  );
   assert.strictEqual(facts.find((f) => f.id === "habits.routine-abandoned.r1"), undefined);
 });
 
 test("habitsFacts: una rutina corrida anteayer sigue viva", () => {
   const facts = habitsFacts(
     snapshot({
-      routines: [{ id: "r1", name: "Viva", habitCount: 3 }],
+      routines: [{ id: "r1", name: "Viva", habitCount: 3, occupationId: "o1" }],
       routineRuns: [{ routineId: "r1", date: addDaysISO(HOY, -2) }]
     }),
     HOY
@@ -127,17 +130,80 @@ test("habitsFacts: una rutina corrida anteayer sigue viva", () => {
   assert.strictEqual(facts.find((f) => f.id === "habits.routine-abandoned.r1"), undefined);
 });
 
+test("habitsFacts: la mayoría de rutinas sin bloque horario va en UN hecho agregado", () => {
+  // El anclaje lo declara la rutina desde 0045, así que el hecho se mira por
+  // rutina y no por hábito: "N de M rutinas", no "N de M hábitos".
+  const facts = habitsFacts(
+    snapshot({
+      routines: [
+        { id: "r1", name: "Uno", habitCount: 1, occupationId: null },
+        { id: "r2", name: "Dos", habitCount: 1, occupationId: null },
+        { id: "r3", name: "Tres", habitCount: 1, occupationId: "o1" }
+      ]
+    }),
+    HOY
+  );
+  const sinAncla = facts.filter((f) => f.id === "habits.no-anchor");
+  assert.strictEqual(sinAncla.length, 1, "uno agregado, no uno por rutina");
+  assert.match(sinAncla[0]?.label ?? "", /2 de 3 rutinas no tienen un bloque horario/);
+});
+
+test("habitsFacts: una minoría de rutinas sin anclar no se reporta — el usuario ya sabe lo que hace", () => {
+  const facts = habitsFacts(
+    snapshot({
+      routines: [
+        { id: "r1", name: "Uno", habitCount: 1, occupationId: null },
+        { id: "r2", name: "Dos", habitCount: 1, occupationId: "o1" },
+        { id: "r3", name: "Tres", habitCount: 1, occupationId: "o1" },
+        { id: "r4", name: "Cuatro", habitCount: 1, occupationId: "o1" }
+      ]
+    }),
+    HOY
+  );
+  assert.strictEqual(facts.find((f) => f.id === "habits.no-anchor"), undefined);
+});
+
+test("habitsFacts: todas las rutinas ancladas no generan ningún hecho de anclaje", () => {
+  // El caso que la versión anterior (a nivel de hábito) no podía distinguir
+  // bien: si cada rutina ya tiene su bloque, no hay nada que avisar.
+  const facts = habitsFacts(
+    snapshot({
+      routines: [
+        { id: "r1", name: "Uno", habitCount: 1, occupationId: "o1" },
+        { id: "r2", name: "Dos", habitCount: 1, occupationId: "o2" }
+      ]
+    }),
+    HOY
+  );
+  assert.strictEqual(facts.find((f) => f.id === "habits.no-anchor"), undefined);
+});
+
+test("habitsFacts: la falta de ancla nunca desplaza a una racha rota larga", () => {
+  const facts = habitsFacts(
+    snapshot({
+      habits: [habito("h1"), habito("h2", { routineId: "r2" })],
+      logs: racha("h1", addDaysISO(HOY, -2), 14),
+      routines: [
+        { id: "r1", name: "Uno", habitCount: 1, occupationId: null },
+        { id: "r2", name: "Dos", habitCount: 1, occupationId: null }
+      ]
+    }),
+    HOY
+  );
+  assert.strictEqual(facts[0]?.id, "habits.streak-broken.h1", "la racha rota debe ir primero");
+});
+
 test("habitsFacts: todo hecho declara su dominio, refs y un peso entre 0 y 1", () => {
   const facts = habitsFacts(
     snapshot({
       habits: [habito("h1"), habito("h2", { routineId: "r2" })],
       logs: racha("h1", addDaysISO(HOY, -2), 6),
-      routines: [{ id: "r1", name: "R", habitCount: 2 }],
+      routines: [{ id: "r1", name: "R", habitCount: 2, occupationId: null }],
       routineRuns: [{ routineId: "r1", date: addDaysISO(HOY, -20) }]
     }),
     HOY
   );
-  assert.ok(facts.length >= 2);
+  assert.ok(facts.length >= 3);
   for (const f of facts) {
     assert.strictEqual(f.domain, "habits");
     assert.ok(f.weight >= 0 && f.weight <= 1, `peso fuera de rango en ${f.id}: ${f.weight}`);

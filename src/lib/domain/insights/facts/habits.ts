@@ -30,6 +30,8 @@ export interface RoutineFactLike {
   id: string;
   name: string;
   habitCount: number;
+  /** `routines.occupation_id`: el bloque horario que la ancla, si lo tiene. */
+  occupationId: string | null;
 }
 
 export interface RoutineRunLike {
@@ -166,11 +168,47 @@ function abandonedRoutineFacts(snapshot: HabitsSnapshot, todayISO: string): Fact
   return facts;
 }
 
+/**
+ * Rutinas sin bloque horario que las ancle, en UN solo hecho agregado.
+ *
+ * El "a qué hora" no es un campo más: `routines.occupation_id` es justo el
+ * dato con el que una rutina sin hora concreta se delata como un propósito.
+ * Desde 0045 el bloque lo declara la rutina, no cada hábito suelto —por eso
+ * `habits.occupation_id` se borró como duplicado—, así que este hecho se mira
+ * ahora por rutina y no por hábito. Emitir uno por cada rutina sin anclar
+ * llenaría el contexto con la misma frase repetida, así que va el recuento y
+ * hasta tres nombres.
+ *
+ * Solo se reporta si es MAYORÍA: con dos de nueve sin anclar, el usuario ya
+ * sabe lo que hace.
+ */
+function noAnchorFacts(snapshot: HabitsSnapshot): Fact[] {
+  if (!snapshot.routines.length) return [];
+  const sinAncla = snapshot.routines.filter((r) => !r.occupationId);
+  const proporcion = sinAncla.length / snapshot.routines.length;
+  if (proporcion <= 0.5) return [];
+
+  return [
+    {
+      id: "habits.no-anchor",
+      domain: "habits",
+      label:
+        `${sinAncla.length} de ${snapshot.routines.length} rutinas no tienen un bloque horario asignado: ` +
+        sinAncla.slice(0, 3).map((r) => `"${r.name}"`).join(", "),
+      // Todas sin anclar pesa 0.5: es un patrón que conviene contar, no una
+      // emergencia. Nunca debe desplazar a una racha rota de dos semanas.
+      weight: clampWeight(proporcion / 2),
+      refs: sinAncla.slice(0, 5).map((r) => ({ table: "routines", id: r.id }))
+    }
+  ];
+}
+
 /** Todos los hechos de hábitos, ordenados de más a menos anómalo. */
 export function habitsFacts(snapshot: HabitsSnapshot, todayISO: string): Fact[] {
   return [
     ...brokenStreakFacts(snapshot, todayISO),
     ...lowAdherenceFacts(snapshot, todayISO),
-    ...abandonedRoutineFacts(snapshot, todayISO)
+    ...abandonedRoutineFacts(snapshot, todayISO),
+    ...noAnchorFacts(snapshot)
   ].sort((a, b) => b.weight - a.weight);
 }
