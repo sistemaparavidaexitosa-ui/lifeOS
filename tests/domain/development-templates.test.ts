@@ -117,3 +117,12 @@ test("matchHabitForStep devuelve null cuando no hay pista o no hay coincidencia"
   assert.strictEqual(matchHabitForStep("nadar", [{ id: "h1", name: "Leer" }]), null);
   assert.strictEqual(matchHabitForStep("leer", []), null);
 });
+
+test("HabitTemplate ya no lleva frecuencia: la dicta la rutina", () => {
+  // Desde 0045 un hábito no vive suelto: siempre está dentro de una rutina, y
+  // es ella la que tiene frecuencia. Una plantilla de hábito con `frequency`
+  // propondría un valor que el formulario ya no tiene dónde guardar.
+  for (const plantilla of HABIT_TEMPLATES) {
+    assert.ok(!Object.hasOwn(plantilla, "frequency"), `${plantilla.id} todavía trae frequency`);
+  }
+});

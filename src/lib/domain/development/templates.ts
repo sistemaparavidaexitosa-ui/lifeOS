@@ -31,8 +31,9 @@ export interface RoutineTemplateStep {
   detail: string;
   /**
    * Texto con el que se intenta reconocer un hábito que el usuario YA tenga,
-   * para ligar el paso a él (`routine_steps.habit_id`) en vez de duplicarlo.
-   * La migración 0024 lo dice: la racha no se bifurca.
+   * para NO sembrarlo de nuevo al usar la plantilla. Desde 0045 el paso ES el
+   * hábito, así que aquí ya no hay nada que ligar —solo evitar el duplicado
+   * que bifurcaría la racha en dos filas con el mismo nombre.
    */
   habitHint?: string;
 }
@@ -137,12 +138,16 @@ export function getRoutineTemplate(id: string): RoutineTemplate | undefined {
  *     fallar. Es la que se hace el día malo, y la que sostiene la racha.
  *   - `why`: en qué se apoya, para que quien elija la plantilla entienda la
  *     regla y pueda escribir la suya después.
+ *
+ * Sin `frequency`: desde 0045 un hábito no vive suelto, siempre está dentro de
+ * una rutina, y es la rutina la que toca cuando toca. Una plantilla de hábito
+ * que propusiera una frecuencia estaría proponiendo algo que el formulario ya
+ * no tiene dónde guardar.
  */
 export interface HabitTemplate {
   id: string;
   name: string;
   category: HabitCategory;
-  frequency: Frequency;
   cue: string;
   twoMinVersion: string;
   why: string;
@@ -153,7 +158,6 @@ export const HABIT_TEMPLATES: readonly HabitTemplate[] = [
     id: "moverme",
     name: "Moverme 20 minutos",
     category: "Salud",
-    frequency: "Diario",
     cue: "Después de dejar el teléfono cargando por la mañana",
     twoMinVersion: "Ponerme los tenis",
     why: "La versión de dos minutos no es el ejercicio: es el gesto que hace probable el ejercicio."
@@ -162,7 +166,6 @@ export const HABIT_TEMPLATES: readonly HabitTemplate[] = [
     id: "agua",
     name: "Un vaso de agua al despertar",
     category: "Salud",
-    frequency: "Diario",
     cue: "Después de apagar la alarma",
     twoMinVersion: "Dejar el vaso lleno en el buró la noche anterior",
     why: "Prepararlo la noche antes convierte el hábito en algo que ya está hecho a medias cuando despiertas."
@@ -171,7 +174,6 @@ export const HABIT_TEMPLATES: readonly HabitTemplate[] = [
     id: "hora-de-dormir",
     name: "Acostarme a la misma hora",
     category: "Salud",
-    frequency: "Diario",
     cue: "Después de recoger la cocina",
     twoMinVersion: "Poner una alarma de «hora de apagar»",
     why: "Es el hábito del que dependen casi todos los demás: sin sueño, la mañana no existe."
@@ -180,7 +182,6 @@ export const HABIT_TEMPLATES: readonly HabitTemplate[] = [
     id: "leer",
     name: "Leer 20 minutos",
     category: "Aprendizaje",
-    frequency: "Diario",
     cue: "Después de meterme a la cama",
     twoMinVersion: "Leer una página",
     why: "Una página al día es ridículamente poco, y por eso se cumple. La cantidad se acomoda sola."
@@ -189,7 +190,6 @@ export const HABIT_TEMPLATES: readonly HabitTemplate[] = [
     id: "apuntar-lo-aprendido",
     name: "Apuntar lo que aprendí",
     category: "Aprendizaje",
-    frequency: "Diario",
     cue: "Después de cerrar el libro",
     twoMinVersion: "Escribir una frase",
     why: "Se apila sobre la lectura: el hábito que ya tienes es el disparador del que quieres tener."
@@ -198,7 +198,6 @@ export const HABIT_TEMPLATES: readonly HabitTemplate[] = [
     id: "tres-tareas",
     name: "Definir las 3 tareas del día",
     category: "Trabajo",
-    frequency: "Entre semana",
     cue: "Después de abrir la computadora",
     twoMinVersion: "Escribir la primera",
     why: "Se ancla a algo que ya haces sin falta, así que no necesita fuerza de voluntad para arrancar."
@@ -207,7 +206,6 @@ export const HABIT_TEMPLATES: readonly HabitTemplate[] = [
     id: "cierre-del-dia",
     name: "Cerrar el día en la bitácora",
     category: "Trabajo",
-    frequency: "Entre semana",
     cue: "Después de la última reunión",
     twoMinVersion: "Una línea de qué pasó",
     why: "Un cierre corto y diario vale más que una revisión larga que se pospone toda la semana."
@@ -216,7 +214,6 @@ export const HABIT_TEMPLATES: readonly HabitTemplate[] = [
     id: "gratitud",
     name: "Diario de gratitud",
     category: "Personal",
-    frequency: "Diario",
     cue: "Después de lavarme los dientes en la noche",
     twoMinVersion: "Escribir una sola cosa",
     why: "El cepillado ya es automático: es de los disparadores más fiables que tiene cualquiera."
@@ -225,7 +222,6 @@ export const HABIT_TEMPLATES: readonly HabitTemplate[] = [
     id: "meditar",
     name: "Meditar",
     category: "Personal",
-    frequency: "Diario",
     cue: "Después de sentarme en el escritorio",
     twoMinVersion: "Tres respiraciones lentas",
     why: "Tres respiraciones no cambian nada por sí solas; cambian que mañana vuelvas a sentarte."
@@ -234,7 +230,6 @@ export const HABIT_TEMPLATES: readonly HabitTemplate[] = [
     id: "llamar",
     name: "Llamar a alguien que quiero",
     category: "Personal",
-    frequency: "Semanal",
     cue: "Después de comer el domingo",
     twoMinVersion: "Mandar un mensaje",
     why: "El mensaje es la salida honrosa para el día en que no hay energía para una llamada."

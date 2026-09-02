@@ -10,60 +10,94 @@
 // Un solo panel para los dos pasos, y no un drawer dentro de otro: dos hojas
 // apiladas en un móvil son una trampa, porque cerrar la de arriba parece
 // cerrarlo todo y se pierde lo escrito.
+//
+// Desde 0045 hay un paso previo a los dos: elegir la rutina. Un hábito ya no
+// vive suelto —siempre está dentro de una rutina— así que antes de prellenar
+// el formulario hay que decidir a cuál se suma.
 import { useState } from "react";
 import FormSheet from "../FormSheet";
 import { HabitFields, type HabitOption } from "./HabitForm";
 import { habitTemplatesByCategory, type HabitTemplate } from "@/lib/domain/development/templates.ts";
 
-interface OccupationLite {
-  id: string;
-  title: string;
-  start: string;
-  end: string;
-}
-
 export default function HabitTemplates({
-  occupations,
+  routines,
   otherHabits
 }: {
-  occupations: OccupationLite[];
+  routines: { id: string; name: string }[];
   otherHabits: HabitOption[];
 }) {
   return (
     <FormSheet label="Plantillas" title="Plantillas de hábitos">
-      {(close) => <Contenido occupations={occupations} otherHabits={otherHabits} close={close} />}
+      {(close) => <Contenido routines={routines} otherHabits={otherHabits} close={close} />}
     </FormSheet>
   );
 }
 
 function Contenido({
-  occupations,
+  routines,
   otherHabits,
   close
 }: {
-  occupations: OccupationLite[];
+  routines: { id: string; name: string }[];
   otherHabits: HabitOption[];
   close: () => void;
 }) {
   const [elegida, setElegida] = useState<HabitTemplate | null>(null);
+  const [routineId, setRoutineId] = useState("");
 
   if (elegida) {
+    if (!routineId) {
+      return (
+        <div className="flex flex-col gap-3">
+          <button
+            type="button"
+            className="nb-crumb-back"
+            style={{ alignSelf: "flex-start" }}
+            onClick={() => {
+              setElegida(null);
+              setRoutineId("");
+            }}
+          >
+            ← Todas las plantillas
+          </button>
+          <div className="ah-why">{elegida.why}</div>
+          <p className="text-xs" style={{ color: "var(--muted)" }}>
+            ¿A qué rutina se suma? Un hábito solo se sostiene dentro de una cadena: la rutina es la que decide cuándo
+            toca y la que tira de él los días malos.
+          </p>
+          {routines.length === 0 ? (
+            <p className="text-xs" style={{ color: "var(--danger)" }}>
+              Todavía no tienes ninguna rutina. Crea una primero —o parte de una plantilla de rutina— y vuelve aquí.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {routines.map((r) => (
+                <button key={r.id} type="button" className="ah-card" onClick={() => setRoutineId(r.id)}>
+                  <span className="ah-card-name">{r.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
     return (
       <div className="flex flex-col gap-3">
-        <button type="button" className="nb-crumb-back" style={{ alignSelf: "flex-start" }} onClick={() => setElegida(null)}>
-          ← Todas las plantillas
+        <button type="button" className="nb-crumb-back" style={{ alignSelf: "flex-start" }} onClick={() => setRoutineId("")}>
+          ← Otra rutina
         </button>
         <div className="ah-why">{elegida.why}</div>
         <p className="text-xs" style={{ color: "var(--muted)" }}>
           Cámbialo todo lo que haga falta antes de guardar: la señal solo funciona si describe <b>tu</b> día.
         </p>
         <HabitFields
-          occupations={occupations}
+          routineId={routineId}
           otherHabits={otherHabits}
+          position={0}
           prefill={{
             name: elegida.name,
             category: elegida.category,
-            frequency: elegida.frequency,
             cue: elegida.cue,
             twoMinVersion: elegida.twoMinVersion
           }}

@@ -205,9 +205,11 @@ export async function toggleHabitToday(routineId: string, habitId: string) {
  *     las 5 AM tratan de UNA HORA concreta del día; anclarla al bloque horario
  *     en el momento de crear la rutina es la mitad del método, y después nadie
  *     vuelve a abrir el formulario para hacerlo.
- *   - Si un paso corresponde a un hábito que el usuario ya lleva, se liga por
- *     `routine_steps.habit_id` en vez de duplicarlo. La migración 0024 lo dice:
- *     así la racha no se bifurca.
+ *   - La plantilla siembra HÁBITOS, no pasos: desde 0045 son lo mismo, así que
+ *     cada paso de la plantilla nace con racha propia desde el primer día.
+ *     `matchHabitForStep` ya no sirve para ligar —no hay nada que ligar— pero
+ *     sí para NO duplicar: si el usuario ya tiene ese hábito en otra rutina, se
+ *     salta, porque un hábito solo puede estar en una.
  *
  * Contrato `{ ok, reason }` (D-030): esta acción la llama un Client Component
  * que necesita pintar el motivo si algo falla.
@@ -229,32 +231,42 @@ export async function createRoutineFromTemplate(templateId: string, occupationId
       name: template.name,
       frequency: template.frequency,
       occupation_id: occupationId || null,
+      identity: "",
       active: true
     })
     .select("id")
     .single();
   if (error || !routine) return { ok: false, reason: describeDbError(error) };
 
-  // Los hábitos del usuario, para intentar ligar los pasos que correspondan.
-  const { data: habits } = await supabase.from("habits").select("id, name");
+  // Los hábitos que el usuario ya tiene, para no sembrar un duplicado que
+  // bifurcaría la racha en dos filas con el mismo nombre.
+  const { data: existentes } = await supabase.from("habits").select("id, name");
 
-  const steps = template.steps.map((step, index) => ({
-    routine_id: routine.id,
-    title: step.title,
-    duration_min: step.durationMin,
-    position: index,
-    habit_id: matchHabitForStep(step.habitHint, habits ?? [])
-  }));
+  const nuevos = template.steps
+    .filter((step) => matchHabitForStep(step.habitHint ?? step.title, existentes ?? []) === null)
+    .map((step, index) => ({
+      user_id: user.id,
+      routine_id: routine.id,
+      name: step.title,
+      category: "Otros" as const,
+      position: index,
+      duration_min: step.durationMin,
+      cue: "",
+      two_min_version: ""
+    }));
 
-  const { error: stepsError } = await supabase.from("routine_steps").insert(steps);
-  if (stepsError) {
-    // Una rutina sin pasos no sirve de nada y es peor que no haberla creado:
-    // el usuario tendría que borrarla a mano para volver a intentarlo.
-    await supabase.from("routines").delete().eq("id", routine.id);
-    return { ok: false, reason: describeDbError(stepsError) };
+  if (nuevos.length > 0) {
+    const { error: habitsError } = await supabase.from("habits").insert(nuevos);
+    if (habitsError) {
+      // Una rutina sin hábitos no sirve de nada y es peor que no haberla creado:
+      // el usuario tendría que borrarla a mano para volver a intentarlo.
+      await supabase.from("routines").delete().eq("id", routine.id);
+      return { ok: false, reason: describeDbError(habitsError) };
+    }
   }
 
   revalidatePath("/development/routines");
   revalidatePath("/development");
+  revalidatePath("/home");
   return { ok: true, id: routine.id as string };
 }
