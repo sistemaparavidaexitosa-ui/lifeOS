@@ -3,15 +3,22 @@
 // tests/domain/development-routines.test.ts).
 //
 // LO QUE ESTE MÓDULO NO HACE, A PROPÓSITO
-// No guarda horarios: el bloque sigue viviendo en `occupations`. No calcula
-// rachas: siguen viviendo en `habit_logs`. Una rutina solo aporta el ORDEN de
-// los pasos y el puente hacia el hábito que ya existe.
+// No guarda horarios: el bloque sigue viviendo en `occupations`, y ahora lo
+// referencia la rutina, no cada hábito. No calcula rachas: siguen viviendo en
+// `habit_logs`, que desde la migración 0045 es TAMBIÉN la única fuente de
+// "¿hice hoy este paso?" — por eso `routine_runs` ya no lleva la lista de
+// pasos completados. La rutina aporta el ORDEN y la FRECUENCIA; el hábito
+// aporta el registro.
 
 import { addDaysISO, diffDays } from "../datetime.ts";
 
 export type Frequency = "Diario" | "Semanal" | "Entre semana" | "Fin de semana";
 
-export interface StepLike {
+/**
+ * Un hábito visto desde la rutina. Desde 0045 no hay una tabla de pasos: el
+ * paso ES la fila del hábito, con su `position` y su `duration_min`.
+ */
+export interface RoutineHabitLike {
   id: string;
   durationMin: number;
 }
@@ -35,17 +42,21 @@ export function routineDueToday(frequency: Frequency, dateISO: string): boolean 
   }
 }
 
+/**
+ * `doneHabitIds` son los hábitos con registro en `habit_logs` para el día que
+ * se está mirando. No hay un segundo lugar donde consultarlo.
+ */
 export function routineProgress(
-  completedStepIds: string[],
-  steps: StepLike[]
+  doneHabitIds: string[],
+  habits: RoutineHabitLike[]
 ): { done: number; total: number; pct: number; remainingMin: number } {
-  const done = new Set(completedStepIds);
-  const hechos = steps.filter((s) => done.has(s.id));
+  const done = new Set(doneHabitIds);
+  const hechos = habits.filter((h) => done.has(h.id));
   return {
     done: hechos.length,
-    total: steps.length,
-    pct: steps.length === 0 ? 0 : Math.round((hechos.length / steps.length) * 100),
-    remainingMin: steps.filter((s) => !done.has(s.id)).reduce((sum, s) => sum + s.durationMin, 0)
+    total: habits.length,
+    pct: habits.length === 0 ? 0 : Math.round((hechos.length / habits.length) * 100),
+    remainingMin: habits.filter((h) => !done.has(h.id)).reduce((sum, h) => sum + h.durationMin, 0)
   };
 }
 
@@ -55,9 +66,9 @@ function toMinutes(hhmm: string): number {
 }
 
 /** ¿Cabe la rutina en el bloque al que está anclada? Sin bloque, siempre cabe. */
-export function routineFitsBlock(steps: StepLike[], block: { start: string; end: string } | null): boolean {
+export function routineFitsBlock(habits: RoutineHabitLike[], block: { start: string; end: string } | null): boolean {
   if (block === null) return true;
-  const total = steps.reduce((sum, s) => sum + s.durationMin, 0);
+  const total = habits.reduce((sum, h) => sum + h.durationMin, 0);
   return total <= toMinutes(block.end) - toMinutes(block.start);
 }
 
@@ -79,23 +90,28 @@ export function routineAdherence(
   return due === 0 ? 0 : Math.round((hit / due) * 100);
 }
 
-export function nextCompletedSteps(current: string[], stepId: string): string[] {
-  return current.includes(stepId) ? current.filter((id) => id !== stepId) : [...current, stepId];
+/**
+ * La ejecución del día se cierra cuando TODOS los hábitos de la rutina tienen
+ * registro hoy.
+ *
+ * Una rutina sin hábitos devuelve `false` y no `true`: "todos los cero" es
+ * cierto en lógica y falso en la vida. Darla por hecha regalaría días a la
+ * adherencia de una rutina que nadie ha ejecutado.
+ */
+export function routineRunComplete(habitIds: string[], doneHabitIds: string[]): boolean {
+  if (habitIds.length === 0) return false;
+  const done = new Set(doneHabitIds);
+  return habitIds.every((id) => done.has(id));
 }
 
-export type HabitLogEffect = "insert" | "noop";
-
 /**
- * El puente que evita duplicar la racha. Dos reglas deliberadas:
- *  - Si el hábito ya se marcó hoy (desde /development/habits o desde otra
- *    rutina), no se inserta otra vez: `habit_logs` es único por
- *    (habit_id, log_date) y marcar dos veces no debe reventar.
- *  - Desmarcar el paso NO desmarca el hábito. El usuario pudo haberlo
- *    cumplido por otra vía, y borrar su racha desde aquí sería destruir un
- *    dato que esta rutina no es dueña de negar.
+ * Qué hacer con `habit_logs` al tocar la casilla de un hábito.
+ *
+ * Antes de 0045 el paso y el hábito eran dos registros y desmarcar el paso no
+ * borraba la racha: el usuario podía haber cumplido el hábito por otra vía y
+ * esta rutina no era dueña de negarlo. Ahora son el mismo registro, así que
+ * desmarcar es desmarcar. Es un cambio de conducta, no un descuido.
  */
-export function habitLogEffect(habitId: string | null, willBeDone: boolean, alreadyLoggedToday: boolean): HabitLogEffect {
-  if (habitId === null) return "noop";
-  if (!willBeDone) return "noop";
-  return alreadyLoggedToday ? "noop" : "insert";
+export function toggleHabitEffect(alreadyLoggedToday: boolean): "insert" | "delete" {
+  return alreadyLoggedToday ? "delete" : "insert";
 }
