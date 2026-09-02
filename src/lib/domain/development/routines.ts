@@ -105,6 +105,23 @@ export function routineRunComplete(habitIds: string[], doneHabitIds: string[]): 
 }
 
 /**
+ * ¿Hay que tocar `routine_runs` al EDITAR la rutina —añadir un hábito, borrar
+ * otro— y no al ejecutarla?
+ *
+ * Editar no es ejecutar, y por eso no basta con escribir siempre. Si hoy no hay
+ * ejecución y la rutina tampoco queda cerrada, crear la fila inventaría un
+ * `started_at` de una rutina que nadie arrancó: el motor de análisis mide «no
+ * se ejecuta desde hace N días» contando esas filas, y se callaría el aviso
+ * porque alguien cambió un nombre. Pero si la fila YA existe hay que corregirla
+ * siempre — es justo la que se quedó mintiendo: añadir un hábito a una rutina
+ * cerrada hoy la deja incompleta, y borrar el único que faltaba la completa sin
+ * que nadie toque una casilla.
+ */
+export function routineRunNeedsWrite(hasRunToday: boolean, complete: boolean): boolean {
+  return hasRunToday || complete;
+}
+
+/**
  * Qué hacer con `habit_logs` al tocar la casilla de un hábito.
  *
  * Antes de 0045 el paso y el hábito eran dos registros y desmarcar el paso no

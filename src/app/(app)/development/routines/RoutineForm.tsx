@@ -24,10 +24,13 @@ interface RoutineLite {
 
 export default function RoutineForm({
   routine,
-  occupations
+  occupations,
+  habitCount = 0
 }: {
   routine?: RoutineLite;
   occupations: OccupationLite[];
+  /** Cuántos hábitos cuelgan de esta rutina. Solo se usa para avisar al borrar. */
+  habitCount?: number;
 }) {
   return (
     <FormSheet
@@ -35,18 +38,38 @@ export default function RoutineForm({
       title={routine ? "Editar rutina" : "Nueva rutina"}
       variant={routine ? "ghost" : "primary"}
     >
-      {(close) => <RoutineFields routine={routine} occupations={occupations} close={close} />}
+      {(close) => (
+        <RoutineFields routine={routine} occupations={occupations} habitCount={habitCount} close={close} />
+      )}
     </FormSheet>
   );
+}
+
+/**
+ * Lo que se pierde al borrar la rutina, dicho antes de borrarla.
+ *
+ * Desde 0045 esto no es el aviso de cortesía que era: `habits.routine_id` es
+ * `on delete cascade` y `habit_logs` cuelga del hábito, así que borrar la
+ * rutina encadena hasta las rachas. Antes el hábito sobrevivía en su propia
+ * pantalla; ahora no queda dónde recuperarlo.
+ */
+function avisoDeBorrado(nombre: string, habitCount: number): string {
+  if (habitCount === 0) {
+    return `¿Eliminar la rutina "${nombre}"? Está vacía, así que no te llevas ningún hábito por delante.`;
+  }
+  const habitos = habitCount === 1 ? "1 hábito" : `${habitCount} hábitos`;
+  return `¿Eliminar la rutina "${nombre}"? Se van con ella sus ${habitos} y todo su historial: las rachas se borran con ellos y no se pueden deshacer.`;
 }
 
 function RoutineFields({
   routine,
   occupations,
+  habitCount,
   close
 }: {
   routine?: RoutineLite;
   occupations: OccupationLite[];
+  habitCount: number;
   close: () => void;
 }) {
   const [pending, startTransition] = useTransition();
@@ -123,7 +146,8 @@ function RoutineFields({
         onCancel={close}
         onDelete={
           routine
-            ? () =>
+            ? () => {
+                if (!window.confirm(avisoDeBorrado(routine.name, habitCount))) return;
                 startTransition(async () => {
                   try {
                     await deleteRoutine(routine.id);
@@ -131,7 +155,8 @@ function RoutineFields({
                   } catch (e) {
                     setError(e instanceof Error ? e.message : "Error");
                   }
-                })
+                });
+              }
             : undefined
         }
       />

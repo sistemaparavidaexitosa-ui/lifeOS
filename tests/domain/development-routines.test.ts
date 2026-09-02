@@ -7,6 +7,7 @@ import {
   routineFitsBlock,
   routineAdherence,
   routineRunComplete,
+  routineRunNeedsWrite,
   toggleHabitEffect
 } from "../../src/lib/domain/development/routines.ts";
 
@@ -83,6 +84,22 @@ test("routineRunComplete: una rutina sin hábitos NO se da por hecha", () => {
 
 test("routineRunComplete: registros de hábitos ajenos no cierran la rutina", () => {
   assert.strictEqual(routineRunComplete(["h1", "h2"], ["h1", "h9"]), false);
+});
+
+test("routineRunNeedsWrite: si hoy ya hay ejecución, se corrige siempre", () => {
+  // Los dos casos que dejaban `completed_at` mintiendo cuando solo lo
+  // recalculaba el toggle: añadir un hábito a una rutina ya cerrada hoy, y
+  // borrar el último que quedaba sin marcar.
+  assert.strictEqual(routineRunNeedsWrite(true, false), true);
+  assert.strictEqual(routineRunNeedsWrite(true, true), true);
+});
+
+test("routineRunNeedsWrite: sin ejecución hoy, solo se escribe si la rutina queda cerrada", () => {
+  // Editar no es ejecutar: crear la fila por un cambio de nombre le daría a la
+  // rutina un `started_at` que nadie provocó, y el motor dejaría de avisar de
+  // que lleva días sin correrse.
+  assert.strictEqual(routineRunNeedsWrite(false, false), false);
+  assert.strictEqual(routineRunNeedsWrite(false, true), true);
 });
 
 test("toggleHabitEffect: marcar inserta, desmarcar borra", () => {

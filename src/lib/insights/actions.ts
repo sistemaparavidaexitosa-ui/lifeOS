@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { todayLocal } from "@/lib/data/dates";
+import { todayLocal, addDaysISO } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
 import { getPersonalWorkspaceIds } from "@/lib/data/workspaces";
 import { moneyFacts, type BudgetLineLike } from "@/lib/domain/insights/facts/money.ts";
@@ -171,9 +171,16 @@ async function loadDomainFacts(supabase: Db, userId: string, domain: Domain, tod
     }
 
     case "habits": {
+      // Los registros se piden por ventana: `max_rows = 1000` en config.toml
+      // trunca en silencio y sin orden fijo, así que a partir de unos meses el
+      // motor vería un histórico con agujeros y afirmaría rachas que no son.
+      // 40 días cubren con holgura la ventana de observación de habitsFacts
+      // —30 días— y la racha previa que compara para detectar la que se rompió.
+      const desdeLogs = addDaysISO(today, -39);
+
       const [{ data: habits }, { data: logs }, { data: routines }, { data: runs }] = await Promise.all([
         supabase.from("habits").select("id, name, routine_id, routines(frequency)").eq("user_id", userId),
-        supabase.from("habit_logs").select("habit_id, log_date"),
+        supabase.from("habit_logs").select("habit_id, log_date").gte("log_date", desdeLogs).lte("log_date", today),
         supabase.from("routines").select("id, name, occupation_id, habits(id)").eq("user_id", userId),
         supabase.from("routine_runs").select("routine_id, local_date")
       ]);

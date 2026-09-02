@@ -6,7 +6,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
-import { toggleHabitEffect, routineRunComplete } from "@/lib/domain/development/routines.ts";
+import { toggleHabitEffect, routineRunComplete, routineRunNeedsWrite } from "@/lib/domain/development/routines.ts";
 import { getRoutineTemplate, matchHabitForStep } from "@/lib/domain/development/templates.ts";
 import { describeDbError, type ActionResult } from "@/lib/supabase/errors";
 
@@ -60,6 +60,60 @@ export async function deleteRoutine(id: string) {
   if (error) throw new Error(error.message);
   revalidatePath("/development/routines");
   revalidatePath("/development");
+}
+
+type Db = Awaited<ReturnType<typeof createClient>>;
+
+/**
+ * Recalcula si la rutina queda cerrada HOY y lo escribe en `routine_runs`.
+ *
+ * Existe porque el cierre no depende solo de marcar casillas. Mientras lo
+ * recalculaba únicamente `toggleHabitToday`, añadir un hábito a una rutina ya
+ * cerrada dejaba `completed_at` puesto —la rutina ya no estaba completa— y
+ * borrar el último sin marcar lo dejaba en null aunque sí lo estuviera. Como
+ * `routineAdherence` lee `completed_at`, el chip de «% a 30 días» acababa
+ * contradiciendo a la barra de progreso que tiene justo encima, que se calcula
+ * desde `habit_logs`. Con D-087 diciendo que solo hay una fuente de verdad,
+ * dos respuestas distintas en la misma tarjeta no son un detalle.
+ *
+ * `arranca` distingue ejecutar de editar: al tocar una casilla la ejecución del
+ * día se abre aunque falten hábitos —`started_at` es el dato que dice cuándo
+ * empezaste—, pero al editar solo se corrige lo que ya existe (ver
+ * `routineRunNeedsWrite`).
+ */
+async function sincronizarCierreDeRutina(
+  supabase: Db,
+  routineId: string,
+  today: string,
+  { arranca }: { arranca: boolean }
+): Promise<void> {
+  const [{ data: habits }, { data: run }] = await Promise.all([
+    supabase.from("habits").select("id").eq("routine_id", routineId),
+    supabase.from("routine_runs").select("id").eq("routine_id", routineId).eq("local_date", today).maybeSingle()
+  ]);
+
+  const habitIds = (habits ?? []).map((h) => h.id);
+  // El uuid imposible evita que `.in()` con lista vacía devuelva la tabla
+  // entera: una rutina recién vaciada no puede heredar los registros de nadie.
+  const { data: logsHoy } = await supabase
+    .from("habit_logs")
+    .select("habit_id")
+    .eq("log_date", today)
+    .in("habit_id", habitIds.length > 0 ? habitIds : ["00000000-0000-0000-0000-000000000000"]);
+
+  const cerrada = routineRunComplete(habitIds, (logsHoy ?? []).map((l) => l.habit_id));
+  if (!arranca && !routineRunNeedsWrite(Boolean(run), cerrada)) return;
+
+  // upsert con onConflict: dos clics simultáneos no crean dos ejecuciones del
+  // mismo día — el índice único (routine_id, local_date) lo resuelve en la base.
+  // `started_at` no viaja en el payload, así que la primera hora se conserva.
+  const { error } = await supabase
+    .from("routine_runs")
+    .upsert(
+      { routine_id: routineId, local_date: today, completed_at: cerrada ? new Date().toISOString() : null },
+      { onConflict: "routine_id,local_date" }
+    );
+  if (error) throw new Error(error.message);
 }
 
 const habitSchema = z.object({
@@ -118,6 +172,11 @@ export async function upsertHabit(routineId: string, id: string | null, formData
     const { error } = await supabase.from("habits").insert({ ...payload, user_id: user.id });
     if (error) throw new Error(error.message);
   }
+
+  // La rutina acaba de cambiar de tamaño: el hábito nuevo la descierra, y el
+  // editado puede haber sido el que faltaba.
+  await sincronizarCierreDeRutina(supabase, routineId, todayLocal(await getUserTimeZone()), { arranca: false });
+
   revalidatePath("/development/routines");
   revalidatePath("/development");
   revalidatePath("/home");
@@ -125,8 +184,19 @@ export async function upsertHabit(routineId: string, id: string | null, formData
 
 export async function deleteHabit(id: string) {
   const supabase = await createClient();
+  // La rutina se lee ANTES de borrar: después la fila ya no está y con ella se
+  // iría el único sitio donde consta a qué rutina había que recalcularle el
+  // cierre del día. Borrar el último hábito que quedaba sin marcar completa la
+  // rutina sin que nadie toque una casilla.
+  const { data: habit } = await supabase.from("habits").select("routine_id").eq("id", id).maybeSingle();
+
   const { error } = await supabase.from("habits").delete().eq("id", id);
   if (error) throw new Error(error.message);
+
+  if (habit?.routine_id) {
+    await sincronizarCierreDeRutina(supabase, habit.routine_id, todayLocal(await getUserTimeZone()), { arranca: false });
+  }
+
   revalidatePath("/development/routines");
   revalidatePath("/development");
   revalidatePath("/home");
@@ -150,10 +220,12 @@ export async function toggleHabitToday(routineId: string, habitId: string) {
 
   const today = todayLocal(await getUserTimeZone());
 
-  const [{ data: log }, { data: habits }] = await Promise.all([
-    supabase.from("habit_logs").select("id").eq("habit_id", habitId).eq("log_date", today).maybeSingle(),
-    supabase.from("habits").select("id").eq("routine_id", routineId)
-  ]);
+  const { data: log } = await supabase
+    .from("habit_logs")
+    .select("id")
+    .eq("habit_id", habitId)
+    .eq("log_date", today)
+    .maybeSingle();
 
   if (toggleHabitEffect(Boolean(log)) === "delete") {
     const { error } = await supabase.from("habit_logs").delete().eq("id", log!.id);
@@ -165,27 +237,11 @@ export async function toggleHabitToday(routineId: string, habitId: string) {
     await supabase.from("audit_log").insert({ user_id: user.id, action: "habit.complete", object: habitId });
   }
 
-  // Se relee el día DESPUÉS de escribir: así el cierre de la rutina refleja el
-  // estado real y no el que teníamos antes del clic.
-  const habitIds = (habits ?? []).map((h) => h.id);
-  const { data: logsHoy } = await supabase
-    .from("habit_logs")
-    .select("habit_id")
-    .eq("log_date", today)
-    .in("habit_id", habitIds.length > 0 ? habitIds : ["00000000-0000-0000-0000-000000000000"]);
-
-  const cerrada = routineRunComplete(habitIds, (logsHoy ?? []).map((l) => l.habit_id));
-
-  // upsert con onConflict: dos clics simultáneos no crean dos ejecuciones del
-  // mismo día — el índice único (routine_id, local_date) lo resuelve en la base.
-  // `started_at` no viaja en el payload, así que la primera hora se conserva.
-  const { error } = await supabase
-    .from("routine_runs")
-    .upsert(
-      { routine_id: routineId, local_date: today, completed_at: cerrada ? new Date().toISOString() : null },
-      { onConflict: "routine_id,local_date" }
-    );
-  if (error) throw new Error(error.message);
+  // Se recalcula DESPUÉS de escribir: así el cierre de la rutina refleja el
+  // estado real y no el que teníamos antes del clic. `arranca: true` porque
+  // tocar una casilla SÍ es ejecutar la rutina, y la ejecución del día se abre
+  // aunque queden hábitos por marcar.
+  await sincronizarCierreDeRutina(supabase, routineId, today, { arranca: true });
 
   revalidatePath("/development/routines");
   revalidatePath("/development");
@@ -211,10 +267,22 @@ export async function toggleHabitToday(routineId: string, habitId: string) {
  *     sí para NO duplicar: si el usuario ya tiene ese hábito en otra rutina, se
  *     salta, porque un hábito solo puede estar en una.
  *
+ * Saltarse un paso no puede ser silencioso, y por eso los nombres vuelven en
+ * `skipped`. Antes de 0045 la plantilla creaba TODOS los pasos y como mucho los
+ * ligaba a un hábito existente, así que la rutina siempre salía completa; ahora
+ * puede nacer con tres hábitos menos, y una rutina incompleta que nadie anunció
+ * parece un fallo del programa. Por el mismo motivo el reconocimiento usa solo
+ * `step.habitHint` y no el título del paso: "Silencio" o "Crecer" se
+ * escribieron para leerse, no para compararse, y una coincidencia de más aquí
+ * ya no es inofensiva — borra un hábito de la rutina que estás creando.
+ *
  * Contrato `{ ok, reason }` (D-030): esta acción la llama un Client Component
  * que necesita pintar el motivo si algo falla.
  */
-export async function createRoutineFromTemplate(templateId: string, occupationId: string): Promise<ActionResult & { id?: string }> {
+export async function createRoutineFromTemplate(
+  templateId: string,
+  occupationId: string
+): Promise<ActionResult & { id?: string; skipped?: string[] }> {
   const template = getRoutineTemplate(templateId);
   if (!template) return { ok: false, reason: "Esa plantilla ya no existe." };
 
@@ -241,19 +309,42 @@ export async function createRoutineFromTemplate(templateId: string, occupationId
   // Los hábitos que el usuario ya tiene, para no sembrar un duplicado que
   // bifurcaría la racha en dos filas con el mismo nombre.
   const { data: existentes } = await supabase.from("habits").select("id, name");
+  const nombrePorId = new Map((existentes ?? []).map((h) => [h.id, h.name as string]));
 
-  const nuevos = template.steps
-    .filter((step) => matchHabitForStep(step.habitHint ?? step.title, existentes ?? []) === null)
-    .map((step, index) => ({
+  // Se recorre a mano y no con filter+map porque hacen falta las dos mitades:
+  // lo que se siembra y lo que NO, con el nombre que el usuario reconoce —el
+  // suyo, no el del paso de la plantilla— para poder decírselo.
+  const saltados: string[] = [];
+  const nuevos: {
+    user_id: string;
+    routine_id: string;
+    name: string;
+    category: "Otros";
+    position: number;
+    duration_min: number;
+    cue: string;
+    two_min_version: string;
+  }[] = [];
+
+  for (const step of template.steps) {
+    const yaLoTiene = matchHabitForStep(step.habitHint, existentes ?? []);
+    if (yaLoTiene !== null) {
+      saltados.push(nombrePorId.get(yaLoTiene) ?? step.title);
+      continue;
+    }
+    nuevos.push({
       user_id: user.id,
-      routine_id: routine.id,
+      routine_id: routine.id as string,
       name: step.title,
-      category: "Otros" as const,
-      position: index,
+      category: "Otros",
+      // La posición se cuenta sobre los que SÍ entran: un hueco en el orden se
+      // vería como un salto en la lista de la rutina.
+      position: nuevos.length,
       duration_min: step.durationMin,
       cue: "",
       two_min_version: ""
-    }));
+    });
+  }
 
   if (nuevos.length === 0) {
     // Los pasos existían todos ya como hábitos del usuario, así que no hay
@@ -264,7 +355,7 @@ export async function createRoutineFromTemplate(templateId: string, occupationId
     await supabase.from("routines").delete().eq("id", routine.id);
     return {
       ok: false,
-      reason: "Ya tienes todos los hábitos de esta plantilla, cada uno en su rutina. Un hábito solo puede vivir en una a la vez."
+      reason: `Ya tienes todos los hábitos de esta plantilla en otras rutinas: ${saltados.join(", ")}. Un hábito solo puede vivir en una a la vez, así que no quedaba nada que sembrar y la rutina no se ha creado.`
     };
   }
 
@@ -279,5 +370,5 @@ export async function createRoutineFromTemplate(templateId: string, occupationId
   revalidatePath("/development/routines");
   revalidatePath("/development");
   revalidatePath("/home");
-  return { ok: true, id: routine.id as string };
+  return { ok: true, id: routine.id as string, skipped: saltados };
 }

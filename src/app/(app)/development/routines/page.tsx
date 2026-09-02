@@ -27,13 +27,21 @@ export default async function RoutinesPage() {
   // "Hoy" se calcula ANTES de consultar: la ventana de adherencia depende de él.
   const today = todayLocal(await getUserTimeZone());
   const from = addDaysISO(today, -29);
+  // Los registros se piden por ventana y no enteros: `max_rows = 1000` en
+  // config.toml trunca cualquier consulta más larga SIN avisar y en un orden
+  // que nadie fija, así que diez hábitos bastarían para que a los cien días la
+  // pantalla empezara a perder días sueltos —racha mal contada, casilla de hoy
+  // en blanco, y el clic para recuperarla chocando contra el índice único de
+  // (habit_id, log_date)—. 400 días acota cualquier racha que esta pantalla
+  // sepa dibujar.
+  const desdeLogs = addDaysISO(today, -399);
 
   const [{ data: routines }, { data: habits }, { data: occupations }, { data: habitLogs }, { data: runs }] =
     await Promise.all([
       supabase.from("routines").select("*").order("position"),
       supabase.from("habits").select("*").order("position"),
       supabase.from("occupations").select("id, title, start_time, end_time"),
-      supabase.from("habit_logs").select("habit_id, log_date"),
+      supabase.from("habit_logs").select("habit_id, log_date").gte("log_date", desdeLogs).lte("log_date", today),
       supabase.from("routine_runs").select("*").gte("local_date", from).lte("local_date", today)
     ]);
 
@@ -125,6 +133,7 @@ export default async function RoutinesPage() {
             }
             action={
               <RoutineForm
+                habitCount={own.length}
                 routine={{
                   id: routine.id,
                   name: routine.name,
