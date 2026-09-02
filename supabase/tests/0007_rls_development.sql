@@ -5,7 +5,7 @@
 -- workspace lo alcanza, y un usuario no ve las filas de otro.
 
 begin;
-select plan(10);
+select plan(9);
 
 insert into auth.users (id, instance_id, aud, role, email) values
   ('11111111-1111-4111-8111-111111111111', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'dev-titular@test.local'),
@@ -29,14 +29,11 @@ values ('44444444-4444-4444-8444-444444444444', '33333333-3333-4333-8333-3333333
 insert into public.occupations (id, user_id, title, start_time, end_time, category, occ_date)
 values ('55555555-5555-4555-8555-555555555555', '11111111-1111-4111-8111-111111111111', 'Mañana', '06:00', '07:00', 'Personal', current_date);
 
-insert into public.habits (id, user_id, name)
-values ('66666666-6666-4666-8666-666666666666', '11111111-1111-4111-8111-111111111111', 'Meditar');
-
 insert into public.routines (id, user_id, name, occupation_id)
 values ('77777777-7777-4777-8777-777777777777', '11111111-1111-4111-8111-111111111111', 'Rutina matutina', '55555555-5555-4555-8555-555555555555');
 
-insert into public.routine_steps (id, routine_id, position, title, duration_min, habit_id)
-values ('88888888-8888-4888-8888-888888888888', '77777777-7777-4777-8777-777777777777', 0, 'Meditar 10 min', 10, '66666666-6666-4666-8666-666666666666');
+insert into public.habits (id, user_id, name, routine_id)
+values ('66666666-6666-4666-8666-666666666666', '11111111-1111-4111-8111-111111111111', 'Meditar', '77777777-7777-4777-8777-777777777777');
 
 -- BR-026: borrar la ocupación NO borra la rutina, solo la desliga
 delete from public.occupations where id = '55555555-5555-4555-8555-555555555555';
@@ -46,12 +43,14 @@ select is(
   'occupation_id de la rutina queda en null al borrar la ocupación (BR-026)'
 );
 
--- Borrar el hábito NO borra el paso de rutina
+-- Desde 0045 no hay pasos: borrar el hábito borra la fila y la rutina se queda
+-- sin él. Lo que 0024 protegía —que la racha no se bifurcara— ya no puede
+-- ocurrir, porque no hay dos registros que reconciliar.
 delete from public.habits where id = '66666666-6666-4666-8666-666666666666';
 select is(
-  (select habit_id from public.routine_steps where id = '88888888-8888-4888-8888-888888888888'),
-  null,
-  'habit_id del paso queda en null al borrar el hábito, el paso sobrevive'
+  (select count(*)::int from public.habits where routine_id = '77777777-7777-4777-8777-777777777777'),
+  0,
+  'Borrar el hábito lo quita de la rutina, no deja un paso huérfano'
 );
 
 -- Un solo run por rutina y día
@@ -96,14 +95,11 @@ select is_empty(
 -- §9 del spec: "ningún rol de workspace alcanza ninguna tabla del módulo".
 -- Como estas tablas no tienen workspace_id y su política es user_id =
 -- auth.uid(), un miembro de workspace no es más que otro usuario: basta con
--- que las tres tablas de rutinas también queden vacías para él.
+-- que las dos tablas de rutinas que quedan tras 0045 —routine_steps se fue—
+-- también queden vacías para él.
 select is_empty(
   $$ select 1 from public.routines $$,
   'Otro usuario no ve las rutinas del titular (BR-027)'
-);
-select is_empty(
-  $$ select 1 from public.routine_steps $$,
-  'Otro usuario no ve los pasos de rutina del titular, protegidos vía el padre'
 );
 select is_empty(
   $$ select 1 from public.routine_runs $$,

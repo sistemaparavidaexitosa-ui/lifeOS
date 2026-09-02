@@ -24,8 +24,13 @@ set local role authenticated;
 insert into public.occupations (id, user_id, title, start_time, end_time, category, occ_date)
 values ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '99999999-9999-4999-8999-999999999999', 'Lectura', '20:30', '21:00', 'Personal', current_date);
 
-insert into public.habits (id, user_id, name, occupation_id)
-values ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', '99999999-9999-4999-8999-999999999999', 'Leer', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+-- Desde 0045 el bloque horario lo ancla la RUTINA, no cada hábito, y ningún
+-- hábito existe fuera de una rutina.
+insert into public.routines (id, user_id, name, frequency, occupation_id)
+values ('cccccccc-1111-4ccc-8ccc-cccccccccccc', '99999999-9999-4999-8999-999999999999', 'Lectura de noche', 'Diario', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+
+insert into public.habits (id, user_id, name, routine_id)
+values ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', '99999999-9999-4999-8999-999999999999', 'Leer', 'cccccccc-1111-4ccc-8ccc-cccccccccccc');
 
 -- FR-HAB-006/BR-026: eliminar la ocupación NO borra el hábito; solo lo desliga
 delete from public.occupations where id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -35,9 +40,9 @@ select isnt_empty(
   'El hábito sobrevive a la eliminación de su ocupación (FR-HAB-006/BR-026)'
 );
 select is(
-  (select occupation_id from public.habits where id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'),
+  (select occupation_id from public.routines where id = 'cccccccc-1111-4ccc-8ccc-cccccccccccc'),
   null,
-  'occupation_id queda en null tras eliminar la ocupación (BR-026), no rompe la fila'
+  'occupation_id de la rutina queda en null tras eliminar la ocupación (BR-026), y el hábito ni se entera'
 );
 
 -- Hogar: miembro de hogar creado por el titular

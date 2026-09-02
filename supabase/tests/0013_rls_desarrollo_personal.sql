@@ -29,9 +29,14 @@ insert into public.book_progress (book_id, local_date, page)
 values ('f3333333-3333-4333-8333-333333333333', '2026-08-20', 100)
 on conflict (book_id, local_date) do nothing;
 
-insert into public.habits (id, user_id, name) values
-  ('f4444444-4444-4444-8444-444444444444', 'f1111111-1111-4111-8111-111111111111', 'Leer'),
-  ('f5555555-5555-4555-8555-555555555555', 'f2222222-2222-4222-8222-222222222222', 'Correr (de otro)')
+insert into public.routines (id, user_id, name, frequency) values
+  ('f6666666-6666-4666-8666-666666666666', 'f1111111-1111-4111-8111-111111111111', 'Rutina del titular', 'Diario'),
+  ('f7777777-7777-4777-8777-777777777777', 'f2222222-2222-4222-8222-222222222222', 'Rutina del otro', 'Diario')
+on conflict (id) do nothing;
+
+insert into public.habits (id, user_id, name, routine_id) values
+  ('f4444444-4444-4444-8444-444444444444', 'f1111111-1111-4111-8111-111111111111', 'Leer', 'f6666666-6666-4666-8666-666666666666'),
+  ('f5555555-5555-4555-8555-555555555555', 'f2222222-2222-4222-8222-222222222222', 'Correr (de otro)', 'f7777777-7777-4777-8777-777777777777')
 on conflict (id) do nothing;
 
 -- ---------------------------------------------------------------------------
