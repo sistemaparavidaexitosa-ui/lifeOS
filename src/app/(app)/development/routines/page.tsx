@@ -175,7 +175,14 @@ export default async function RoutinesPage() {
       <SectionHeader
         action={
           <span className="flex gap-2">
-            <HabitTemplates routines={(routines ?? []).map((r) => ({ id: r.id, name: r.name }))} otherHabits={habitOptions} />
+            <HabitTemplates
+              routines={(routines ?? []).map((r) => ({
+                id: r.id,
+                name: r.name,
+                habitCount: (habits ?? []).filter((h) => h.routine_id === r.id).length
+              }))}
+              otherHabits={habitOptions}
+            />
             <RoutineTemplates occupations={occOptions} />
             <RoutineForm occupations={occOptions} />
           </span>

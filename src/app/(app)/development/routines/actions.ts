@@ -255,14 +255,25 @@ export async function createRoutineFromTemplate(templateId: string, occupationId
       two_min_version: ""
     }));
 
-  if (nuevos.length > 0) {
-    const { error: habitsError } = await supabase.from("habits").insert(nuevos);
-    if (habitsError) {
-      // Una rutina sin hábitos no sirve de nada y es peor que no haberla creado:
-      // el usuario tendría que borrarla a mano para volver a intentarlo.
-      await supabase.from("routines").delete().eq("id", routine.id);
-      return { ok: false, reason: describeDbError(habitsError) };
-    }
+  if (nuevos.length === 0) {
+    // Los pasos existían todos ya como hábitos del usuario, así que no hay
+    // nada que sembrar. No es un error, pero tampoco se puede dejar la rutina
+    // creada: `routineRunComplete` da por no cumplida a propósito una rutina
+    // sin hábitos, así que quedaría marcada "hoy" para siempre sin que nadie
+    // entienda por qué. Se borra y se explica, en vez de dejar una trampa.
+    await supabase.from("routines").delete().eq("id", routine.id);
+    return {
+      ok: false,
+      reason: "Ya tienes todos los hábitos de esta plantilla, cada uno en su rutina. Un hábito solo puede vivir en una a la vez."
+    };
+  }
+
+  const { error: habitsError } = await supabase.from("habits").insert(nuevos);
+  if (habitsError) {
+    // Una rutina sin hábitos no sirve de nada y es peor que no haberla creado:
+    // el usuario tendría que borrarla a mano para volver a intentarlo.
+    await supabase.from("routines").delete().eq("id", routine.id);
+    return { ok: false, reason: describeDbError(habitsError) };
   }
 
   revalidatePath("/development/routines");

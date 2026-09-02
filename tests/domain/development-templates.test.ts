@@ -126,3 +126,17 @@ test("HabitTemplate ya no lleva frecuencia: la dicta la rutina", () => {
     assert.ok(!Object.hasOwn(plantilla, "frequency"), `${plantilla.id} todavía trae frequency`);
   }
 });
+
+test("si el usuario ya tiene todos los hábitos de una plantilla de rutina, ningún paso queda por sembrar", () => {
+  // Reproduce el filtro que usa `createRoutineFromTemplate` (fuera del alcance
+  // de este archivo por ser una server action, no lógica pura): si el usuario
+  // ya tiene un hábito que coincide con cada paso, la lista de "nuevos" sale
+  // vacía. Ese caso es justo el que la acción debe rechazar en vez de crear
+  // una rutina sin hábitos que reporte éxito.
+  const plantilla = getRoutineTemplate("savers-60")!;
+  const existentes = plantilla.steps.map((paso, i) => ({ id: `h${i}`, name: paso.habitHint ?? paso.title }));
+  const nuevos = plantilla.steps.filter(
+    (paso) => matchHabitForStep(paso.habitHint ?? paso.title, existentes) === null
+  );
+  assert.strictEqual(nuevos.length, 0);
+});

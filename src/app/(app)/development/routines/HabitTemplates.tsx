@@ -23,7 +23,7 @@ export default function HabitTemplates({
   routines,
   otherHabits
 }: {
-  routines: { id: string; name: string }[];
+  routines: { id: string; name: string; habitCount: number }[];
   otherHabits: HabitOption[];
 }) {
   return (
@@ -38,7 +38,7 @@ function Contenido({
   otherHabits,
   close
 }: {
-  routines: { id: string; name: string }[];
+  routines: { id: string; name: string; habitCount: number }[];
   otherHabits: HabitOption[];
   close: () => void;
 }) {
@@ -94,7 +94,10 @@ function Contenido({
         <HabitFields
           routineId={routineId}
           otherHabits={otherHabits}
-          position={0}
+          // El final de la cadena, como cualquier otro hábito nuevo: `position`
+          // ES el orden de apilamiento (0045), y sembrar siempre en 0 empataría
+          // con lo que ya ocupa ese lugar en vez de sumarse al final.
+          position={routines.find((r) => r.id === routineId)?.habitCount ?? 0}
           prefill={{
             name: elegida.name,
             category: elegida.category,
