@@ -21,7 +21,7 @@
 - **`pnpm verify` BORRA la base local** (termina en `supabase db reset`). No lo corras sin avisar si hay datos reales en local. Durante el desarrollo usa los comandos sueltos: `pnpm typecheck`, `pnpm lint`, `pnpm test:unit`, `supabase db reset && supabase db test`.
 - **La lógica pura va en `src/lib/domain/`**, sin React ni Supabase, y se prueba en `tests/domain/`. Si aparece aritmética nueva en una página, está en el sitio equivocado.
 - **Fechas:** el día local lo calcula el servidor con `todayLocal(await getUserTimeZone())` y viaja al cliente como prop. El cliente nunca llama a `new Date()` para saber qué día es (D-018).
-- **URL de la base local:** `postgresql://postgres:postgres@127.0.0.1:54322/postgres`.
+- **`psql` NO está instalado en el host.** La base local se alcanza con `docker exec -i supabase_db_lifeos psql -U postgres` (el nombre del contenedor sale de `docker ps --filter name=supabase_db_`). La URL directa `postgresql://postgres:postgres@127.0.0.1:54322/postgres` solo sirve desde dentro del contenedor o si algún día se instala el cliente.
 - **Numeración:** la migración es `0045`, la prueba pgTAP nueva es `0021` (el hueco `0020` lo ocupa la rama `feat/panel-admin-plantillas`, todavía sin fusionar), y las decisiones nuevas de `docs/DECISIONS.md` son **D-086** y **D-087** (la última existente es D-085).
 
 ---
@@ -483,10 +483,24 @@ Crea `scripts/verificar-backfill-0045.sh` y hazlo ejecutable:
 # CUIDADO: hace `supabase db reset`. Borra la base LOCAL.
 set -euo pipefail
 
-DB_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
 MIG="supabase/migrations/0045_habitos_dentro_de_rutinas.sql"
 SEED="supabase/seed.sql"
 TMP="$(mktemp -d)"
+
+# En esta máquina `psql` NO está instalado en el host, pero sí dentro del
+# contenedor de la base local. Se usa el que haya, y si no hay ninguno se dice
+# por qué en vez de fallar con "command not found".
+CONTENEDOR="$(docker ps --filter 'name=supabase_db_' --format '{{.Names}}' | head -1)"
+if command -v psql >/dev/null 2>&1; then
+  correr() { psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f "$1"; }
+elif [ -n "$CONTENEDOR" ]; then
+  # `-f -` no hace falta: psql lee de stdin, y ON_ERROR_STOP propaga el fallo
+  # como código de salida distinto de cero, que es lo que `set -e` necesita.
+  correr() { docker exec -i "$CONTENEDOR" psql -U postgres -v ON_ERROR_STOP=1 < "$1"; }
+else
+  echo "No encuentro psql ni el contenedor de la base local. ¿Corriste 'supabase start'?" >&2
+  exit 1
+fi
 
 restaurar() {
   [ -f "$TMP/0045.sql" ] && mv "$TMP/0045.sql" "$MIG"
@@ -504,13 +518,13 @@ echo "→ Reconstruyendo la base en el estado anterior a 0045…"
 supabase db reset
 
 echo "→ Sembrando datos con la forma vieja…"
-psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/backfill/0045_fixture.sql
+correr supabase/tests/backfill/0045_fixture.sql
 
 echo "→ Aplicando 0045…"
-psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$TMP/0045.sql"
+correr "$TMP/0045.sql"
 
 echo "→ Comprobando…"
-psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/backfill/0045_asserts.sql
+correr supabase/tests/backfill/0045_asserts.sql
 
 echo "✓ Backfill verificado."
 ```
