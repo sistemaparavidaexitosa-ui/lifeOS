@@ -29,12 +29,12 @@ export default async function DevelopmentPage() {
   // dominio, ni discrepar con lo que Home enseña en la misma sesión.
   const lectura = await loadReadingFocus();
 
-  const [{ data: goals }, { data: krs }, { data: routines }, { data: steps }, { data: runs }] = await Promise.all([
+  const [{ data: goals }, { data: krs }, { data: routines }, { data: habits }, { data: logsHoy }] = await Promise.all([
     supabase.from("personal_goals").select("*").eq("status", "Activa").order("created_at"),
     supabase.from("key_results").select("*").order("position"),
     supabase.from("routines").select("*").eq("active", true).order("position"),
-    supabase.from("routine_steps").select("*").order("position"),
-    supabase.from("routine_runs").select("*").eq("local_date", today)
+    supabase.from("habits").select("id, routine_id, duration_min").order("position"),
+    supabase.from("habit_logs").select("habit_id").eq("log_date", today)
   ]);
 
   const goalRows = (goals ?? [])
@@ -60,12 +60,13 @@ export default async function DevelopmentPage() {
     // Las metas en riesgo primero: es lo que hay que ver al abrir el panel.
     .sort((a, b) => Number(b.atRisk) - Number(a.atRisk));
 
+  const hechos = (logsHoy ?? []).map((l) => l.habit_id);
   const routineRows = (routines ?? [])
     .filter((r) => routineDueToday(r.frequency as Frequency, today))
     .map((r) => {
-      const own = (steps ?? []).filter((s) => s.routine_id === r.id).map((s) => ({ id: s.id, durationMin: s.duration_min }));
-      const run = (runs ?? []).find((x) => x.routine_id === r.id) ?? null;
-      return { routine: r, progress: routineProgress(run?.completed_step_ids ?? [], own) };
+      const propios = (habits ?? []).filter((h) => h.routine_id === r.id);
+      const progress = routineProgress(hechos, propios.map((h) => ({ id: h.id, durationMin: h.duration_min })));
+      return { routine: r, progress };
     });
 
   const enRiesgo = goalRows.filter((g) => g.atRisk).length;
@@ -134,7 +135,7 @@ export default async function DevelopmentPage() {
                 <>
                   <Chip kind="info">{routine.frequency}</Chip>
                   <span className="text-xs" style={{ color: "var(--muted)" }}>
-                    {progress.done}/{progress.total} pasos · {progress.remainingMin} min por delante
+                    {progress.done}/{progress.total} hábitos · {progress.remainingMin} min por delante
                   </span>
                 </>
               }

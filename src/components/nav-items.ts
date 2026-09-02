@@ -44,8 +44,11 @@ export const NAV_ITEMS: NavItem[] = [
   // porque ese selector lo usa.
   { href: "/development", label: "Panel", group: "Personal Development OS", icon: "development", color: "var(--c-orange)" },
   { href: "/development/goals", label: "Metas Personales", group: "Personal Development OS", icon: "personalGoals", color: "var(--c-orange)" },
-  { href: "/development/routines", label: "Rutinas", group: "Personal Development OS", icon: "routines", color: "var(--c-orange)" },
-  { href: "/development/habits", label: "Hábitos", group: "Personal Development OS", icon: "habits", color: "var(--c-orange)" },
+  { href: "/development/routines", label: "Rutinas y Hábitos", group: "Personal Development OS", icon: "routines", color: "var(--c-orange)" },
+  // "Hábitos" ya no es una entrada: desde 0045 un hábito no existe fuera de su
+  // rutina, así que una pantalla propia solo podía enseñar una lista sin el
+  // contexto que la hace legible. /development/habits sobrevive como redirect.
+  { href: "/development/habits", label: "Hábitos", group: "Personal Development OS", icon: "habits", color: "var(--c-orange)", hidden: true },
   { href: "/development/library", label: "Biblioteca", group: "Personal Development OS", icon: "library", color: "var(--c-orange)" },
   // "Intelligence OS" ya no es una sección del menú. Anunciarla como tal
   // prometía un cerebro central que todavía no existe: el motor está
