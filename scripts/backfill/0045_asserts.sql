@@ -99,6 +99,20 @@ begin
     raise exception 'Bloque ajeno: el hábito heredó la rutina equivocada; el título o el ancla del bloque de otra cuenta se filtraron al backfill';
   end if;
 
+  -- Paso ajeno: el hábito de A al que apuntaba un paso de la rutina de B no
+  -- puede haber heredado esa rutina. Si lo hiciera, A dejaría de verlo —la RLS
+  -- no le deja leer la rutina de B— y el día que B borrara esa rutina el
+  -- cascade se llevaría el hábito de A y todos sus habit_logs. Cae al paso 3.
+  select routine_id into v_routine from public.habits
+   where id = 'a2000000-0000-4000-8000-000000000007';
+  select count(*) into v_n from public.routines
+   where id = v_routine
+     and user_id = 'aaaaaaaa-0000-4000-8000-000000000001'
+     and name = 'Hábitos diarios';
+  if v_n <> 1 then
+    raise exception 'Paso ajeno: el hábito acabó en una rutina que no es de su dueño; el cascade de esa rutina podría borrarlo con toda su racha';
+  end if;
+
   -- Usuario sin NINGUNA rutina previa: la rama NULL del coalesce que calcula
   -- `routines.position`. Sus dos rutinas nuevas tienen que salir en 0 y 1, no
   -- en null (que reventaría el not null) ni las dos en 0.
@@ -107,7 +121,10 @@ begin
   if v_n <> 2 then
     raise exception 'Usuario sin rutinas: esperaba 2 rutinas nuevas, hay %', v_n;
   end if;
-  select count(*) into v_n from public.routines
+  -- `count(distinct position)` y no `count(*)`: contando filas, dos rutinas
+  -- empatadas en 0 también daban 2, que es exactamente el caso que este bloque
+  -- dice descartar.
+  select count(distinct position) into v_n from public.routines
    where user_id = 'cccccccc-0000-4000-8000-000000000003' and position in (0, 1);
   if v_n <> 2 then
     raise exception 'Usuario sin rutinas: las posiciones no salieron 0 y 1 (la rama null del coalesce)';
@@ -140,17 +157,17 @@ begin
     raise exception '% hábitos quedaron sin rutina', v_n;
   end if;
 
-  -- Y NADIE se coló de más. El fixture trae 10 hábitos y 1 paso de texto
-  -- libre, así que después de migrar tiene que haber exactamente 11. Es la
+  -- Y NADIE se coló de más. El fixture trae 11 hábitos y 1 paso de texto
+  -- libre, así que después de migrar tiene que haber exactamente 12. Es la
   -- comprobación que caza el peor fallo posible del paso 4: que en vez de
   -- convertir el paso lo duplique, o que el paso 1 clone el hábito que estaba
   -- en dos rutinas en lugar de elegir una. Un hábito de más no es una fila de
   -- más: es una racha partida en dos. La base corre sin la semilla (el script
   -- la aparta), así que estos son todos los hábitos que existen.
   select count(*) into v_n from public.habits;
-  if v_n <> 11 then
-    raise exception 'Esperaba 11 hábitos tras migrar (10 previos + 1 paso de texto libre), hay %', v_n;
+  if v_n <> 12 then
+    raise exception 'Esperaba 12 hábitos tras migrar (11 previos + 1 paso de texto libre), hay %', v_n;
   end if;
 
-  raise notice 'Backfill 0045: los ocho casos pasan.';
+  raise notice 'Backfill 0045: los nueve casos pasan.';
 end $$;

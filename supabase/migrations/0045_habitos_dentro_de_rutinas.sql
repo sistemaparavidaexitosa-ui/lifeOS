@@ -38,7 +38,7 @@ alter table public.routines
   add column if not exists identity text not null default '';
 
 comment on column public.habits.routine_id is
-  'La rutina a la que pertenece. `on delete cascade` y no `set null` como occupation_id (BR-026): el bloque horario es opcional y el hábito le sobrevive, pero sin rutina un hábito ya no puede existir.';
+  'La rutina a la que pertenece. `on delete cascade` y no `set null` como occupation_id (BR-026): el bloque horario es opcional y el hábito le sobrevive, pero sin rutina un hábito ya no puede existir. El precio de esa coherencia es que borrar la rutina borra sus hábitos Y sus habit_logs —el cascade encadena—, así que se lleva la racha entera: quien ofrezca ese botón tiene que avisar de lo que cuesta.';
 comment on column public.habits.position is
   'El orden dentro de la rutina. ES el apilamiento: «después de qué» se lee de la posición anterior, no de un campo que haya que mantener a mano.';
 comment on column public.habits.duration_min is
@@ -69,11 +69,24 @@ begin
   -- `position` 0. Ahí el ganador lo elegiría el plan de ejecución, y la misma
   -- base migrada dos veces podría dar dos respuestas distintas. Con `rt.id` el
   -- resultado es reproducible aunque el criterio siga siendo arbitrario.
+  --
+  -- `h.user_id = rt.user_id` es la misma cautela que el paso 2 tiene con el
+  -- bloque horario, y por el mismo motivo: `routine_steps.habit_id` nunca tuvo
+  -- guard de propiedad —0024 lo creó sin él y 0033 solo blindó
+  -- `stack_after_habit_id`— y las claves foráneas no evalúan RLS, así que un
+  -- paso de la rutina de una cuenta podía apuntar legalmente al hábito de otra.
+  -- Sin esta cláusula ese hábito se mudaría a una rutina que su dueño no puede
+  -- leer: desaparecería de su pantalla sin que ninguna vista lo recupere, y el
+  -- día que el otro borrase la rutina, el `on delete cascade` se lo llevaría
+  -- por delante con TODOS sus `habit_logs`. El `set not null` del final no caza
+  -- esto: el hábito sí tiene rutina, solo que ajena. Excluido aquí, cae al
+  -- paso 3, que es el cajón de sastre y lo coloca por frecuencia.
   with elegido as (
     select distinct on (s.habit_id)
            s.habit_id, s.routine_id, s.position, s.duration_min
       from public.routine_steps s
       join public.routines rt on rt.id = s.routine_id
+      join public.habits h on h.id = s.habit_id and h.user_id = rt.user_id
      where s.habit_id is not null
      order by s.habit_id, rt.position, rt.created_at, s.position, rt.id
   )
@@ -188,6 +201,9 @@ alter table public.habits drop column frequency;
 alter table public.habits drop column occupation_id;
 drop table public.routine_steps;
 alter table public.routine_runs drop column completed_step_ids;
+
+comment on table public.habit_logs is
+  'FR-HAB-002: un registro por (habit_id, log_date). Calcula la racha y, desde 0045, es también la única fuente de «¿hice hoy este paso?». Dejó de ser append-only en esa misma migración (D-087): cuando el paso y el hábito eran dos registros, desmarcar el paso no podía borrar la racha; ahora son el mismo registro, así que desmarcar borra su fila.';
 
 comment on table public.routine_runs is
   'Único por (routine_id, local_date). Ya no lleva la lista de pasos hechos: eso vive en habit_logs desde 0045. Sobrevive por started_at y completed_at, que dicen cuándo arrancaste la rutina y cuándo la cerraste — dato que ninguna otra tabla tiene.';

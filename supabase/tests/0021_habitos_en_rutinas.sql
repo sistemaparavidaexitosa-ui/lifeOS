@@ -6,7 +6,7 @@
 -- scripts/verificar-backfill-0045.sh.
 
 begin;
-select plan(9);
+select plan(10);
 
 insert into auth.users (id, instance_id, aud, role, email) values
   ('c1111111-1111-4111-8111-111111111111', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'rut-titular@test.local'),
@@ -64,6 +64,14 @@ delete from public.routines where id = 'c3333333-3333-4333-8333-333333333333';
 select is_empty(
   $$ select 1 from public.habits where id = 'c4444444-4444-4444-8444-444444444444' $$,
   'Borrar la rutina borra sus hábitos (on delete cascade)'
+);
+
+-- Y el cascade no se para en el hábito: encadena hasta habit_logs, así que
+-- borrar una rutina borra las rachas de sus hábitos. Es lo que hace que ese
+-- botón no pueda existir sin confirmación, y por eso se prueba y no se supone.
+select is_empty(
+  $$ select 1 from public.habit_logs where habit_id = 'c4444444-4444-4444-8444-444444444444' $$,
+  'Borrar la rutina también borra los habit_logs de sus hábitos: la racha se va con ella'
 );
 
 -- El guard: no puedes colgar tu hábito de la rutina de otro

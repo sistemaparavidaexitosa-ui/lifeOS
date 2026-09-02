@@ -81,6 +81,20 @@ insert into public.habits (id, user_id, name, frequency, category, occupation_id
 values ('a2000000-0000-4000-8000-000000000006', 'aaaaaaaa-0000-4000-8000-000000000001',
         'Revisar pendientes', 'Entre semana', 'Trabajo', 'b0000000-0000-4000-8000-000000000001');
 
+-- Y el mismo agujero por el otro lado: un PASO de la rutina de B que apunta al
+-- hábito de A. `routine_steps.habit_id` tampoco tenía guard de propiedad —0024
+-- lo creó sin él— así que el esquema viejo lo permitía. Si el paso 1 se lo
+-- creyera, el hábito de A se mudaría a una rutina que A no puede leer, y el día
+-- que B borrara esa rutina el cascade se llevaría el hábito de A con toda su
+-- racha. Tiene que caer al paso 3 y estrenar 'Hábitos diarios' de A.
+insert into public.habits (id, user_id, name, frequency, category)
+values ('a2000000-0000-4000-8000-000000000007', 'aaaaaaaa-0000-4000-8000-000000000001',
+        'Escribir tres líneas', 'Diario', 'Personal');
+
+insert into public.routine_steps (id, routine_id, position, title, duration_min, habit_id)
+values ('b3000000-0000-4000-8000-000000000003', 'b1000000-0000-4000-8000-000000000002',
+        1, 'Escribir tres líneas', 7, 'a2000000-0000-4000-8000-000000000007');
+
 -- ---------------------------------------------------------------------------
 -- USUARIO C — hábitos y CERO rutinas
 -- ---------------------------------------------------------------------------
