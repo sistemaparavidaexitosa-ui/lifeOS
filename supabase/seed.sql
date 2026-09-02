@@ -282,14 +282,16 @@ begin
   on conflict (id) do update set title = excluded.title, start_time = excluded.start_time, end_time = excluded.end_time;
 
   -- Desde 0045 ningún hábito existe fuera de una rutina, y el bloque horario
-  -- lo ancla la rutina y no el hábito. Lo mínimo para que la semilla siga
-  -- arrancando; la rutina de demostración de verdad —con identidad y varios
-  -- hábitos— llega en la tarea 8.
-  insert into public.routines (id, user_id, name, frequency, occupation_id, position)
-  values (v_rut_lectura, v_user_id, 'Cierre del día', 'Diario', v_occ_lectura, 0)
+  -- lo ancla la rutina y no el hábito. La identidad viene rellena a
+  -- propósito: es lo primero que se lee bajo el título y en local se vería
+  -- siempre vacía si no la sembráramos.
+  insert into public.routines (id, user_id, name, frequency, occupation_id, identity, position)
+  values (v_rut_lectura, v_user_id, 'Cierre del día', 'Diario', v_occ_lectura,
+          'Soy alguien que termina el día leyendo, no rascando el teléfono', 0)
   on conflict (id) do update set
     name = excluded.name, frequency = excluded.frequency,
-    occupation_id = excluded.occupation_id, position = excluded.position;
+    occupation_id = excluded.occupation_id, identity = excluded.identity,
+    position = excluded.position;
 
   -- El hábito viene con la forma de «Hábitos atómicos» (migración 0033): la
   -- señal y la versión de dos minutos, que son lo que se prueba al abrir la

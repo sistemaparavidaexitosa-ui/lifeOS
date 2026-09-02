@@ -1297,6 +1297,22 @@ la mitad que ya existía estaba rota.
   instante completo (`...T12:00:00Z`) sí la tiene y conserva el comportamiento
   de siempre. Cubierto por `tests/domain/format.test.ts`.
 
+### Hábitos dentro de rutinas (Personal Development OS, septiembre 2026)
+- **D-086 Un hábito no existe fuera de una rutina**: `habits.routine_id` es
+  `not null` (migración 0045) y `routine_steps` desaparece — el paso ES el
+  hábito. Se descartó dejar la relación opcional o mantener una tabla de unión:
+  las dos habrían dejado la invariante en manos de la aplicación, y la
+  aplicación no puede defenderla contra un `insert` que no pase por ella. Con
+  ello se van también `habits.frequency` (la dicta la rutina) y
+  `habits.occupation_id` (el bloque lo ancla la rutina): dos sitios diciendo lo
+  mismo es un sitio donde mentir.
+- **D-087 `habit_logs` es la única fuente de "¿lo hice hoy?"**: se borra
+  `routine_runs.completed_step_ids`, que era un segundo registro de lo mismo.
+  Consecuencia deliberada: desmarcar un hábito dentro de la rutina ahora **sí**
+  borra el registro del día. Antes no lo hacía —`habitLogEffect`— porque el
+  usuario podía haberlo cumplido por otra vía y la rutina no era dueña de
+  negarlo; con un solo registro esa ambigüedad no existe.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo
