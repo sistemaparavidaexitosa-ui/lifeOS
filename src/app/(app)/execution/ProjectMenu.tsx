@@ -157,11 +157,12 @@ export default function ProjectMenu({
                   onConfirm={async (draft, selection) => {
                     const result = await applyAiPlan(project.id, draft, selection);
                     if (result.ok) {
-                      // La MISMA pareja que ApplyTemplatePanel y MoveProjectPanel:
-                      // el `replace` fuerza una navegación de verdad y el `refresh`
-                      // trae el árbol nuevo saltándose la caché del router. Con
-                      // `refresh` a secas el tablero se queda igual.
-                      router.replace(`/execution?project=${project.id}`);
+                      // Basta `refresh`. Antes iba acompañado de un `replace` a
+                      // esta misma URL porque `refresh` a secas parecía no hacer
+                      // nada: sí traía el árbol nuevo, pero BoardShell se quedaba
+                      // con el estado viejo y ningún `replace` a la misma ruta lo
+                      // iba a remontar. Eso se arregló donde estaba el fallo, en
+                      // BoardShell, comparando la huella de la estructura.
                       router.refresh();
                     }
                     return result;
@@ -598,13 +599,11 @@ function ApplyTemplatePanel({
               setError(result.reason ?? "No se pudo aplicar la plantilla.");
               return;
             }
-            // La MISMA pareja que usa MoveProjectPanel unas líneas más arriba,
-            // que es la que en esta pantalla está demostrado que repinta: el
-            // `replace` a la misma URL fuerza una navegación de verdad, y el
-            // `refresh` trae el árbol nuevo saltándose la caché del router.
-            // Con `refresh` a secas el tablero se quedaba igual y había que
-            // salir del proyecto y volver a entrar.
-            router.replace(`/execution?project=${projectId}`);
+            // Solo `refresh`: trae el árbol nuevo, y BoardShell lo adopta al
+            // ver que cambió la huella de la estructura. El `replace` a esta
+            // misma URL que lo acompañaba era cargo cult — el tablero no se
+            // repintaba por la caché del router, sino porque BoardShell tenía
+            // las tareas congeladas en su estado local.
             router.refresh();
             setHecho(result.created ?? { groups: 0, tasks: 0 });
           })

@@ -49,6 +49,7 @@ export default function BoardShell({
   initialAssignees,
   commentCountByTask,
   members,
+  revision,
   initialView,
   orderingEnabled,
   threadEnabled,
@@ -61,6 +62,8 @@ export default function BoardShell({
   initialAssignees: Record<string, string[]>;
   commentCountByTask: Record<string, number>;
   members: string[];
+  /** Huella de la estructura servida (board.ts). Ver la resincronización de abajo. */
+  revision: string;
   initialView: ExecutionView;
   orderingEnabled: boolean;
   /** Solo en espacios compartidos: en el personal no hay con quién conversar. */
@@ -84,9 +87,32 @@ export default function BoardShell({
   const [detailTaskId, setDetailTaskId] = useState<string | null>(openTaskId);
   const [error, setError] = useState<string | null>(null);
 
-  // Nota: page.tsx monta este componente con key={projectId}, así que cambiar
-  // de tablero lo remonta con estado limpio — no hace falta ningún efecto de
-  // sincronización (que además pisaría los updates optimistas en curso).
+  // ADOPTAR LA ESTRUCTURA QUE TRAE EL SERVIDOR.
+  //
+  // page.tsx monta este componente con key={projectId}: cambiar de tablero lo
+  // remonta con estado limpio. Pero aplicar una plantilla o un plan de IA NO
+  // cambia el proyecto, así que la key es la misma, React no remonta nada y
+  // este `useState` se quedaba con las tareas de antes — el tablero seguía
+  // igual por mucho que la Server Action revalidara, y había que salir del
+  // proyecto y volver a entrar para ver los grupos nuevos.
+  //
+  // `revision` es una huella de la FORMA del árbol (qué tareas hay, de quién
+  // cuelgan, en qué grupo y en qué orden). Solo se mueve cuando el servidor
+  // trae una estructura distinta, así que esto no pisa los updates optimistas
+  // de estado, prioridad o título, que no la tocan. Se ajusta durante el
+  // render y no en un efecto: así el primer pintado ya sale con los datos
+  // nuevos, sin un fotograma con los viejos.
+  const [syncedRevision, setSyncedRevision] = useState(revision);
+  if (revision !== syncedRevision) {
+    setSyncedRevision(revision);
+    setTasks(initialTasks);
+    setGroups(initialGroups);
+    setAssigneesByTask(initialAssignees);
+    // La selección se limpia porque puede señalar filas que ya no existen; la
+    // vista, los filtros y el orden NO se tocan: aplicar una plantilla no debe
+    // costarle al usuario el contexto de lectura que tenía montado.
+    setSelected(new Set());
+  }
 
   function changeView(next: ExecutionView) {
     setView(next);

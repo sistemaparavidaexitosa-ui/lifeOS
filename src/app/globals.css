@@ -480,11 +480,14 @@ textarea:focus {
   transition: background 0.12s ease;
   position: relative;
 }
+/* `background-color` y no el atajo `background`: las guías de nivel de una
+   subtarea son un `background-image`, y el atajo lo borraría al pasar el
+   puntero o al seleccionar la fila. */
 .mb-row:hover {
-  background: var(--surface2);
+  background-color: var(--surface2);
 }
 .mb-row.selected {
-  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  background-color: color-mix(in srgb, var(--accent) 8%, var(--surface));
 }
 .mb-row.dragging {
   opacity: 0.45;
@@ -856,15 +859,6 @@ textarea:focus {
 .mb-expand:hover {
   background: var(--surface3);
 }
-.mb-indent-1 {
-  padding-left: 34px;
-}
-.mb-indent-2 {
-  padding-left: 56px;
-}
-.mb-indent-3 {
-  padding-left: 78px;
-}
 .mb-badge-count {
   font-size: 10.5px;
   font-weight: 800;
@@ -975,33 +969,22 @@ textarea:focus {
 }
 
 /* Mobile: cada fila se convierte en tarjeta apilada — nunca tabla con
-   scroll horizontal (el problema más reportado en celular). */
+   scroll horizontal (el problema más reportado en celular).
+
+   De este bloque solo queda lo que sigue vivo. La rejilla `1fr 1fr` y la
+   sangría plana que había aquí las pisaba entera la capa de acabado del final
+   del archivo (la fila es un flex en columna desde entonces, y la sangría se
+   calcula desde `--mb-depth`); mantenerlas solo servía para hacer creer que
+   el móvil se resolvía en dos sitios a la vez. */
 @media (max-width: 860px) {
   .mb-cols {
     display: none;
   }
-  .mb-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    align-items: stretch;
-    gap: 8px;
-    padding: 12px;
-  }
   .mb-row-item {
-    grid-column: 1 / -1;
     flex-wrap: wrap;
-  }
-  .mb-row-title {
-    flex: 1 1 140px;
   }
   .mb-cell-people {
     justify-content: flex-start;
-  }
-  .mb-indent-1,
-  .mb-indent-2,
-  .mb-indent-3 {
-    padding-left: 20px;
-    border-left: 3px solid var(--surface3);
   }
 }
 
@@ -2189,11 +2172,45 @@ textarea:focus {
   border-top-color: color-mix(in srgb, var(--line) 70%, transparent);
   transition: background 0.12s ease, box-shadow 0.12s ease;
 }
+
+/* ------------------------------------------------------------------------ */
+/* SANGRÍA DE SUBTAREAS                                                      */
+/*                                                                           */
+/* Va en esta capa, y no en clases `.mb-indent-N` aparte, porque el atajo     */
+/* `padding` de la regla de aquí arriba tiene la misma especificidad y está   */
+/* más abajo en el archivo: se comía el `padding-left` de aquellas clases y   */
+/* el tablero llevaba tiempo pintando tarea y subtarea al mismo nivel, en     */
+/* móvil Y en escritorio. MondayRow solo declara `--mb-depth`.               */
+/*                                                                           */
+/* El `min()` pone tope a la sangría: la anidación no lo tiene (ni en la      */
+/* recursión ni en la base), y sin tope un nivel 12 empujaría el título       */
+/* fuera de la pantalla.                                                     */
+/* ------------------------------------------------------------------------ */
+.mb-row,
+.mb-quickadd {
+  --mb-step: 22px;
+  padding-left: calc(14px + min(var(--mb-depth, 0) * var(--mb-step), 7 * var(--mb-step)));
+}
+
+/* Una guía vertical por cada nivel de ancestro, como el árbol de archivos de
+   un editor. Se dibujan con un degradado repetido y no con elementos: las
+   filas hijas son HERMANAS en el DOM (MondayRow las emite en un Fragment),
+   así que no hay contenedor por nivel del que colgar un borde. */
+.mb-row.mb-sub {
+  background-image: repeating-linear-gradient(
+    to right,
+    color-mix(in srgb, var(--line) 85%, transparent) 0 1px,
+    transparent 1px var(--mb-step)
+  );
+  background-repeat: no-repeat;
+  background-size: calc(min(var(--mb-depth, 0), 7) * var(--mb-step)) 100%;
+  background-position: 8px 0;
+}
 .mb-row:hover {
-  background: color-mix(in srgb, var(--accent) 4%, var(--surface));
+  background-color: color-mix(in srgb, var(--accent) 4%, var(--surface));
 }
 .mb-row.selected {
-  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+  background-color: color-mix(in srgb, var(--accent) 9%, var(--surface));
   box-shadow: inset 3px 0 0 var(--accent);
 }
 .mb-row-title {
@@ -2353,6 +2370,19 @@ textarea:focus {
     gap: 5px;
     padding: 6px 12px;
     min-height: 0;
+  }
+  /* Paso de sangría corto: 22px por nivel se comerían un tercio de una
+     pantalla de 360px, y el título de la fila ya se lleva la línea entera.
+     Con 13px y su guía, el nivel se lee sin quitarle ancho al texto. Va
+     DESPUÉS del atajo `padding` de aquí arriba, que si no lo pisaría — el
+     mismo choque de cascada que dejó el tablero sin sangría. */
+  .mb-row,
+  .mb-quickadd {
+    --mb-step: 13px;
+    padding-left: calc(12px + min(var(--mb-depth, 0) * var(--mb-step), 7 * var(--mb-step)));
+  }
+  .mb-row.mb-sub {
+    background-position: 6px 0;
   }
   .mb-row + .mb-row {
     border-top: 1px solid var(--line);

@@ -13,6 +13,7 @@
 // hace una sola vez para sus cuatro paneles.
 
 import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { requestProjectSequence, applyProjectSequence } from "./actions";
 
 interface TaskLite {
@@ -31,6 +32,7 @@ export default function SequencePanel({
   tasks: TaskLite[];
   onClose: () => void;
 }) {
+  const router = useRouter();
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -114,6 +116,10 @@ export default function SequencePanel({
             startTransition(async () => {
               try {
                 await applyProjectSequence(projectId, suggestion.order);
+                // La Action reordena en la base y revalida, pero el tablero
+                // tiene sus tareas en estado local: sin este refresco el
+                // usuario cerraba el panel y las veía en el orden de antes.
+                router.refresh();
                 onClose();
               } catch (e) {
                 setError(e instanceof Error ? e.message : "No se pudo aplicar la secuencia");

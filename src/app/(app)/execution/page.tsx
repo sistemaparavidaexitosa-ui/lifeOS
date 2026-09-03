@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { fdate } from "@/lib/format";
-import { isOverdue, isOpen, type BoardTaskLike } from "@/lib/domain/board.ts";
+import { boardRevision, isOverdue, isOpen, type BoardTaskLike } from "@/lib/domain/board.ts";
 import { todayInTimeZone } from "@/lib/domain/datetime.ts";
 import { getUserTimeZone } from "@/lib/data/profile";
 import { listWorkspaces, ROLES_QUE_CREAN, type WorkspaceSummary } from "@/lib/data/workspaces";
@@ -306,6 +306,13 @@ async function BoardWorkspace({
     if (profile?.name) members = [profile.name];
   }
 
+  const groups = (groupRows ?? []) as BoardGroup[];
+
+  // Huella de la estructura servida. BoardShell la compara con la que ya tenía
+  // para saber cuándo el servidor le trae un árbol distinto (una plantilla
+  // aplicada, un plan de IA) y adoptarlo sin remontar. Ver board.ts.
+  const revision = boardRevision(tasks, groups);
+
   const rootTasks: BoardTaskLike[] = tasks.filter((t) => !t.parentTaskId);
   const countable = rootTasks.filter((t) => t.status !== "Cancelled");
   const done = countable.filter((t) => t.status === "Completed").length;
@@ -340,10 +347,11 @@ async function BoardWorkspace({
         key={projectId}
         projectId={projectId}
         initialTasks={tasks}
-        initialGroups={(groupRows ?? []) as BoardGroup[]}
+        initialGroups={groups}
         initialAssignees={assigneesByTask}
         commentCountByTask={commentCountByTask}
         members={members}
+        revision={revision}
         initialView={threadEnabled || view !== "hilo" ? view : "board"}
         orderingEnabled={orderingEnabled}
         threadEnabled={threadEnabled}

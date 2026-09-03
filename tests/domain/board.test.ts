@@ -236,3 +236,34 @@ test("isDescendantOf detecta el subárbol y evita ciclos al anidar", async () =>
   assert.strictEqual(isDescendantOf(tasks, "abuelo", "ajeno"), false);
   assert.deepStrictEqual(subtreeIds(tasks, "padre").sort(), ["hijo", "padre"]);
 });
+
+// --- huella de la estructura ----------------------------------------------
+
+test("boardRevision cambia con la estructura y NO con el contenido de las filas", async () => {
+  const { boardRevision } = await import("../../src/lib/domain/board.ts");
+  const grupos = [
+    { id: "g1", position: 0 },
+    { id: "g2", position: 1 }
+  ];
+  const tareas = [task({ id: "a", position: 0 }), task({ id: "b", parentTaskId: "a", position: 0 })];
+  const base = boardRevision(tareas, grupos);
+
+  // Determinista: la misma entrada da siempre la misma huella.
+  assert.strictEqual(boardRevision(tareas, grupos), base);
+
+  // Renombrar o cambiar de estado NO la mueve: eso ya lo lleva el estado
+  // optimista del cliente, y resincronizar ahí pisaría una edición en vuelo.
+  const editada = tareas.map((t) => ({ ...t, title: "otro", status: "Completed" as const, urgent: true }));
+  assert.strictEqual(boardRevision(editada, grupos), base);
+
+  // Lo que sí la mueve: añadir, reanidar, cambiar de grupo, reordenar.
+  assert.notStrictEqual(boardRevision([...tareas, task({ id: "c", position: 1 })], grupos), base);
+  assert.notStrictEqual(boardRevision([tareas[0]!], grupos), base);
+  assert.notStrictEqual(boardRevision(tareas.map((t) => ({ ...t, parentTaskId: null })), grupos), base);
+  assert.notStrictEqual(boardRevision(tareas.map((t) => ({ ...t, groupId: "g2" })), grupos), base);
+  assert.notStrictEqual(boardRevision(tareas.map((t) => ({ ...t, position: t.position + 1 })), grupos), base);
+
+  // Y un grupo nuevo, aunque venga vacío: es justo lo que crea una plantilla.
+  assert.notStrictEqual(boardRevision(tareas, [...grupos, { id: "g3", position: 2 }]), base);
+  assert.notStrictEqual(boardRevision(tareas, [grupos[1]!, grupos[0]!]), base);
+});
