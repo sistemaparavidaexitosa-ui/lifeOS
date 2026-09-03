@@ -1408,6 +1408,34 @@ la mitad que ya existía estaba rota.
   `recordActivity({ type: "comment.project" })`. Quien mira `/activity` quiere
   saber que aquí se habló. Lo que se quitó es la lectura, no el registro.
 
+- **D-087 · Un solo proveedor de IA, y sin SDK.** D-075 defendía dos —Anthropic
+  para las recomendaciones, OpenAI para el planificador— con el argumento de
+  que migrar código probado no ganaba nada. Dejó de ser cierto en cuanto
+  apareció una tercera feature: dos proveedores para tres cosas son dos
+  facturas, dos formas de fallar y dos SDK que mantener. Todo pasa a
+  `gemini-2.5-flash`, con `GEMINI_API_KEY` como única llave.
+
+  **Y se habla con la API por `fetch`, sin SDK.** Esto es lo que de verdad se
+  gana, y no es ahorro por ahorro: `recommend.ts` importaba `zod/v4` y
+  `plan-project.ts` la `zod` clásica porque el conversor de esquemas de cada
+  SDK revienta con el núcleo del otro (D-027, D-075). Era una división que no
+  venía de nuestro código sino de sus dependencias, y que obligaba a escribir
+  en la cabecera de los dos archivos que NO se podían unificar. Sin conversor,
+  el problema desaparece: **queda una sola `zod` en todo el repo y caen dos
+  dependencias de runtime** (`openai`, `@anthropic-ai/sdk`), que es la
+  dirección que pide D-008.
+
+  El precio es escribir dos esquemas por feature en vez de uno: el de zod, que
+  EXIGE la forma de la respuesta, y el de `responseSchema`, que se la PIDE al
+  modelo. Se aceptó porque son veinte líneas y porque una deriva entre ambos la
+  caza el `safeParse`, no la pantalla del usuario.
+
+  `generateJson` mantiene el contrato de D-021 palabra por palabra —nunca
+  lanza— y traduce a un motivo legible cada forma de fallar. Una que antes no
+  existía y ahora es normal: el **429 del free tier**. No es una anomalía, es
+  el plan gratuito haciendo su trabajo, y se dice con esas palabras en vez de
+  como un error.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo

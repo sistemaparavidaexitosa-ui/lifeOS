@@ -16,7 +16,7 @@ import { loadMyTasks, type MyTaskRow } from "@/lib/data/tasks";
 import type { JournalEntryLike, ProjectStatus } from "@/lib/domain/types.ts";
 import { allowedDomains, buildAliasMap, buildContext, restore, type Scope } from "./context";
 import { recommend } from "@/lib/ai/recommend";
-import { MODEL } from "@/lib/ai/provider";
+import { GEMINI_MODEL } from "@/lib/ai/gemini-provider";
 import { recommendationFingerprint } from "@/lib/domain/insights/fingerprint.ts";
 import { canTransition, REJECTION_STATUSES, type RecommendationStatus } from "@/lib/domain/insights/states.ts";
 import { DOMAIN_LABEL, type Domain, type Fact } from "@/lib/domain/insights/types.ts";
@@ -399,7 +399,7 @@ export async function analyze(scope: Scope): Promise<AnalyzeResult> {
       scope,
       domains: context.domains,
       factCount: context.facts.length,
-      model: MODEL,
+      model: GEMINI_MODEL,
       created: result.recommendations.length,
       dropped: result.dropped.length
     }

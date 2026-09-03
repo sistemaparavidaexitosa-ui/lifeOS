@@ -37,44 +37,44 @@ pnpm gen:types
      habilitado. En Authentication → URL Configuration, agrega tu dominio de
      Vercel a **Redirect URLs** (`https://tu-dominio.vercel.app/auth/callback`).
 
-## 1ter) Motor de recomendaciones (Intelligence OS)
+## 1ter) Las funciones de IA (una sola llave)
 
-El análisis de `/money` llama a la API de Claude. Sin esta variable la app
-**no falla**: el botón "Analizar" responde que el motor no está configurado y
-el resto de la página sigue igual.
-
-```bash
-ANTHROPIC_API_KEY=sk-ant-xxxxxxxx   # https://console.anthropic.com → API Keys
-```
-
-El análisis lo dispara siempre el usuario con un clic; no hay cron ni llamadas
-en segundo plano, así que el gasto es una llamada por clic. El modelo es
-`claude-opus-5` y está fijado en `src/lib/ai/provider.ts`.
-
-## 1quater) Planes de proyecto con IA (Proyectos y Tareas)
-
-«Generar plan con IA», en `/execution`, llama a la API de OpenAI. Sin esta
-variable la app **no falla**: el panel dice que no está configurado y el resto
-de `/execution` —tablero, plantillas, todo— sigue igual (F11, D-075).
+Tres cosas llaman al modelo y las tres salen por la misma variable: el motor de
+recomendaciones (Intelligence OS), «Generar plan con IA» en `/execution` y el
+chat del rail lateral. Sin ella la app **no falla**: esas tres avisan de que no
+están configuradas y todo lo demás sigue igual (F11).
 
 ```bash
-OPENAI_API_KEY=sk-proj-xxxxxxxx   # https://platform.openai.com → API keys
+GEMINI_API_KEY=AIza...   # https://aistudio.google.com/apikey (gratis)
 ```
 
-Igual que el motor de recomendaciones: lo dispara siempre el usuario con un
-clic, no hay cron ni llamadas en segundo plano, y el gasto es una llamada por
-clic (dos si regenera). El modelo es `gpt-5.6` y está fijado en
-`src/lib/ai/openai-provider.ts`; `gpt-5.6-terra` es ahí el cambio de una línea
-si el coste llega a importar.
+El modelo es `gemini-2.5-flash` y está fijado en
+`src/lib/ai/gemini-provider.ts`, que es el único archivo del proyecto que habla
+con la API; `gemini-2.5-flash-lite` es ahí el cambio de una línea si hiciera
+falta algo más barato o más rápido.
 
-⚠️ Lo que sale del servidor es el **objetivo que escribió el usuario** y, en un
-proyecto que ya tiene tareas, los **títulos** de sus grupos y tareas. Nada más:
-ni responsables, ni fechas, ni comentarios, ni ids. El panel lo dice en pantalla
-antes de generar.
+**Sobre el free tier.** Tiene límite por minuto y por día. Ninguna de las tres
+funciones corre sola: no hay cron ni llamadas en segundo plano, siempre las
+dispara el usuario con un gesto, así que el consumo es una llamada por clic o
+por turno de chat. Al topar el límite, la respuesta lo dice con esas palabras
+—«se agotó la cuota gratuita, inténtalo en un minuto»— y no como un error
+genérico.
 
-⚠️ Lo que sale del servidor son los **hechos ya calculados**, en texto, con los
-nombres de cuentas y dependientes sustituidos por alias. Nunca filas crudas de
-la base. El filtro vive en un solo archivo, `src/lib/insights/context.ts`.
+**Fue de dos llaves a una.** Hasta la migración a Gemini convivían
+`ANTHROPIC_API_KEY` (recomendaciones) y `OPENAI_API_KEY` (plan de proyecto).
+Las dos se pueden borrar del entorno: ya no las lee nadie.
+
+⚠️ Lo que sale del servidor, en los tres casos:
+
+- **Recomendaciones y chat:** los **hechos ya calculados**, en texto, con los
+  nombres de cuentas y dependientes sustituidos por alias, y solo de los
+  dominios que el usuario haya encendido en Configuración → IA (vacío por
+  defecto). Nunca filas crudas. El filtro vive en un solo archivo,
+  `src/lib/insights/context.ts`.
+- **Plan de proyecto:** el **objetivo que escribió el usuario** y, en un
+  proyecto que ya tiene tareas, los **títulos** de sus grupos y tareas. Nada
+  más: ni responsables, ni fechas, ni comentarios, ni ids. El panel lo dice en
+  pantalla antes de generar.
 
 ## 1bis) Correo transaccional (invitaciones a workspaces)
 
@@ -123,6 +123,14 @@ git push -u origin main
    | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Project Settings → API → anon public | Production, Preview, Development |
    | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API → service_role (⚠️ nunca la expongas con prefijo `NEXT_PUBLIC_`) | Production, Preview |
    | `NEXT_PUBLIC_APP_URL` | Tu URL de Vercel, p. ej. `https://lifeos-app.vercel.app` | Production, Preview |
+   | `GEMINI_API_KEY` | https://aistudio.google.com/apikey (gratis). **Opcional**: sin ella la app despliega y funciona; solo las tres funciones de IA avisan de que no están configuradas (§1ter) | Production, Preview |
+   | `RESEND_API_KEY` | https://resend.com → API Keys. **Opcional**: sin ella la invitación se crea igual y se muestra el enlace para compartirlo a mano (§1bis) | Production, Preview |
+   | `EMAIL_FROM` | El remitente de las invitaciones, p. ej. `LifeOS <no-reply@tudominio.com>`. Solo si pusiste `RESEND_API_KEY` | Production, Preview |
+
+   Esta tabla no listaba ninguna llave opcional y por eso se desplegaba sin
+   ellas sin saber que faltaban. Las cuatro primeras son **obligatorias**; las
+   tres últimas apagan su feature y nada más.
+
 3. Install/Build commands ya están fijados en `vercel.json`
    (`pnpm install --frozen-lockfile`, `pnpm build`); Node se toma de `.nvmrc`.
 4. Deploy.
