@@ -1382,6 +1382,32 @@ la mitad que ya existía estaba rota.
   Lo que un administrador escriba después no pasa por ahí: a eso lo protege el
   esquema zod, al guardarlo y al leerlo.
 
+### El hilo se calla, la IA se unifica y aparece un sitio donde preguntar (septiembre 2026)
+
+- **D-086 · El hilo del proyecto deja de intercalar la actividad.** La 0041 lo
+  estrenó mezclando los eventos de `workspace_activity` entre los mensajes, con
+  el argumento —bueno— de que un cambio de estado explica por qué el siguiente
+  mensaje dice lo que dice. Lo que no se vio entonces es que esa pregunta ya
+  tenía pantalla: `/activity` enseña los mismos eventos, completos, agrupados
+  por día y con su autor al margen. Repetirlos en el hilo no añadía contexto,
+  competía con él: sesenta líneas grises por cada puñado de mensajes.
+
+  El hilo contesta «qué nos dijimos»; `/activity` contesta «qué ha pasado
+  aquí». Son dos preguntas y ahora son dos pantallas.
+
+  **Se cae `src/lib/domain/execution/project-thread.ts` entero**, con sus dos
+  funciones y sus nueve pruebas. `mergeProjectThread` existía para mezclar dos
+  corrientes y ya solo hay una; `describeEvent` se queda sin eventos que
+  describir. Y el desempate por `id` que la mezcla protegía tampoco sobrevive,
+  por una razón concreta y no por descuido: existía porque el comentario y su
+  fila de actividad se escriben en la MISMA operación y podían compartir
+  milisegundo. Sin eventos esa colisión no puede ocurrir, y el
+  `order("created_at")` de la consulta ya deja el orden bien.
+
+  Lo que **no** cambia: `addProjectComment` sigue escribiendo su
+  `recordActivity({ type: "comment.project" })`. Quien mira `/activity` quiere
+  saber que aquí se habló. Lo que se quitó es la lectura, no el registro.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo

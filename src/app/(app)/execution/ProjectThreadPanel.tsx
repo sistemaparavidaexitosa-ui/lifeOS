@@ -7,12 +7,13 @@
 // pertenece a ninguna tarea concreta, así que acababa colgado de una cualquiera
 // —la que estuviera abierta— y allí se perdía. Aquí tiene su sitio.
 //
-// Y NO ES SOLO UN CHAT
-// Se intercalan los eventos del proyecto: quién creó una tarea, quién movió un
-// estado, quién aplicó una plantilla. Es la misma idea que el hilo de una tarea
-// con sus mensajitos grises — lo que explica por qué el siguiente mensaje dice
-// lo que dice. El orden vive en domain/execution/project-thread.ts, probado sin
-// React; aquí solo se pinta.
+// Y ES SOLO UN CHAT
+// Aquí se intercalaban los eventos del proyecto —quién creó una tarea, quién
+// movió un estado— como los mensajitos grises de un chat. Se quitaron: esa
+// pregunta («qué ha pasado aquí») ya la contesta /activity, que los enseña
+// completos y agrupados por día, y repetirlos aquí enterraba la conversación
+// bajo su propio ruido. El hilo contesta la otra pregunta: «qué nos dijimos».
+// La actividad se sigue registrando igual; simplemente no se pinta aquí.
 //
 // Solo aparece en espacios COMPARTIDOS (ver BoardShell/page.tsx): en el
 // personal no hay con quién conversar ni a quién mencionar.
@@ -27,8 +28,6 @@ import {
   type ReactionLike
 } from "@/lib/domain/execution/reactions.ts";
 import { PRESET_LABEL, type ReminderPreset } from "@/lib/domain/execution/reminders.ts";
-import { mergeProjectThread, describeEvent } from "@/lib/domain/execution/project-thread.ts";
-import { activityLabel } from "@/lib/domain/execution/activity.ts";
 import MenuSurface from "@/components/MenuSurface";
 import { CommentBody, MentionComposer } from "./mention-ui";
 import { useThreadRealtime } from "@/lib/hooks/useThreadRealtime";
@@ -60,10 +59,9 @@ export default function ProjectThreadPanel({ projectId }: { projectId: string })
   // una acción propia: una sola manera de refrescar.
   useThreadRealtime(projectId, load);
 
-  const entries = useMemo(
-    () => (data ? mergeProjectThread(data.comments, data.events) : []),
-    [data]
-  );
+  // Sin eventos que intercalar no hay nada que mezclar: la consulta ya los pide
+  // `order("created_at", { ascending: true })`, que es como se lee un chat.
+  const entries = data?.comments ?? [];
 
   const reactionRows: ReactionLike[] = useMemo(
     () => (data ?? { reactions: [] }).reactions.map((r) => ({ commentId: r.comment_id, userId: r.user_id, emoji: r.emoji })),
@@ -145,55 +143,48 @@ export default function ProjectThreadPanel({ projectId }: { projectId: string })
       )}
 
       <div style={{ marginTop: 6 }}>
-        {entries.map((e) =>
-          e.kind === "event" ? (
-            <div key={e.id} className="text-xs" style={{ color: "var(--muted)", margin: "8px 0 8px 2px" }}>
-              <b style={{ color: "var(--c-purple)" }}>{activityLabel(e.type)}</b> · {describeEvent(e.actor, e.text)} ·{" "}
-              {new Date(e.at).toLocaleString()}
+        {entries.map((e) => (
+          <div
+            key={e.id}
+            style={{ background: "var(--surface2)", borderRadius: 12, padding: "9px 11px", margin: "8px 0" }}
+          >
+            <div className="text-sm">
+              <CommentBody body={e.body} roster={data.roster} />
             </div>
-          ) : (
-            <div
-              key={e.id}
-              style={{ background: "var(--surface2)", borderRadius: 12, padding: "9px 11px", margin: "8px 0" }}
-            >
-              <div className="text-sm">
-                <CommentBody body={e.body} roster={data.roster} />
-              </div>
 
-              <div className="flex items-center gap-1.5 flex-wrap" style={{ marginTop: 6 }}>
-                {summarizeReactions(reactionRows, e.id, data.viewerId).map((rx) => (
-                  <button
-                    key={rx.emoji}
-                    className={`btn-ghost btn-sm${rx.mine ? " btn-primary" : ""}`}
-                    style={{ padding: "2px 8px", minHeight: 26 }}
-                    disabled={pending}
-                    onClick={() => react(e.id, rx.emoji)}
-                    aria-label={`${rx.emoji} · ${rx.count}${rx.mine ? " · reaccionaste" : ""}`}
-                  >
-                    {rx.emoji} {rx.count}
-                  </button>
-                ))}
+            <div className="flex items-center gap-1.5 flex-wrap" style={{ marginTop: 6 }}>
+              {summarizeReactions(reactionRows, e.id, data.viewerId).map((rx) => (
                 <button
-                  className="btn-ghost btn-sm"
+                  key={rx.emoji}
+                  className={`btn-ghost btn-sm${rx.mine ? " btn-primary" : ""}`}
                   style={{ padding: "2px 8px", minHeight: 26 }}
                   disabled={pending}
-                  onClick={(ev) => {
-                    const abierto = openFor === e.id;
-                    setOpenFor(abierto ? null : e.id);
-                    setActionAnchor(abierto ? null : ev.currentTarget);
-                  }}
-                  aria-label="Reaccionar, fijar o recordar"
+                  onClick={() => react(e.id, rx.emoji)}
+                  aria-label={`${rx.emoji} · ${rx.count}${rx.mine ? " · reaccionaste" : ""}`}
                 >
-                  ⋯
+                  {rx.emoji} {rx.count}
                 </button>
-              </div>
-
-              <div className="text-xs" style={{ color: "var(--muted)", marginTop: 3 }}>
-                {e.authorName} · {new Date(e.at).toLocaleString()}
-              </div>
+              ))}
+              <button
+                className="btn-ghost btn-sm"
+                style={{ padding: "2px 8px", minHeight: 26 }}
+                disabled={pending}
+                onClick={(ev) => {
+                  const abierto = openFor === e.id;
+                  setOpenFor(abierto ? null : e.id);
+                  setActionAnchor(abierto ? null : ev.currentTarget);
+                }}
+                aria-label="Reaccionar, fijar o recordar"
+              >
+                ⋯
+              </button>
             </div>
-          )
-        )}
+
+            <div className="text-xs" style={{ color: "var(--muted)", marginTop: 3 }}>
+              {e.authorName} · {new Date(e.createdAt).toLocaleString()}
+            </div>
+          </div>
+        ))}
       </div>
 
       <MentionComposer
