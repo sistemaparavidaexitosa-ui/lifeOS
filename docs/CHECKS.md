@@ -610,3 +610,85 @@ comprobar eso, que es lo que de verdad protege el invariante.
 - **Que el 404 de `/admin` se vea como 404 en el navegador.** El `notFound()`
   del layout está puesto y el build genera la ruta, pero la respuesta HTTP no se
   comprobó con una sesión real.
+
+## Hilo solo de conversación · Gemini único proveedor · Chat transversal (3-sep-2026)
+
+### Lo que se ejecutó
+
+| Comprobación | Resultado |
+|---|---|
+| `pnpm typecheck` | ✅ limpio |
+| `pnpm lint` | ✅ sin warnings ni errores |
+| `pnpm test:unit` | ✅ **574 pruebas**, 0 fallos (eran 572: −9 de `execution-project-thread`, +11 de `ai-chat`) |
+| `pnpm build` | ✅ compila; 30 rutas |
+| `supabase start` (45 migraciones + seed) | ✅ la 0045 aplica sin error |
+| `supabase test db` | ✅ **21 archivos, 156 pruebas**, incluido el nuevo `0021_rls_chat_ia.sql` (6 casos) |
+| `pnpm gen:types:local` | ✅ `ai_chat_messages` aparece en `database.types.ts` (F3: generado, no escrito a mano) |
+
+### Un volumen de Postgres que hubo que recrear
+
+La base local no arrancaba: `supabase_db_lifeos` había sido inicializado con
+PostgreSQL 15 y el CLI levanta ahora un 17.6 — `database files are incompatible
+with server`, y el contenedor se quedaba en `unhealthy`. Antes de borrar nada se
+comprobó qué había dentro del stack que sí estaba en marcha (uno huérfano de
+otro directorio, ocupando los mismos puertos): **cero tablas en `public`, cero
+usuarios**. Con eso a la vista se recreó el volumen y se aplicaron las 45
+migraciones desde cero. El proyecto remoto no se tocó.
+
+### La app, con una sesión real
+
+Se creó un usuario local, se armó su cookie de `@supabase/ssr` a mano y se pidió
+la app por HTTP para mirar el HTML que sale del servidor:
+
+| Petición | Resultado |
+|---|---|
+| `/login` sin sesión | 200, y **sin rail** — está fuera del grupo `(app)`, como debe |
+| `/home` con sesión, sin cookie de plegado | 200 y el rail abierto en el HTML: `class="ai-rail"`, «Asistente», el texto de bienvenida |
+| `/home` con `lifeos_chat_collapsed=1` | 200 y `ai-rail-collapsed`: la franja, no el panel |
+| `/execution`, `/settings`, `/intelligence`, `/activity`, `/money` | 200 las cinco |
+| Copia del botón en `/settings` | «Borrar historial de IA» |
+
+### Un salto de layout que solo se vio mirando el HTML del servidor
+
+El rail no aparecía en la respuesta del servidor: la preferencia de plegado
+estaba en `localStorage`, que solo se lee tras hidratar, así que en escritorio
+el rail entraba un frame tarde y **movía el ancho del contenido en cada carga**.
+Se pasó a cookie, que el layout lee antes de pintar (D-090). No lo habría
+detectado ninguna prueba automática de las que hay: el componente era correcto,
+lo que estaba mal era cuándo sabía lo que tenía que pintar.
+
+### Un fallo de CSS que el orden de capas habría escondido
+
+El rail se ocultaba en móvil con `hidden xl:flex` de Tailwind. No habría
+funcionado: el bloque `.ai-rail { display: flex }` se añade al final de
+`globals.css`, **después** de `@tailwind utilities`, así que gana a `.hidden`
+por orden de aparición y el rail se habría pintado también en un teléfono. El
+corte se movió a media queries dentro del propio bloque (D-090). Se detectó
+leyendo, no en pantalla — no habría saltado en `typecheck` ni en `lint`.
+
+### Lo que NO se verificó
+
+- **Ninguna llamada real al modelo.** No hay `GEMINI_API_KEY` en este entorno,
+  así que `planProject`, `recommend` y `chatReply` no se han ejecutado contra la
+  API. Lo que sí está comprobado es que sin llave la app entera sigue en pie:
+  las cinco rutas que embeben IA responden 200 y solo el botón correspondiente
+  avisa (F11). Queda sin ejercitar **todo el trato con la API**, y en concreto
+  tres cosas que se escribieron siguiendo la documentación y no la experiencia:
+
+  1. **La forma del `responseSchema`.** Los tipos van en MAYÚSCULAS (`STRING`,
+     `OBJECT`, `ARRAY`) porque el cuerpo se parsea como JSON de protobuf y un
+     valor de enum se casa por su nombre exacto; en minúscula sería un 400
+     antes de llegar al modelo. Los enums llevan además `format: "enum"`.
+  2. **`thinkingConfig.thinkingBudget`.** Es lo que evita el peor fallo posible
+     —`MAX_TOKENS` con el texto vacío— al gastar el modelo tokens de
+     razonamiento contra el mismo tope que la respuesta. Si la API rechazara el
+     campo, la llamada fallaría entera y no a medias, así que se vería al
+     primer intento.
+  3. **El mapeo de `finishReason` y el mensaje del 429.**
+
+  Es lo primero que hay que mirar con una llave puesta, y en ese orden.
+- **El recorrido en un navegador.** Nadie ha escrito en el hilo ni en el chat
+  con el ratón. El plegado del rail, la burbuja de móvil y el botón «Crear» de
+  la tarea propuesta están implementados y tipados, pero no usados.
+- **`pnpm verify` completo.** Se corrieron sus pasos por separado, como la vez
+  anterior y por el mismo motivo: termina en `supabase db reset`.

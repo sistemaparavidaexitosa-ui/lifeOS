@@ -5,6 +5,7 @@ import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 import { NAV_ITEMS } from "./nav-items";
 import CommandPalette from "./CommandPalette";
+import AiChatRail from "./AiChatRail";
 import { usePathname } from "next/navigation";
 import { Suspense } from "react";
 
@@ -18,12 +19,15 @@ export default function AppShell({
   userName,
   bell,
   workspaceId,
+  chatCollapsed = false,
   children
 }: {
   userName: string;
   bell?: React.ReactNode;
-  /** Espacio donde busca la paleta. Null si la cuenta no tiene ninguno. */
+  /** Espacio donde buscan la paleta y el chat. Null si la cuenta no tiene ninguno. */
   workspaceId?: string | null;
+  /** La preferencia de plegado del rail, ya leída de la cookie por el layout. */
+  chatCollapsed?: boolean;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -36,7 +40,11 @@ export default function AppShell({
   }, [pathname]);
 
   return (
-    <div className="grid md:grid-cols-[272px_1fr] min-h-dvh">
+    // Tres columnas a partir de xl (1280px), que es donde el rail del chat
+    // cabe sin estrangular el contenido. `auto` y no un ancho fijo porque el
+    // rail se pliega a una franja y es él quien decide cuál de las dos formas
+    // pinta; el grid solo le hace sitio.
+    <div className="grid md:grid-cols-[272px_1fr] xl:grid-cols-[272px_1fr_auto] min-h-dvh">
       {/* Aquí y no en cada pantalla: Cmd+K tiene que responder desde todas, y
           este es el único ancestro que las envuelve a todas. */}
       <CommandPalette workspaceId={workspaceId ?? null} />
@@ -72,6 +80,11 @@ export default function AppShell({
           {children}
         </div>
       </main>
+
+      {/* Tercera celda del grid, hermana de <main> y no hija: si colgara de
+          dentro heredaría el max-w del contenido y el scroll de la página, y
+          la conversación arrastraría el tablero al bajar. */}
+      <AiChatRail workspaceId={workspaceId ?? null} initialCollapsed={chatCollapsed} />
     </div>
   );
 }

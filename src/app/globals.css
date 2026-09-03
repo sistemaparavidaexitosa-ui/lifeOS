@@ -3147,3 +3147,121 @@ textarea:focus {
   color: var(--muted);
   line-height: 1.45;
 }
+
+/* ======================================================================== */
+/* Chat de IA transversal — el rail lateral (AiChatRail.tsx)                 */
+/*                                                                          */
+/* NO ES UN DRAWER, Y ESA ES LA DIFERENCIA QUE JUSTIFICA EL BLOQUE.          */
+/* Un drawer tapa lo que hay debajo y se cierra al terminar. Este rail es la */
+/* tercera columna del grid: convive con la pantalla en lugar de ocultarla,  */
+/* porque lo que se le pregunta al chat es casi siempre SOBRE lo que se está */
+/* mirando. Por debajo de 1280px deja de caber —sidebar 272 + contenido +    */
+/* 360 no entra sin estrangular el contenido— y ahí sí se comporta como un   */
+/* drawer, reusando .td-backdrop/.td-drawer tal cual.                        */
+/* ======================================================================== */
+.ai-rail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+  /* Pegado y con su propio scroll: la conversación no arrastra la página. */
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+  padding-top: var(--safe-top);
+}
+.ai-rail-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  min-height: var(--topbar-h);
+  flex-shrink: 0;
+}
+.ai-rail-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ai-rail-composer {
+  border-top: 1px solid var(--line);
+  padding: 10px 12px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  flex-shrink: 0;
+}
+
+/* Plegado: queda una franja con el icono, que es el mismo botón de abrir.
+   Se pliega y no se esconde porque el tablero de /execution con sus cinco
+   columnas es justo donde más estorba y donde más falta hace tenerlo cerca. */
+.ai-rail-collapsed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding-top: calc(10px + var(--safe-top));
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+}
+
+.ai-msg {
+  border-radius: 12px;
+  padding: 9px 11px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  /* Un id, una cifra larga o una ruta no pueden ensanchar la columna. */
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.ai-msg-user {
+  background: var(--surface3);
+  align-self: flex-end;
+  max-width: 92%;
+}
+.ai-msg-assistant {
+  background: var(--surface2);
+}
+
+/* La burbuja de móvil. Va sobre el contenido pero por debajo del menú lateral,
+   que en móvil toma la pantalla entera. */
+.ai-fab {
+  position: fixed;
+  right: 14px;
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  z-index: calc(var(--z-drawer) - 2);
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(20, 20, 60, 0.22);
+}
+/* El corte de visibilidad vive AQUÍ y no en clases `hidden xl:flex` del JSX.
+   Este bloque va después de `@tailwind utilities`, así que `.ai-rail`
+   { display: flex } le ganaría a `.hidden` por orden y el rail se pintaría
+   también en un teléfono. Con media queries el corte es uno solo y no depende
+   de dónde acabe cada regla en el archivo. */
+@media (max-width: 1279.98px) {
+  .ai-rail,
+  .ai-rail-collapsed {
+    display: none;
+  }
+}
+@media (min-width: 1280px) {
+  .ai-fab,
+  .ai-chat-sheet,
+  .ai-chat-sheet-backdrop {
+    display: none;
+  }
+}

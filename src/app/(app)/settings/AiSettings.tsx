@@ -50,7 +50,7 @@ export default function AiSettings({ enabled }: { enabled: string[] }) {
         {confirming === null && (
           <>
             <button className="btn-ghost btn-sm" onClick={() => setConfirming("history")}>
-              Borrar historial de recomendaciones
+              Borrar historial de IA
             </button>
             <button className="btn-ghost btn-sm" onClick={() => setConfirming("memory")}>
               Borrar toda la memoria
@@ -61,7 +61,7 @@ export default function AiSettings({ enabled }: { enabled: string[] }) {
           <>
             <span className="text-sm">
               {confirming === "history"
-                ? "Se borran todas las recomendaciones, incluidas las silenciadas. El motor podrá volver a proponerlas."
+                ? "Se borran todas las recomendaciones —incluidas las silenciadas— y la conversación entera del chat. El motor podrá volver a proponerlas."
                 : "Se borra toda la memoria. El motor dejará de saber lo que le habías dicho."}
             </span>
             <button

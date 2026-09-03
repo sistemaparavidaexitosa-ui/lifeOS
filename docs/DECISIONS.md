@@ -1436,6 +1436,90 @@ la mitad que ya existía estaba rota.
   el plan gratuito haciendo su trabajo, y se dice con esas palabras en vez de
   como un error.
 
+- **D-088 · Hay un chat, y no contradice al spec.** El spec de Intelligence OS
+  (§2) descartó el chat a propósito: «el valor está en que el sistema note
+  cosas, no en conversar». Sigue siendo verdad para las recomendaciones —nadie
+  quiere teclear para enterarse de que su presupuesto va al 92%—, y por eso el
+  motor no se toca. Lo que ese diseño deja fuera es la pregunta en la otra
+  dirección, «¿en qué me enfoco esta semana?», que ningún motor proactivo puede
+  adivinar. El chat no sustituye al motor: contesta lo que el motor nunca se
+  preguntó.
+
+  **Ve exactamente el mismo contexto, por el mismo sitio.** Reusa
+  `allowedDomains('global')`, el opt-in de `profiles.ai_domains` (vacío por
+  defecto), `buildAliasMap`, `buildContext` y `restore`. Un chat con su propia
+  forma de reunir datos habría sido un SEGUNDO camino por el que salen cifras
+  del servidor, con sus propias reglas y su propia manera de quedarse atrás
+  — y `context.ts` dejaría de ser lo que D-027 promete: un archivo que
+  auditar.
+
+  Para lograrlo hubo que sacar `loadFacts` de `lib/insights/actions.ts` a
+  `lib/insights/facts-loader.ts`. No es un capricho de organización: ese
+  archivo lleva `"use server"`, donde todo lo exportado tiene que ser una
+  Server Action, así que la función solo podía ser privada. La alternativa era
+  una segunda forma de cargar hechos, condenada a divergir de la primera.
+
+  **Con todos los dominios apagados el chat contesta igual**, pero diciendo que
+  no ve nada. Un asistente que se niega a hablar hasta que configures algo es
+  peor que uno honesto sobre lo que no sabe.
+
+- **D-089 · El chat propone tareas; crearlas sigue siendo del usuario.** El
+  modelo devuelve un título y la UI ofrece un botón. No hay ningún camino de
+  escritura nuevo: lo crea `quickAddTask`, que ya existía y que a su vez reusa
+  `createTask` —con su grupo, su posición y su primera fila de
+  `task_history`—, así que del chat no salen tareas de segunda categoría.
+  Mismo criterio que D-075 tomó con el planificador, y por el mismo motivo: lo
+  que un modelo escribe solo en la base de datos de alguien es lo único que no
+  se puede deshacer con un clic.
+
+  El título pasa por `sanitizeProposedTask`, que le quita las fechas por la
+  misma razón que `sanitizePlan`: una fecha inventada deja el tablero lleno de
+  tareas vencidas al mes siguiente.
+
+- **D-090 · El chat es un rail que se pliega, no un drawer ni una pantalla.**
+  Casi todo lo que se le pregunta es SOBRE lo que se está mirando: «¿por cuál
+  empiezo?» delante del tablero, «¿cuánto llevo?» delante del presupuesto. Una
+  ruta `/chat` quita justo el contexto que hace buena la pregunta, y un drawer
+  tapa la pantalla sobre la que se pregunta. Es la tercera columna del grid a
+  partir de 1280px, montada en `AppShell` al lado de `CommandPalette` y por el
+  mismo motivo que aquélla: es el único ancestro de todas las pantallas.
+
+  **Se pliega en vez de cerrarse** porque el tablero de `/execution` con sus
+  cinco columnas es a la vez donde más estorba y donde más falta hace tenerlo
+  cerca; plegado deja la franja con el icono, que es el mismo botón de abrir.
+  Por debajo de 1280px no cabe —272 de menú + contenido + 360 estrangulan la
+  pantalla— y ahí se comporta como los demás paneles del proyecto, reusando
+  `.td-backdrop`/`.td-drawer`.
+
+  **El corte de visibilidad vive en `globals.css` con media queries y no en
+  clases `hidden xl:flex`.** No es preferencia de estilo: el bloque va después
+  de `@tailwind utilities`, así que `.ai-rail { display: flex }` le gana a
+  `.hidden` por orden de aparición y el rail se habría pintado también en un
+  teléfono.
+
+  **Y la preferencia de plegado va en una COOKIE, no en `localStorage`.** La
+  primera versión usaba `localStorage` y al comprobar el HTML del servidor se
+  vio el problema: solo se puede leer después de hidratar, así que el servidor
+  pintaba siempre la misma forma y el ancho del contenido se movía un frame más
+  tarde, en CADA carga de página. La cookie la lee el layout —que ya es
+  dinámico— y el rail llega decidido desde el servidor. Es una preferencia de
+  interfaz, no una sesión: `samesite=lax` y un año.
+
+- **D-091 · Sin streaming, y dicho a propósito.** No hay streaming en ninguna
+  parte del repo: toda la IA es request/response con `useTransition`. Abrirlo
+  para la primera versión de una feature habría sido estrenar un patrón —route
+  handler, `ReadableStream`, reensamblado en cliente— en el sitio con menos
+  información sobre si hace falta. `gemini-2.5-flash` responde rápido y el
+  «Pensando…» cubre la espera. Queda apuntado como siguiente paso, no como
+  deuda escondida.
+
+- **D-092 · «Borrar historial de IA» borra también la conversación.** El botón
+  de Configuración vaciaba solo `recommendations`. Con el chat guardando turnos
+  en `ai_chat_messages`, dejarlo como estaba convertía la promesa del botón en
+  media verdad — y precisamente sobre la tabla donde el modelo escribió con más
+  detalle sobre la vida del usuario. El botón se llama ahora «Borrar historial
+  de IA» y hace lo que dice.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo
