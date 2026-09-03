@@ -32,11 +32,20 @@ const ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
 
 /**
  * Modelo y ajustes, en un solo sitio para poder cambiarlos sin tocar la
- * lógica. `gemini-2.5-flash` es el que cubre el free tier con holgura; si
- * alguna vez hiciera falta más barato o más rápido, `gemini-2.5-flash-lite`
- * es el cambio de UNA línea que hay que hacer aquí.
+ * lógica: era el cambio de UNA línea que se prometió aquí, y a los pocos días
+ * hizo falta.
+ *
+ * Se estrenó con `gemini-2.5-flash` y la API lo retiró para cuentas nuevas —
+ * «no longer available to new users», con `gemini-3.6-flash` como sucesor
+ * nombrado en el propio mensaje de error. Que ese mensaje llegara íntegro hasta
+ * la pantalla, y no convertido en un «no se pudo» genérico, es exactamente para
+ * lo que `httpReason` devuelve el `detalle` de la API: el diagnóstico vino
+ * dicho, no hubo que buscarlo.
+ *
+ * Un modelo retirado no avisa antes. Si vuelve a pasar, el síntoma es el mismo
+ * y el arreglo también: esta línea.
  */
-export const GEMINI_MODEL = "gemini-2.5-flash";
+export const GEMINI_MODEL = "gemini-3.6-flash";
 
 /**
  * Un modelo con pensamiento gasta tokens de razonamiento CONTRA el mismo tope

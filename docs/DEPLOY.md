@@ -48,10 +48,15 @@ están configuradas y todo lo demás sigue igual (F11).
 GEMINI_API_KEY=AIza...   # https://aistudio.google.com/apikey (gratis)
 ```
 
-El modelo es `gemini-2.5-flash` y está fijado en
+El modelo es `gemini-3.6-flash` y está fijado en
 `src/lib/ai/gemini-provider.ts`, que es el único archivo del proyecto que habla
-con la API; `gemini-2.5-flash-lite` es ahí el cambio de una línea si hiciera
-falta algo más barato o más rápido.
+con la API. Ahí es donde se cambia, en una línea.
+
+⚠️ **Los modelos se retiran.** El primero que se usó, `gemini-2.5-flash`, dejó
+de estar disponible para cuentas nuevas a los pocos días. Se reconoce enseguida
+porque el mensaje de la API llega entero a la pantalla y nombra al sucesor:
+«This model … is no longer available to new users. Please update your code to
+use models/…». Cuando pase, se cambia esa línea y nada más.
 
 **Sobre el free tier.** Tiene límite por minuto y por día. Ninguna de las tres
 funciones corre sola: no hay cron ni llamadas en segundo plano, siempre las

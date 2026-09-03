@@ -668,7 +668,7 @@ leyendo, no en pantalla — no habría saltado en `typecheck` ni en `lint`.
 
 ### Lo que NO se verificó
 
-- **Ninguna llamada real al modelo.** No hay `GEMINI_API_KEY` en este entorno,
+- **Ninguna llamada real al modelo desde aquí.** No hay `GEMINI_API_KEY` en este entorno,
   así que `planProject`, `recommend` y `chatReply` no se han ejecutado contra la
   API. Lo que sí está comprobado es que sin llave la app entera sigue en pie:
   las cinco rutas que embeben IA responden 200 y solo el botón correspondiente
@@ -687,6 +687,15 @@ leyendo, no en pantalla — no habría saltado en `typecheck` ni en `lint`.
   3. **El mapeo de `finishReason` y el mensaje del 429.**
 
   Es lo primero que hay que mirar con una llave puesta, y en ese orden.
+
+  **Lo que sí se supo al ponerle llave, fuera de este entorno:** la primera
+  llamada real devolvió «This model models/gemini-2.5-flash is no longer
+  available to new users». Eso confirma dos cosas y **ninguna tercera**: que la
+  autenticación por `x-goog-api-key` funciona, y que `httpReason` deja pasar el
+  mensaje de la API tal cual —traía dentro el nombre del sucesor—. No confirma
+  nada del cuerpo: el modelo va en la URL y se rechaza antes de validar
+  `responseSchema`, `thinkingConfig` o los tipos en mayúsculas. Los tres siguen
+  sin ejercitarse, y siguen siendo lo primero que hay que mirar.
 - **El recorrido en un navegador.** Nadie ha escrito en el hilo ni en el chat
   con el ratón. El plegado del rail, la burbuja de móvil y el botón «Crear» de
   la tarea propuesta están implementados y tipados, pero no usados.

@@ -1413,7 +1413,7 @@ la mitad que ya existía estaba rota.
   que migrar código probado no ganaba nada. Dejó de ser cierto en cuanto
   apareció una tercera feature: dos proveedores para tres cosas son dos
   facturas, dos formas de fallar y dos SDK que mantener. Todo pasa a
-  `gemini-2.5-flash`, con `GEMINI_API_KEY` como única llave.
+  `gemini-3.6-flash`, con `GEMINI_API_KEY` como única llave.
 
   **Y se habla con la API por `fetch`, sin SDK.** Esto es lo que de verdad se
   gana, y no es ahorro por ahorro: `recommend.ts` importaba `zod/v4` y
@@ -1435,6 +1435,26 @@ la mitad que ya existía estaba rota.
   existía y ahora es normal: el **429 del free tier**. No es una anomalía, es
   el plan gratuito haciendo su trabajo, y se dice con esas palabras en vez de
   como un error.
+
+  **Addendum (a los pocos días): el modelo se retiró.** `gemini-2.5-flash` pasó
+  a «no longer available to new users» y la propia API nombró al sucesor,
+  `gemini-3.6-flash`. Se cambió la línea de `GEMINI_MODEL` y ya está — que
+  fuera una línea es la razón por la que la constante vive sola en
+  `gemini-provider.ts` y no repartida por cada feature.
+
+  Lo que confirmó el episodio no es el modelo sino el manejo de errores:
+  `httpReason` devuelve el `detalle` que manda la API para cualquier 4xx que no
+  sea 429/401/403, así que el mensaje llegó íntegro a la pantalla —con el
+  nombre del sucesor dentro— en vez de convertirse en un «no se pudo» genérico.
+  El diagnóstico vino dicho.
+
+  **La API sugiere además migrar a su «Interactions API». No se hizo, a
+  propósito.** Es una recomendación, no un requisito: el mismo mensaje dice
+  «update your code to use models/gemini-3.6-flash», o sea que
+  `:generateContent` sigue sirviendo. Cambiar de superficie de API a ciegas,
+  sin poder ejecutar una sola llamada en este entorno, sería sustituir algo que
+  falla por una razón conocida por algo que puede fallar por razones que no
+  sabríamos leer. Queda como pendiente con nombre, no como deuda escondida.
 
 - **D-088 · Hay un chat, y no contradice al spec.** El spec de Intelligence OS
   (§2) descartó el chat a propósito: «el valor está en que el sistema note
@@ -1509,7 +1529,7 @@ la mitad que ya existía estaba rota.
   parte del repo: toda la IA es request/response con `useTransition`. Abrirlo
   para la primera versión de una feature habría sido estrenar un patrón —route
   handler, `ReadableStream`, reensamblado en cliente— en el sitio con menos
-  información sobre si hace falta. `gemini-2.5-flash` responde rápido y el
+  información sobre si hace falta. La familia flash responde rápido y el
   «Pensando…» cubre la espera. Queda apuntado como siguiente paso, no como
   deuda escondida.
 
