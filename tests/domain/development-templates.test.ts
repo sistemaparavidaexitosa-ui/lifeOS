@@ -2,14 +2,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  ROUTINE_TEMPLATES,
-  HABIT_TEMPLATES,
   routineTemplateDuration,
-  getRoutineTemplate,
-  getHabitTemplate,
   habitTemplatesByCategory,
   matchHabitForStep
 } from "../../src/lib/domain/development/templates.ts";
+import { RUTINAS_SEMBRADAS as ROUTINE_TEMPLATES, HABITOS_SEMBRADOS as HABIT_TEMPLATES, buscar } from "./seed-catalogo.ts";
+
+// El contenido ya no es un array de este repositorio (migración 0044): lo que
+// se vigila es la SEMILLA de la migración, que es el catálogo con el que
+// arranca cualquier entorno nuevo. Ver el comentario de seed-catalogo.ts.
+const getRoutineTemplate = (id: string) => buscar(ROUTINE_TEMPLATES, id);
+const getHabitTemplate = (id: string) => buscar(HABIT_TEMPLATES, id);
 
 test("los ids de las plantillas son únicos", () => {
   // Un id repetido haría que "usar plantilla" copiara siempre la primera, y el
@@ -87,7 +90,7 @@ test("las señales están redactadas como intención de implementación", () => 
 });
 
 test("habitTemplatesByCategory agrupa sin perder ni duplicar plantillas", () => {
-  const grupos = habitTemplatesByCategory();
+  const grupos = habitTemplatesByCategory(HABIT_TEMPLATES);
   const total = grupos.reduce((sum, g) => sum + g.templates.length, 0);
   assert.strictEqual(total, HABIT_TEMPLATES.length);
   assert.ok(grupos.every((g) => g.templates.length > 0), "no debe haber grupos vacíos");

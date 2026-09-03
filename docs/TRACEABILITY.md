@@ -37,6 +37,8 @@ Ningún ID de requisito fue renumerado.
 
 ## Cobertura de pruebas ejecutadas (evidencia real)
 
+| Catálogo de plantillas administrable (D-080/082, migración 0044) | `template_catalog`, `profiles.is_admin`, `audit_log` | `template_catalog_select` (`status = 'published' or is_admin()`), `_insert`/`_update`/`_delete` (`is_admin()`); `anon` revocado | `saveTemplate`,`setTemplateStatus`,`deleteTemplate` (`admin/actions.ts`); lectura en `lib/data/templates.ts` | `admin/layout.tsx` (404), `admin/TemplateEditor.tsx`, `Project/Routine/HabitTemplateFields.tsx` | `supabase/tests/0020_rls_template_catalog.sql` (12 assertions, ✅) · `tests/domain/templates-catalogo.test.ts` (9 casos, ✅) |
+
 ```
 tests/domain/*.test.ts → 56 tests, 56 pass, 0 fail (node --experimental-strip-types --test)
 ```

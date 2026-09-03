@@ -543,3 +543,70 @@ propia prueba.
   S.A.V.E.R.S. y comprobar que el paso de lectura queda ligado al hábito «Leer
   20 minutos» está implementado y con la acción probada por tipos, pero no se
   hizo clic en él.
+
+## Panel de administración y catálogo de plantillas en la base (1-sep-2026, migración 0044)
+
+Es el cambio que **deroga D-044**: el catálogo deja de ser un array en el código
+y pasa a `template_catalog`, editable desde `/admin`. Lo que sigue es lo que se
+ejecutó de verdad.
+
+### Lo que se ejecutó
+
+| Comprobación | Estado | Evidencia |
+|---|---|---|
+| `pnpm typecheck` | ✅ EJECUTADO OK | Sin errores. Incluye las tres aserciones de tipo de `templates/schema.ts`, que hacen fallar a `tsc` si una interfaz del dominio gana un campo y el zod no |
+| `pnpm lint` | ✅ EJECUTADO OK | «No ESLint warnings or errors» |
+| `pnpm test:unit` | ✅ EJECUTADO OK | **572 pruebas, 572 pass, 0 fail** (eran 563 antes de este cambio) |
+| `pnpm build` | ✅ EJECUTADO OK | Compila y aparecen las tres rutas nuevas: `/admin`, `/admin/[kind]`, `/admin/[kind]/[slug]` |
+| Migración 0044 aplicada | ✅ EJECUTADO OK | `supabase migration up --local`. **No** se corrió `db reset`: la base local tenía datos y la migración no los necesita |
+| `pnpm db:test` (pgTAP) | ✅ EJECUTADO OK | **20 archivos, 150 assertions, PASS**, incluido el nuevo `0020_rls_template_catalog.sql` (12) |
+| El seed no perdió nada | ✅ EJECUTADO OK | 24 filas publicadas: 11 proyecto, 3 rutina, 10 hábito. `tests/domain/templates-catalogo.test.ts` compara los slugs uno a uno contra la lista que había en código |
+| Las 24 pasan el esquema con el que se leen | ✅ EJECUTADO OK | Si una no pasara, la capa de datos la descartaría y sería invisible en producción sin fallar ruidosamente |
+
+### Recorrido real contra PostgREST (no solo `set role`)
+
+pgTAP prueba la RLS con `set local role`, que no pasa por los GRANT del mismo
+modo que la aplicación. Esto se hizo por el camino real, contra la pila local:
+
+| Paso | Resultado |
+|---|---|
+| `anon` (sin sesión) pidiendo el catálogo | `42501 permission denied for table template_catalog` — el `revoke` de la migración **hacía falta**: `0002` concede `select` a `anon` por defecto a toda tabla nueva, y la política `status = 'published'` no lo habría frenado |
+| Usuario normal con sesión, publicadas | Ve las 24: 11 proyecto, 10 hábito, 3 rutina |
+| Usuario normal, con un borrador REAL en la tabla | `[]` — no lo ve |
+| Usuario normal intentando insertar | `42501 new row violates row-level security policy` |
+| El **mismo** usuario tras ponerle `is_admin` | Ya ve el borrador |
+| Ese admin publicando la plantilla | `status` pasa a `published` |
+| Ese admin pidiendo el perfil de la otra usuaria | `[]` — **BR-012 en pie**: administrar contenido no es ver a la gente |
+
+La base se dejó como estaba: 24 plantillas, cero administradores, ninguna fila
+temporal.
+
+### Un descuido que la verificación destapó
+
+El comentario de la migración afirmaba que a `anon` «no se le da nada», y era
+falso: `0002` deja puesto un `alter default privileges ... grant select on
+tables to anon`, así que la tabla nacía legible para cualquiera sin sesión —y su
+política de lectura no lo frenaba, porque `status = 'published'` es cierto sin
+usuario. Se añadió un `revoke all ... from anon` explícito, y la comprobación de
+arriba es la que lo demuestra.
+
+### Un test que estaba mal escrito
+
+La primera versión de «una tarea con `due` o `impact` no pasa el esquema» falló:
+zod **descarta** las claves que no declara en vez de rechazarlas. La garantía
+real no es que se rechace, sino que nunca se guarda — la acción del panel
+escribe lo que sale del parseo, no lo que entró. El test se corrigió para
+comprobar eso, que es lo que de verdad protege el invariante.
+
+### Lo que NO se verificó
+
+- **El recorrido en un navegador.** No se hizo clic en `/admin`: crear una
+  plantilla desde el formulario, moverle un grupo de sitio, previsualizarla y
+  publicarla está implementado y probado por tipos, RLS y pruebas unitarias,
+  pero nadie lo ha usado con el ratón. El paso 3bis de `/docs/DEPLOY.md` y el
+  smoke test lo cubren para el despliegue.
+- **`pnpm verify` completo.** Se corrieron sus pasos por separado a propósito:
+  termina en `supabase db reset`, que borra la base local, y había datos dentro.
+- **Que el 404 de `/admin` se vea como 404 en el navegador.** El `notFound()`
+  del layout está puesto y el build genera la ruta, pero la respuesta HTTP no se
+  comprobó con una sesión real.

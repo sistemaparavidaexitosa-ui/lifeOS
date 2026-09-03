@@ -68,5 +68,12 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/wealth", label: "Patrimonio", group: "Money OS (privado)", icon: "wealth", color: "var(--c-green)" },
   { href: "/goals", label: "Metas Financieras", group: "Money OS (privado)", icon: "goals", color: "var(--c-green)" },
   { href: "/household", label: "Hogar y Dependientes", group: "Money OS (privado)", icon: "household", color: "var(--c-green)" },
-  { href: "/settings", label: "Configuración", group: "Cuenta", icon: "settings", color: "var(--muted)" }
+  { href: "/settings", label: "Configuración", group: "Cuenta", icon: "settings", color: "var(--muted)" },
+  // El panel de administración (0044) no puede estar en el menú: esta lista la
+  // importa un componente cliente y es la misma para todo el mundo, así que
+  // ponerlo aquí visible anunciaría la ruta a quien recibe un 404 al abrirla.
+  // Se alcanza desde Configuración, y solo si eres administrador. Figura de
+  // todos modos porque de esta lista sale el título de la barra superior: sin
+  // la entrada, la pantalla se titularía "Life OS".
+  { href: "/admin", label: "Administración", group: "Cuenta", icon: "settings", color: "var(--muted)", hidden: true }
 ];

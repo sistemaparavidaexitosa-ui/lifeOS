@@ -22,16 +22,25 @@ interface OccupationLite {
   end: string;
 }
 
+/**
+ * `templates` llega por props y no de un import: desde 0044 el catálogo vive en
+ * `template_catalog` y solo el servidor lo lee. La página, que ya es un Server
+ * Component, lo baja hasta aquí.
+ */
 export default function HabitTemplates({
   occupations,
-  otherHabits
+  otherHabits,
+  templates
 }: {
   occupations: OccupationLite[];
   otherHabits: HabitOption[];
+  templates: HabitTemplate[];
 }) {
   return (
     <FormSheet label="Plantillas" title="Plantillas de hábitos">
-      {(close) => <Contenido occupations={occupations} otherHabits={otherHabits} close={close} />}
+      {(close) => (
+        <Contenido occupations={occupations} otherHabits={otherHabits} templates={templates} close={close} />
+      )}
     </FormSheet>
   );
 }
@@ -39,10 +48,12 @@ export default function HabitTemplates({
 function Contenido({
   occupations,
   otherHabits,
+  templates,
   close
 }: {
   occupations: OccupationLite[];
   otherHabits: HabitOption[];
+  templates: HabitTemplate[];
   close: () => void;
 }) {
   const [elegida, setElegida] = useState<HabitTemplate | null>(null);
@@ -80,7 +91,7 @@ function Contenido({
         minutos, que son las dos piezas que deciden si el hábito se sostiene.
       </p>
 
-      {habitTemplatesByCategory().map((grupo) => (
+      {habitTemplatesByCategory(templates).map((grupo) => (
         <section key={grupo.category}>
           <h4 className="font-bold text-sm mb-1">{grupo.category}</h4>
           <div className="flex flex-col gap-1.5">

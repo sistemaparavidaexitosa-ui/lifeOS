@@ -15,7 +15,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { recordActivity } from "@/lib/data/activity";
-import { getProjectTemplate, plannedRows } from "@/lib/domain/execution/project-templates.ts";
+import { plannedRows, type ProjectTemplate } from "@/lib/domain/execution/project-templates.ts";
+import { getTemplate } from "@/lib/data/templates";
 
 export interface TemplateResult {
   ok: boolean;
@@ -30,7 +31,10 @@ export async function applyProjectTemplate(projectId: string, templateId: string
   const parsed = schema.safeParse({ projectId, templateId });
   if (!parsed.success) return { ok: false, reason: "Proyecto o plantilla no válidos." };
 
-  const template = getProjectTemplate(parsed.data.templateId);
+  // «Ya no existe» ahora cubre un caso más que antes: además de un id
+  // inventado, una plantilla que un administrador despublicó mientras esta
+  // pantalla llevaba un rato abierta. El mensaje sirve para los dos.
+  const template = await getTemplate("project", parsed.data.templateId);
   if (!template) return { ok: false, reason: "Esa plantilla ya no existe." };
 
   const supabase = await createClient();
@@ -56,7 +60,7 @@ export async function applyProjectTemplate(projectId: string, templateId: string
 }
 
 type Db = Awaited<ReturnType<typeof createClient>>;
-type Template = NonNullable<ReturnType<typeof getProjectTemplate>>;
+type Template = ProjectTemplate;
 
 /**
  * La escritura, separada para que `createProject` pueda reusarla sin volver a

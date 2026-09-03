@@ -13,6 +13,7 @@ import {
 import { CardHeader, ModuleNote, SectionHeader } from "../FormSheet";
 import RoutineForm, { StepForm, type OccupationLite } from "./RoutineForm";
 import RoutineTemplates from "./RoutineTemplates";
+import { listTemplates } from "@/lib/data/templates";
 import RoutineRunner, { type RunnerStep } from "./RoutineRunner";
 import { getSessionUser } from "@/lib/data/session";
 
@@ -168,7 +169,7 @@ export default async function RoutinesPage() {
       <SectionHeader
         action={
           <span className="flex gap-2">
-            <RoutineTemplates occupations={occOptions} />
+            <RoutineTemplates occupations={occOptions} templates={await listTemplates("routine")} />
             <RoutineForm occupations={occOptions} />
           </span>
         }

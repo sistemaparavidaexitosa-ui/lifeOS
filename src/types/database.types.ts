@@ -1533,6 +1533,7 @@ export type Database = {
           created_at: string
           currency: string
           cycle: string
+          is_admin: boolean
           locale: string
           name: string
           onboarded: boolean
@@ -1549,6 +1550,7 @@ export type Database = {
           created_at?: string
           currency?: string
           cycle?: string
+          is_admin?: boolean
           locale?: string
           name?: string
           onboarded?: boolean
@@ -1565,6 +1567,7 @@ export type Database = {
           created_at?: string
           currency?: string
           cycle?: string
+          is_admin?: boolean
           locale?: string
           name?: string
           onboarded?: boolean
@@ -2194,6 +2197,42 @@ export type Database = {
           },
         ]
       }
+      template_catalog: {
+        Row: {
+          created_at: string
+          id: string
+          kind: string
+          payload: Json
+          position: number
+          slug: string
+          status: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind: string
+          payload: Json
+          position?: number
+          slug: string
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: string
+          payload?: Json
+          position?: number
+          slug?: string
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       weekly_reviews: {
         Row: {
           blocked_count: number
@@ -2347,6 +2386,7 @@ export type Database = {
           workspace_name: string
         }[]
       }
+      is_admin: { Args: never; Returns: boolean }
       is_workspace_member: {
         Args: { p_workspace_id: string }
         Returns: boolean

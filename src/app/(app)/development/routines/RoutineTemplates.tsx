@@ -12,11 +12,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import FormSheet from "../FormSheet";
 import { createRoutineFromTemplate } from "./actions";
-import {
-  ROUTINE_TEMPLATES,
-  routineTemplateDuration,
-  type RoutineTemplate
-} from "@/lib/domain/development/templates.ts";
+import { routineTemplateDuration, type RoutineTemplate } from "@/lib/domain/development/templates.ts";
 
 export interface OccupationLite {
   id: string;
@@ -25,15 +21,34 @@ export interface OccupationLite {
   end: string;
 }
 
-export default function RoutineTemplates({ occupations }: { occupations: OccupationLite[] }) {
+/**
+ * `templates` llega por props y no de un import: desde 0044 el catálogo vive en
+ * `template_catalog` y solo el servidor lo lee. La página, que ya es un Server
+ * Component, lo baja hasta aquí.
+ */
+export default function RoutineTemplates({
+  occupations,
+  templates
+}: {
+  occupations: OccupationLite[];
+  templates: RoutineTemplate[];
+}) {
   return (
     <FormSheet label="Plantillas" title="Plantillas de rutinas">
-      {(close) => <Contenido occupations={occupations} close={close} />}
+      {(close) => <Contenido occupations={occupations} templates={templates} close={close} />}
     </FormSheet>
   );
 }
 
-function Contenido({ occupations, close }: { occupations: OccupationLite[]; close: () => void }) {
+function Contenido({
+  occupations,
+  templates,
+  close
+}: {
+  occupations: OccupationLite[];
+  templates: RoutineTemplate[];
+  close: () => void;
+}) {
   const router = useRouter();
   const [elegida, setElegida] = useState<RoutineTemplate | null>(null);
   const [occupationId, setOccupationId] = useState("");
@@ -123,7 +138,7 @@ function Contenido({ occupations, close }: { occupations: OccupationLite[]; clos
         queda ligado a él para no partir tu racha en dos.
       </p>
 
-      {ROUTINE_TEMPLATES.map((t) => (
+      {templates.map((t) => (
         <button key={t.id} type="button" className="ah-card" onClick={() => setElegida(t)}>
           <span className="ah-card-name">{t.name}</span>
           <span className="ah-card-cue">

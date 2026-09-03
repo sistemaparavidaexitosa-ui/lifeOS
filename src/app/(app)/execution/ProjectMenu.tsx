@@ -25,6 +25,7 @@ import { applyAiPlan } from "./ai-plan-actions";
 import { TemplateSelect, TemplatePreview } from "./ProjectTemplatePicker";
 import { moveProject, shareProjectWithGuest, unshareProjectFromGuests } from "@/lib/workspaces/actions";
 import type { WorkspaceSummary } from "@/lib/data/workspaces";
+import type { ProjectTemplate } from "@/lib/domain/execution/project-templates.ts";
 import type { LogEntry, KnowledgeItem } from "./logbook-knowledge-actions";
 import { IconClose, IconTrash } from "@/components/icons";
 
@@ -60,7 +61,8 @@ export default function ProjectMenu({
   workspaces,
   currentWorkspaceId,
   guestAccess,
-  workspaceIsPersonal
+  workspaceIsPersonal,
+  templates
 }: {
   project: ProjectMenuData;
   /** Cuántas tareas se van con el proyecto: el aviso tiene que decirlo. */
@@ -76,6 +78,8 @@ export default function ProjectMenu({
   guestAccess: string | null;
   /** En el espacio personal no hay invitados: la opción ni se ofrece. */
   workspaceIsPersonal: boolean;
+  /** El catálogo publicado; desde 0044 lo lee la página, no un import. */
+  templates: ProjectTemplate[];
 }) {
   const menu = useMenuAnchor();
   const [panel, setPanel] = useState<Panel>(null);
@@ -166,7 +170,7 @@ export default function ProjectMenu({
                 />
               )}
               {panel === "template" && (
-                <ApplyTemplatePanel projectId={project.id} taskCount={taskCount} onDone={() => setPanel(null)} />
+                <ApplyTemplatePanel projectId={project.id} taskCount={taskCount} onDone={() => setPanel(null)} templates={templates} />
               )}
               {panel === "edit" && <EditProjectForm project={project} onSaved={() => setPanel(null)} />}
               {panel === "move" && (
@@ -504,11 +508,13 @@ function MenuItem({
 function ApplyTemplatePanel({
   projectId,
   taskCount,
-  onDone
+  onDone,
+  templates
 }: {
   projectId: string;
   taskCount: number;
   onDone: () => void;
+  templates: ProjectTemplate[];
 }) {
   const router = useRouter();
   const [templateId, setTemplateId] = useState("");
@@ -572,9 +578,9 @@ function ApplyTemplatePanel({
 
       <label className="text-xs font-bold">
         Plantilla
-        <TemplateSelect value={templateId} onChange={setTemplateId} />
+        <TemplateSelect value={templateId} onChange={setTemplateId} templates={templates} />
       </label>
-      <TemplatePreview templateId={templateId} />
+      <TemplatePreview templateId={templateId} templates={templates} />
 
       {error && (
         <div className="text-xs" style={{ color: "var(--danger)" }}>

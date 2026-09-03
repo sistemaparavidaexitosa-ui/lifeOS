@@ -7,7 +7,8 @@ import { createClient } from "@/lib/supabase/server";
 import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
 import { nextCompletedSteps, habitLogEffect } from "@/lib/domain/development/routines.ts";
-import { getRoutineTemplate, matchHabitForStep } from "@/lib/domain/development/templates.ts";
+import { matchHabitForStep } from "@/lib/domain/development/templates.ts";
+import { getTemplate } from "@/lib/data/templates";
 import { describeDbError, type ActionResult } from "@/lib/supabase/errors";
 
 const routineSchema = z.object({
@@ -170,7 +171,9 @@ export async function toggleRoutineStep(routineId: string, stepId: string) {
  * que necesita pintar el motivo si algo falla.
  */
 export async function createRoutineFromTemplate(templateId: string, occupationId: string): Promise<ActionResult & { id?: string }> {
-  const template = getRoutineTemplate(templateId);
+  // Desde 0044 «ya no existe» también cubre que un administrador la haya
+  // despublicado mientras el panel llevaba un rato abierto.
+  const template = await getTemplate("routine", templateId);
   if (!template) return { ok: false, reason: "Esa plantilla ya no existe." };
 
   const supabase = await createClient();

@@ -8,6 +8,7 @@ import { ModuleNote, SectionHeader } from "../FormSheet";
 import HabitRow from "./HabitRow";
 import HabitForm from "./HabitForm";
 import HabitTemplates from "./HabitTemplates";
+import { listTemplates } from "@/lib/data/templates";
 import { getSessionUser } from "@/lib/data/session";
 
 export default async function HabitsPage() {
@@ -45,7 +46,7 @@ export default async function HabitsPage() {
       <SectionHeader
         action={
           <span className="flex gap-2">
-            <HabitTemplates occupations={occOptions} otherHabits={habitOptions} />
+            <HabitTemplates occupations={occOptions} otherHabits={habitOptions} templates={await listTemplates("habit")} />
             <HabitForm occupations={occOptions} otherHabits={habitOptions} />
           </span>
         }

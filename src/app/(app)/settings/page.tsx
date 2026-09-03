@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui";
@@ -6,6 +7,7 @@ import AiSettings from "./AiSettings";
 import Automations, { type AutomationRow } from "./Automations";
 import type { ActionType, TriggerType } from "@/lib/domain/automations/rules.ts";
 import { getSessionUser } from "@/lib/data/session";
+import { isPlatformAdmin } from "@/lib/data/templates";
 
 export default async function SettingsPage() {
   const supabase = await createClient();
@@ -21,6 +23,11 @@ export default async function SettingsPage() {
       .order("created_at", { ascending: false })
   ]);
   if (!profile) throw new Error("Perfil no encontrado.");
+
+  // El acceso al panel de plantillas vive aquí, y solo para quien lo puede
+  // usar: /admin devuelve 404 a los demás, así que enseñar el enlace a todo el
+  // mundo sería ofrecer una puerta que no abre.
+  const esAdmin = await isPlatformAdmin();
 
   const automations: AutomationRow[] = (automationRows ?? []).map((r) => ({
     id: r.id,
@@ -124,6 +131,22 @@ export default async function SettingsPage() {
           </a>
         </div>
       </Card>
+
+      {esAdmin && (
+        <Card>
+          <h3 className="font-bold mb-2">Administración</h3>
+          <p className="text-xs" style={{ color: "var(--muted)" }}>
+            El catálogo de plantillas —proyectos, rutinas y hábitos— que ve <b>todo el mundo</b>. Lo que publiques aquí
+            aparece en el selector de cada sección; al usar una plantilla se copia, así que editarla después no le cambia
+            nada a quien ya la aplicó.
+          </p>
+          <div className="flex gap-1.5 flex-wrap" style={{ marginTop: 10 }}>
+            <Link href="/admin" className="btn-ghost btn-sm">
+              Catálogo de plantillas
+            </Link>
+          </div>
+        </Card>
+      )}
 
       {/*
         Nota (16-ago-2026): se eliminó deliberadamente la sección "Categorías

@@ -510,7 +510,10 @@
 
 ### Personal Development OS: plantillas y lectura medida (agosto 2026)
 
-- **D-044 El catálogo de plantillas vive en código, no en la base.**
+- **D-044 (DEROGADA por D-080, sept-2026) El catálogo de plantillas vive en
+  código, no en la base.** Se conserva escrita porque su razonamiento sigue
+  siendo válido y explica qué se perdió al cambiar de opinión.
+
   `src/lib/domain/development/templates.ts` es contenido, no datos del usuario:
   no tiene dueño, no lleva RLS y no cambia por persona. En código va versionado
   en git, se prueba sin levantar Postgres y no puede divergir entre entornos,
@@ -1296,6 +1299,88 @@ la mitad que ya existía estaba rota.
   Tijuana y en Madrid, así que se formatea en UTC, que es como se guardó. Un
   instante completo (`...T12:00:00Z`) sí la tiene y conserva el comportamiento
   de siempre. Cubierto por `tests/domain/format.test.ts`.
+
+### Un panel de administración, y el catálogo que se muda a la base (septiembre 2026)
+
+- **D-080 · El catálogo de plantillas se muda a `template_catalog` y lo edita un
+  administrador. DEROGA D-044.** Añadir o corregir una plantilla exigía un
+  despliegue, y eso convierte el catálogo en algo que solo se toca cuando
+  alguien programa. Migración `0044_admin_catalogo_plantillas.sql`.
+
+  **Qué se pierde, sin adornos.** `git log` sobre el contenido (quién cambió qué
+  plantilla y cuándo), `git revert` sobre una edición mala, y la imposibilidad
+  de que dos entornos divergan. Las tres eran ventajas reales de D-044 y ninguna
+  se recupera con esto; el panel **no lleva historial ni deshacer**, así que una
+  edición equivocada se arregla volviéndola a escribir.
+
+  **Qué lo compensa.** El miedo CONCRETO de D-044 era que alguien editara en
+  producción y un usuario aplicara una plantilla a medio escribir. Eso lo cierra
+  la columna `status`: una plantilla nace en `draft` y no la ve nadie —lo
+  garantiza la RLS, y lo prueba `supabase/tests/0020`— hasta que se publica. La
+  semilla es idempotente (`on conflict do nothing`) y conserva los `slug` de
+  siempre, así que un entorno nuevo arranca con el catálogo exacto de antes y un
+  redespliegue nunca pisa lo que un administrador ya editó.
+
+  **Lo que NO cambia, y es la mitad importante de D-044:** al usar una plantilla
+  se **copia** a las tablas del usuario. Editarla no le reescribe el tablero ni
+  los pasos a nadie que ya la hubiera aplicado.
+
+- **D-081 · `payload jsonb`, y no cinco tablas relacionales.** Los tres tipos de
+  plantilla tienen formas distintas —proyecto es grupos → tareas → subtareas,
+  rutina es una lista de pasos, hábito es plano— y el contenido se lee entero y
+  siempre: nadie consulta «las tareas de la plantilla X» por separado, porque al
+  aplicarla se copia de una vez. Relacional serían cinco tablas y tres joins
+  para algo que nunca se consulta por partes, más una migración de esquema cada
+  vez que un tipo gane un campo.
+
+  Quien garantiza la forma es `src/lib/domain/templates/schema.ts`, que corre en
+  los DOS extremos: al guardar (lo que no valida no entra) y al leer (una fila
+  que no valida se descarta y las demás se muestran). Es el puesto que ocupaba
+  el compilador cuando el catálogo era un array de un `.ts`, y por eso el
+  esquema **guarda lo que sale del parseo, nunca lo que entró**: así una tarea
+  con `due` o con `impact` pierde el campo antes de llegar a la tabla, que es la
+  forma de seguir cumpliendo las ausencias que documenta `project-templates.ts`
+  ahora que el compilador ya no puede.
+
+- **D-082 · El rol de administrador es de PLATAFORMA, y no toca datos de nadie.**
+  Es el primer rol del esquema que no es de workspace: los de 0003
+  (Owner/Admin/Member/Guest/Viewer) dicen qué puede alguien dentro de un
+  espacio; `profiles.is_admin` dice quién cura el contenido que ven todos. La
+  única tabla que alcanza es `template_catalog`, que no tiene `user_id`. BR-012
+  sigue en pie palabra por palabra, y hay una assertion de pgTAP que lo
+  demuestra: un administrador **no ve el perfil de otro usuario**.
+
+  Se otorga con SQL después de desplegar (ver `/docs/DEPLOY.md`). No hay
+  pantalla para repartir privilegios: es superficie de ataque que no hace falta
+  mientras los administradores se cuenten con los dedos de una mano.
+
+- **D-083 · /admin devuelve 404 a quien no es administrador, no un redirect.**
+  Un redirect a /home contesta «esto existe, pero no es para ti»; un 404 no
+  contesta nada. Y no es la única defensa, es la primera: la RLS rechaza
+  cualquier escritura de quien no es admin, y cada Server Action lo vuelve a
+  comprobar antes de escribir — porque una Server Action es un endpoint HTTP y
+  se puede invocar sin pasar por la pantalla.
+
+- **D-084 · El editor es un formulario, no un campo de JSON.** Un `textarea` con
+  el payload sería una fracción del código y convertiría cada edición en un
+  ejercicio de puntuación: una coma de más y la plantilla no se guarda, sin
+  decir dónde. Con campos, lo único que se puede escribir es lo que el esquema
+  declara.
+
+  Y la **previsualización reusa las funciones del dominio** —`plannedRows`,
+  `templateSummary`, `routineTemplateDuration`—, las mismas que ejecuta la
+  acción que aplica la plantilla. Lo que el administrador ve es literalmente lo
+  que se va a insertar, no una segunda cuenta condenada a divergir de la primera
+  al siguiente cambio.
+
+- **D-085 · Las pruebas de contenido apuntan a la semilla de la migración.**
+  Al salir el catálogo del código, los tests que vigilaban que ninguna tarea
+  trajera fecha, que los colores fueran tokens del design system o que
+  S.A.V.E.R.S. sumara sesenta minutos se quedaban sin objeto. Ahora leen el
+  `insert` de la migración (`tests/domain/seed-catalogo.ts`), que es el catálogo
+  con el que arranca cualquier entorno nuevo, y siguen corriendo sin Postgres.
+  Lo que un administrador escriba después no pasa por ahí: a eso lo protege el
+  esquema zod, al guardarlo y al leerlo.
 
 ## Guardrails aplicados literalmente del prompt de build
 

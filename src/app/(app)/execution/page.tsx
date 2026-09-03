@@ -18,6 +18,7 @@ import BoardShell from "./BoardShell";
 import { isExecutionView, type BoardGroup, type BoardTask, type ExecutionView } from "./board-types";
 import { getProjectLogAndKnowledge } from "./logbook-knowledge-actions";
 import { getSessionUser } from "@/lib/data/session";
+import { listTemplates } from "@/lib/data/templates";
 import InsightSection from "@/components/InsightSection";
 
 // REDISEÑO DEL FLUJO DE PROYECTOS (estilo monday.com / ClickUp)
@@ -150,7 +151,11 @@ export default async function ExecutionPage({
           }
         >
           {canCreate && activeWorkspace && (
-            <NewProjectForm workspaceId={activeWorkspace.id} workspaceName={activeWorkspace.name} />
+            <NewProjectForm
+              workspaceId={activeWorkspace.id}
+              workspaceName={activeWorkspace.name}
+              templates={await listTemplates("project")}
+            />
           )}
         </PortfolioBoard>
 
@@ -308,6 +313,7 @@ async function BoardWorkspace({
   return (
     <>
       <BoardHeader
+        templates={await listTemplates("project")}
         workspaces={moveTargets}
         currentWorkspaceId={projectRow.workspace_id}
         guestAccess={share?.access_level ?? null}
