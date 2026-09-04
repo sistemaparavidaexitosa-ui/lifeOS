@@ -1870,6 +1870,34 @@ de lo que se planeó, no de lo que quedó._
   de borrarse: ahora fija que arranca lleno. Si alguien vuelve a dejarlo vacío,
   el chat renace sin saber nada de quien pregunta y una prueba lo dice.
 
+- **D-109 · El prompt le prohibía al modelo usar sus propias herramientas.** El
+  chat seguía sin ver nada aun con todos los dominios encendidos, y la causa
+  estaba escrita en el propio prompt: bajo el epígrafe «reglas que no puedes
+  romper» seguían dos frases de la época sin herramientas — «si una cifra no
+  está en un hecho, **no existe y no la mencionas**» y «si no tienes hechos para
+  contestar, **dilo en una frase**»—. Las herramientas se describían más arriba
+  como una recomendación blanda. Una regla dura le gana a una sugerencia: el
+  modelo se rendía sin llamar a nada.
+
+  **Y debajo había un malentendido peor, que es el que hay que recordar: los
+  `Fact` no son los datos del usuario, son las ANOMALÍAS.** El motor solo emite
+  lo que se sale de lo normal. Mientras el chat solo tuvo hechos, «lo que no
+  está no existe» era casi cierto y funcionaba. En cuanto tuvo herramientas dejó
+  de serlo, y nadie actualizó la frase: el chat nacía ciego por diseño y con
+  orden expresa de no mirar.
+
+  El prompt ahora lo dice al revés y en ese orden: qué son los hechos (anomalías,
+  no la foto completa), que tiene acceso a todo, y que **decir «no tengo esa
+  información» sin haberla buscado es el peor error posible**.
+
+- **D-110 · Un fallo silencioso deja de serlo.** El reintento sin herramientas
+  ante un 400 (D-097) es una red que hay que mantener, pero era invisible: un
+  chat que no PUDO consultar y uno que consultó y no encontró nada se veían
+  exactamente igual, y son problemas distintos. Ahora `generateJson` devuelve
+  `toolRounds` y `toolsDisabled`, `audit_log` los guarda en cada turno, y el
+  rail enseña un aviso en ámbar cuando la respuesta salió degradada. Diagnosticar
+  esto a ciegas costó una ronda entera; con esto, la próxima se ve.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo

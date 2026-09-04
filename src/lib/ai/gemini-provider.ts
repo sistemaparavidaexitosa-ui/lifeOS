@@ -179,6 +179,15 @@ export interface GenerateJsonResult<T> {
    * respondido el segundo — un registro que miente es peor que no tenerlo.
    */
   model?: string;
+  /**
+   * Cuántas rondas de herramientas se llegaron a ejecutar. Se registra en
+   * `audit_log` porque, si no, un chat que contesta sin haber consultado nada
+   * y uno que consultó y no encontró nada se ven EXACTAMENTE igual desde
+   * fuera — y son problemas distintos.
+   */
+  toolRounds?: number;
+  /** Las herramientas se cayeron por forma y se reintentó sin ellas. */
+  toolsDisabled?: boolean;
 }
 
 /** Lo que interesa de la respuesta. El resto de campos se ignoran. */
@@ -234,6 +243,8 @@ interface Intento<T> {
   status?: number;
   /** El turno del modelo pidiendo herramientas, para reenviarlo verbatim. */
   pide?: GeminiContent;
+  /** Rondas de herramientas ejecutadas antes de contestar. */
+  rondas?: number;
 }
 
 /**
@@ -361,7 +372,7 @@ async function conversarConModelo<T>(
     const ultima = ronda === MAX_RONDAS_HERRAMIENTAS;
     const intento = await intentarConModelo(input, apiKey, model, contents, conHerramientas && !ultima);
 
-    if (intento.ok || !intento.pide) return intento;
+    if (intento.ok || !intento.pide) return { ...intento, rondas: ronda };
 
     // El turno del modelo se reenvía VERBATIM (con su `thoughtSignature`).
     contents.push(intento.pide);
@@ -377,7 +388,7 @@ async function conversarConModelo<T>(
     contents.push({ role: "user", parts: respuestas });
   }
 
-  return { ok: false, reason: "El modelo se quedó pidiendo datos y no llegó a contestar." };
+  return { ok: false, reason: "El modelo se quedó pidiendo datos y no llegó a contestar.", rondas: MAX_RONDAS_HERRAMIENTAS };
 }
 
 /**
@@ -417,6 +428,7 @@ export async function generateJson<T>(input: GenerateJsonInput<T>): Promise<Gene
 
   for (const model of modelos) {
     let intento = await conversarConModelo(input, apiKey, model, true);
+    let sinHerramientas = false;
 
     // RED DE SEGURIDAD. Combinar `tools` con `responseSchema` está documentado
     // para la serie Gemini 3, pero en este repo no hay una sola llamada real
@@ -425,9 +437,12 @@ export async function generateJson<T>(input: GenerateJsonInput<T>): Promise<Gene
     // vale mil veces más una respuesta sin datos frescos que un rail roto.
     if (!intento.ok && intento.status === 400 && input.tools?.length) {
       intento = await conversarConModelo(input, apiKey, model, false);
+      sinHerramientas = true;
     }
 
-    if (intento.ok) return { ok: true, data: intento.data, model };
+    if (intento.ok) {
+      return { ok: true, data: intento.data, model, toolRounds: intento.rondas ?? 0, toolsDisabled: sinHerramientas };
+    }
 
     ultimo = intento;
     if (intento.status === 429) agotadosPorCuota += 1;
@@ -435,7 +450,7 @@ export async function generateJson<T>(input: GenerateJsonInput<T>): Promise<Gene
       // Ni la llave ni un esquema mal formado mejoran con otro modelo: se
       // devuelve el motivo tal cual, que es lo que hizo legible el episodio
       // del modelo retirado.
-      return { ok: false, reason: intento.reason, model };
+      return { ok: false, reason: intento.reason, model, toolRounds: intento.rondas ?? 0, toolsDisabled: sinHerramientas };
     }
   }
 

@@ -45,6 +45,12 @@ export interface SendResult {
   proposedTask?: string;
   /** Un hecho duradero que el modelo propone recordar. Sin confirmar. */
   proposedMemory?: { text: string; scope: MemoryScope };
+  /**
+   * Aviso discreto cuando la respuesta salió degradada. Existe porque el
+   * reintento sin herramientas es SILENCIOSO: sin esto, un chat que no pudo
+   * consultar nada se ve igual que uno que no tenía nada que consultar.
+   */
+  nota?: string;
   reason?: string;
 }
 
@@ -224,7 +230,16 @@ export async function sendChatMessage(text: string): Promise<SendResult> {
       user_id: user.id,
       action: "ai.chat",
       object: "global",
-      meta: { domains: context.domains, facts: context.facts.length, ok: result.ok }
+      // `toolRounds` y `toolsDisabled` no son telemetría de adorno: sin ellos,
+      // «contestó sin consultar nada» y «consultó y no había nada» se ven
+      // idénticos desde fuera, y son problemas distintos.
+      meta: {
+        domains: context.domains,
+        facts: context.facts.length,
+        ok: result.ok,
+        toolRounds: result.toolRounds ?? 0,
+        toolsDisabled: result.toolsDisabled ?? false
+      }
     });
   });
 
@@ -248,6 +263,9 @@ export async function sendChatMessage(text: string): Promise<SendResult> {
     proposedTask: result.proposedTask ? restore(result.proposedTask, aliases) : undefined,
     proposedMemory: result.proposedMemory
       ? { ...result.proposedMemory, text: restore(result.proposedMemory.text, aliases) }
+      : undefined,
+    nota: result.toolsDisabled
+      ? "Respondí sin poder consultar tus datos: el modelo rechazó las herramientas en esta petición."
       : undefined
   };
 }
