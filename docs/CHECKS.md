@@ -611,6 +611,56 @@ comprobar eso, que es lo que de verdad protege el invariante.
   del layout está puesto y el build genera la ruta, pero la respuesta HTTP no se
   comprobó con una sesión real.
 
+## Cadena de modelos · Herramientas · Memoria (3/4-sep-2026)
+
+### Lo que se ejecutó
+
+| Comprobación | Resultado |
+|---|---|
+| `pnpm typecheck` | ✅ limpio |
+| `pnpm lint` | ✅ sin warnings ni errores |
+| `pnpm test:unit` | ✅ 0 fallos, con las pruebas nuevas de `ai-model-chain`, `ai-tools`, `ai-chat` e `insights-context` |
+| `pnpm build` | ✅ exit 0 |
+| `supabase test db` | ✅ sin regresiones (el esquema no cambia en esta tanda) |
+
+### Dos bugs que cazó una prueba escrita antes que el código
+
+1. **`RegExp.test` sobre un patrón global es stateful.** `FECHA` llevaba el flag
+   `g` para `replace`, y reusar el mismo objeto en `sanitizeProposedMemory`
+   habría dejado pasar una memoria con fecha **una de cada dos veces**:
+   `lastIndex` avanza al acertar y no se reinicia. Se partió en dos objetos, uno
+   con `g` y otro sin él. La prueba que lo destapó llama dos veces seguidas con
+   el mismo texto.
+2. La lista de ámbitos de `memory_items` estaba escrita **tres veces** (el tipo,
+   un arreglo en las acciones, y habría sido una tercera en el saneador). Se
+   unificó en `MEMORY_SCOPES`, junto al tipo, que ahora se deriva de ella.
+
+### Lo que NO se verificó
+
+**Sigue sin haber ni una sola llamada real al modelo desde aquí.** No hay
+`GEMINI_API_KEY` en este entorno. Todo lo que dice la sección siguiente («Hilo
+solo de conversación») sigue vigente, y esta tanda **añade tres cosas nuevas sin
+ejercitar**, que son las primeras que hay que mirar con una llave puesta:
+
+1. **`thoughtSignature`.** La serie Gemini 3 devuelve una firma dentro de las
+   partes y hay que reenviarla IDÉNTICA o la segunda llamada responde 400
+   («Function call is missing a thought_signature»). Los SDK lo hacen solos;
+   aquí no hay SDK. La defensa implementada es no reconstruir nunca el turno del
+   modelo: se reenvía `candidates[0].content` tal cual. **Esto es lo primero que
+   hay que probar vivo**, porque si falla, falla todo el uso de herramientas.
+2. **`tools` junto a `responseSchema`.** Está documentado para Gemini 3, pero no
+   comprobado aquí. Hay red de seguridad: un 400 con herramientas reintenta el
+   mismo modelo sin ellas, así que el peor caso conocido es un chat sin datos
+   frescos, no un rail roto. Esa red tampoco está ejercitada.
+3. **El salto de modelo.** `debeSaltarDeModelo` tiene pruebas unitarias por cada
+   código HTTP, pero el bucle contra la API no se ha corrido. Se provoca a mano
+   poniendo un primer modelo inexistente en `GEMINI_MODELS` y comprobando que el
+   segundo contesta y que `audit_log.meta.model` registra **el que de verdad
+   contestó**.
+
+**El recorrido en un navegador.** Nadie ha pulsado «Recordar esto» ni el
+interruptor de acceso total con el ratón.
+
 ## Hilo solo de conversación · Gemini único proveedor · Chat transversal (3-sep-2026)
 
 ### Lo que se ejecutó

@@ -2,9 +2,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  MAX_TEXTO_MEMORIA,
   MAX_TITULO_TAREA,
   MAX_TURNOS,
   recortarHistorial,
+  sanitizeProposedMemory,
   sanitizeProposedTask,
   type ChatMessageLike
 } from "../../src/lib/domain/ai/chat.ts";
@@ -70,4 +72,59 @@ test("sanitizeProposedTask: un párrafo se corta al tope y se marca", () => {
 
 test("sanitizeProposedTask: colapsa los espacios de más", () => {
   assert.strictEqual(sanitizeProposedTask("  Revisar   el   presupuesto  "), "Revisar el presupuesto");
+});
+
+// --- Memoria propuesta (A3) --------------------------------------------------
+// La regla que importa: una memoria es algo que seguirá siendo verdad dentro de
+// seis meses. Un dato del día no lo es, y guardarlo ensucia para siempre el
+// prompt de todas las features.
+
+test("sanitizeProposedMemory: acepta un hecho duradero con su ámbito", () => {
+  assert.deepStrictEqual(sanitizeProposedMemory({ text: "Es celíaco: nada con gluten.", scope: "preference" }), {
+    text: "Es celíaco: nada con gluten.",
+    scope: "preference"
+  });
+});
+
+test("sanitizeProposedMemory: null cuando no hay nada que proponer, que es el caso normal", () => {
+  assert.strictEqual(sanitizeProposedMemory(null), null);
+  assert.strictEqual(sanitizeProposedMemory({ text: "   ", scope: "preference" }), null);
+});
+
+test("sanitizeProposedMemory: rechaza un ámbito que la base no admite, en vez de dejar que falle el insert", () => {
+  assert.strictEqual(sanitizeProposedMemory({ text: "Entrena por las mañanas.", scope: "inventado" }), null);
+});
+
+test("sanitizeProposedMemory: rechaza el dato del día — «hoy comí» no es memoria", () => {
+  assert.strictEqual(sanitizeProposedMemory({ text: "Hoy comió avena y dos huevos.", scope: "habit" }), null);
+  assert.strictEqual(sanitizeProposedMemory({ text: "Ayer no entrenó.", scope: "habit" }), null);
+});
+
+test("sanitizeProposedMemory: rechaza lo que lleva una fecha dentro, igual que sanitizeProposedTask", () => {
+  assert.strictEqual(sanitizeProposedMemory({ text: "Cambió de trabajo el 2026-08-01.", scope: "decision" }), null);
+});
+
+test("sanitizeProposedMemory: no confunde «mañana» adverbio de tiempo con «por la mañana»", () => {
+  assert.deepStrictEqual(sanitizeProposedMemory({ text: "Entrena por la mañana, antes de trabajar.", scope: "habit" }), {
+    text: "Entrena por la mañana, antes de trabajar.",
+    scope: "habit"
+  });
+});
+
+test("sanitizeProposedMemory: descarta lo demasiado corto para significar algo", () => {
+  assert.strictEqual(sanitizeProposedMemory({ text: "sí", scope: "preference" }), null);
+});
+
+test("sanitizeProposedMemory: recorta lo que se pasa de largo en vez de rechazarlo", () => {
+  const largo = "a".repeat(400);
+  const salida = sanitizeProposedMemory({ text: largo, scope: "goal" });
+  assert.ok(salida);
+  assert.ok(salida.text.length <= MAX_TEXTO_MEMORIA);
+  assert.ok(salida.text.endsWith("…"));
+});
+
+test("sanitizeProposedMemory: dos llamadas seguidas con la misma fecha se rechazan las dos (el regex global es stateful)", () => {
+  const propuesta = { text: "Cambió de trabajo el 2026-08-01.", scope: "decision" };
+  assert.strictEqual(sanitizeProposedMemory(propuesta), null);
+  assert.strictEqual(sanitizeProposedMemory(propuesta), null);
 });

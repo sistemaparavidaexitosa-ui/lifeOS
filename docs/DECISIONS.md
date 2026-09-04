@@ -1563,6 +1563,125 @@ de lo que se planeó, no de lo que quedó._
   usuario podía haberlo cumplido por otra vía y la rutina no era dueña de
   negarlo; con un solo registro esa ambigüedad no existe.
 
+### IA transversal: cadena de modelos, herramientas y memoria (septiembre 2026)
+
+- **D-095 · El modelo deja de ser uno y pasa a ser una cadena.** `GEMINI_MODEL`
+  era una constante y el 429 del free tier dejaba las tres funciones de IA sin
+  servicio hasta el día siguiente. Ahora `GEMINI_MODELS` es
+  `["gemini-3.1-flash-lite", "gemini-3.6-flash"]` y se recorre: cada modelo del
+  plan gratuito tiene su propio contador diario, así que encadenarlos **suma
+  cuota** en vez de esperar a mañana. El primero es el `-lite` porque es el que
+  más peticiones al día trae; el segundo es el que ya estaba en producción.
+
+  **Lo que decide el salto está en una función pura**, `debeSaltarDeModelo`
+  (`src/lib/domain/ai/model-chain.ts`), y no en el bucle: es la única parte de
+  esto que se puede probar sin red, y son seis casos que conviene tener
+  escritos. Salta el **429** (cuota), el **404** (modelo retirado) y los
+  **5xx**. NO salta el 401/403 —la llave fallaría igual en todos y recorrer la
+  cadena solo añade espera antes del mismo mensaje—, ni el **400**, que es
+  nuestro esquema mal formado: saltarlo lo escondería, que es lo contrario de
+  lo que consiguió `httpReason` devolviendo el detalle de la API tal cual. El
+  timeout tampoco encadena: son 60 s por modelo y dos seguidos son dos minutos
+  con un botón girando.
+
+  **Efecto secundario que sí importa:** el episodio de D-087 —un modelo retirado
+  que tumbó la IA entera— ya no puede repetirse igual. El 404 salta y el
+  siguiente contesta.
+
+  **Y `audit_log` deja de registrar una constante.** `GenerateJsonResult` gana
+  `model` con el que de verdad contestó, porque con una cadena dar por hecho el
+  primero es registrar algo falso. Un registro que miente es peor que no
+  tenerlo.
+
+- **D-096 · El chat propone memoria; guardarla sigue siendo del usuario.**
+  Extensión literal de D-089, con el mismo mecanismo y por el mismo motivo: el
+  modelo devuelve `proposedMemoryText`/`proposedMemoryScope` y la UI ofrece un
+  botón «Recordar». **Ninguna tabla nueva** — `memory_items` existe desde 0008
+  con `scope`, `valid_until` y un `origin` que 0027 restringió a
+  `('user','ai')` precisamente para este caso. La escritura reusa
+  `upsertMemoryItem`, que sigue siendo el único sitio que escribe ahí; lo único
+  que se le añadió es el parámetro `origin`.
+
+  **La regla que hace útil la memoria es qué se RECHAZA.** `memory_items` entra
+  en el prompt de todas las features y no caduca sola, así que lo que se cuele
+  se seguirá contando dentro de un año. `sanitizeProposedMemory` descarta lo
+  efímero —«hoy comió avena» es un renglón del diario, no quién eres—, lo que
+  lleva una fecha dentro y lo demasiado corto para significar algo. Aceptar
+  basura aquí es permanente, a diferencia de un botón de tarea que se ignora.
+
+  Dos detalles que costaron una prueba cada uno y se dejan escritos porque
+  volverían a morder: el `(?<!la |las )` delante de «mañana», sin el cual
+  «entrena por la mañana» —el tipo de hecho duradero que esto busca— se
+  rechazaría por contener un adverbio de tiempo que ahí no lo es; y que el
+  regex de fechas se partió en dos objetos, uno con `g` para `replace` y otro
+  sin él para `test`, porque `RegExp.test` sobre un patrón global avanza
+  `lastIndex` y no lo reinicia al acertar: compartir el objeto habría dejado
+  pasar una memoria con fecha una de cada dos veces.
+
+  **La lista de ámbitos se unificó de camino.** Estaba escrita tres veces
+  —el tipo en `domain/insights/memory.ts`, un arreglo en `insights/actions.ts`
+  y habría sido un tercero en el saneador—. Ahora `MEMORY_SCOPES` vive junto al
+  tipo, que se deriva de ella. Un ámbito que la base no admite no falla en la
+  pantalla: falla en el `insert`, con un error de restricción que el usuario no
+  puede interpretar.
+
+- **D-097 · El modelo pregunta por los datos en vez de recibirlos todos.** El
+  contexto eran 40 hechos precocinados (`MAX_FACTS`) y punto: lo que no cupiera
+  ahí no existía para el modelo. Se descartó ensanchar el volcado —meter todos
+  los dominios en cada turno paga el contexto entero en cada pregunta y se come
+  la cuota que D-095 acaba de ganar— y se eligió **function calling**: dos
+  herramientas, `leer_hechos` y `consultar`, que el modelo usa solo cuando le
+  hacen falta.
+
+  **La regla que sostiene todo lo demás: una herramienta devuelve cosas con id,
+  nunca filas anónimas.** El motor entero se apoya en que el modelo no calcula
+  —cita hechos con id estable y `validateAnchoring` descarta lo que cite un id
+  que no se le envió—. Devolver filas sin identificar habría dejado al modelo
+  redactando cifras que nadie puede rastrear, y esa red se habría caído sin que
+  fallara nada visible. Por eso hasta una fila cruda entra como
+  `fila:<tabla>:<uuid>`, y por eso `chatReply` valida las citas contra los
+  hechos del contexto **unidos a** los ids que entregaron las herramientas: sin
+  esa unión, lo que el modelo se molestó en consultar se le descartaría por
+  inventado, justo en las respuestas mejor fundamentadas.
+
+  **La lista blanca vive en `insights/context.ts`, no en `lib/ai/tools.ts`.**
+  Ese archivo dice de sí mismo que es «el ÚNICO punto donde se aplica el filtro
+  de privacidad» (D-027), y repartirlo entre dos sitios habría costado
+  exactamente lo que ese archivo vale: poder auditarlo de una sentada. Es una
+  lista BLANCA —lo que no está, no se consulta—, así que `profiles`,
+  `audit_log`, `ai_chat_messages` o cualquier tabla de workspace quedan fuera
+  sin que nadie tenga que acordarse de excluirlas. Cada entrada declara su
+  dominio (para que `ai_domains` siga mandando) y la columna por la que se
+  acota la ventana. El `satisfies Partial<Record<keyof Database…>>` hace que
+  una tabla mal escrita **no compile**.
+
+  **Dos topes, y los dos por la misma razón:** máximo dos rondas de
+  herramientas y máximo 50 filas por consulta. Lo que devuelve una herramienta
+  viaja DENTRO del prompt de la llamada siguiente, así que sin topes el modelo
+  puede gastarse la ventana y la cuota dando vueltas. En la última ronda se le
+  quitan las herramientas, que es lo que convierte el tope en «ahora contesta»
+  en vez de en un error.
+
+  **La trampa que costó leerse la documentación: `thoughtSignature`.** La serie
+  Gemini 3 devuelve una firma dentro de las partes y hay que reenviarla
+  IDÉNTICA, o la segunda llamada responde 400. Los SDK lo hacen solos; aquí no
+  hay SDK (D-087). La defensa no es copiar el campo —mañana habrá otro— sino no
+  reconstruir nunca el turno del modelo: se reenvía `candidates[0].content`
+  tal cual llegó.
+
+  **Y una red de seguridad que se deja puesta a propósito:** si la petición con
+  herramientas se rechaza con un 400, se reintenta el mismo modelo sin ellas.
+  Combinar `tools` con `responseSchema` está documentado para Gemini 3, pero en
+  este repo no hay **ni una sola llamada real ejercitada** (CHECKS.md) y el
+  chat está montado en todas las pantallas. Vale mil veces más una respuesta
+  sin datos frescos que un rail roto.
+
+  **En Configuración cambió el texto, no solo el código.** Decía que «lo que
+  viaja son cifras ya calculadas», y con `consultar` eso dejó de ser cierto.
+  El botón «Acceso total» marca todas las casillas pero **no guarda**: dejarlo
+  guardar convertiría un clic en autorización para leerlo todo, y el
+  consentimiento sigue estando en Guardar.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo

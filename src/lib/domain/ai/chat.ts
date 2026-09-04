@@ -1,4 +1,6 @@
 // src/lib/domain/ai/chat.ts
+import { MEMORY_SCOPES, type MemoryScope } from "../insights/memory.ts";
+
 // El chat de IA transversal — lógica pura, sin React ni Supabase (probada en
 // tests/domain/ai-chat.test.ts).
 //
@@ -49,7 +51,18 @@ export const MAX_TITULO_TAREA = 120;
  * inventada por el modelo deja el tablero lleno de tareas vencidas al mes
  * siguiente. La tarea se crea igual; lo que se quita es la fecha.
  */
-const FECHA = /\b(\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}(\/\d{2,4})?)\b/g;
+const FECHA_FUENTE = String.raw`\b(\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}(/\d{2,4})?)\b`;
+
+/** Con `g`, para `replace`: quita TODAS las fechas del título, no solo la primera. */
+const FECHA = new RegExp(FECHA_FUENTE, "g");
+
+/**
+ * Sin `g`, para `test`. No es duplicación: `RegExp.test` sobre un patrón global
+ * avanza `lastIndex` y NO lo reinicia cuando acierta, así que la segunda
+ * llamada seguida con el mismo texto devuelve `false`. Compartir el objeto
+ * habría hecho que una memoria con fecha se colara una de cada dos veces.
+ */
+const CONTIENE_FECHA = new RegExp(FECHA_FUENTE);
 
 /**
  * Lo que se acepta de una tarea propuesta por el modelo, o `null` si no hay
@@ -73,4 +86,55 @@ export function sanitizeProposedTask(title: string | null | undefined): string |
 
   if (limpio.length < 3) return null;
   return limpio.length > MAX_TITULO_TAREA ? `${limpio.slice(0, MAX_TITULO_TAREA - 1).trimEnd()}…` : limpio;
+}
+
+/** Tope de una memoria. Más largo que esto ya no es un hecho, es una nota. */
+export const MAX_TEXTO_MEMORIA = 200;
+
+// Los ámbitos válidos NO se repiten aquí: vienen de donde vive el tipo. Un
+// valor fuera de la lista no falla en la pantalla, falla en el `insert` con un
+// error de restricción que el usuario no puede interpretar — así que se
+// comprueba antes de proponer, contra la única lista que hay.
+
+/**
+ * Lo que distingue una memoria de un dato del día.
+ *
+ * `memory_items` entra en el prompt de TODAS las features y no caduca sola, así
+ * que lo que se cuele aquí seguirá contándose dentro de un año. «Hoy comió
+ * avena» no es quién eres: es un renglón del diario, y el diario ya lo guarda.
+ *
+ * El `(?<!la |las )` delante de «mañana» no es un detalle: sin él, «entrena por
+ * la mañana» —que es exactamente el tipo de hecho duradero que esto quiere
+ * capturar— se rechazaría por contener un adverbio de tiempo que ahí no lo es.
+ */
+const EFIMERO =
+  /\b(hoy|ayer|anoche|esta\s+(mañana|tarde|noche|semana)|este\s+(lunes|martes|miércoles|jueves|viernes|sábado|domingo)|(?<!la |las )mañana)\b/i;
+
+/**
+ * Lo que se acepta de una memoria propuesta por el modelo, o `null`.
+ *
+ * `null` es la respuesta normal: casi ningún turno revela algo que merezca
+ * recordarse para siempre. Mismo criterio que `sanitizeProposedTask`, y por el
+ * mismo motivo de D-089 — el modelo propone, guardar sigue siendo del usuario.
+ */
+export function sanitizeProposedMemory(
+  propuesta: { text: string; scope: string } | null | undefined
+): { text: string; scope: MemoryScope } | null {
+  if (!propuesta) return null;
+
+  const scope = propuesta.scope as MemoryScope;
+  if (!MEMORY_SCOPES.includes(scope)) return null;
+
+  const limpio = (propuesta.text ?? "").replace(/\s+/g, " ").trim();
+
+  // Ocho y no tres: un fragmento de tres letras no es un hecho sobre nadie, y
+  // aquí el coste de aceptar basura es permanente, no un botón que se ignora.
+  if (limpio.length < 8) return null;
+  if (CONTIENE_FECHA.test(limpio)) return null;
+  if (EFIMERO.test(limpio)) return null;
+
+  return {
+    scope,
+    text: limpio.length > MAX_TEXTO_MEMORIA ? `${limpio.slice(0, MAX_TEXTO_MEMORIA - 1).trimEnd()}…` : limpio
+  };
 }

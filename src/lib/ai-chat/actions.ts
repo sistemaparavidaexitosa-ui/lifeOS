@@ -19,8 +19,10 @@ import { getUserTimeZone } from "@/lib/data/profile";
 import { loadFacts, type Db } from "@/lib/insights/facts-loader";
 import { allowedDomains, buildAliasMap, buildContext, restore } from "@/lib/insights/context";
 import { chatReply } from "@/lib/ai/chat";
-import { recortarHistorial, type ChatMessageLike } from "@/lib/domain/ai/chat.ts";
+import { crearCajaDeHerramientas } from "@/lib/ai/tools";
+import { recortarHistorial, sanitizeProposedMemory, type ChatMessageLike } from "@/lib/domain/ai/chat.ts";
 import { quickAddTask } from "@/lib/search/quick-add";
+import { upsertMemoryItem } from "@/lib/insights/actions";
 import type { Domain } from "@/lib/domain/insights/types.ts";
 import type { MemoryItemLike, MemoryScope } from "@/lib/domain/insights/memory.ts";
 
@@ -41,6 +43,8 @@ export interface SendResult {
   reply?: ChatMessage;
   /** Una tarea que el modelo propone y el usuario todavía no ha confirmado. */
   proposedTask?: string;
+  /** Un hecho duradero que el modelo propone recordar. Sin confirmar. */
+  proposedMemory?: { text: string; scope: MemoryScope };
   reason?: string;
 }
 
@@ -180,8 +184,28 @@ export async function sendChatMessage(text: string): Promise<SendResult> {
   const { data: pregunta, error: insertErr } = await guardarPregunta;
   if (insertErr) return { ok: false, reason: insertErr.message };
 
+  // La caja se crea SIEMPRE que haya algún dominio autorizado, y con los mismos
+  // permisos que ya se aplicaron a los hechos: no hay un segundo opt-in.
+  const herramientas = permitidos.length
+    ? crearCajaDeHerramientas({
+        supabase,
+        userId: user.id,
+        autorizados: permitidos,
+        today,
+        profile: {
+          quincenalIncome: profile?.quincenal_income ?? 0,
+          window: {
+            start: (profile?.activity_window_start ?? "08:00").slice(0, 5),
+            end: (profile?.activity_window_end ?? "18:00").slice(0, 5)
+          }
+        },
+        aliases
+      })
+    : undefined;
+
   const result = await chatReply({
     context,
+    tools: herramientas,
     // El historial se leyó EN PARALELO con la escritura de la pregunta, así que
     // puede haberla pillado o no según cuál llegara antes. Se descarta por id y
     // no por posición: así la conversación previa es la misma pase lo que pase,
@@ -221,7 +245,10 @@ export async function sendChatMessage(text: string): Promise<SendResult> {
   return {
     ok: true,
     reply: toMessage(saved),
-    proposedTask: result.proposedTask ? restore(result.proposedTask, aliases) : undefined
+    proposedTask: result.proposedTask ? restore(result.proposedTask, aliases) : undefined,
+    proposedMemory: result.proposedMemory
+      ? { ...result.proposedMemory, text: restore(result.proposedMemory.text, aliases) }
+      : undefined
   };
 }
 
@@ -233,6 +260,26 @@ export async function createTaskFromChat(workspaceId: string, title: string) {
   const ws = z.string().uuid().safeParse(workspaceId);
   if (!ws.success) return { ok: false as const, reason: "No hay un espacio donde crear la tarea." };
   return quickAddTask(ws.data, title);
+}
+
+/**
+ * Guardar la memoria que el chat propuso. Solo corre tras el clic en
+ * «Recordar»: el modelo propone, la persona decide (D-089).
+ *
+ * No abre un camino de escritura nuevo — reusa `upsertMemoryItem`, que ya era
+ * el único sitio que escribe en `memory_items`, con `origin: "ai"` para que en
+ * `/intelligence/memory` se vea de dónde salió el texto.
+ */
+export async function createMemoryFromChat(text: string, scope: string): Promise<{ ok: boolean; reason?: string }> {
+  // Se vuelve a sanear en el servidor: lo que llega del cliente es lo que el
+  // navegador quiera mandar, no necesariamente lo que el modelo propuso.
+  const limpia = sanitizeProposedMemory({ text, scope });
+  if (!limpia) return { ok: false, reason: "Eso no es algo que convenga recordar para siempre." };
+
+  const formData = new FormData();
+  formData.set("text", limpia.text);
+  formData.set("scope", limpia.scope);
+  return upsertMemoryItem(null, formData, "ai");
 }
 
 /**

@@ -91,6 +91,8 @@ export interface RecommendResult {
   /** Descartadas por falta de anclaje. Se registran para poder auditarlas. */
   dropped: { text: string; reason: string }[];
   reason?: string;
+  /** El modelo de la cadena que contestó. Lo registra `audit_log`. */
+  model?: string;
 }
 
 function buildPrompt(context: InsightContext): string {
@@ -142,7 +144,7 @@ export async function recommend(context: InsightContext): Promise<RecommendResul
   });
 
   if (!result.ok || !result.data) {
-    return { ok: false, recommendations: [], dropped: [], reason: result.reason };
+    return { ok: false, recommendations: [], dropped: [], reason: result.reason, model: result.model };
   }
 
   // La garantía estructural: nada sin respaldo llega a la base (§3.3).
@@ -150,5 +152,5 @@ export async function recommend(context: InsightContext): Promise<RecommendResul
     result.data.recommendations,
     context.facts.map((f) => f.id)
   );
-  return { ok: true, recommendations: kept, dropped };
+  return { ok: true, recommendations: kept, dropped, model: result.model };
 }

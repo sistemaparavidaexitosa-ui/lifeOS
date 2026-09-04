@@ -1,5 +1,6 @@
 import "server-only";
 import { requireGeminiApiKey } from "@/config/env";
+import { debeSaltarDeModelo, motivoCadenaAgotada } from "@/lib/domain/ai/model-chain.ts";
 
 /**
  * EL ÚNICO SITIO DEL PROYECTO QUE HABLA CON UN MODELO.
@@ -45,7 +46,14 @@ const ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
  * Un modelo retirado no avisa antes. Si vuelve a pasar, el síntoma es el mismo
  * y el arreglo también: esta línea.
  */
-export const GEMINI_MODEL = "gemini-3.6-flash";
+export const GEMINI_MODELS = ["gemini-3.1-flash-lite", "gemini-3.6-flash"] as const;
+
+/**
+ * El primero de la cadena, para quien solo necesite nombrar «el modelo». No es
+ * el que contesta necesariamente: eso lo dice `GenerateJsonResult.model`, y es
+ * lo que hay que registrar en `audit_log`.
+ */
+export const GEMINI_MODEL = GEMINI_MODELS[0];
 
 /**
  * Un modelo con pensamiento gasta tokens de razonamiento CONTRA el mismo tope
@@ -119,6 +127,17 @@ export interface GeminiSchema {
   propertyOrdering?: string[];
 }
 
+/**
+ * Una herramienta declarada al modelo. `parameters` reusa `GeminiSchema`
+ * —el mismo dialecto de `responseSchema`— porque es el mismo subconjunto de
+ * OpenAPI: dos tipos para la misma forma sería una deriva esperando a pasar.
+ */
+export interface FunctionDeclaration {
+  name: string;
+  description: string;
+  parameters: GeminiSchema;
+}
+
 export interface GenerateJsonInput<T> {
   system: string;
   prompt: string;
@@ -131,19 +150,62 @@ export interface GenerateJsonInput<T> {
    */
   validate: (raw: unknown) => { ok: true; value: T } | { ok: false; reason: string };
   budget: Budget;
-  model?: string;
+  /**
+   * Cadena a recorrer. Por defecto `GEMINI_MODELS`; se pasa a mano solo para
+   * probar el salto o para acotar una feature a un modelo concreto.
+   */
+  models?: readonly string[];
+  /**
+   * Lo que el modelo puede pedir antes de contestar. Ausente en `recommend` y
+   * `plan-project`: los dos reciben todo lo que necesitan en el prompt y no
+   * tienen nada que preguntar.
+   */
+  tools?: FunctionDeclaration[];
+  /**
+   * Ejecuta la herramienta EN EL SERVIDOR y devuelve lo que verá el modelo. Lo
+   * proporciona quien llama, no este módulo: aquí no se sabe qué es un
+   * `user_id` ni se puede tocar Supabase, y así sigue.
+   */
+  executeTool?: (name: string, args: Record<string, unknown>) => Promise<unknown>;
 }
 
 export interface GenerateJsonResult<T> {
   ok: boolean;
   data?: T;
   reason?: string;
+  /**
+   * El modelo que DE VERDAD contestó (o el que falló sin dejar seguir). Sin
+   * esto, `audit_log` registraría el primero de la cadena aunque hubiera
+   * respondido el segundo — un registro que miente es peor que no tenerlo.
+   */
+  model?: string;
+}
+
+/** Lo que interesa de la respuesta. El resto de campos se ignoran. */
+/**
+ * Una parte de la respuesta. Se declara ABIERTA (`[k: string]: unknown`) a
+ * propósito: la serie Gemini 3 mete aquí un `thoughtSignature` que hay que
+ * devolver **idéntico** en la siguiente llamada o la API responde 400
+ * («Function call is missing a thought_signature»). Los SDK lo hacen solos;
+ * como aquí no hay SDK (D-087), la defensa es no reconstruir nunca el turno
+ * del modelo y reenviar el objeto tal cual llegó.
+ */
+interface GeminiPart {
+  text?: string;
+  functionCall?: { name?: string; args?: Record<string, unknown> };
+  [clave: string]: unknown;
+}
+
+interface GeminiContent {
+  role?: string;
+  parts?: GeminiPart[];
+  [clave: string]: unknown;
 }
 
 /** Lo que interesa de la respuesta. El resto de campos se ignoran. */
 interface GeminiResponse {
   candidates?: {
-    content?: { parts?: { text?: string }[] };
+    content?: GeminiContent;
     finishReason?: string;
   }[];
   promptFeedback?: { blockReason?: string };
@@ -160,17 +222,50 @@ function httpReason(status: number, body: GeminiResponse | null): string {
   return detalle ? `El modelo rechazó la petición: ${detalle}` : `El modelo respondió con un error (HTTP ${status}).`;
 }
 
-export async function generateJson<T>(input: GenerateJsonInput<T>): Promise<GenerateJsonResult<T>> {
-  let apiKey: string;
-  try {
-    apiKey = requireGeminiApiKey();
-  } catch (error) {
-    // La validación perezosa (F11) lanza; el contrato de este módulo es no
-    // lanzar. Se traduce aquí, una sola vez, en vez de en cada llamador.
-    return { ok: false, reason: error instanceof Error ? error.message : "Falta GEMINI_API_KEY." };
-  }
+/**
+ * Lo que devuelve UN intento contra UN modelo. El `status` es lo que decide si
+ * la cadena sigue: sin él —fallo de red, de forma o de validación— no hay nada
+ * que el siguiente modelo vaya a hacer mejor.
+ */
+interface Intento<T> {
+  ok: boolean;
+  data?: T;
+  reason?: string;
+  status?: number;
+  /** El turno del modelo pidiendo herramientas, para reenviarlo verbatim. */
+  pide?: GeminiContent;
+}
 
-  const model = input.model ?? GEMINI_MODEL;
+/**
+ * Cuántas veces se le deja pedir datos antes de exigirle una respuesta.
+ *
+ * Dos, y no «las que haga falta»: cada ronda es una llamada entera contra la
+ * cuota y varios segundos de espera con el «Pensando…» puesto. Un modelo que
+ * no ha reunido lo que necesita en dos rondas normalmente está dando vueltas,
+ * no investigando.
+ */
+const MAX_RONDAS_HERRAMIENTAS = 2;
+
+async function intentarConModelo<T>(
+  input: GenerateJsonInput<T>,
+  apiKey: string,
+  model: string,
+  contents: GeminiContent[],
+  conHerramientas: boolean
+): Promise<Intento<T>> {
+  const cuerpo: Record<string, unknown> = {
+    systemInstruction: { parts: [{ text: input.system }] },
+    contents,
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema: input.schema,
+      maxOutputTokens: input.budget.maxOutputTokens,
+      thinkingConfig: { thinkingBudget: input.budget.thinkingBudget }
+    }
+  };
+  if (conHerramientas && input.tools?.length) {
+    cuerpo.tools = [{ functionDeclarations: input.tools }];
+  }
 
   let response: Response;
   try {
@@ -178,19 +273,12 @@ export async function generateJson<T>(input: GenerateJsonInput<T>): Promise<Gene
       method: "POST",
       headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
       signal: AbortSignal.timeout(TIMEOUT_MS),
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: input.system }] },
-        contents: [{ role: "user", parts: [{ text: input.prompt }] }],
-        generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema: input.schema,
-          maxOutputTokens: input.budget.maxOutputTokens,
-          thinkingConfig: { thinkingBudget: input.budget.thinkingBudget }
-        }
-      })
+      body: JSON.stringify(cuerpo)
     });
   } catch (error) {
     const abortada = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+    // Sin `status`: un timeout NO encadena. Son 60 s por modelo, y dos
+    // seguidos son dos minutos con el botón girando — peor que el fallo.
     return {
       ok: false,
       reason: abortada
@@ -208,7 +296,7 @@ export async function generateJson<T>(input: GenerateJsonInput<T>): Promise<Gene
     body = null;
   }
 
-  if (!response.ok) return { ok: false, reason: httpReason(response.status, body) };
+  if (!response.ok) return { ok: false, reason: httpReason(response.status, body), status: response.status };
   if (!body) return { ok: false, reason: "El modelo devolvió una respuesta ilegible." };
 
   // Las tres formas de fallar SIN error HTTP, y por eso se comprueban a mano.
@@ -218,6 +306,11 @@ export async function generateJson<T>(input: GenerateJsonInput<T>): Promise<Gene
   }
 
   const candidate = body.candidates?.[0];
+  const partes = candidate?.content?.parts ?? [];
+
+  // ¿Pide datos antes de contestar? Se devuelve el turno ENTERO, sin tocarlo.
+  if (partes.some((p) => p.functionCall)) return { ok: false, pide: candidate?.content };
+
   const finish = candidate?.finishReason;
   if (finish && finish !== "STOP") {
     return {
@@ -231,7 +324,7 @@ export async function generateJson<T>(input: GenerateJsonInput<T>): Promise<Gene
 
   // Las partes se concatenan: una respuesta larga puede venir troceada, y
   // quedarse con la primera devolvería un JSON cortado a media llave.
-  const text = (candidate?.content?.parts ?? [])
+  const text = partes
     .map((p) => p.text ?? "")
     .join("")
     .trim();
@@ -248,4 +341,91 @@ export async function generateJson<T>(input: GenerateJsonInput<T>): Promise<Gene
   if (!validated.ok) return { ok: false, reason: validated.reason };
 
   return { ok: true, data: validated.value };
+}
+
+/**
+ * La conversación completa con UN modelo: las rondas de herramientas que pida
+ * (hasta el tope) y la respuesta final.
+ */
+async function conversarConModelo<T>(
+  input: GenerateJsonInput<T>,
+  apiKey: string,
+  model: string,
+  conHerramientas: boolean
+): Promise<Intento<T>> {
+  const contents: GeminiContent[] = [{ role: "user", parts: [{ text: input.prompt }] }];
+
+  for (let ronda = 0; ronda <= MAX_RONDAS_HERRAMIENTAS; ronda += 1) {
+    // En la última vuelta se le quitan las herramientas: es lo que convierte el
+    // tope en «ahora contesta» en vez de en un error.
+    const ultima = ronda === MAX_RONDAS_HERRAMIENTAS;
+    const intento = await intentarConModelo(input, apiKey, model, contents, conHerramientas && !ultima);
+
+    if (intento.ok || !intento.pide) return intento;
+
+    // El turno del modelo se reenvía VERBATIM (con su `thoughtSignature`).
+    contents.push(intento.pide);
+    const respuestas: GeminiPart[] = [];
+    for (const parte of intento.pide.parts ?? []) {
+      const llamada = parte.functionCall;
+      if (!llamada?.name) continue;
+      const salida = input.executeTool
+        ? await input.executeTool(llamada.name, llamada.args ?? {})
+        : { error: "Esta herramienta no está disponible." };
+      respuestas.push({ functionResponse: { name: llamada.name, response: { resultado: salida } } } as GeminiPart);
+    }
+    contents.push({ role: "user", parts: respuestas });
+  }
+
+  return { ok: false, reason: "El modelo se quedó pidiendo datos y no llegó a contestar." };
+}
+
+/**
+ * Recorre la cadena de modelos. El primero que conteste, contesta; y si uno
+ * falla por algo que el siguiente puede arreglar —cuota, retirada, caída—, se
+ * pasa al siguiente sin que el usuario se entere.
+ *
+ * El contrato de D-021 no cambia: NUNCA LANZA.
+ */
+export async function generateJson<T>(input: GenerateJsonInput<T>): Promise<GenerateJsonResult<T>> {
+  let apiKey: string;
+  try {
+    apiKey = requireGeminiApiKey();
+  } catch (error) {
+    // La validación perezosa (F11) lanza; el contrato de este módulo es no
+    // lanzar. Se traduce aquí, una sola vez, en vez de en cada llamador.
+    return { ok: false, reason: error instanceof Error ? error.message : "Falta GEMINI_API_KEY." };
+  }
+
+  const modelos = input.models ?? GEMINI_MODELS;
+  let ultimo: Intento<T> = { ok: false, reason: "No hay ningún modelo configurado." };
+  let agotadosPorCuota = 0;
+
+  for (const model of modelos) {
+    let intento = await conversarConModelo(input, apiKey, model, true);
+
+    // RED DE SEGURIDAD. Combinar `tools` con `responseSchema` está documentado
+    // para la serie Gemini 3, pero en este repo no hay una sola llamada real
+    // ejercitada (CHECKS.md) y el chat vive en TODAS las pantallas. Si la
+    // petición con herramientas se rechaza por forma, se reintenta sin ellas:
+    // vale mil veces más una respuesta sin datos frescos que un rail roto.
+    if (!intento.ok && intento.status === 400 && input.tools?.length) {
+      intento = await conversarConModelo(input, apiKey, model, false);
+    }
+
+    if (intento.ok) return { ok: true, data: intento.data, model };
+
+    ultimo = intento;
+    if (intento.status === 429) agotadosPorCuota += 1;
+    if (intento.status === undefined || !debeSaltarDeModelo(intento.status)) {
+      // Ni la llave ni un esquema mal formado mejoran con otro modelo: se
+      // devuelve el motivo tal cual, que es lo que hizo legible el episodio
+      // del modelo retirado.
+      return { ok: false, reason: intento.reason, model };
+    }
+  }
+
+  // Si TODOS cayeron por cuota, el mensaje de un solo modelo sería mentira.
+  const reason = agotadosPorCuota === modelos.length ? motivoCadenaAgotada(modelos.length) : ultimo.reason;
+  return { ok: false, reason };
 }

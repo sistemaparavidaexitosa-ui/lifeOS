@@ -48,15 +48,29 @@ están configuradas y todo lo demás sigue igual (F11).
 GEMINI_API_KEY=AIza...   # https://aistudio.google.com/apikey (gratis)
 ```
 
-El modelo es `gemini-3.6-flash` y está fijado en
+Los modelos son una **cadena**, fijada en `GEMINI_MODELS` dentro de
 `src/lib/ai/gemini-provider.ts`, que es el único archivo del proyecto que habla
-con la API. Ahí es donde se cambia, en una línea.
+con la API:
+
+```ts
+export const GEMINI_MODELS = ["gemini-3.1-flash-lite", "gemini-3.6-flash"] as const;
+```
+
+Se prueba el primero y, **si se agota su cuota diaria (429), se pasa al
+siguiente**. Cada modelo del free tier tiene su propio contador, así que la
+cadena suma peticiones al día en vez de dejar la IA parada hasta mañana. El
+usuario no ve el salto; solo ve la respuesta.
+
+Qué modelo contestó de verdad queda en `audit_log` (`meta.model`), no se
+deduce: con una cadena, dar por hecho el primero sería registrar una mentira.
 
 ⚠️ **Los modelos se retiran.** El primero que se usó, `gemini-2.5-flash`, dejó
-de estar disponible para cuentas nuevas a los pocos días. Se reconoce enseguida
+de estar disponible para cuentas nuevas a los pocos días y se llevó por delante
+las tres funciones de IA. Con la cadena eso ya no tumba nada: un 404 también
+salta al siguiente modelo. Aun así conviene arreglarlo, y se reconoce enseguida
 porque el mensaje de la API llega entero a la pantalla y nombra al sucesor:
 «This model … is no longer available to new users. Please update your code to
-use models/…». Cuando pase, se cambia esa línea y nada más.
+use models/…». Cuando pase, se cambia esa lista y nada más.
 
 **Sobre el free tier.** Tiene límite por minuto y por día. Ninguna de las tres
 funciones corre sola: no hay cron ni llamadas en segundo plano, siempre las

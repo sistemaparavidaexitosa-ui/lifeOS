@@ -18,7 +18,13 @@
 // reusando .td-backdrop/.td-drawer, que en móvil ya suben desde abajo.
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { loadChatHistory, sendChatMessage, createTaskFromChat, type ChatMessage } from "@/lib/ai-chat/actions";
+import {
+  loadChatHistory,
+  sendChatMessage,
+  createTaskFromChat,
+  createMemoryFromChat,
+  type ChatMessage
+} from "@/lib/ai-chat/actions";
 import { IconSparkles, IconClose, IconChevronRight } from "./icons";
 
 /**
@@ -46,6 +52,8 @@ export default function AiChatRail({
   const [error, setError] = useState<string | null>(null);
   const [proposal, setProposal] = useState<string | null>(null);
   const [created, setCreated] = useState(false);
+  const [memoria, setMemoria] = useState<{ text: string; scope: string } | null>(null);
+  const [recordado, setRecordado] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const [collapsed, setCollapsed] = useState(initialCollapsed);
@@ -96,6 +104,8 @@ export default function AiChatRail({
     setError(null);
     setProposal(null);
     setCreated(false);
+    setMemoria(null);
+    setRecordado(false);
 
     startTransition(async () => {
       const result = await sendChatMessage(texto);
@@ -105,6 +115,7 @@ export default function AiChatRail({
       }
       setMessages((prev) => [...prev, result.reply!]);
       setProposal(result.proposedTask ?? null);
+      setMemoria(result.proposedMemory ?? null);
     });
   }
 
@@ -118,6 +129,19 @@ export default function AiChatRail({
       }
       setCreated(true);
       setProposal(null);
+    });
+  }
+
+  function recordar() {
+    if (!memoria) return;
+    startTransition(async () => {
+      const result = await createMemoryFromChat(memoria.text, memoria.scope);
+      if (!result.ok) {
+        setError(result.reason ?? "No se pudo guardar.");
+        return;
+      }
+      setRecordado(true);
+      setMemoria(null);
     });
   }
 
@@ -179,9 +203,41 @@ export default function AiChatRail({
           </div>
         )}
 
+        {memoria && (
+          <div
+            style={{
+              border: "1px solid var(--line)",
+              borderRadius: 12,
+              padding: "9px 11px",
+              background: "var(--surface2)"
+            }}
+          >
+            <div className="text-xs" style={{ color: "var(--muted)" }}>
+              ¿Lo recuerdo para siempre?
+            </div>
+            <div className="text-sm" style={{ fontWeight: 700, margin: "3px 0 7px" }}>
+              {memoria.text}
+            </div>
+            <div className="flex gap-1.5 flex-wrap">
+              <button className="btn-primary btn-sm" disabled={pending} onClick={recordar}>
+                Recordar
+              </button>
+              <button className="btn-ghost btn-sm" disabled={pending} onClick={() => setMemoria(null)}>
+                Descartar
+              </button>
+            </div>
+          </div>
+        )}
+
         {created && (
           <div className="text-xs" style={{ color: "var(--muted)" }}>
             Tarea creada. La encuentras en Ejecución.
+          </div>
+        )}
+
+        {recordado && (
+          <div className="text-xs" style={{ color: "var(--muted)" }}>
+            Guardado. Lo puedes editar o borrar en Inteligencia → Memoria.
           </div>
         )}
 

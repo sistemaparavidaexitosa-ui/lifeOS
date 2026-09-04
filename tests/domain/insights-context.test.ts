@@ -9,7 +9,9 @@ import {
   buildContext,
   pseudonymize,
   restore,
-  MAX_FACTS
+  tablaConsultable,
+  MAX_FACTS,
+  TABLAS_CONSULTABLES
 } from "../../src/lib/insights/context.ts";
 import type { Domain, Fact } from "../../src/lib/domain/insights/types.ts";
 
@@ -186,4 +188,39 @@ test("buildContext: la memoria también se seudonimiza antes de salir", () => {
 test("buildContext: sin memoria cargada el contexto la deja vacía, no undefined", () => {
   const ctx = buildContext({ scope: "money", facts: [fact("m1", "money", 1)] });
   assert.deepStrictEqual(ctx.memory, []);
+});
+
+// --- Lista blanca de consulta (A2) -------------------------------------------
+// Las herramientas del modelo pueden bajar a la fila, y esto es lo único que
+// decide a qué filas. Si una prueba de este bloque se rompe, el modelo está
+// mirando algo que nadie autorizó.
+
+test("tablaConsultable: una tabla fuera de la lista no se consulta, aunque su dominio esté autorizado", () => {
+  assert.strictEqual(tablaConsultable("profiles", ["money", "habits", "time", "execution", "debt"]), null);
+  assert.strictEqual(tablaConsultable("audit_log", ["money", "habits", "time", "execution", "debt"]), null);
+  assert.strictEqual(tablaConsultable("ai_chat_messages", ["money", "habits", "time", "execution", "debt"]), null);
+});
+
+test("tablaConsultable: una tabla de la lista cuyo dominio NO autorizó el usuario tampoco se consulta", () => {
+  assert.strictEqual(tablaConsultable("journal_entries", ["habits"]), null);
+});
+
+test("tablaConsultable: una tabla autorizada devuelve su dominio y la columna por la que se acota la ventana", () => {
+  const t = tablaConsultable("journal_entries", ["money"]);
+  assert.ok(t);
+  assert.strictEqual(t.domain, "money");
+  assert.strictEqual(t.fecha, "entry_date");
+});
+
+test("tablaConsultable: sin ningún dominio autorizado no se consulta nada", () => {
+  for (const tabla of Object.keys(TABLAS_CONSULTABLES)) {
+    assert.strictEqual(tablaConsultable(tabla, []), null, `${tabla} no debería consultarse sin opt-in`);
+  }
+});
+
+test("TABLAS_CONSULTABLES: ninguna tabla escapa a un dominio que 'global' no cubra", () => {
+  const globales = allowedDomains("global");
+  for (const [tabla, meta] of Object.entries(TABLAS_CONSULTABLES)) {
+    assert.ok(globales.includes(meta.domain), `${tabla} apunta a ${meta.domain}, que no está en global`);
+  }
 });

@@ -11,7 +11,7 @@ import { GEMINI_MODEL } from "@/lib/ai/gemini-provider";
 import { recommendationFingerprint } from "@/lib/domain/insights/fingerprint.ts";
 import { canTransition, REJECTION_STATUSES, type RecommendationStatus } from "@/lib/domain/insights/states.ts";
 import { DOMAIN_LABEL, type Domain } from "@/lib/domain/insights/types.ts";
-import type { MemoryItemLike, MemoryScope } from "@/lib/domain/insights/memory.ts";
+import { MEMORY_SCOPES, type MemoryItemLike, type MemoryOrigin, type MemoryScope } from "@/lib/domain/insights/memory.ts";
 
 /**
  * Intelligence OS — el análisis lo dispara el usuario y es informativo.
@@ -152,7 +152,7 @@ export async function analyze(scope: Scope): Promise<AnalyzeResult> {
       scope,
       domains: context.domains,
       factCount: context.facts.length,
-      model: GEMINI_MODEL,
+      model: result.model ?? GEMINI_MODEL,
       created: result.recommendations.length,
       dropped: result.dropped.length
     }
@@ -286,14 +286,21 @@ export async function editRecommendationText(id: string, text: string): Promise<
 
 // --- Memoria (§6) -----------------------------------------------------------
 
-const MEMORY_SCOPES = ["goal", "project", "finance", "decision", "preference", "time", "habit"] as const;
 
 /**
- * Alta y edición de una nota de memoria. Solo origen `user`: la memoria de
- * origen `ai` nace únicamente de aceptar una recomendación con acción
- * `memory.remember`, y esas acciones llegan en la Fase 4. Nunca se escribe sola.
+ * Alta y edición de una nota de memoria, y el ÚNICO sitio que escribe en
+ * `memory_items`.
+ *
+ * `origin` distingue quién la redactó, no quién la autorizó: la de origen `ai`
+ * sale de una propuesta del chat que el usuario confirmó con un botón (D-089).
+ * Ninguna de las dos se escribe sola — lo que cambia es a quién se le atribuye
+ * el texto cuando después se lee en `/intelligence/memory`.
  */
-export async function upsertMemoryItem(id: string | null, formData: FormData): Promise<{ ok: boolean; reason?: string }> {
+export async function upsertMemoryItem(
+  id: string | null,
+  formData: FormData,
+  origin: MemoryOrigin = "user"
+): Promise<{ ok: boolean; reason?: string }> {
   const text = String(formData.get("text") ?? "").trim();
   const scope = String(formData.get("scope") ?? "");
   const validUntilRaw = String(formData.get("validUntil") ?? "").trim();
@@ -310,7 +317,7 @@ export async function upsertMemoryItem(id: string | null, formData: FormData): P
   const payload = { scope, text, valid_until: validUntilRaw || null };
   const { error } = id
     ? await supabase.from("memory_items").update(payload).eq("id", id)
-    : await supabase.from("memory_items").insert({ ...payload, user_id: user.id, origin: "user" });
+    : await supabase.from("memory_items").insert({ ...payload, user_id: user.id, origin });
   if (error) return { ok: false, reason: error.message };
 
   revalidatePath("/intelligence/memory");
