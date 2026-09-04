@@ -8,7 +8,17 @@
 
 import { diffDays } from "../datetime.ts";
 
-export type KeyResultSourceKind = "habit" | "project" | "book" | "financial_goal" | "savings_goal" | "manual";
+export type KeyResultSourceKind =
+  | "habit"
+  | "project"
+  | "book"
+  | "financial_goal"
+  | "savings_goal"
+  | "nutrition"
+  | "manual";
+
+/** Qué mide un resultado clave de nutrición. Las demás fuentes lo ignoran. */
+export type KeyResultMetric = "adherencia" | "peso";
 
 export interface KeyResultLike {
   id: string;
@@ -16,6 +26,14 @@ export interface KeyResultLike {
   sourceId: string | null;
   target: number;
   manualCurrent: number;
+  /** Solo lo mira `nutrition`; para el resto es ruido con default. */
+  sourceMetric?: KeyResultMetric;
+  /**
+   * El valor de partida, y **solo tiene sentido en una meta DESCENDENTE**
+   * («bajar a 78 kg»). Sin él no hay forma de saber cuánto se ha avanzado: 81
+   * kg puede ser casi la meta o no haber empezado, según de dónde se venga.
+   */
+  baseline?: number | null;
 }
 
 /** Valor actual de cada fuente posible, ya leído de la base por la capa de datos. */
@@ -26,6 +44,10 @@ export interface SourceSnapshot {
   financialGoalAmount: Record<string, number>;
   /** Migración 0035: `savings_goals` es hermana de `financial_goals`, no un caso aparte. */
   savingsGoalAmount: Record<string, number>;
+  /** Migración 0047. La clave es el `user_id`: hay una fila de perfil por persona. */
+  nutritionAdherencePct: Record<string, number>;
+  /** Migración 0047. El peso más reciente, por `user_id`. */
+  bodyWeightKg: Record<string, number>;
 }
 
 export interface KeyResultProgress {
@@ -46,13 +68,34 @@ function pctOf(current: number, target: number): number {
  * se atiende antes, porque su valor no viene del snapshot sino del propio
  * resultado clave.
  */
-const SOURCE_TABLE: Record<Exclude<KeyResultSourceKind, "manual">, (s: SourceSnapshot) => Record<string, number>> = {
+const SOURCE_TABLE: Record<
+  Exclude<KeyResultSourceKind, "manual">,
+  (s: SourceSnapshot, kr: KeyResultLike) => Record<string, number>
+> = {
   habit: (s) => s.habitCompletionPct,
   project: (s) => s.projectDonePct,
   book: (s) => s.bookPagesRead,
   financial_goal: (s) => s.financialGoalAmount,
-  savings_goal: (s) => s.savingsGoalAmount
+  savings_goal: (s) => s.savingsGoalAmount,
+  // La única fuente que mide dos cosas distintas, y por eso recibe el propio
+  // resultado clave. Una fuente por métrica habría sido `nutrition_adherencia`
+  // y `nutrition_peso` en el check de la base: dos valores para un módulo.
+  nutrition: (s, kr) => (kr.sourceMetric === "peso" ? s.bodyWeightKg : s.nutritionAdherencePct)
 };
+
+/**
+ * El porcentaje de una meta que se cumple BAJANDO.
+ *
+ * `pctOf` no sirve aquí: 81 kg contra un objetivo de 78 da 103 %, que recortado
+ * a 100 haría nacer cumplida cualquier meta de bajar peso. Lo que se avanza es
+ * el trecho recorrido desde el punto de partida, y por eso hace falta
+ * `baseline`.
+ */
+function pctDescendente(current: number, baseline: number, target: number): number {
+  const trecho = baseline - target;
+  if (trecho <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.round(((baseline - current) / trecho) * 100)));
+}
 
 export function keyResultProgress(kr: KeyResultLike, sources: SourceSnapshot): KeyResultProgress {
   if (kr.sourceKind === "manual") {
@@ -63,10 +106,22 @@ export function keyResultProgress(kr: KeyResultLike, sources: SourceSnapshot): K
   // con el else, añadir una fuente nueva y olvidar su rama la mandaba
   // silenciosamente a la tabla de la última: el resultado clave mostraba el
   // número de OTRA cosa. Así, olvidarla no compila.
-  const table = SOURCE_TABLE[kr.sourceKind](sources);
+  const table = SOURCE_TABLE[kr.sourceKind](sources, kr);
 
   const current = kr.sourceId === null ? undefined : table[kr.sourceId];
   if (current === undefined) return { current: 0, target: kr.target, pct: 0, stale: true };
+
+  // Descendente = el objetivo está por debajo del punto de partida. Sin
+  // `baseline` no se puede saber cuánto se ha avanzado, y fingir un número
+  // sería peor que decir que la fuente no da: se declara `stale`, que es la
+  // rama que la UI ya sabe pintar.
+  if (kr.sourceMetric === "peso") {
+    if (kr.baseline === null || kr.baseline === undefined) {
+      return { current, target: kr.target, pct: 0, stale: true };
+    }
+    return { current, target: kr.target, pct: pctDescendente(current, kr.baseline, kr.target), stale: false };
+  }
+
   return { current, target: kr.target, pct: pctOf(current, kr.target), stale: false };
 }
 

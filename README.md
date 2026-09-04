@@ -70,6 +70,19 @@ de cuentas y personas sustituidos por alias, y únicamente de los dominios que
 hayas encendido en Configuración (todos apagados por defecto). Nunca filas
 crudas de la base. El filtro vive en `src/lib/insights/context.ts`.
 
+## Administración del catálogo de plantillas
+
+Las plantillas de proyecto, rutina y hábito viven en la base (`template_catalog`,
+migración 0044) y las edita un **administrador de plataforma** desde `/admin`,
+al que se llega por Configuración. Una plantilla nace en borrador y no la ve
+nadie hasta que se publica.
+
+Ese rol solo alcanza esa tabla: no da acceso a los datos de ningún usuario, y hay
+una prueba de RLS que lo demuestra. Se otorga con SQL después de desplegar — ver
+`/docs/DEPLOY.md`, paso 3bis.
+
+## Privacidad, en detalle
+
 Money OS (cuentas, presupuesto, deudas, cashback, inversiones, patrimonio,
 metas y Hogar) y la planeación personal (Hoy, ocupaciones, rango de
 actividad, hábitos, lectura, **metas personales y rutinas**) son **siempre

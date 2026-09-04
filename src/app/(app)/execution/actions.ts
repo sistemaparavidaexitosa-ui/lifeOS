@@ -7,7 +7,7 @@ import { recordActivity } from "@/lib/data/activity";
 import { evaluateTransition } from "@/lib/domain/task-state.ts";
 import { PRIORITY_META, PROJECT_STATUS_META, STATUS_META } from "./status-meta";
 import { dispatchAutomations } from "@/lib/automations/dispatch";
-import { getProjectTemplate } from "@/lib/domain/execution/project-templates.ts";
+import { getTemplate } from "@/lib/data/templates";
 import { templateFromPayload } from "@/lib/domain/execution/ai-plan.ts";
 import { writeTemplate } from "./template-actions";
 import { suggestProjectSequence } from "@/lib/domain/project-sequence.ts";
@@ -107,7 +107,7 @@ export async function createProject(formData: FormData) {
   // camino de escritura propio, se convierte en una plantilla y entra por el
   // que ya existe, con su rollback y su historial.
   const template = parsed.templateId
-    ? getProjectTemplate(parsed.templateId)
+    ? ((await getTemplate("project", parsed.templateId)) ?? undefined)
     : (parsePlanPayload(parsed.aiPlan) ?? undefined);
 
   if (template) {

@@ -7,9 +7,10 @@
 // estas reglas —que son las que importan— se puedan probar sin base de datos.
 
 import type { Domain, Fact } from "../domain/insights/types.ts";
+import type { Database } from "../../types/database.types.ts";
 import { activeMemory, type MemoryItemLike } from "../domain/insights/memory.ts";
 
-export type Scope = "money" | "debt" | "habits" | "time" | "execution" | "activity" | "global";
+export type Scope = "money" | "debt" | "habits" | "time" | "execution" | "activity" | "nutrition" | "global";
 
 /** Tope de arranque (§3.2). Los hechos de mayor peso son los que sobreviven. */
 export const MAX_FACTS = 40;
@@ -30,6 +31,8 @@ export function allowedDomains(scope: Scope, options: { projectIsWorkspace?: boo
       return ["debt"];
     case "habits":
       return ["habits"];
+    case "nutrition":
+      return ["nutrition"];
     case "time":
       return ["time"];
     case "execution":
@@ -41,9 +44,101 @@ export function allowedDomains(scope: Scope, options: { projectIsWorkspace?: boo
       // que el usuario pidió sobre sí mismo.
       return ["activity"];
     case "global":
-      return ["money", "debt", "habits", "time", "execution"];
+      // `nutrition` SÍ entra en global —es «tu vida», donde ya viven hábitos y
+      // tiempo—, a diferencia de `activity`, que es la semana del equipo.
+      return ["money", "debt", "habits", "time", "execution", "nutrition"];
   }
 }
+
+/**
+ * LA LISTA BLANCA DE CONSULTA (D-097).
+ *
+ * Las herramientas del modelo pueden bajar de los hechos a la fila. Esto es lo
+ * ÚNICO que decide a qué filas, y vive aquí —y no en `lib/ai/tools.ts`— por la
+ * misma razón que todo lo demás de este archivo: el filtro de privacidad tiene
+ * que caber en un sitio que se pueda auditar de una sentada. Repartirlo entre
+ * dos archivos es perder eso.
+ *
+ * Tres propiedades que se defienden con pruebas, no con buena voluntad:
+ *
+ * 1. **Es una lista blanca, no una negra.** Lo que no está, no se consulta. Por
+ *    eso `profiles`, `audit_log`, `ai_chat_messages`, `consents` o cualquier
+ *    tabla de workspace no aparecen: no hace falta acordarse de excluirlas.
+ * 2. **Cada tabla declara su dominio**, así que el opt-in de
+ *    `profiles.ai_domains` sigue mandando igual que sobre los hechos. Sin el
+ *    dominio encendido, la tabla no existe para el modelo.
+ * 3. **Cada tabla declara por qué columna se acota la ventana**, porque una
+ *    consulta sin ventana devuelve la vida entera del usuario y el `max_rows`
+ *    de PostgREST la cortaría por donde cayera.
+ *
+ * `activity` no está y no puede estar: `allowedDomains('global')` la deja
+ * fuera a propósito —es la semana del equipo, no la vida del usuario— y una
+ * prueba comprueba que ninguna entrada se escape de global.
+ */
+export interface TablaConsultable {
+  domain: Domain;
+  /** Columna por la que se acota la ventana de fechas. */
+  fecha: string;
+  /** Qué columnas se traen. Se declara para NO traer un `*` que crezca solo. */
+  select: string;
+}
+
+/**
+ * El `satisfies` no es decorativo: ata las claves a las tablas que EXISTEN
+ * según los tipos generados, así que una tabla mal escrita —o una que se
+ * renombre en una migración futura— no compila. Y al ser `satisfies` y no una
+ * anotación, las claves conservan su tipo literal, que es lo que permite
+ * pasárselas al cliente de Supabase sin un `as`.
+ */
+export const TABLAS_CONSULTABLES = {
+  // Dinero. `journal_entries` trae sus líneas embebidas porque el importe vive
+  // en la hija: sin ellas, «¿cuánto gasté en esto?» no se puede contestar.
+  journal_entries: {
+    domain: "money",
+    fecha: "entry_date",
+    select: "id, type, memo, entry_date, category, counterparty, journal_lines(amount, account_id)"
+  },
+  budgets: { domain: "money", fecha: "created_at", select: "id, category, monthly_cost, created_at" },
+  accounts: { domain: "money", fecha: "created_at", select: "id, name, type, currency, created_at" },
+
+  debts: { domain: "debt", fecha: "created_at", select: "id, name, balance, rate, min_payment, due_day, created_at" },
+
+  habits: { domain: "habits", fecha: "created_at", select: "id, name, category, routine_id, duration_min, created_at" },
+  habit_logs: { domain: "habits", fecha: "log_date", select: "id, habit_id, log_date" },
+  routines: { domain: "habits", fecha: "created_at", select: "id, name, frequency, identity, active, created_at" },
+  routine_runs: { domain: "habits", fecha: "local_date", select: "id, routine_id, local_date, completed_at" },
+
+  occupations: { domain: "time", fecha: "created_at", select: "id, title, category, start_time, end_time, days, occ_date, created_at" },
+
+  tasks: { domain: "execution", fecha: "created_at", select: "id, title, status, due, project_id, created_at" },
+  projects: { domain: "execution", fecha: "created_at", select: "id, title, status, area, target_date, created_at" }
+} satisfies Partial<Record<keyof Database["public"]["Tables"], TablaConsultable>>;
+
+/** Los nombres de tabla que una herramienta puede nombrar. */
+export type TablaConsultableNombre = keyof typeof TABLAS_CONSULTABLES;
+
+/**
+ * La tabla que se puede consultar, o `null`. `null` cubre los dos «no» y no
+ * los distingue a propósito: decirle al modelo «esa tabla existe pero no la
+ * autorizaste» ya es contarle algo del usuario.
+ */
+export function tablaConsultable(
+  tabla: string,
+  autorizados: readonly Domain[]
+): (TablaConsultable & { nombre: TablaConsultableNombre }) | null {
+  const meta = (TABLAS_CONSULTABLES as Record<string, TablaConsultable | undefined>)[tabla];
+  if (!meta) return null;
+  // El nombre vuelve tipado para que el cliente de Supabase lo acepte sin un
+  // `as` en el sitio donde de verdad importa que sea una tabla real.
+  return autorizados.includes(meta.domain) ? { ...meta, nombre: tabla as TablaConsultableNombre } : null;
+}
+
+/**
+ * Tope de filas por consulta. No es rendimiento: es que lo que vuelve va DENTRO
+ * del prompt de la siguiente llamada, y doscientas filas de diario se comen la
+ * ventana y la cuota que la cadena de modelos acaba de ganar.
+ */
+export const MAX_FILAS_CONSULTA = 50;
 
 /**
  * Mapa alias↔real para seudonimizar antes de salir del servidor (§4.2).

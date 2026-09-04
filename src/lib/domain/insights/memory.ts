@@ -4,7 +4,16 @@
 // La memoria es lo que separa un motor genérico de uno que conoce al usuario:
 // sin ella sugerirá indefinidamente cosas que ya fueron decididas.
 
-export type MemoryScope = "goal" | "project" | "finance" | "decision" | "preference" | "time" | "habit";
+/**
+ * Los ámbitos que admite `memory_items.scope` (check de la migración 0008).
+ *
+ * Se declara como arreglo y el tipo se deriva de él, no al revés: el tipo solo
+ * existe en `tsc` y hacen falta los valores en tiempo de ejecución —para
+ * validar lo que llega de un formulario y lo que propone el modelo—. Tenerlos
+ * escritos dos veces es tenerlos mal una.
+ */
+export const MEMORY_SCOPES = ["goal", "project", "finance", "decision", "preference", "time", "habit", "health"] as const;
+export type MemoryScope = (typeof MEMORY_SCOPES)[number];
 export type MemoryOrigin = "user" | "ai";
 
 export interface MemoryItemLike {
@@ -35,7 +44,10 @@ const SCOPE_RELEVANCE: Record<string, MemoryScope[]> = {
   // La actividad del equipo se lee con las mismas reglas que los proyectos: un
   // "no me avises de X" o un "este proyecto lo lleva otro" aplican igual aquí.
   activity: ["project", "decision", "preference"],
-  global: ["goal", "project", "finance", "decision", "preference", "time", "habit"]
+  // La memoria relevante para nutrición es la de salud y las restricciones que
+  // el usuario haya declarado: «es celíaco» cambia toda recomendación de comida.
+  nutrition: ["health", "habit", "goal", "decision", "preference"],
+  global: ["goal", "project", "finance", "decision", "preference", "time", "habit", "health"]
 };
 
 /** Caducada = tenía fecha y ya pasó. Sin fecha, vive. */

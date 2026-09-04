@@ -23,6 +23,12 @@ import {
   type FinishEstimate
 } from "@/lib/domain/development/reading.ts";
 import { getSessionUser } from "@/lib/data/session";
+import {
+  dailyTargets,
+  nutritionAdherencePct as calcularAdherencia,
+  type ActivityLevel,
+  type NutritionGoal
+} from "@/lib/domain/development/nutrition.ts";
 
 /**
  * Valor actual de cada fuente que puede alimentar un resultado clave.
@@ -39,12 +45,31 @@ import { getSessionUser } from "@/lib/data/session";
 export const loadSourceSnapshot = cache(async (): Promise<SourceSnapshot> => {
   const supabase = await createClient();
   const user = await getSessionUser();
-  if (!user) return { habitCompletionPct: {}, projectDonePct: {}, bookPagesRead: {}, financialGoalAmount: {}, savingsGoalAmount: {} };
+  if (!user)
+    return {
+      habitCompletionPct: {},
+      projectDonePct: {},
+      bookPagesRead: {},
+      financialGoalAmount: {},
+      savingsGoalAmount: {},
+      nutritionAdherencePct: {},
+      bodyWeightKg: {}
+    };
 
   const today = todayLocal(await getUserTimeZone());
   const from = addDaysISO(today, -29); // ventana de 30 días para hábitos
 
-  const [{ data: habits }, { data: logs }, { data: projects }, { data: books }, { data: fgoals }, { data: sgoals }] = await Promise.all([
+  const [
+    { data: habits },
+    { data: logs },
+    { data: projects },
+    { data: books },
+    { data: fgoals },
+    { data: sgoals },
+    { data: nutriPerfil },
+    { data: comidas },
+    { data: pesos }
+  ] = await Promise.all([
     supabase.from("habits").select("id"),
     supabase.from("habit_logs").select("habit_id, log_date").gte("log_date", from).lte("log_date", today),
     // PROYECTO PERSONAL ya no es "sin workspace" (workspace_id es NOT NULL
@@ -54,7 +79,16 @@ export const loadSourceSnapshot = cache(async (): Promise<SourceSnapshot> => {
     supabase.from("projects").select("id").in("workspace_id", await getPersonalWorkspaceIds()),
     supabase.from("books").select("id, current_page"),
     supabase.from("financial_goals").select("id, current_amount"),
-    supabase.from("savings_goals").select("id, current_amount")
+    supabase.from("savings_goals").select("id, current_amount"),
+    // Nutrición (0047). La MISMA ventana de 30 días que los hábitos, y con el
+    // mismo argumento: es lo que mide `nutritionAdherencePct`.
+    supabase.from("nutrition_profiles").select("*").maybeSingle(),
+    supabase
+      .from("food_entries")
+      .select("local_date, kcal, protein_g, carbs_g, fat_g")
+      .gte("local_date", from)
+      .lte("local_date", today),
+    supabase.from("body_measurements").select("local_date, weight_kg").order("local_date", { ascending: false }).limit(1)
   ]);
 
   const habitCompletionPct: Record<string, number> = {};
@@ -83,7 +117,58 @@ export const loadSourceSnapshot = cache(async (): Promise<SourceSnapshot> => {
   const savingsGoalAmount: Record<string, number> = {};
   for (const g of sgoals ?? []) savingsGoalAmount[g.id] = Number(g.current_amount);
 
-  return { habitCompletionPct, projectDonePct, bookPagesRead, financialGoalAmount, savingsGoalAmount };
+  // NUTRICIÓN. Las dos fuentes van indexadas por `user_id` y no por el id de
+  // una fila cualquiera: hay un solo perfil corporal por persona, y es LA fila
+  // que define los objetivos contra los que se mide todo. Sin perfil, el
+  // Record se queda vacío y `keyResultProgress` devuelve `stale` — exactamente
+  // la rama que ya existía para un libro borrado, sin código nuevo.
+  const nutritionAdherencePct: Record<string, number> = {};
+  const bodyWeightKg: Record<string, number> = {};
+
+  if (nutriPerfil) {
+    const targets = dailyTargets(
+      {
+        sex: nutriPerfil.sex === "Mujer" ? "Mujer" : "Hombre",
+        birthDate: nutriPerfil.birth_date,
+        heightCm: Number(nutriPerfil.height_cm),
+        weightKg: Number(nutriPerfil.weight_kg),
+        activityLevel: nutriPerfil.activity_level as ActivityLevel,
+        goal: nutriPerfil.goal as NutritionGoal,
+        proteinGPerKg: Number(nutriPerfil.protein_g_per_kg),
+        fatPct: nutriPerfil.fat_pct,
+        kcalOverride: nutriPerfil.kcal_override
+      },
+      today
+    );
+
+    const porDia = new Map<string, { kcal: number; n: number }>();
+    for (const e of comidas ?? []) {
+      const acumulado = porDia.get(e.local_date) ?? { kcal: 0, n: 0 };
+      porDia.set(e.local_date, { kcal: acumulado.kcal + Number(e.kcal), n: acumulado.n + 1 });
+    }
+    const dias = [...porDia.entries()].map(([date, v]) => ({
+      date,
+      total: { kcal: v.kcal, proteinG: 0, carbsG: 0, fatG: 0 },
+      entryCount: v.n
+    }));
+
+    nutritionAdherencePct[user.id] = calcularAdherencia(dias, targets, from, today);
+
+    const ultimo = pesos?.[0];
+    // El peso vigente del perfil sirve de respaldo: una meta de peso no puede
+    // quedarse sin fuente solo porque todavía no haya una medición registrada.
+    bodyWeightKg[user.id] = ultimo ? Number(ultimo.weight_kg) : Number(nutriPerfil.weight_kg);
+  }
+
+  return {
+    habitCompletionPct,
+    projectDonePct,
+    bookPagesRead,
+    financialGoalAmount,
+    savingsGoalAmount,
+    nutritionAdherencePct,
+    bodyWeightKg
+  };
 });
 
 /**

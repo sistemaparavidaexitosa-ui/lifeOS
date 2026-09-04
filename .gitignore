@@ -36,3 +36,9 @@ pnpm-debug.log*
 
 # Test coverage
 coverage/
+
+# Claude Code
+# `.claude/worktrees/` son repos git completos: al añadirlos, git los registra
+# como submódulos sin URL y un clon del repositorio se queda con directorios
+# vacíos que no sabe de dónde sacar.
+.claude/

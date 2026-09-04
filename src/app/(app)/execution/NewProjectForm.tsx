@@ -10,10 +10,12 @@ import { createProject } from "./actions";
 import { TemplateSelect, TemplatePreview } from "./ProjectTemplatePicker";
 import AiPlanPanel from "./AiPlanPanel";
 import { planSummary, type AiPlanDraft } from "@/lib/domain/execution/ai-plan.ts";
+import type { ProjectTemplate } from "@/lib/domain/execution/project-templates.ts";
 
 export default function NewProjectForm({
   workspaceId,
-  workspaceName
+  workspaceName,
+  templates
 }: {
   /**
    * Espacio donde nace el proyecto. Obligatorio desde la migración 0030:
@@ -21,6 +23,8 @@ export default function NewProjectForm({
    */
   workspaceId: string;
   workspaceName: string;
+  /** El catálogo publicado, que desde 0044 lee la página del servidor. */
+  templates: ProjectTemplate[];
 }) {
   const router = useRouter();
   const ref = useRef<HTMLFormElement>(null);
@@ -123,6 +127,7 @@ export default function NewProjectForm({
         Plantilla
         <TemplateSelect
           name="templateId"
+          templates={templates}
           value={templateId}
           onChange={(id) => {
             setTemplateId(id);
@@ -133,7 +138,7 @@ export default function NewProjectForm({
           }}
         />
       </label>
-      <TemplatePreview templateId={templateId} />
+      <TemplatePreview templateId={templateId} templates={templates} />
 
       {!aiOpen && !aiPlan && (
         <button

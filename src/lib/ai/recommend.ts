@@ -1,7 +1,6 @@
 import "server-only";
-import { z } from "zod/v4";
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
-import { anthropic, EFFORT, MAX_TOKENS, MODEL } from "./provider";
+import { z } from "zod";
+import { generateJson, RECOMMEND_BUDGET, type GeminiSchema } from "./gemini-provider";
 import { validateAnchoring, type DraftRecommendation } from "@/lib/domain/insights/anchoring.ts";
 import type { InsightContext } from "@/lib/insights/context";
 
@@ -12,10 +11,12 @@ import type { InsightContext } from "@/lib/insights/context";
  * hechos ya calculados y seudonimizados, y devuelve texto. No puede calcular
  * —no tiene con qué— ni aplicar nada.
  *
- * `zod/v4` a propósito: `zodOutputFormat` del SDK convierte el esquema con el
- * núcleo v4 de zod, y un esquema de la zod clásica revienta al convertirse.
- * Se importa el subpath solo aquí; el resto de la app sigue en `zod` clásica
- * (ver D-027).
+ * `zod` a secas, como el resto del repo. Este archivo importó `zod/v4` durante
+ * un tiempo porque el conversor de esquemas del SDK de Anthropic solo entendía
+ * ese núcleo, mientras `plan-project.ts` seguía en la clásica por el motivo
+ * contrario (D-027, D-075). Sin SDK no hay conversor, y con él se fue la
+ * división: aquí `RecommendationSchema` EXIGE la forma de la respuesta y
+ * `RESPONSE_SCHEMA` se la PIDE al modelo, escritos en paralelo a mano.
  */
 
 const RecommendationSchema = z.object({
@@ -30,6 +31,47 @@ const RecommendationSchema = z.object({
 const ResponseSchema = z.object({
   recommendations: z.array(RecommendationSchema)
 });
+
+/** El mismo contrato, en el dialecto que entiende `responseSchema`. */
+const RESPONSE_SCHEMA: GeminiSchema = {
+  type: "OBJECT",
+  properties: {
+    recommendations: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          type: {
+            type: "STRING",
+            description:
+              "Etiqueta corta y estable del tipo de recomendación, en minúsculas. Ej: 'presupuesto', 'gasto-atipico', 'ingreso-sin-asignar'."
+          },
+          text: {
+            type: "STRING",
+            description: "La recomendación en español, en dos o tres frases, dirigida al usuario. Concreta y accionable."
+          },
+          confidence: { type: "STRING", format: "enum", enum: ["Alta", "Media", "Baja"] },
+          impact: { type: "STRING", format: "enum", enum: ["Alto", "Medio", "Bajo"] },
+          factIds: {
+            type: "ARRAY",
+            description:
+              "Los id EXACTOS de los hechos que sustentan esta recomendación. Obligatorio: al menos uno, y todos deben existir en la lista de hechos entregada.",
+            items: { type: "STRING" }
+          },
+          assumptions: {
+            type: "ARRAY",
+            description: "Supuestos que hiciste, si los hay. Vacío si no hiciste ninguno.",
+            items: { type: "STRING" }
+          }
+        },
+        required: ["type", "text", "confidence", "impact", "factIds", "assumptions"],
+        propertyOrdering: ["type", "text", "confidence", "impact", "factIds", "assumptions"]
+      }
+    }
+  },
+  required: ["recommendations"],
+  propertyOrdering: ["recommendations"]
+};
 
 const SYSTEM = `Eres el motor de recomendaciones de Life OS, un sistema personal de gestión de vida.
 
@@ -49,6 +91,8 @@ export interface RecommendResult {
   /** Descartadas por falta de anclaje. Se registran para poder auditarlas. */
   dropped: { text: string; reason: string }[];
   reason?: string;
+  /** El modelo de la cadena que contestó. Lo registra `audit_log`. */
+  model?: string;
 }
 
 function buildPrompt(context: InsightContext): string {
@@ -84,30 +128,29 @@ export async function recommend(context: InsightContext): Promise<RecommendResul
     return { ok: true, recommendations: [], dropped: [], reason: "No hay nada anómalo que reportar todavía." };
   }
 
-  try {
-    const response = await anthropic().messages.parse({
-      model: MODEL,
-      max_tokens: MAX_TOKENS,
-      thinking: { type: "adaptive" },
-      output_config: { effort: EFFORT, format: zodOutputFormat(ResponseSchema) },
-      system: SYSTEM,
-      messages: [{ role: "user", content: buildPrompt(context) }]
-    });
+  // Mismo contrato que sendEmail (D-021): nunca lanza. Un proveedor caído no
+  // puede tumbar la página de dinero. `generateJson` ya lo cumple.
+  const result = await generateJson({
+    system: SYSTEM,
+    prompt: buildPrompt(context),
+    schema: RESPONSE_SCHEMA,
+    budget: RECOMMEND_BUDGET,
+    validate: (raw) => {
+      const parsed = ResponseSchema.safeParse(raw);
+      return parsed.success
+        ? ({ ok: true, value: parsed.data } as const)
+        : ({ ok: false, reason: "El modelo no devolvió una respuesta con la forma esperada." } as const);
+    }
+  });
 
-    const parsed = response.parsed_output;
-    if (!parsed) return { ok: false, recommendations: [], dropped: [], reason: "El modelo no devolvió una respuesta con la forma esperada." };
-
-    // La garantía estructural: nada sin respaldo llega a la base (§3.3).
-    const { kept, dropped } = validateAnchoring(parsed.recommendations, context.facts.map((f) => f.id));
-    return { ok: true, recommendations: kept, dropped };
-  } catch (error) {
-    // Mismo contrato que sendEmail (D-021): nunca lanza. Un proveedor caído no
-    // puede tumbar la página de dinero.
-    return {
-      ok: false,
-      recommendations: [],
-      dropped: [],
-      reason: error instanceof Error ? error.message : "Error al consultar el modelo"
-    };
+  if (!result.ok || !result.data) {
+    return { ok: false, recommendations: [], dropped: [], reason: result.reason, model: result.model };
   }
+
+  // La garantía estructural: nada sin respaldo llega a la base (§3.3).
+  const { kept, dropped } = validateAnchoring(
+    result.data.recommendations,
+    context.facts.map((f) => f.id)
+  );
+  return { ok: true, recommendations: kept, dropped, model: result.model };
 }

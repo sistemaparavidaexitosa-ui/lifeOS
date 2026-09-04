@@ -407,3 +407,41 @@ export function subtreeIds(tasks: BoardTaskLike[], taskId: string): string[] {
   }
   return [...ids];
 }
+
+/**
+ * Huella de la ESTRUCTURA que sirvió el servidor.
+ *
+ * Existe por un fallo concreto: aplicar una plantilla o un plan de IA escribía
+ * las filas y revalidaba bien, pero el tablero no las pintaba hasta salir del
+ * proyecto y volver a entrar. BoardShell copia los datos del servidor a estado
+ * local UNA vez, y `key={projectId}` no cambia al aplicar la plantilla, así que
+ * React no remontaba nada. Comparando esta huella, BoardShell sabe cuándo el
+ * servidor le trae una estructura distinta y la adopta sin remontar.
+ *
+ * MIRA SOLO LA FORMA DEL ÁRBOL: qué tareas hay, de quién cuelgan, en qué grupo
+ * y en qué orden. Deliberadamente NO mira títulos, estados ni prioridades: eso
+ * lo lleva el estado optimista del cliente, y meterlo aquí haría que un
+ * refresco disparado por otra cosa pisara una edición todavía en vuelo.
+ *
+ * Devuelve una huella corta y no la lista entera porque viaja como prop en el
+ * payload RSC de cada render del tablero.
+ */
+export function boardRevision(
+  tasks: Pick<BoardTaskLike, "id" | "parentTaskId" | "groupId" | "position">[],
+  groups: { id: string; position: number }[]
+): string {
+  // FNV-1a de 32 bits: una pasada, sin dependencias y sin colisiones que
+  // importen aquí — lo peor que puede pasar con una es un repintado de menos
+  // en un caso que ya exigiría dos estructuras distintas del mismo tamaño.
+  let hash = 0x811c9dc5;
+  const eat = (text: string) => {
+    for (let i = 0; i < text.length; i++) {
+      hash ^= text.charCodeAt(i);
+      hash = Math.imul(hash, 0x01000193);
+    }
+  };
+  for (const t of tasks) eat(`${t.id}|${t.parentTaskId ?? ""}|${t.groupId ?? ""}|${t.position};`);
+  eat("#");
+  for (const g of groups) eat(`${g.id}|${g.position};`);
+  return `${tasks.length}.${groups.length}.${(hash >>> 0).toString(36)}`;
+}

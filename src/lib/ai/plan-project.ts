@@ -1,7 +1,6 @@
 import "server-only";
 import { z } from "zod";
-import { zodTextFormat } from "openai/helpers/zod";
-import { openai, PLAN_MODEL, PLAN_MAX_OUTPUT_TOKENS } from "./openai-provider";
+import { generateJson, PLAN_BUDGET, type GeminiSchema } from "./gemini-provider";
 import { PLAN_LIMITS, sanitizePlan, type AiPlanDraft } from "@/lib/domain/execution/ai-plan.ts";
 
 /**
@@ -11,17 +10,20 @@ import { PLAN_LIMITS, sanitizePlan, type AiPlanDraft } from "@/lib/domain/execut
  * devuelve un borrador. Quien la llama decide si eso se escribe. Mismo reparto
  * que `recommend.ts`.
  *
- * `zod` CLÁSICA A PROPÓSITO, y es justo lo contrario de lo que hace
- * `recommend.ts` (ver D-027 y D-075). El helper de Anthropic convierte el
- * esquema con el núcleo v4 y revienta con uno v3; el `zodTextFormat` de OpenAI
- * va por `zod-to-json-schema`, que revienta con uno v4
- * (openai/openai-node#1602). Cada archivo importa el que su SDK admite. NO se
- * unifican: unificar rompe uno de los dos.
+ * DOS ESQUEMAS Y NO UNO, A PROPÓSITO. `PlanSchema` (zod) es el que EXIGE la
+ * forma de la respuesta; `PLAN_RESPONSE_SCHEMA` es el que se la PIDE al
+ * modelo. Se escriben en paralelo y a mano porque el conversor automático de
+ * un SDK es justo lo que ataba este archivo a `zod` clásica y `recommend.ts` a
+ * `zod/v4` (D-027, D-075): un reparto que no venía de nuestro código sino de
+ * sus dependencias. Sin conversor, todo el repo usa una sola `zod`, y una
+ * deriva entre los dos esquemas la caza el `safeParse` de más abajo — no la
+ * pantalla del usuario.
  */
 
-// Todos los campos son OBLIGATORIOS. Structured Outputs corre en modo estricto
-// (`additionalProperties: false` y `required` completo), y un `.optional()`
-// aquí hace que la petición se rechace con un 400 antes de llegar al modelo.
+// Todos los campos son OBLIGATORIOS. El modo estructurado no admite
+// `additionalProperties` y da por requerido lo que se declare, así que un
+// `.optional()` aquí solo serviría para que zod aceptara lo que el modelo no
+// va a mandar.
 const PlanTaskSchema = z.object({
   title: z.string().describe("La tarea, en español, en imperativo y en una línea. Concreta: se debe poder saber cuándo está hecha."),
   priority: z.enum(["High", "Medium", "Low"]).describe("Alta solo para lo que bloquea al resto de la fase. La mayoría es Medium."),
@@ -46,6 +48,65 @@ const PlanSchema = z.object({
   summary: z.string().describe("Una sola frase: qué enfoque tomaste y dónde termina el plan."),
   groups: z.array(PlanGroupSchema).describe("Las fases, en el orden en que se recorren.")
 });
+
+/**
+ * El mismo contrato, en el dialecto que entiende `responseSchema`.
+ *
+ * `propertyOrdering` no es decorativo: sin él el orden de las claves puede
+ * bailar entre llamadas idénticas.
+ */
+const PLAN_RESPONSE_SCHEMA: GeminiSchema = {
+  type: "OBJECT",
+  properties: {
+    name: { type: "STRING", description: "Nombre corto del plan, en español. Ej: «Plan de lanzamiento en 12 semanas»." },
+    summary: { type: "STRING", description: "Una sola frase: qué enfoque tomaste y dónde termina el plan." },
+    groups: {
+      type: "ARRAY",
+      description: "Las fases, en el orden en que se recorren.",
+      items: {
+        type: "OBJECT",
+        properties: {
+          name: {
+            type: "STRING",
+            description:
+              "El nombre de la fase, con su horizonte temporal dentro. Ej: «Fase 2 · Construcción (semanas 4-9)». El horizonte va AQUÍ, nunca como fecha."
+          },
+          tasks: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                title: {
+                  type: "STRING",
+                  description:
+                    "La tarea, en español, en imperativo y en una línea. Concreta: se debe poder saber cuándo está hecha."
+                },
+                priority: {
+                  type: "STRING",
+                  format: "enum",
+                  enum: ["High", "Medium", "Low"],
+                  description: "Alta solo para lo que bloquea al resto de la fase. La mayoría es Medium."
+                },
+                subtasks: {
+                  type: "ARRAY",
+                  description:
+                    "Los pasos en que se descompone la tarea, si de verdad se descompone. Array VACÍO en la mayoría: solo se usa cuando la tarea son varias cosas distintas.",
+                  items: { type: "STRING" }
+                }
+              },
+              required: ["title", "priority", "subtasks"],
+              propertyOrdering: ["title", "priority", "subtasks"]
+            }
+          }
+        },
+        required: ["name", "tasks"],
+        propertyOrdering: ["name", "tasks"]
+      }
+    }
+  },
+  required: ["name", "summary", "groups"],
+  propertyOrdering: ["name", "summary", "groups"]
+};
 
 const SYSTEM = `Eres el planificador de proyectos de Life OS, un sistema personal de gestión de vida. Trabajas en español.
 
@@ -102,62 +163,36 @@ function buildPrompt(input: PlanInput): string {
 
 /**
  * NUNCA LANZA. Mismo contrato que `recommend()` y `sendEmail()` (D-021,
- * D-030): que OpenAI esté caído, sin saldo o lento no puede tumbar el tablero
- * de proyectos, que es una pantalla que se usa sin IA todos los días.
+ * D-030): que el modelo esté caído, sin cuota o lento no puede tumbar el
+ * tablero de proyectos, que es una pantalla que se usa sin IA todos los días.
+ * `generateJson` ya cumple ese contrato y traduce a un motivo legible cada
+ * forma de fallar —cuota agotada, respuesta cortada, negativa del modelo—;
+ * aquí solo quedan las que son propias de un plan.
  */
 export async function planProject(input: PlanInput): Promise<PlanResult> {
   if (!input.objective.trim()) return { ok: false, reason: "Hace falta un objetivo para poder planear." };
 
-  try {
-    const response = await openai().responses.parse({
-      model: PLAN_MODEL,
-      max_output_tokens: PLAN_MAX_OUTPUT_TOKENS,
-      // Estructurar un proyecto es criterio, no redacción; pero tampoco es un
-      // problema abierto. `medium` es el punto donde deja de mejorar y empieza
-      // solo a costar tokens de razonamiento contra `max_output_tokens`.
-      reasoning: { effort: "medium" },
-      input: [
-        { role: "system", content: SYSTEM },
-        { role: "user", content: buildPrompt(input) }
-      ],
-      text: { format: zodTextFormat(PlanSchema, "plan") }
-    });
-
-    // Las dos formas de fallar SIN error HTTP, y por eso se comprueban a mano:
-    // la respuesta se cortó por el tope de tokens, o el modelo se negó. En
-    // ambas `output_parsed` viene vacío y sin esto el usuario vería un
-    // "no se pudo" genérico que no dice qué hacer.
-    if (response.status === "incomplete") {
-      const motivo = response.incomplete_details?.reason;
-      return {
-        ok: false,
-        reason:
-          motivo === "max_output_tokens"
-            ? "El plan salió demasiado largo y se cortó. Prueba con un objetivo más acotado."
-            : "El modelo no pudo terminar la respuesta. Inténtalo otra vez."
-      };
+  const result = await generateJson({
+    system: SYSTEM,
+    prompt: buildPrompt(input),
+    schema: PLAN_RESPONSE_SCHEMA,
+    budget: PLAN_BUDGET,
+    validate: (raw) => {
+      const parsed = PlanSchema.safeParse(raw);
+      return parsed.success
+        ? ({ ok: true, value: parsed.data } as const)
+        : ({ ok: false, reason: "El modelo no devolvió una respuesta con la forma esperada." } as const);
     }
+  });
 
-    const refusal = response.output
-      .flatMap((item) => (item.type === "message" ? item.content : []))
-      .find((content) => content.type === "refusal");
-    if (refusal && refusal.type === "refusal") {
-      return { ok: false, reason: `El modelo no quiso planear esto: ${refusal.refusal}` };
-    }
+  if (!result.ok || !result.data) return { ok: false, reason: result.reason };
 
-    if (!response.output_parsed) {
-      return { ok: false, reason: "El modelo no devolvió una respuesta con la forma esperada." };
-    }
-
-    // El esquema garantiza la FORMA; `sanitizePlan` garantiza las REGLAS
-    // —topes, colores, cero fechas—, que ningún esquema puede garantizar.
-    const plan = sanitizePlan(response.output_parsed);
-    if (!plan.groups.length) {
-      return { ok: false, reason: "El plan que devolvió el modelo llegó vacío. Inténtalo otra vez." };
-    }
-
-    return { ok: true, plan };
-  } catch (error) {
-    return { ok: false, reason: error instanceof Error ? error.message : "Error al consultar el modelo" };
+  // El esquema garantiza la FORMA; `sanitizePlan` garantiza las REGLAS
+  // —topes, colores, cero fechas—, que ningún esquema puede garantizar.
+  const plan = sanitizePlan(result.data);
+  if (!plan.groups.length) {
+    return { ok: false, reason: "El plan que devolvió el modelo llegó vacío. Inténtalo otra vez." };
   }
+
+  return { ok: true, plan };
 }

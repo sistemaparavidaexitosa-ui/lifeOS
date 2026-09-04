@@ -1,15 +1,24 @@
 // tests/domain/execution-project-templates.test.ts
+//
+// Dos cosas distintas se prueban aquí, y conviene no confundirlas:
+//
+//   - LAS FUNCIONES (`templateSummary`, `plannedRows`) siguen siendo dominio
+//     puro y se prueban con plantillas de mentira o con las sembradas.
+//   - EL CONTENIDO del catálogo ya no es un array de este repositorio: desde la
+//     migración 0044 vive en `template_catalog`. Lo que sigue estando en un
+//     archivo, y es lo que se vigila aquí, es la SEMILLA de esa migración — el
+//     catálogo con el que arranca cualquier entorno nuevo. Una plantilla que un
+//     administrador escriba después la valida el zod de schema.ts, al guardarla
+//     y al leerla.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import {
-  PROJECT_TEMPLATES,
-  TEMPLATE_CATEGORIES,
-  getProjectTemplate,
-  templateSummary,
-  plannedRows
-} from "../../src/lib/domain/execution/project-templates.ts";
+import { TEMPLATE_CATEGORIES, templateSummary, plannedRows } from "../../src/lib/domain/execution/project-templates.ts";
+import { PROYECTOS_SEMBRADOS as PROJECT_TEMPLATES, buscar } from "./seed-catalogo.ts";
 
-test("el catálogo trae las once plantillas y ningún id repetido", () => {
+/** El `getProjectTemplate` de cuando el catálogo era un array de este módulo. */
+const getProjectTemplate = (id: string) => buscar(PROJECT_TEMPLATES, id);
+
+test("la semilla trae las once plantillas y ningún id repetido", () => {
   assert.strictEqual(PROJECT_TEMPLATES.length, 11);
   const ids = PROJECT_TEMPLATES.map((t) => t.id);
   assert.strictEqual(new Set(ids).size, ids.length, "un id repetido haría que getProjectTemplate devolviera la otra");

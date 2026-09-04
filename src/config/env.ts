@@ -51,31 +51,42 @@ export function requireServiceRoleKey(): string {
 }
 
 /**
- * F11: el secreto del motor de recomendaciones. Solo lo exige la Server Action
- * que de verdad llama al modelo; ninguna página, ninguna otra acción. Si falta,
- * el análisis dice que no está configurado y el resto de la app no se entera.
+ * F11: el ÚNICO secreto de IA que queda. Lo exigen las tres features que
+ * llaman al modelo —recomendaciones, plan de proyecto y el chat— y nadie más:
+ * ninguna página, ninguna otra acción. Si falta, esas tres dicen que no están
+ * configuradas y el resto de la app no se entera.
+ *
+ * Fueron dos (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) mientras convivieron dos
+ * proveedores. Ahora todo sale por `src/lib/ai/gemini-provider.ts`.
  */
-export function requireAnthropicApiKey(): string {
-  const key = process.env.ANTHROPIC_API_KEY;
+export function requireGeminiApiKey(): string {
+  const key = process.env.GEMINI_API_KEY;
   if (!key) {
     throw new Error(
-      "ANTHROPIC_API_KEY no está definida. Solo se requiere para generar recomendaciones (Intelligence OS) — ver /docs/DEPLOY.md."
+      "GEMINI_API_KEY no está definida. Solo se requiere para las funciones de IA (recomendaciones, plan de proyecto y chat) — ver /docs/DEPLOY.md."
     );
   }
   return key;
 }
 
 /**
- * F11: el secreto del generador de planes de proyecto. Mismo criterio que el
- * de arriba y por el mismo motivo: solo lo exige la Server Action que llama al
- * modelo. Sin esta variable, «Generar plan con IA» dice que no está
- * configurado y TODO lo demás de /execution sigue funcionando igual.
+ * F11: la llave de FoodData Central (USDA), y es OPCIONAL de verdad.
+ *
+ * Solo la exige el buscador de alimentos genéricos. Sin ella la búsqueda cae
+ * en Open Food Facts —que no pide llave— y el módulo de nutrición sigue
+ * funcionando entero: `searchUsda` envuelve esto en un `try/catch` y trata la
+ * ausencia como «este proveedor no pudo contestar», que es un caso que ya
+ * sabía manejar.
+ *
+ * NUNCA usar `DEMO_KEY` como valor por defecto: son 30 peticiones por hora
+ * compartidas con todo internet, así que fallaría de forma intermitente e
+ * inexplicable en vez de fallar claro.
  */
-export function requireOpenAiApiKey(): string {
-  const key = process.env.OPENAI_API_KEY;
+export function requireUsdaApiKey(): string {
+  const key = process.env.USDA_API_KEY;
   if (!key) {
     throw new Error(
-      "OPENAI_API_KEY no está definida. Solo se requiere para generar planes de proyecto con IA — ver /docs/DEPLOY.md."
+      "USDA_API_KEY no está definida. Solo la exige el buscador de alimentos genéricos (FoodData Central); sin ella se busca en Open Food Facts — ver /docs/DEPLOY.md."
     );
   }
   return key;

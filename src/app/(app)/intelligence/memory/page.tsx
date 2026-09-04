@@ -14,6 +14,7 @@ const SCOPE_LABEL: Record<MemoryScope, string> = {
   finance: "Finanzas",
   decision: "Decisión",
   preference: "Preferencia",
+  health: "Salud",
   time: "Tiempo",
   habit: "Hábito"
 };

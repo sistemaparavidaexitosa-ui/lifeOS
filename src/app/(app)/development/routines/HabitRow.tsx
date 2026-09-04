@@ -2,39 +2,39 @@
 
 import { useTransition, type ReactNode } from "react";
 import { toggleHabitToday } from "./actions";
-
-interface OccupationLite {
-  id: string;
-  title: string;
-}
+import FormSheet from "../FormSheet";
+import FoodSearchForm from "../nutrition/FoodSearchForm";
+import type { Meal } from "@/lib/domain/development/nutrition.ts";
 
 /**
  * Fila de hábito. En móvil la racha ya no compite por la primera línea con el
- * nombre: baja junto a la frecuencia y la categoría, que es donde se lee como
+ * nombre: baja junto a la duración y la categoría, que es donde se lee como
  * un dato más del hábito. El nombre puede ser largo — `min-w-0` es lo que
  * impide que empuje el botón de marcar fuera de la pantalla.
  */
 export default function HabitRow({
+  routineId,
   habit,
   doneToday,
   streak,
-  occupation,
   action
 }: {
+  routineId: string;
   habit: {
     id: string;
     name: string;
-    frequency: string;
     category: string;
+    durationMin: number;
     /** «Después de X…» — la intención de implementación (migración 0033). */
     cue: string;
     twoMinVersion: string;
     /** Nombre del hábito ancla, ya resuelto en el servidor. */
     stackAfterName: string | null;
+    /** La comida que ES este hábito (0047), o `null` si no es una comida. */
+    meal?: string | null;
   };
   doneToday: boolean;
   streak: number;
-  occupation: OccupationLite | null;
   /** Botón de edición: viaja desde el Server Component para vivir en la fila. */
   action?: ReactNode;
 }) {
@@ -57,7 +57,7 @@ export default function HabitRow({
           color: doneToday ? "#fff" : "inherit"
         }}
         disabled={pending}
-        onClick={() => startTransition(() => toggleHabitToday(habit.id))}
+        onClick={() => startTransition(() => toggleHabitToday(routineId, habit.id))}
         aria-label={doneToday ? "Marcar como no cumplido" : "Marcar como cumplido"}
       >
         {doneToday ? "✓" : ""}
@@ -70,6 +70,18 @@ export default function HabitRow({
             trabajo es recordarte CUÁNDO toca — encerrada en la pantalla de
             edición no la lee nadie, y entonces las tres columnas de la
             migración 0033 no habrían servido para nada. */}
+        {habit.meal && (
+          // Registrar la comida marca también el hábito, pero SOLO al enviar el
+          // formulario: nada se escribe por el mero hecho de que el hábito sea
+          // una comida (D-089/D-105).
+          <span className="hb-cue">
+            <FormSheet label={`Registrar ${habit.meal.toLowerCase()}`} title={`Registrar ${habit.meal.toLowerCase()}`}>
+              {(close) => (
+                <FoodSearchForm localDate="" meal={habit.meal as Meal} close={close} habitId={habit.id} />
+              )}
+            </FormSheet>
+          </span>
+        )}
         {(habit.stackAfterName || habit.cue) && (
           <span className="hb-cue">
             {habit.stackAfterName ? `Después de: ${habit.stackAfterName}` : habit.cue}
@@ -83,8 +95,7 @@ export default function HabitRow({
         )}
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs" style={{ color: "var(--muted)", overflowWrap: "anywhere" }}>
-            {habit.frequency} · {habit.category}
-            {occupation ? ` · ligado a ${occupation.title}` : ""}
+            {habit.durationMin} min · {habit.category}
           </span>
           <span className="sm:hidden">{streakChip}</span>
         </div>

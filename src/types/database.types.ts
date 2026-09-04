@@ -64,6 +64,33 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_chat_messages: {
+        Row: {
+          content: string
+          created_at: string
+          fact_ids: string[]
+          id: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          fact_ids?: string[]
+          id?: string
+          role: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          fact_ids?: string[]
+          id?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       assets: {
         Row: {
           as_of: string
@@ -204,6 +231,33 @@ export type Database = {
           trigger_params?: Json
           trigger_type?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      body_measurements: {
+        Row: {
+          body_fat_pct: number | null
+          created_at: string
+          id: string
+          local_date: string
+          user_id: string
+          weight_kg: number
+        }
+        Insert: {
+          body_fat_pct?: number | null
+          created_at?: string
+          id?: string
+          local_date: string
+          user_id: string
+          weight_kg: number
+        }
+        Update: {
+          body_fat_pct?: number | null
+          created_at?: string
+          id?: string
+          local_date?: string
+          user_id?: string
+          weight_kg?: number
         }
         Relationships: []
       }
@@ -793,6 +847,116 @@ export type Database = {
           },
         ]
       }
+      food_entries: {
+        Row: {
+          brand: string
+          carbs_g: number
+          created_at: string
+          fat_g: number
+          food_id: string | null
+          grams: number
+          id: string
+          kcal: number
+          local_date: string
+          meal: string
+          name: string
+          position: number
+          protein_g: number
+          user_id: string
+        }
+        Insert: {
+          brand?: string
+          carbs_g?: number
+          created_at?: string
+          fat_g?: number
+          food_id?: string | null
+          grams: number
+          id?: string
+          kcal: number
+          local_date: string
+          meal: string
+          name: string
+          position?: number
+          protein_g?: number
+          user_id: string
+        }
+        Update: {
+          brand?: string
+          carbs_g?: number
+          created_at?: string
+          fat_g?: number
+          food_id?: string | null
+          grams?: number
+          id?: string
+          kcal?: number
+          local_date?: string
+          meal?: string
+          name?: string
+          position?: number
+          protein_g?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "food_entries_food_id_fkey"
+            columns: ["food_id"]
+            isOneToOne: false
+            referencedRelation: "foods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      foods: {
+        Row: {
+          brand: string
+          carbs_100g: number
+          created_at: string
+          fat_100g: number
+          fetched_at: string
+          id: string
+          kcal_100g: number
+          name: string
+          protein_100g: number
+          search: unknown
+          serving_g: number | null
+          serving_label: string
+          source: string
+          source_ref: string
+        }
+        Insert: {
+          brand?: string
+          carbs_100g?: number
+          created_at?: string
+          fat_100g?: number
+          fetched_at?: string
+          id?: string
+          kcal_100g: number
+          name: string
+          protein_100g?: number
+          search?: unknown
+          serving_g?: number | null
+          serving_label?: string
+          source: string
+          source_ref: string
+        }
+        Update: {
+          brand?: string
+          carbs_100g?: number
+          created_at?: string
+          fat_100g?: number
+          fetched_at?: string
+          id?: string
+          kcal_100g?: number
+          name?: string
+          protein_100g?: number
+          search?: unknown
+          serving_g?: number | null
+          serving_label?: string
+          source?: string
+          source_ref?: string
+        }
+        Relationships: []
+      }
       habit_logs: {
         Row: {
           completed_at: string
@@ -827,10 +991,12 @@ export type Database = {
           category: string
           created_at: string
           cue: string
-          frequency: string
+          duration_min: number
           id: string
+          meal: string | null
           name: string
-          occupation_id: string | null
+          position: number
+          routine_id: string
           stack_after_habit_id: string | null
           two_min_version: string
           user_id: string
@@ -839,10 +1005,12 @@ export type Database = {
           category?: string
           created_at?: string
           cue?: string
-          frequency?: string
+          duration_min?: number
           id?: string
+          meal?: string | null
           name: string
-          occupation_id?: string | null
+          position?: number
+          routine_id: string
           stack_after_habit_id?: string | null
           two_min_version?: string
           user_id: string
@@ -851,20 +1019,22 @@ export type Database = {
           category?: string
           created_at?: string
           cue?: string
-          frequency?: string
+          duration_min?: number
           id?: string
+          meal?: string | null
           name?: string
-          occupation_id?: string | null
+          position?: number
+          routine_id?: string
           stack_after_habit_id?: string | null
           two_min_version?: string
           user_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "habits_occupation_id_fkey"
-            columns: ["occupation_id"]
+            foreignKeyName: "habits_routine_id_fkey"
+            columns: ["routine_id"]
             isOneToOne: false
-            referencedRelation: "occupations"
+            referencedRelation: "routines"
             referencedColumns: ["id"]
           },
           {
@@ -1086,6 +1256,7 @@ export type Database = {
       }
       key_results: {
         Row: {
+          baseline: number | null
           created_at: string
           goal_id: string
           id: string
@@ -1093,11 +1264,13 @@ export type Database = {
           position: number
           source_id: string | null
           source_kind: string
+          source_metric: string
           target: number
           title: string
           unit: string
         }
         Insert: {
+          baseline?: number | null
           created_at?: string
           goal_id: string
           id?: string
@@ -1105,11 +1278,13 @@ export type Database = {
           position?: number
           source_id?: string | null
           source_kind?: string
+          source_metric?: string
           target?: number
           title: string
           unit?: string
         }
         Update: {
+          baseline?: number | null
           created_at?: string
           goal_id?: string
           id?: string
@@ -1117,6 +1292,7 @@ export type Database = {
           position?: number
           source_id?: string | null
           source_kind?: string
+          source_metric?: string
           target?: number
           title?: string
           unit?: string
@@ -1447,6 +1623,51 @@ export type Database = {
           },
         ]
       }
+      nutrition_profiles: {
+        Row: {
+          activity_level: string
+          birth_date: string
+          created_at: string
+          fat_pct: number
+          goal: string
+          height_cm: number
+          kcal_override: number | null
+          protein_g_per_kg: number
+          sex: string
+          updated_at: string
+          user_id: string
+          weight_kg: number
+        }
+        Insert: {
+          activity_level?: string
+          birth_date: string
+          created_at?: string
+          fat_pct?: number
+          goal?: string
+          height_cm: number
+          kcal_override?: number | null
+          protein_g_per_kg?: number
+          sex: string
+          updated_at?: string
+          user_id: string
+          weight_kg: number
+        }
+        Update: {
+          activity_level?: string
+          birth_date?: string
+          created_at?: string
+          fat_pct?: number
+          goal?: string
+          height_cm?: number
+          kcal_override?: number | null
+          protein_g_per_kg?: number
+          sex?: string
+          updated_at?: string
+          user_id?: string
+          weight_kg?: number
+        }
+        Relationships: []
+      }
       occupations: {
         Row: {
           category: string
@@ -1533,6 +1754,7 @@ export type Database = {
           created_at: string
           currency: string
           cycle: string
+          is_admin: boolean
           locale: string
           name: string
           onboarded: boolean
@@ -1549,6 +1771,7 @@ export type Database = {
           created_at?: string
           currency?: string
           cycle?: string
+          is_admin?: boolean
           locale?: string
           name?: string
           onboarded?: boolean
@@ -1565,6 +1788,7 @@ export type Database = {
           created_at?: string
           currency?: string
           cycle?: string
+          is_admin?: boolean
           locale?: string
           name?: string
           onboarded?: boolean
@@ -1821,7 +2045,6 @@ export type Database = {
       routine_runs: {
         Row: {
           completed_at: string | null
-          completed_step_ids: string[]
           id: string
           local_date: string
           routine_id: string
@@ -1829,7 +2052,6 @@ export type Database = {
         }
         Insert: {
           completed_at?: string | null
-          completed_step_ids?: string[]
           id?: string
           local_date: string
           routine_id: string
@@ -1837,7 +2059,6 @@ export type Database = {
         }
         Update: {
           completed_at?: string | null
-          completed_step_ids?: string[]
           id?: string
           local_date?: string
           routine_id?: string
@@ -1853,54 +2074,13 @@ export type Database = {
           },
         ]
       }
-      routine_steps: {
-        Row: {
-          duration_min: number
-          habit_id: string | null
-          id: string
-          position: number
-          routine_id: string
-          title: string
-        }
-        Insert: {
-          duration_min?: number
-          habit_id?: string | null
-          id?: string
-          position?: number
-          routine_id: string
-          title: string
-        }
-        Update: {
-          duration_min?: number
-          habit_id?: string | null
-          id?: string
-          position?: number
-          routine_id?: string
-          title?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "routine_steps_habit_id_fkey"
-            columns: ["habit_id"]
-            isOneToOne: false
-            referencedRelation: "habits"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "routine_steps_routine_id_fkey"
-            columns: ["routine_id"]
-            isOneToOne: false
-            referencedRelation: "routines"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       routines: {
         Row: {
           active: boolean
           created_at: string
           frequency: string
           id: string
+          identity: string
           name: string
           occupation_id: string | null
           position: number
@@ -1911,6 +2091,7 @@ export type Database = {
           created_at?: string
           frequency?: string
           id?: string
+          identity?: string
           name: string
           occupation_id?: string | null
           position?: number
@@ -1921,6 +2102,7 @@ export type Database = {
           created_at?: string
           frequency?: string
           id?: string
+          identity?: string
           name?: string
           occupation_id?: string | null
           position?: number
@@ -2194,6 +2376,42 @@ export type Database = {
           },
         ]
       }
+      template_catalog: {
+        Row: {
+          created_at: string
+          id: string
+          kind: string
+          payload: Json
+          position: number
+          slug: string
+          status: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind: string
+          payload: Json
+          position?: number
+          slug: string
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: string
+          payload?: Json
+          position?: number
+          slug?: string
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       weekly_reviews: {
         Row: {
           blocked_count: number
@@ -2347,6 +2565,7 @@ export type Database = {
           workspace_name: string
         }[]
       }
+      is_admin: { Args: never; Returns: boolean }
       is_workspace_member: {
         Args: { p_workspace_id: string }
         Returns: boolean

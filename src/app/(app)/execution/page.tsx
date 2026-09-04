@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { fdate } from "@/lib/format";
-import { isOverdue, isOpen, type BoardTaskLike } from "@/lib/domain/board.ts";
+import { boardRevision, isOverdue, isOpen, type BoardTaskLike } from "@/lib/domain/board.ts";
 import { todayInTimeZone } from "@/lib/domain/datetime.ts";
 import { getUserTimeZone } from "@/lib/data/profile";
 import { listWorkspaces, ROLES_QUE_CREAN, type WorkspaceSummary } from "@/lib/data/workspaces";
@@ -18,6 +18,7 @@ import BoardShell from "./BoardShell";
 import { isExecutionView, type BoardGroup, type BoardTask, type ExecutionView } from "./board-types";
 import { getProjectLogAndKnowledge } from "./logbook-knowledge-actions";
 import { getSessionUser } from "@/lib/data/session";
+import { listTemplates } from "@/lib/data/templates";
 import InsightSection from "@/components/InsightSection";
 
 // REDISEÑO DEL FLUJO DE PROYECTOS (estilo monday.com / ClickUp)
@@ -150,7 +151,11 @@ export default async function ExecutionPage({
           }
         >
           {canCreate && activeWorkspace && (
-            <NewProjectForm workspaceId={activeWorkspace.id} workspaceName={activeWorkspace.name} />
+            <NewProjectForm
+              workspaceId={activeWorkspace.id}
+              workspaceName={activeWorkspace.name}
+              templates={await listTemplates("project")}
+            />
           )}
         </PortfolioBoard>
 
@@ -301,6 +306,13 @@ async function BoardWorkspace({
     if (profile?.name) members = [profile.name];
   }
 
+  const groups = (groupRows ?? []) as BoardGroup[];
+
+  // Huella de la estructura servida. BoardShell la compara con la que ya tenía
+  // para saber cuándo el servidor le trae un árbol distinto (una plantilla
+  // aplicada, un plan de IA) y adoptarlo sin remontar. Ver board.ts.
+  const revision = boardRevision(tasks, groups);
+
   const rootTasks: BoardTaskLike[] = tasks.filter((t) => !t.parentTaskId);
   const countable = rootTasks.filter((t) => t.status !== "Cancelled");
   const done = countable.filter((t) => t.status === "Completed").length;
@@ -308,6 +320,7 @@ async function BoardWorkspace({
   return (
     <>
       <BoardHeader
+        templates={await listTemplates("project")}
         workspaces={moveTargets}
         currentWorkspaceId={projectRow.workspace_id}
         guestAccess={share?.access_level ?? null}
@@ -334,10 +347,11 @@ async function BoardWorkspace({
         key={projectId}
         projectId={projectId}
         initialTasks={tasks}
-        initialGroups={(groupRows ?? []) as BoardGroup[]}
+        initialGroups={groups}
         initialAssignees={assigneesByTask}
         commentCountByTask={commentCountByTask}
         members={members}
+        revision={revision}
         initialView={threadEnabled || view !== "hilo" ? view : "board"}
         orderingEnabled={orderingEnabled}
         threadEnabled={threadEnabled}

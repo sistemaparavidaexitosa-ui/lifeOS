@@ -80,13 +80,15 @@ versión exacta según lo que el propio instalador exija.
 | @supabase/ssr | `0.5.2` | Cliente SSR con cookies para App Router. **Nunca** `@supabase/auth-helpers-*` (deprecado). |
 | typescript | `5.7.3` | `strict: true` + `noUncheckedIndexedAccess: true` + `allowImportingTsExtensions: true`. |
 | tailwindcss | `3.4.17` | Design tokens extraídos de `LifeOS 4.html`. |
-| zod | `3.25.76` | Validación de entrada en todas las Server Actions. Subida desde `3.24.1` porque `@anthropic-ai/sdk` exige `^3.25`; la app sigue usando la API clásica (ver D-027). |
-| @anthropic-ai/sdk | `0.120.0` | Motor de recomendaciones (Intelligence OS). Única dependencia de runtime añadida después del set original — ver D-027. |
+| zod | `3.25.76` | Validación de entrada en todas las Server Actions **y de las respuestas del modelo**. La subida desde `3.24.1` la pidió en su día `@anthropic-ai/sdk`; la versión se queda porque el repo ya está en ella y funciona. Toda la app usa ahora la API clásica: el subpath `zod/v4` desapareció con los SDK (D-087). |
 
 ## Por qué este set evita ERESOLVE (F1)
 
 Los únicos paquetes de runtime son `next`, `react`, `react-dom`, `@supabase/*`,
-`zod`, `clsx` y `@anthropic-ai/sdk`. Ninguno de `@supabase/*`/`zod`/`clsx` declara un peer de React,
+`zod` y `clsx` — el set original, sin añadidos. `@anthropic-ai/sdk` y `openai`
+se quitaron al unificar la IA en Gemini, con la que se habla por `fetch` desde
+`src/lib/ai/gemini-provider.ts` (D-087): no hay SDK de IA que versionar, ni
+peers suyos que resolver. Ninguno de `@supabase/*`/`zod`/`clsx` declara un peer de React,
 por lo que React 19 no puede entrar en conflicto con ninguna dependencia
 transitiva. `.npmrc` con `legacy-peer-deps=true` se mantiene como red de
 seguridad documentada (no como parche a ciegas — ver `/docs/DECISIONS.md`

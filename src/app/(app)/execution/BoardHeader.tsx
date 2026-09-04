@@ -5,6 +5,7 @@ import { Chip, Progress } from "@/components/ui";
 import ProjectMenu, { type ProjectMenuData } from "./ProjectMenu";
 import type { LogEntry, KnowledgeItem } from "./logbook-knowledge-actions";
 import type { WorkspaceSummary } from "@/lib/data/workspaces";
+import type { ProjectTemplate } from "@/lib/domain/execution/project-templates.ts";
 
 export default function BoardHeader({
   project,
@@ -19,7 +20,8 @@ export default function BoardHeader({
   workspaces,
   currentWorkspaceId,
   guestAccess,
-  workspaceIsPersonal
+  workspaceIsPersonal,
+  templates
 }: {
   project: ProjectMenuData;
   progress: number;
@@ -36,6 +38,8 @@ export default function BoardHeader({
   /** Nivel del share vigente, o null si ningún invitado alcanza el proyecto. */
   guestAccess: string | null;
   workspaceIsPersonal: boolean;
+  /** El catálogo publicado, de camino al menú del proyecto. */
+  templates: ProjectTemplate[];
 }) {
   return (
     <header className="ex-header">
@@ -73,6 +77,7 @@ export default function BoardHeader({
           currentWorkspaceId={currentWorkspaceId}
           guestAccess={guestAccess}
           workspaceIsPersonal={workspaceIsPersonal}
+          templates={templates}
         />
       </div>
     </header>

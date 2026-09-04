@@ -51,7 +51,12 @@ export default function QuickAddRow({
   const empty = !value.trim();
 
   return (
-    <div className="mb-quickadd" style={{ marginLeft: indent * 26 }}>
+    // La misma variable de profundidad que usan las filas del tablero
+    // (MondayRow), para que "+ Agregar subtarea" quede alineada con las
+    // subtareas que va a crear. Antes era un `margin-left` propio: además de
+    // ir a su aire, empujaba la fila hacia fuera, y el `overflow-x: hidden`
+    // de body recortaba el desbordamiento en silencio en pantallas estrechas.
+    <div className="mb-quickadd" style={{ "--mb-depth": indent } as React.CSSProperties}>
       {/* El "+" era un icono decorativo: se veía como un botón y no hacía
           nada. Ahora es el botón de verdad — con el campo vacío le da el foco
           (que es lo que se espera al pulsarlo) y con algo escrito crea la

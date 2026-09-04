@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
@@ -24,10 +25,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // pantallas abren por defecto.
   const personalWorkspace = await getPersonalWorkspace();
 
+  // El plegado del rail del chat se lee AQUÍ y no en el cliente: con
+  // `localStorage` el servidor pintaría siempre la misma forma y el ancho del
+  // contenido se movería un frame después, en cada carga de página.
+  const chatCollapsed = (await cookies()).get("lifeos_chat_collapsed")?.value === "1";
+
   return (
     <AppShell
       userName={profile.name || "Usuario"}
       workspaceId={personalWorkspace?.id ?? null}
+      chatCollapsed={chatCollapsed}
       // Tras un límite de Suspense: la bandeja consulta en TODAS las pantallas
       // y no puede retrasar el pintado de ninguna. `null` de fallback porque un
       // esqueleto de campana parpadeando en cada navegación molesta más que

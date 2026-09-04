@@ -4,32 +4,23 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
-import { getPersonalWorkspaceIds } from "@/lib/data/workspaces";
-import { moneyFacts, type BudgetLineLike } from "@/lib/domain/insights/facts/money.ts";
-import { timeFacts } from "@/lib/domain/insights/facts/time.ts";
-import { executionFacts } from "@/lib/domain/insights/facts/execution.ts";
-import { habitsFacts, type HabitFrequency } from "@/lib/domain/insights/facts/habits.ts";
-import { debtFacts } from "@/lib/domain/insights/facts/debt.ts";
-import { activityFacts, type UnreadMentionLike } from "@/lib/domain/insights/facts/activity.ts";
-import { occupationAppliesOn } from "@/lib/domain/time.ts";
-import { loadMyTasks, type MyTaskRow } from "@/lib/data/tasks";
-import type { JournalEntryLike, ProjectStatus } from "@/lib/domain/types.ts";
+import { loadFacts } from "./facts-loader";
 import { allowedDomains, buildAliasMap, buildContext, restore, type Scope } from "./context";
 import { recommend } from "@/lib/ai/recommend";
-import { MODEL } from "@/lib/ai/provider";
+import { GEMINI_MODEL } from "@/lib/ai/gemini-provider";
 import { recommendationFingerprint } from "@/lib/domain/insights/fingerprint.ts";
 import { canTransition, REJECTION_STATUSES, type RecommendationStatus } from "@/lib/domain/insights/states.ts";
-import { DOMAIN_LABEL, type Domain, type Fact } from "@/lib/domain/insights/types.ts";
-import type { MemoryItemLike, MemoryScope } from "@/lib/domain/insights/memory.ts";
+import { DOMAIN_LABEL, type Domain } from "@/lib/domain/insights/types.ts";
+import { MEMORY_SCOPES, type MemoryItemLike, type MemoryOrigin, type MemoryScope } from "@/lib/domain/insights/memory.ts";
 
 /**
  * Intelligence OS — el análisis lo dispara el usuario y es informativo.
  *
  * El orden importa y es el del spec (§3.5): cargar datos → extraer hechos →
- * filtrar contexto → modelo → validar anclaje → escribir. La carga vive aquí y
- * no en `context.ts` para que el filtro de privacidad se pueda probar sin base
- * de datos; `context.ts` sigue siendo el único sitio donde ese filtro se
- * aplica (ver D-027).
+ * filtrar contexto → modelo → validar anclaje → escribir. La carga vive en
+ * `facts-loader.ts` y el filtro en `context.ts` —que sigue siendo el único
+ * sitio donde ese filtro se aplica (D-027) y se puede probar sin base de
+ * datos—; aquí solo se orquestan los pasos y se escribe el resultado.
  *
  * Cubre los cinco dominios personales —`money`, `debt`, `time`, `execution` y
  * `habits`— y con ellos el ámbito `global`, que es el único que los cruza.
@@ -42,11 +33,6 @@ export interface AnalyzeResult {
   created: number;
   /** Mensaje para la UI: por qué no hubo recomendaciones, si no las hubo. */
   reason?: string;
-}
-
-/** Primer día del ciclo vigente: se usa el mes natural, como /money/budget. */
-function cycleStart(todayISO: string): string {
-  return `${todayISO.slice(0, 7)}-01`;
 }
 
 /**
@@ -62,241 +48,9 @@ const SCOPE_PATH: Record<Scope, string> = {
   time: "/time",
   execution: "/execution",
   activity: "/activity",
+  nutrition: "/development/nutrition",
   global: "/home"
 };
-
-/** Lo que los extractores necesitan del perfil y no sale de sus propias tablas. */
-interface ProfileBits {
-  quincenalIncome: number;
-  window: { start: string; end: string };
-}
-
-type Db = Awaited<ReturnType<typeof createClient>>;
-
-/**
- * Carga los datos de cada dominio permitido y devuelve sus hechos.
- *
- * Un dominio, una función, y todas en paralelo: el ámbito `execution` incluye
- * también `time` (allowedDomains), y encadenarlas duplicaría la espera del
- * análisis sin ganar nada.
- *
- * Nótese lo que NO hay aquí: aritmética. Cada bloque carga filas, las traduce a
- * la forma que pide su extractor y delega. Toda la decisión de qué es anómalo
- * vive en domain/insights/facts/**, que se prueba sin base de datos.
- */
-async function loadFacts(supabase: Db, userId: string, domains: Domain[], today: string, profile: ProfileBits): Promise<Fact[]> {
-  const partes = await Promise.all(domains.map((domain) => loadDomainFacts(supabase, userId, domain, today, profile)));
-  return partes.flat();
-}
-
-async function loadDomainFacts(supabase: Db, userId: string, domain: Domain, today: string, profile: ProfileBits): Promise<Fact[]> {
-  switch (domain) {
-    case "money": {
-      const [{ data: budgets }, { data: entries }] = await Promise.all([
-        supabase.from("budgets").select("*").eq("period", "current"),
-        supabase.from("journal_entries").select("*, journal_lines(*)")
-      ]);
-
-      const entriesForDomain: JournalEntryLike[] = (entries ?? []).map((e) => ({
-        id: e.id,
-        type: e.type as JournalEntryLike["type"],
-        date: e.entry_date,
-        category: e.category,
-        status: e.status as JournalEntryLike["status"],
-        lines: (e.journal_lines ?? []).map((l) => ({ account: l.account_id, amount: l.amount }))
-      }));
-
-      const budgetLines: BudgetLineLike[] = (budgets ?? []).map((b) => ({
-        id: b.id,
-        category: b.category,
-        monthlyCost: b.monthly_cost,
-        q1Amount: b.q1_amount,
-        q2Amount: b.q2_amount
-      }));
-
-      return moneyFacts(
-        { budgets: budgetLines, entries: entriesForDomain, quincenalIncome: profile.quincenalIncome, cycleFromISO: cycleStart(today) },
-        today
-      );
-    }
-
-    case "time": {
-      const [{ data: occupations }, tasks] = await Promise.all([
-        supabase.from("occupations").select("*").eq("user_id", userId),
-        loadMyTasks(userId)
-      ]);
-
-      // Mismo filtro por día que /time y que Home: una ocupación no recurrente
-      // pertenece a SU fecha y a ninguna otra (migración 0016).
-      const hoy = (occupations ?? [])
-        .filter((o) => occupationAppliesOn({ recurring: o.recurring, occDate: o.occ_date, days: o.days }, today))
-        .map((o) => ({ id: o.id, title: o.title, start: o.start_time.slice(0, 5), end: o.end_time.slice(0, 5) }));
-
-      return timeFacts({
-        window: profile.window,
-        todayOccupations: hoy,
-        impactTasks: tasks.filter(isOpenTask).filter((t) => t.impact).map((t) => ({ id: t.id, title: t.title, est: t.est }))
-      });
-    }
-
-    case "execution": {
-      const [tasks, { data: projects }] = await Promise.all([
-        loadMyTasks(userId),
-        supabase.from("projects").select("id, title, status")
-      ]);
-
-      // Solo los proyectos donde tengo trabajo. Ser miembro de un espacio da
-      // acceso a proyectos enteros que no llevo yo, y decirle a alguien que el
-      // proyecto de un compañero lleva tres semanas parado no es una
-      // recomendación, es un chisme.
-      const mios = new Set(tasks.map((t) => t.projectId));
-
-      return executionFacts(
-        {
-          projects: (projects ?? [])
-            .filter((p) => mios.has(p.id))
-            .map((p) => ({ id: p.id, title: p.title, status: p.status as ProjectStatus })),
-          tasks: tasks.map((t) => ({
-            id: t.id,
-            title: t.title,
-            projectId: t.projectId,
-            status: t.status,
-            due: t.due,
-            deps: t.deps,
-            completedAtISO: t.completedAtISO
-          }))
-        },
-        today
-      );
-    }
-
-    case "habits": {
-      const [{ data: habits }, { data: logs }, { data: routines }, { data: runs }] = await Promise.all([
-        supabase.from("habits").select("id, name, frequency, occupation_id").eq("user_id", userId),
-        supabase.from("habit_logs").select("habit_id, log_date"),
-        supabase.from("routines").select("id, name, routine_steps(id)").eq("user_id", userId),
-        supabase.from("routine_runs").select("routine_id, local_date")
-      ]);
-
-      return habitsFacts(
-        {
-          habits: (habits ?? []).map((h) => ({
-            id: h.id,
-            name: h.name,
-            frequency: h.frequency as HabitFrequency,
-            occupationId: h.occupation_id
-          })),
-          logs: (logs ?? []).map((l) => ({ habitId: l.habit_id, date: l.log_date })),
-          routines: (routines ?? []).map((r) => ({ id: r.id, name: r.name, stepCount: (r.routine_steps ?? []).length })),
-          routineRuns: (runs ?? []).map((r) => ({ routineId: r.routine_id, date: r.local_date }))
-        },
-        today
-      );
-    }
-
-    case "activity": {
-      // La actividad cuelga del ESPACIO, no del usuario, así que hace falta
-      // saber cuál. Se usa el personal —el que siempre existe desde 0030— por
-      // el mismo motivo que la paleta: el ámbito del análisis no viaja en la
-      // llamada, y adivinarlo sería peor que fijar el que todos tienen.
-      const personalIds = await getPersonalWorkspaceIds();
-      const workspaceId = personalIds[0];
-      if (!workspaceId) return [];
-
-      const [{ data: rows }, { data: projects }, { data: mentions }, { data: reads }] = await Promise.all([
-        supabase
-          .from("workspace_activity")
-          .select("id, type, project_id, created_at")
-          .eq("workspace_id", workspaceId)
-          .order("created_at", { ascending: false })
-          .limit(200),
-        supabase.from("projects").select("id, title").eq("workspace_id", workspaceId),
-        supabase
-          .from("comments")
-          .select("id, subject_id, created_at")
-          .eq("subject_type", "task")
-          .contains("mentioned_user_ids", [userId])
-          .neq("author_id", userId)
-          .order("created_at", { ascending: false })
-          .limit(50),
-        supabase.from("comment_reads").select("comment_id").eq("user_id", userId)
-      ]);
-
-      const mencionadas = mentions ?? [];
-      if (!mencionadas.length && !(rows ?? []).length) return [];
-
-      // ¿Alguien escribió DESPUÉS en el mismo hilo? Una sola consulta para
-      // todas las tareas implicadas, no una por mención.
-      const taskIds = [...new Set(mencionadas.map((m) => m.subject_id))];
-      const [{ data: tasks }, { data: posteriores }] = await Promise.all([
-        taskIds.length
-          ? supabase.from("tasks").select("id, title").in("id", taskIds)
-          : Promise.resolve({ data: [] as { id: string; title: string }[] }),
-        taskIds.length
-          ? supabase.from("comments").select("subject_id, created_at").eq("subject_type", "task").in("subject_id", taskIds)
-          : Promise.resolve({ data: [] as { subject_id: string; created_at: string }[] })
-      ]);
-
-      const tituloPorTarea = new Map((tasks ?? []).map((t) => [t.id, t.title]));
-      const leidos = new Set((reads ?? []).map((r) => r.comment_id));
-
-      const sinLeer: UnreadMentionLike[] = mencionadas.flatMap((m) => {
-        if (leidos.has(m.id)) return [];
-        const titulo = tituloPorTarea.get(m.subject_id);
-        // Una mención cuya tarea ya no existe no lleva a ninguna parte.
-        if (!titulo) return [];
-        return [
-          {
-            commentId: m.id,
-            taskId: m.subject_id,
-            taskTitle: titulo,
-            at: m.created_at,
-            answered: (posteriores ?? []).some((c) => c.subject_id === m.subject_id && c.created_at > m.created_at)
-          }
-        ];
-      });
-
-      return activityFacts(
-        {
-          rows: (rows ?? []).map((r) => ({ id: r.id, type: r.type, projectId: r.project_id, at: r.created_at })),
-          mentions: sinLeer,
-          projects: (projects ?? []).map((p) => ({ id: p.id, title: p.title }))
-        },
-        today
-      );
-    }
-
-    case "debt": {
-      const [{ data: debts }, { data: pagos }] = await Promise.all([
-        supabase.from("debts").select("id, name, balance, rate, min_payment").eq("user_id", userId),
-        // Solo los gastos YA ligados a una deuda. Un gasto sin `debt_id` no es
-        // un pago de deuda: es un gasto (ver money/actions.ts, que además baja
-        // el saldo al registrarlo).
-        supabase.from("journal_entries").select("debt_id, entry_date").not("debt_id", "is", null)
-      ]);
-
-      return debtFacts(
-        {
-          debts: (debts ?? []).map((d) => ({
-            id: d.id,
-            name: d.name,
-            balance: Number(d.balance),
-            rate: Number(d.rate),
-            minPayment: Number(d.min_payment)
-          })),
-          payments: (pagos ?? [])
-            .filter((p): p is typeof p & { debt_id: string } => Boolean(p.debt_id))
-            .map((p) => ({ debtId: p.debt_id, date: p.entry_date }))
-        },
-        today
-      );
-    }
-  }
-}
-
-function isOpenTask(task: MyTaskRow): boolean {
-  return task.status !== "Completed" && task.status !== "Cancelled";
-}
 
 export async function analyze(scope: Scope): Promise<AnalyzeResult> {
   const supabase = await createClient();
@@ -399,7 +153,7 @@ export async function analyze(scope: Scope): Promise<AnalyzeResult> {
       scope,
       domains: context.domains,
       factCount: context.facts.length,
-      model: MODEL,
+      model: result.model ?? GEMINI_MODEL,
       created: result.recommendations.length,
       dropped: result.dropped.length
     }
@@ -533,14 +287,21 @@ export async function editRecommendationText(id: string, text: string): Promise<
 
 // --- Memoria (§6) -----------------------------------------------------------
 
-const MEMORY_SCOPES = ["goal", "project", "finance", "decision", "preference", "time", "habit"] as const;
 
 /**
- * Alta y edición de una nota de memoria. Solo origen `user`: la memoria de
- * origen `ai` nace únicamente de aceptar una recomendación con acción
- * `memory.remember`, y esas acciones llegan en la Fase 4. Nunca se escribe sola.
+ * Alta y edición de una nota de memoria, y el ÚNICO sitio que escribe en
+ * `memory_items`.
+ *
+ * `origin` distingue quién la redactó, no quién la autorizó: la de origen `ai`
+ * sale de una propuesta del chat que el usuario confirmó con un botón (D-089).
+ * Ninguna de las dos se escribe sola — lo que cambia es a quién se le atribuye
+ * el texto cuando después se lee en `/intelligence/memory`.
  */
-export async function upsertMemoryItem(id: string | null, formData: FormData): Promise<{ ok: boolean; reason?: string }> {
+export async function upsertMemoryItem(
+  id: string | null,
+  formData: FormData,
+  origin: MemoryOrigin = "user"
+): Promise<{ ok: boolean; reason?: string }> {
   const text = String(formData.get("text") ?? "").trim();
   const scope = String(formData.get("scope") ?? "");
   const validUntilRaw = String(formData.get("validUntil") ?? "").trim();
@@ -557,7 +318,7 @@ export async function upsertMemoryItem(id: string | null, formData: FormData): P
   const payload = { scope, text, valid_until: validUntilRaw || null };
   const { error } = id
     ? await supabase.from("memory_items").update(payload).eq("id", id)
-    : await supabase.from("memory_items").insert({ ...payload, user_id: user.id, origin: "user" });
+    : await supabase.from("memory_items").insert({ ...payload, user_id: user.id, origin });
   if (error) return { ok: false, reason: error.message };
 
   revalidatePath("/intelligence/memory");
@@ -595,7 +356,14 @@ export async function setAiDomains(formData: FormData): Promise<void> {
   revalidatePath("/money");
 }
 
-/** §4.4: borrar TODO el historial de recomendaciones. Sin vuelta atrás. */
+/**
+ * §4.4: borrar TODO el historial de IA. Sin vuelta atrás.
+ *
+ * Incluye la conversación del chat (0045) y no solo las recomendaciones. El
+ * botón promete «borrar el historial de IA», y una conversación que sobreviva
+ * a ese botón convierte la promesa en media verdad — es, además, el sitio
+ * donde el modelo escribió con más detalle sobre la vida del usuario.
+ */
 export async function clearAiHistory(): Promise<void> {
   const supabase = await createClient();
   const {
@@ -604,10 +372,12 @@ export async function clearAiHistory(): Promise<void> {
   if (!user) return;
 
   await supabase.from("recommendations").delete().eq("user_id", user.id);
+  await supabase.from("ai_chat_messages").delete().eq("user_id", user.id);
   await supabase.from("audit_log").insert({ user_id: user.id, action: "ai.clear.history", object: "" });
   revalidatePath("/intelligence");
   revalidatePath("/money");
   revalidatePath("/settings");
+  revalidatePath("/home");
 }
 
 /** §4.4: borrar toda la memoria. */

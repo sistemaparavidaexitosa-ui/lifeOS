@@ -12,6 +12,16 @@
 //   - Barra de avance de subtareas en la fila padre.
 //   - El detalle ya no monta un Drawer por fila: llama a api.openDetail y
 //     BoardShell monta UNO solo.
+//
+// LA SANGRÍA VIAJA EN UNA VARIABLE, no en una clase. Antes cada fila se
+// pintaba con `mb-indent-1|2|3`, y la capa de acabado de globals.css redeclara
+// más abajo el atajo `padding` sobre `.mb-row` con la misma especificidad: se
+// llevaba por delante el `padding-left` de esas clases sin avisar. El tablero
+// llevaba tiempo dibujando tareas y subtareas al MISMO nivel en todas las
+// pantallas. Ahora la fila solo declara su profundidad (`--mb-depth`) y el
+// `padding-left` se calcula dentro de la propia regla `.mb-row`, donde ningún
+// atajo posterior puede pisarlo. De paso deja de haber tope de tres niveles:
+// la recursión nunca lo tuvo, y la base tampoco.
 import { useState } from "react";
 import { computeStats, isOverdue } from "@/lib/domain/board.ts";
 import { IconChevronRight, IconChevronDown, IconComment, IconPlus, IconTrash } from "@/components/icons";
@@ -94,13 +104,14 @@ export default function MondayRow({
       <div
         className={[
           "mb-row",
-          depth ? `mb-indent-${Math.min(depth, 3)}` : "",
+          depth ? "mb-sub" : "",
           isSelected ? "selected" : "",
           dragging ? "dragging" : "",
           hint ? `drop-${hint}` : ""
         ]
           .filter(Boolean)
           .join(" ")}
+        style={{ "--mb-depth": depth } as React.CSSProperties}
         draggable={api.orderingEnabled}
         onDragStart={(e) => {
           if (!api.orderingEnabled) return;

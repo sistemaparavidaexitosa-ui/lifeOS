@@ -10,13 +10,21 @@
 // sujeto es otro: aquí no hay tarea, ni estado que evaluar, ni dependencias.
 // Lo que se comparte —casar menciones, reaccionar, fijar, recordar— ya vive
 // fuera de los dos (domain/execution/mentions.ts, thread-actions.ts).
+//
+// AQUÍ NO SE LEE `workspace_activity`, Y ES DELIBERADO
+// Hasta ahora se intercalaban los eventos del proyecto entre los mensajes, con
+// la idea de que dieran contexto como los mensajitos grises de un chat. La
+// pantalla que responde a «qué ha pasado aquí» ya existe y es /activity, que
+// los enseña completos y agrupados por día; repetirlos en el hilo no añadía
+// contexto, enterraba la conversación. El hilo responde a otra pregunta: «qué
+// nos dijimos». Solo comentarios y menciones de los miembros del espacio.
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { recordActivity } from "@/lib/data/activity";
 import { parseMentions, type RosterMember } from "@/lib/domain/execution/mentions.ts";
-import type { ProjectEventLike, ThreadCommentLike } from "@/lib/domain/execution/project-thread.ts";
+import type { ThreadCommentLike } from "@/lib/domain/execution/thread.ts";
 
 export interface ProjectThreadComment extends ThreadCommentLike {
   mentions: string[];
@@ -32,20 +40,9 @@ export interface ProjectThreadResult {
   projectTitle: string;
   comments: ProjectThreadComment[];
   reactions: ProjectThreadReaction[];
-  events: ProjectEventLike[];
   roster: RosterMember[];
   viewerId: string;
 }
-
-/**
- * Tope de eventos que se intercalan en el hilo.
- *
- * El feed del espacio (/activity) enseña 200 porque responde a «qué ha pasado
- * aquí». Este responde a «de qué estábamos hablando», y una conversación no se
- * lee entre trescientos mensajitos grises: pasado cierto punto los eventos
- * dejan de dar contexto y empiezan a esconder los mensajes.
- */
-const MAX_EVENTOS = 60;
 
 export async function getProjectThread(projectId: string): Promise<ProjectThreadResult> {
   const id = z.string().uuid().parse(projectId);
@@ -94,19 +91,6 @@ export async function getProjectThread(projectId: string): Promise<ProjectThread
     ? await supabase.from("comment_reactions").select("comment_id, user_id, emoji").in("comment_id", commentIds)
     : { data: [] as ProjectThreadReaction[] };
 
-  // Los eventos vienen descendentes (es el índice que existe) y los ordena
-  // mergeProjectThread. Pedirlos ascendentes traería los MÁS VIEJOS al toparlos.
-  const { data: eventRows } = await supabase
-    .from("workspace_activity")
-    .select("id, type, text, actor, created_at")
-    .eq("project_id", id)
-    // Fuera los avisos de «escribió en el hilo»: el mensaje del que hablan se
-    // está pintando dos líneas más abajo, y repetirlo sería contar cada frase
-    // dos veces. En /activity sí valen, porque allí el mensaje no aparece.
-    .neq("type", "comment.project")
-    .order("created_at", { ascending: false })
-    .limit(MAX_EVENTOS);
-
   return {
     projectTitle: project.title,
     comments: (commentRows ?? []).map((c) => ({
@@ -117,13 +101,6 @@ export async function getProjectThread(projectId: string): Promise<ProjectThread
       createdAt: c.created_at
     })),
     reactions: (reactionRows ?? []) as ProjectThreadReaction[],
-    events: (eventRows ?? []).map((e) => ({
-      id: e.id,
-      type: e.type,
-      text: e.text,
-      actor: e.actor,
-      at: e.created_at
-    })),
     roster,
     viewerId: user.id
   };
@@ -180,10 +157,9 @@ export async function addProjectComment(projectId: string, body: string) {
   await recordActivity({
     workspaceId: project.workspace_id,
     projectId: id,
-    // Tipo propio, no `comment` a secas: el hilo mismo excluye estos eventos
-    // al pintarse —el mensaje ya está ahí, en su tarjeta— y sin un tipo que
-    // los distinga habría que adivinarlo por el texto. En /activity se lee
-    // igual que cualquier comentario.
+    // La fila SIGUE escribiéndose aunque el hilo ya no pinte eventos: quien
+    // mira /activity quiere saber que aquí se habló, y el tipo propio deja
+    // distinguirlo de un comentario de tarea sin adivinarlo por el texto.
     type: "comment.project",
     text: `escribió en el hilo de "${project.title}"`
   });

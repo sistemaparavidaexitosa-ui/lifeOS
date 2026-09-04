@@ -18,7 +18,16 @@ export default async function PersonalGoalsPage() {
 
   const personalWorkspaceIds = await getPersonalWorkspaceIds();
 
-  const [{ data: goals }, { data: krs }, { data: habits }, { data: projects }, { data: books }, { data: fgoals }, { data: sgoals }] =
+  const [
+    { data: goals },
+    { data: krs },
+    { data: habits },
+    { data: projects },
+    { data: books },
+    { data: fgoals },
+    { data: sgoals },
+    { data: nutriPerfil }
+  ] =
     await Promise.all([
       supabase.from("personal_goals").select("*").order("created_at"),
       supabase.from("key_results").select("*").order("position"),
@@ -30,7 +39,8 @@ export default async function PersonalGoalsPage() {
       supabase.from("projects").select("id, title").in("workspace_id", personalWorkspaceIds).order("title"),
       supabase.from("books").select("id, title").order("title"),
       supabase.from("financial_goals").select("id, name").order("name"),
-      supabase.from("savings_goals").select("id, name").order("name")
+      supabase.from("savings_goals").select("id, name").order("name"),
+      supabase.from("nutrition_profiles").select("user_id").maybeSingle()
     ]);
 
   const today = todayLocal(await getUserTimeZone());
@@ -41,7 +51,11 @@ export default async function PersonalGoalsPage() {
     project: (projects ?? []).map((p) => ({ id: p.id, label: p.title })),
     book: (books ?? []).map((b) => ({ id: b.id, label: b.title })),
     financial_goal: (fgoals ?? []).map((g) => ({ id: g.id, label: g.name })),
-    savings_goal: (sgoals ?? []).map((g) => ({ id: g.id, label: g.name }))
+    savings_goal: (sgoals ?? []).map((g) => ({ id: g.id, label: g.name })),
+    // Una sola opción, y solo si el perfil existe: sin perfil no hay objetivo
+    // contra el que medir, y ofrecer la fuente crearía un resultado clave
+    // condenado a salir «stale».
+    nutrition: nutriPerfil ? [{ id: nutriPerfil.user_id, label: "Tu perfil corporal" }] : []
   };
 
   const rows = (goals ?? []).map((g) => {
@@ -53,6 +67,8 @@ export default async function PersonalGoalsPage() {
           id: k.id,
           sourceKind: k.source_kind as KeyResultSourceKind,
           sourceId: k.source_id,
+          sourceMetric: k.source_metric as "adherencia" | "peso",
+          baseline: k.baseline === null ? null : Number(k.baseline),
           target: Number(k.target),
           manualCurrent: Number(k.manual_current)
         },

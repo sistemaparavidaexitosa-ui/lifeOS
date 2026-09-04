@@ -104,3 +104,88 @@ test("goalAtRisk: horizonte vencido sin completar está en riesgo", () => {
 test("goalAtRisk: el umbral es estricto — exactamente 20 puntos de atraso todavía no es riesgo", () => {
   assert.strictEqual(goalAtRisk("2026-01-01", "2026-06-30", 80, "2026-08-22"), false);
 });
+
+// --- Fuente de nutrición y metas DESCENDENTES (0047) --------------------------
+// «Bajar a 78 kg» es la primera fuente del sistema donde el objetivo está POR
+// DEBAJO del valor actual. Con la fórmula de las metas ascendentes, 82/78 da
+// 105 % y se recorta a 100: la meta nacería cumplida.
+
+const SNAPSHOT_NUTRICION: SourceSnapshot = {
+  habitCompletionPct: {},
+  projectDonePct: {},
+  bookPagesRead: {},
+  financialGoalAmount: {},
+  savingsGoalAmount: {},
+  nutritionAdherencePct: { u1: 62 },
+  bodyWeightKg: { u1: 81 }
+};
+
+test("keyResultProgress: la adherencia de nutrición se lee como cualquier otra fuente ascendente", () => {
+  const kr = {
+    id: "k1",
+    sourceKind: "nutrition" as const,
+    sourceId: "u1",
+    sourceMetric: "adherencia" as const,
+    baseline: null,
+    target: 80,
+    manualCurrent: 0
+  };
+  const p = keyResultProgress(kr, SNAPSHOT_NUTRICION);
+  assert.strictEqual(p.current, 62);
+  assert.strictEqual(p.pct, 78);
+});
+
+test("keyResultProgress: una meta de peso NO nace cumplida por estar el objetivo por debajo", () => {
+  const kr = {
+    id: "k2",
+    sourceKind: "nutrition" as const,
+    sourceId: "u1",
+    sourceMetric: "peso" as const,
+    baseline: 85,
+    target: 78,
+    manualCurrent: 0
+  };
+  // De 85 a 78 son 7 kg; lleva 4 (85→81). Eso es un 57 %, no un 100 %.
+  const p = keyResultProgress(kr, SNAPSHOT_NUTRICION);
+  assert.strictEqual(p.current, 81);
+  assert.strictEqual(p.pct, 57);
+});
+
+test("keyResultProgress: una meta descendente ya alcanzada llega a 100 y no se pasa", () => {
+  const kr = {
+    id: "k3",
+    sourceKind: "nutrition" as const,
+    sourceId: "u1",
+    sourceMetric: "peso" as const,
+    baseline: 85,
+    target: 82,
+    manualCurrent: 0
+  };
+  assert.strictEqual(keyResultProgress(kr, SNAPSHOT_NUTRICION).pct, 100);
+});
+
+test("keyResultProgress: sin perfil corporal la meta de nutrición queda stale, como un libro borrado", () => {
+  const kr = {
+    id: "k4",
+    sourceKind: "nutrition" as const,
+    sourceId: "otro-usuario",
+    sourceMetric: "adherencia" as const,
+    baseline: null,
+    target: 80,
+    manualCurrent: 0
+  };
+  assert.strictEqual(keyResultProgress(kr, SNAPSHOT_NUTRICION).stale, true);
+});
+
+test("keyResultProgress: una meta de peso SIN línea base no se inventa el progreso, se declara stale", () => {
+  const kr = {
+    id: "k5",
+    sourceKind: "nutrition" as const,
+    sourceId: "u1",
+    sourceMetric: "peso" as const,
+    baseline: null,
+    target: 78,
+    manualCurrent: 0
+  };
+  assert.strictEqual(keyResultProgress(kr, SNAPSHOT_NUTRICION).stale, true);
+});

@@ -2,14 +2,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  ROUTINE_TEMPLATES,
-  HABIT_TEMPLATES,
   routineTemplateDuration,
-  getRoutineTemplate,
-  getHabitTemplate,
   habitTemplatesByCategory,
   matchHabitForStep
 } from "../../src/lib/domain/development/templates.ts";
+import { RUTINAS_SEMBRADAS as ROUTINE_TEMPLATES, HABITOS_SEMBRADOS as HABIT_TEMPLATES, buscar } from "./seed-catalogo.ts";
+
+// El contenido ya no es un array de este repositorio (migración 0044): lo que
+// se vigila es la SEMILLA de la migración, que es el catálogo con el que
+// arranca cualquier entorno nuevo. Ver el comentario de seed-catalogo.ts.
+const getRoutineTemplate = (id: string) => buscar(ROUTINE_TEMPLATES, id);
+const getHabitTemplate = (id: string) => buscar(HABIT_TEMPLATES, id);
 
 test("los ids de las plantillas son únicos", () => {
   // Un id repetido haría que "usar plantilla" copiara siempre la primera, y el
@@ -87,7 +90,7 @@ test("las señales están redactadas como intención de implementación", () => 
 });
 
 test("habitTemplatesByCategory agrupa sin perder ni duplicar plantillas", () => {
-  const grupos = habitTemplatesByCategory();
+  const grupos = habitTemplatesByCategory(HABIT_TEMPLATES);
   const total = grupos.reduce((sum, g) => sum + g.templates.length, 0);
   assert.strictEqual(total, HABIT_TEMPLATES.length);
   assert.ok(grupos.every((g) => g.templates.length > 0), "no debe haber grupos vacíos");
@@ -112,8 +115,51 @@ test("matchHabitForStep ignora acentos y mayúsculas", () => {
 });
 
 test("matchHabitForStep devuelve null cuando no hay pista o no hay coincidencia", () => {
-  // Fallar aquí no rompe nada: el paso simplemente se crea suelto, sin ligar.
+  // No encontrar nada es el caso BUENO desde 0045: el paso se siembra como
+  // hábito nuevo de la rutina. Lo que sí cuesta es encontrar de más, porque
+  // entonces el paso no se siembra y la rutina nace incompleta — por eso un
+  // paso sin `habitHint` nunca busca, en vez de comparar por su título.
   assert.strictEqual(matchHabitForStep(undefined, [{ id: "h1", name: "Leer" }]), null);
   assert.strictEqual(matchHabitForStep("nadar", [{ id: "h1", name: "Leer" }]), null);
   assert.strictEqual(matchHabitForStep("leer", []), null);
+});
+
+test("HabitTemplate ya no lleva frecuencia: la dicta la rutina", () => {
+  // Desde 0045 un hábito no vive suelto: siempre está dentro de una rutina, y
+  // es ella la que tiene frecuencia. Una plantilla de hábito con `frequency`
+  // propondría un valor que el formulario ya no tiene dónde guardar.
+  for (const plantilla of HABIT_TEMPLATES) {
+    assert.ok(!Object.hasOwn(plantilla, "frequency"), `${plantilla.id} todavía trae frequency`);
+  }
+});
+
+test("si el usuario ya tiene todos los hábitos de una plantilla de rutina, ningún paso queda por sembrar", () => {
+  // Reproduce el filtro que usa `createRoutineFromTemplate` (fuera del alcance
+  // de este archivo por ser una server action, no lógica pura): si el usuario
+  // ya tiene un hábito que coincide con cada paso, la lista de "nuevos" sale
+  // vacía. Ese caso es justo el que la acción debe rechazar en vez de crear
+  // una rutina sin hábitos que reporte éxito.
+  //
+  // Se usa el Club de las 5 AM y no S.A.V.E.R.S. porque es la única plantilla
+  // en la que TODOS los pasos traen `habitHint`, que desde ahora es lo único
+  // que se compara.
+  const plantilla = getRoutineTemplate("club-5am")!;
+  const existentes = plantilla.steps.map((paso, i) => ({ id: `h${i}`, name: paso.habitHint! }));
+  const nuevos = plantilla.steps.filter((paso) => matchHabitForStep(paso.habitHint, existentes) === null);
+  assert.strictEqual(nuevos.length, 0);
+});
+
+test("un paso sin habitHint se siembra siempre, aunque su título se parezca a un hábito que ya llevas", () => {
+  // La regresión que esta prueba fija: comparar por `step.title` hacía que
+  // "Silencio" o "Escritura" coincidieran por inclusión con hábitos del
+  // usuario y la rutina naciera con la mitad de los pasos, en silencio. Un
+  // paso sin pista NO es candidato a duplicado; se siembra.
+  const plantilla = getRoutineTemplate("savers-60")!;
+  const sinPista = plantilla.steps.filter((paso) => paso.habitHint === undefined);
+  assert.ok(sinPista.length > 0, "la plantilla ya no tiene pasos sin habitHint: revisa esta prueba");
+
+  const existentes = sinPista.map((paso, i) => ({ id: `h${i}`, name: paso.title }));
+  for (const paso of sinPista) {
+    assert.strictEqual(matchHabitForStep(paso.habitHint, existentes), null);
+  }
 });

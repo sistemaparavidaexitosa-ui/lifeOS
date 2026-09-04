@@ -6,7 +6,7 @@
 // conecta entre dominios y los redacta. Por eso no puede inventar una cifra —
 // no hay ninguna que inventar, solo que citar.
 
-export type Domain = "money" | "execution" | "time" | "habits" | "debt" | "activity";
+export type Domain = "money" | "execution" | "time" | "habits" | "debt" | "activity" | "nutrition";
 
 export interface Fact {
   /**
@@ -41,5 +41,6 @@ export const DOMAIN_LABEL: Record<Domain, string> = {
   habits: "Hábitos",
   time: "Tiempo",
   execution: "Proyectos y tareas",
-  activity: "Actividad del equipo"
+  activity: "Actividad del equipo",
+  nutrition: "Nutrición"
 };

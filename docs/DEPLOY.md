@@ -37,44 +37,63 @@ pnpm gen:types
      habilitado. En Authentication → URL Configuration, agrega tu dominio de
      Vercel a **Redirect URLs** (`https://tu-dominio.vercel.app/auth/callback`).
 
-## 1ter) Motor de recomendaciones (Intelligence OS)
+## 1ter) Las funciones de IA (una sola llave)
 
-El análisis de `/money` llama a la API de Claude. Sin esta variable la app
-**no falla**: el botón "Analizar" responde que el motor no está configurado y
-el resto de la página sigue igual.
-
-```bash
-ANTHROPIC_API_KEY=sk-ant-xxxxxxxx   # https://console.anthropic.com → API Keys
-```
-
-El análisis lo dispara siempre el usuario con un clic; no hay cron ni llamadas
-en segundo plano, así que el gasto es una llamada por clic. El modelo es
-`claude-opus-5` y está fijado en `src/lib/ai/provider.ts`.
-
-## 1quater) Planes de proyecto con IA (Proyectos y Tareas)
-
-«Generar plan con IA», en `/execution`, llama a la API de OpenAI. Sin esta
-variable la app **no falla**: el panel dice que no está configurado y el resto
-de `/execution` —tablero, plantillas, todo— sigue igual (F11, D-075).
+Tres cosas llaman al modelo y las tres salen por la misma variable: el motor de
+recomendaciones (Intelligence OS), «Generar plan con IA» en `/execution` y el
+chat del rail lateral. Sin ella la app **no falla**: esas tres avisan de que no
+están configuradas y todo lo demás sigue igual (F11).
 
 ```bash
-OPENAI_API_KEY=sk-proj-xxxxxxxx   # https://platform.openai.com → API keys
+GEMINI_API_KEY=AIza...   # https://aistudio.google.com/apikey (gratis)
 ```
 
-Igual que el motor de recomendaciones: lo dispara siempre el usuario con un
-clic, no hay cron ni llamadas en segundo plano, y el gasto es una llamada por
-clic (dos si regenera). El modelo es `gpt-5.6` y está fijado en
-`src/lib/ai/openai-provider.ts`; `gpt-5.6-terra` es ahí el cambio de una línea
-si el coste llega a importar.
+Los modelos son una **cadena**, fijada en `GEMINI_MODELS` dentro de
+`src/lib/ai/gemini-provider.ts`, que es el único archivo del proyecto que habla
+con la API:
 
-⚠️ Lo que sale del servidor es el **objetivo que escribió el usuario** y, en un
-proyecto que ya tiene tareas, los **títulos** de sus grupos y tareas. Nada más:
-ni responsables, ni fechas, ni comentarios, ni ids. El panel lo dice en pantalla
-antes de generar.
+```ts
+export const GEMINI_MODELS = ["gemini-3.1-flash-lite", "gemini-3.6-flash"] as const;
+```
 
-⚠️ Lo que sale del servidor son los **hechos ya calculados**, en texto, con los
-nombres de cuentas y dependientes sustituidos por alias. Nunca filas crudas de
-la base. El filtro vive en un solo archivo, `src/lib/insights/context.ts`.
+Se prueba el primero y, **si se agota su cuota diaria (429), se pasa al
+siguiente**. Cada modelo del free tier tiene su propio contador, así que la
+cadena suma peticiones al día en vez de dejar la IA parada hasta mañana. El
+usuario no ve el salto; solo ve la respuesta.
+
+Qué modelo contestó de verdad queda en `audit_log` (`meta.model`), no se
+deduce: con una cadena, dar por hecho el primero sería registrar una mentira.
+
+⚠️ **Los modelos se retiran.** El primero que se usó, `gemini-2.5-flash`, dejó
+de estar disponible para cuentas nuevas a los pocos días y se llevó por delante
+las tres funciones de IA. Con la cadena eso ya no tumba nada: un 404 también
+salta al siguiente modelo. Aun así conviene arreglarlo, y se reconoce enseguida
+porque el mensaje de la API llega entero a la pantalla y nombra al sucesor:
+«This model … is no longer available to new users. Please update your code to
+use models/…». Cuando pase, se cambia esa lista y nada más.
+
+**Sobre el free tier.** Tiene límite por minuto y por día. Ninguna de las tres
+funciones corre sola: no hay cron ni llamadas en segundo plano, siempre las
+dispara el usuario con un gesto, así que el consumo es una llamada por clic o
+por turno de chat. Al topar el límite, la respuesta lo dice con esas palabras
+—«se agotó la cuota gratuita, inténtalo en un minuto»— y no como un error
+genérico.
+
+**Fue de dos llaves a una.** Hasta la migración a Gemini convivían
+`ANTHROPIC_API_KEY` (recomendaciones) y `OPENAI_API_KEY` (plan de proyecto).
+Las dos se pueden borrar del entorno: ya no las lee nadie.
+
+⚠️ Lo que sale del servidor, en los tres casos:
+
+- **Recomendaciones y chat:** los **hechos ya calculados**, en texto, con los
+  nombres de cuentas y dependientes sustituidos por alias, y solo de los
+  dominios que el usuario haya encendido en Configuración → IA (vacío por
+  defecto). Nunca filas crudas. El filtro vive en un solo archivo,
+  `src/lib/insights/context.ts`.
+- **Plan de proyecto:** el **objetivo que escribió el usuario** y, en un
+  proyecto que ya tiene tareas, los **títulos** de sus grupos y tareas. Nada
+  más: ni responsables, ni fechas, ni comentarios, ni ids. El panel lo dice en
+  pantalla antes de generar.
 
 ## 1bis) Correo transaccional (invitaciones a workspaces)
 
@@ -123,10 +142,50 @@ git push -u origin main
    | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Project Settings → API → anon public | Production, Preview, Development |
    | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API → service_role (⚠️ nunca la expongas con prefijo `NEXT_PUBLIC_`) | Production, Preview |
    | `NEXT_PUBLIC_APP_URL` | Tu URL de Vercel, p. ej. `https://lifeos-app.vercel.app` | Production, Preview |
+   | `GEMINI_API_KEY` | https://aistudio.google.com/apikey (gratis). **Opcional**: sin ella la app despliega y funciona; solo las tres funciones de IA avisan de que no están configuradas (§1ter) | Production, Preview |
+| `USDA_API_KEY` | https://fdc.nal.usda.gov/api-key-signup (gratis, 1.000 pet./hora). **Opcional**: sin ella el buscador de alimentos cae en Open Food Facts —que no pide llave— y el módulo de Nutrición funciona igual | Production, Preview |
+   | `RESEND_API_KEY` | https://resend.com → API Keys. **Opcional**: sin ella la invitación se crea igual y se muestra el enlace para compartirlo a mano (§1bis) | Production, Preview |
+   | `EMAIL_FROM` | El remitente de las invitaciones, p. ej. `LifeOS <no-reply@tudominio.com>`. Solo si pusiste `RESEND_API_KEY` | Production, Preview |
+
+   Esta tabla no listaba ninguna llave opcional y por eso se desplegaba sin
+   ellas sin saber que faltaban. Las cuatro primeras son **obligatorias**; las
+   tres últimas apagan su feature y nada más.
 
 3. Install/Build commands ya están fijados en `vercel.json`
    (`pnpm install --frozen-lockfile`, `pnpm build`); Node se toma de `.nvmrc`.
 4. Deploy.
+
+## 3bis) Nombrar al primer administrador (migración 0044)
+
+El catálogo de plantillas se edita desde `/admin`, y esa ruta devuelve **404** a
+quien no sea administrador de plataforma. Nadie lo es al desplegar: la columna
+nace en `false` para todo el mundo y **no hay pantalla para repartir el
+privilegio** — repartir permisos desde la interfaz es superficie de ataque que
+no hace falta mientras los administradores se cuenten con los dedos de una mano.
+
+En Supabase → SQL Editor, con el correo de la cuenta que va a administrar:
+
+```sql
+update public.profiles
+set is_admin = true
+where user_id = (select id from auth.users where email = 'tu-correo@ejemplo.com');
+```
+
+Comprueba que quedó (debe devolver una fila):
+
+```sql
+select p.user_id, u.email, p.is_admin
+from public.profiles p join auth.users u on u.id = p.user_id
+where p.is_admin;
+```
+
+Después, en la aplicación: **Configuración → Administración → Catálogo de
+plantillas**. Si el enlace no aparece, el `update` no encontró el perfil —
+normalmente porque esa cuenta todavía no ha iniciado sesión nunca y su fila de
+`profiles` aún no existe.
+
+Para quitarlo, el mismo `update` con `false`. Es reversible y no borra nada: las
+plantillas que haya publicado siguen publicadas.
 
 ## 4) Smoke test post-deploy (§8bis)
 
@@ -142,6 +201,14 @@ git push -u origin main
       confirma que el saldo de la deuda baja en `/debt` (FR-DEB-006).
 - [ ] **RLS negativa**: crea un segundo usuario (signup) y confirma que NO ve
       ninguna de las cuentas/proyectos del primero.
+- [ ] **Catálogo de plantillas**: en `/execution`, el selector de plantilla del
+      formulario de nuevo proyecto ofrece las once de siempre (si sale vacío, el
+      seed de la migración 0044 no llegó).
+- [ ] **Panel de administración**: con el usuario sin `is_admin`, `/admin`
+      responde 404. Con el administrador, abre y lista los tres catálogos.
+- [ ] **Borrador invisible**: crea una plantilla en `/admin`, déjala sin
+      publicar y confirma con el otro usuario que NO aparece en su selector.
+      Publícala y confirma que sí.
 
 ## 5) Rollback
 

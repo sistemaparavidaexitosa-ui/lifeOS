@@ -543,3 +543,291 @@ propia prueba.
   S.A.V.E.R.S. y comprobar que el paso de lectura queda ligado al hábito «Leer
   20 minutos» está implementado y con la acción probada por tipos, pero no se
   hizo clic en él.
+
+## Panel de administración y catálogo de plantillas en la base (1-sep-2026, migración 0044)
+
+Es el cambio que **deroga D-044**: el catálogo deja de ser un array en el código
+y pasa a `template_catalog`, editable desde `/admin`. Lo que sigue es lo que se
+ejecutó de verdad.
+
+### Lo que se ejecutó
+
+| Comprobación | Estado | Evidencia |
+|---|---|---|
+| `pnpm typecheck` | ✅ EJECUTADO OK | Sin errores. Incluye las tres aserciones de tipo de `templates/schema.ts`, que hacen fallar a `tsc` si una interfaz del dominio gana un campo y el zod no |
+| `pnpm lint` | ✅ EJECUTADO OK | «No ESLint warnings or errors» |
+| `pnpm test:unit` | ✅ EJECUTADO OK | **572 pruebas, 572 pass, 0 fail** (eran 563 antes de este cambio) |
+| `pnpm build` | ✅ EJECUTADO OK | Compila y aparecen las tres rutas nuevas: `/admin`, `/admin/[kind]`, `/admin/[kind]/[slug]` |
+| Migración 0044 aplicada | ✅ EJECUTADO OK | `supabase migration up --local`. **No** se corrió `db reset`: la base local tenía datos y la migración no los necesita |
+| `pnpm db:test` (pgTAP) | ✅ EJECUTADO OK | **20 archivos, 150 assertions, PASS**, incluido el nuevo `0020_rls_template_catalog.sql` (12) |
+| El seed no perdió nada | ✅ EJECUTADO OK | 24 filas publicadas: 11 proyecto, 3 rutina, 10 hábito. `tests/domain/templates-catalogo.test.ts` compara los slugs uno a uno contra la lista que había en código |
+| Las 24 pasan el esquema con el que se leen | ✅ EJECUTADO OK | Si una no pasara, la capa de datos la descartaría y sería invisible en producción sin fallar ruidosamente |
+
+### Recorrido real contra PostgREST (no solo `set role`)
+
+pgTAP prueba la RLS con `set local role`, que no pasa por los GRANT del mismo
+modo que la aplicación. Esto se hizo por el camino real, contra la pila local:
+
+| Paso | Resultado |
+|---|---|
+| `anon` (sin sesión) pidiendo el catálogo | `42501 permission denied for table template_catalog` — el `revoke` de la migración **hacía falta**: `0002` concede `select` a `anon` por defecto a toda tabla nueva, y la política `status = 'published'` no lo habría frenado |
+| Usuario normal con sesión, publicadas | Ve las 24: 11 proyecto, 10 hábito, 3 rutina |
+| Usuario normal, con un borrador REAL en la tabla | `[]` — no lo ve |
+| Usuario normal intentando insertar | `42501 new row violates row-level security policy` |
+| El **mismo** usuario tras ponerle `is_admin` | Ya ve el borrador |
+| Ese admin publicando la plantilla | `status` pasa a `published` |
+| Ese admin pidiendo el perfil de la otra usuaria | `[]` — **BR-012 en pie**: administrar contenido no es ver a la gente |
+
+La base se dejó como estaba: 24 plantillas, cero administradores, ninguna fila
+temporal.
+
+### Un descuido que la verificación destapó
+
+El comentario de la migración afirmaba que a `anon` «no se le da nada», y era
+falso: `0002` deja puesto un `alter default privileges ... grant select on
+tables to anon`, así que la tabla nacía legible para cualquiera sin sesión —y su
+política de lectura no lo frenaba, porque `status = 'published'` es cierto sin
+usuario. Se añadió un `revoke all ... from anon` explícito, y la comprobación de
+arriba es la que lo demuestra.
+
+### Un test que estaba mal escrito
+
+La primera versión de «una tarea con `due` o `impact` no pasa el esquema» falló:
+zod **descarta** las claves que no declara en vez de rechazarlas. La garantía
+real no es que se rechace, sino que nunca se guarda — la acción del panel
+escribe lo que sale del parseo, no lo que entró. El test se corrigió para
+comprobar eso, que es lo que de verdad protege el invariante.
+
+### Lo que NO se verificó
+
+- **El recorrido en un navegador.** No se hizo clic en `/admin`: crear una
+  plantilla desde el formulario, moverle un grupo de sitio, previsualizarla y
+  publicarla está implementado y probado por tipos, RLS y pruebas unitarias,
+  pero nadie lo ha usado con el ratón. El paso 3bis de `/docs/DEPLOY.md` y el
+  smoke test lo cubren para el despliegue.
+- **`pnpm verify` completo.** Se corrieron sus pasos por separado a propósito:
+  termina en `supabase db reset`, que borra la base local, y había datos dentro.
+- **Que el 404 de `/admin` se vea como 404 en el navegador.** El `notFound()`
+  del layout está puesto y el build genera la ruta, pero la respuesta HTTP no se
+  comprobó con una sesión real.
+
+## Producción: primera llamada real al modelo, y las migraciones que faltaban (4-sep-2026)
+
+Esta sección corrige por fin la frase que este archivo repetía desde agosto
+—«ninguna llamada real al modelo desde aquí»—. Ya la hubo, en producción, y
+enseñó dos cosas.
+
+### Lo que se ejecutó
+
+| Comprobación | Resultado |
+|---|---|
+| `supabase migration list --linked` | ❗ `0046` y `0047` **no estaban aplicadas en el proyecto remoto**: Vercel despliega código, las migraciones son un paso aparte |
+| `supabase db push --dry-run` | ✅ anuncia exactamente esas dos |
+| `supabase db push` | ✅ aplicadas; `migration list` ya no reporta ninguna pendiente |
+| `pnpm typecheck` / `lint` / `test:unit` | ✅ 668 pruebas, 0 fallos |
+
+### El fallo de esquema (D-106)
+
+`proposedMemoryScope` llevaba `""` dentro de su `enum` y la API contestó
+«`response_schema.properties[proposedMemoryScope].enum[8]: cannot be empty`».
+El chat entero dejaba de responder. Arreglado en origen —«ninguno» se dice
+dejando el texto vacío— y con `problemasDeEsquema` corriendo antes del `fetch`,
+para que la próxima vez el fallo se vea sin gastar una llamada.
+
+### Lo que la llamada real SÍ confirmó
+
+- La autenticación por `x-goog-api-key` funciona y la petición llega al
+  validador del cuerpo.
+- `httpReason` deja pasar el detalle de la API íntegro: el mensaje traía el
+  nombre del campo y el índice del valor, así que el diagnóstico vino dicho.
+
+### Lo que sigue SIN confirmar
+
+Nada de lo demás. El 400 se produce **antes** de que el modelo genere, así que
+siguen sin ejercitarse `thinkingConfig`, `propertyOrdering`, el uso de
+herramientas y —sobre todo— el reenvío de `thoughtSignature`, que es el que
+puede tumbar la segunda llamada de cada ronda. Ese sigue siendo el primero de
+la lista.
+
+## Nutrición dentro de Personal Development OS (4-sep-2026)
+
+### Lo que se ejecutó
+
+| Comprobación | Resultado |
+|---|---|
+| `pnpm verify` (cadena completa) | ✅ install → typecheck → lint → test:unit → build → `db reset` → `db test`, todo en verde |
+| `pnpm test:unit` | ✅ **664 pruebas**, 0 fallos (eran 574) |
+| `pnpm build` | ✅ exit 0; `/development/nutrition` aparece en el listado de rutas |
+| `pnpm db:reset` (47 migraciones + seed) | ✅ la 0047 aplica sin error desde cero |
+| `supabase test db` | ✅ **23 archivos, 182 aserciones**, incluido `0022_rls_nutricion.sql` (17) |
+| `pnpm gen:types:local` | ✅ `nutrition_profiles`, `body_measurements`, `foods`, `food_entries`, `key_results.source_metric` y `key_results.baseline` aparecen en `database.types.ts` (F3) |
+
+La base local se reseteó varias veces durante el trabajo. Antes de la primera se
+comprobó su contenido: 2 usuarios y 3 tareas, exactamente la semilla. **No había
+datos reales que perder** y el proyecto remoto no se tocó.
+
+### Un bug que se detectó leyendo, no en pantalla
+
+**Dos campos con el mismo `name` en el formulario de alimentos.** Los macros del
+alimento elegido iban en `input hidden` pintados siempre, y convivían con los
+campos visibles de captura manual: `FormData.get` se queda con el primero, que
+iba vacío, así que **registrar a mano habría fallado siempre**. Los ocultos
+pasan a pintarse solo cuando hay un alimento elegido. Da igual de todas formas
+para la integridad: el servidor recalcula los macros desde `(per100g, gramos)` y
+los vuelve a validar, porque eso lo edita cualquiera desde el navegador.
+
+### Lo que NO se verificó
+
+- **Ninguna llamada real a USDA ni a Open Food Facts.** No hay `USDA_API_KEY` en
+  este entorno, y a Open Food Facts no se ha salido. Lo que está probado es la
+  normalización de sus respuestas contra cuerpos escritos a mano
+  (`development-nutrition-lookup.test.ts`, 16 casos), incluidos los dos errores
+  que más caro salen: usar `energy_100g` (kJ) en vez de `energy-kcal_100g`, y
+  descartar un alimento sin energía en vez de inventarle 0 kcal. Sin ejercitar
+  quedan: la forma real de las respuestas, el `User-Agent` obligatorio de OFF
+  —incumplirlo se castiga con bloqueo de IP—, y que la caché evite de verdad la
+  segunda petición.
+- **El recorrido en un navegador.** Nadie ha registrado una comida con el ratón.
+  El buscador, el panel del perfil corporal y el formulario de peso compilan y
+  tienen sus acciones probadas por tipos, pero no se han visto funcionar.
+
+## Cadena de modelos · Herramientas · Memoria (3/4-sep-2026)
+
+### Lo que se ejecutó
+
+| Comprobación | Resultado |
+|---|---|
+| `pnpm typecheck` | ✅ limpio |
+| `pnpm lint` | ✅ sin warnings ni errores |
+| `pnpm test:unit` | ✅ 0 fallos, con las pruebas nuevas de `ai-model-chain`, `ai-tools`, `ai-chat` e `insights-context` |
+| `pnpm build` | ✅ exit 0 |
+| `supabase test db` | ✅ sin regresiones (el esquema no cambia en esta tanda) |
+
+### Dos bugs que cazó una prueba escrita antes que el código
+
+1. **`RegExp.test` sobre un patrón global es stateful.** `FECHA` llevaba el flag
+   `g` para `replace`, y reusar el mismo objeto en `sanitizeProposedMemory`
+   habría dejado pasar una memoria con fecha **una de cada dos veces**:
+   `lastIndex` avanza al acertar y no se reinicia. Se partió en dos objetos, uno
+   con `g` y otro sin él. La prueba que lo destapó llama dos veces seguidas con
+   el mismo texto.
+2. La lista de ámbitos de `memory_items` estaba escrita **tres veces** (el tipo,
+   un arreglo en las acciones, y habría sido una tercera en el saneador). Se
+   unificó en `MEMORY_SCOPES`, junto al tipo, que ahora se deriva de ella.
+
+### Lo que NO se verificó
+
+**Sigue sin haber ni una sola llamada real al modelo desde aquí.** No hay
+`GEMINI_API_KEY` en este entorno. Todo lo que dice la sección siguiente («Hilo
+solo de conversación») sigue vigente, y esta tanda **añade tres cosas nuevas sin
+ejercitar**, que son las primeras que hay que mirar con una llave puesta:
+
+1. **`thoughtSignature`.** La serie Gemini 3 devuelve una firma dentro de las
+   partes y hay que reenviarla IDÉNTICA o la segunda llamada responde 400
+   («Function call is missing a thought_signature»). Los SDK lo hacen solos;
+   aquí no hay SDK. La defensa implementada es no reconstruir nunca el turno del
+   modelo: se reenvía `candidates[0].content` tal cual. **Esto es lo primero que
+   hay que probar vivo**, porque si falla, falla todo el uso de herramientas.
+2. **`tools` junto a `responseSchema`.** Está documentado para Gemini 3, pero no
+   comprobado aquí. Hay red de seguridad: un 400 con herramientas reintenta el
+   mismo modelo sin ellas, así que el peor caso conocido es un chat sin datos
+   frescos, no un rail roto. Esa red tampoco está ejercitada.
+3. **El salto de modelo.** `debeSaltarDeModelo` tiene pruebas unitarias por cada
+   código HTTP, pero el bucle contra la API no se ha corrido. Se provoca a mano
+   poniendo un primer modelo inexistente en `GEMINI_MODELS` y comprobando que el
+   segundo contesta y que `audit_log.meta.model` registra **el que de verdad
+   contestó**.
+
+**El recorrido en un navegador.** Nadie ha pulsado «Recordar esto» ni el
+interruptor de acceso total con el ratón.
+
+## Hilo solo de conversación · Gemini único proveedor · Chat transversal (3-sep-2026)
+
+### Lo que se ejecutó
+
+| Comprobación | Resultado |
+|---|---|
+| `pnpm typecheck` | ✅ limpio |
+| `pnpm lint` | ✅ sin warnings ni errores |
+| `pnpm test:unit` | ✅ **574 pruebas**, 0 fallos (eran 572: −9 de `execution-project-thread`, +11 de `ai-chat`) |
+| `pnpm build` | ✅ compila; 30 rutas |
+| `supabase start` (46 migraciones + seed) | ✅ la 0045 aplica sin error; la 0046 llegó después y NO se ha ejercitado |
+| `supabase test db` | ✅ **21 archivos, 156 pruebas**, incluido el nuevo `0021_rls_chat_ia.sql` (6 casos) |
+| `pnpm gen:types:local` | ✅ `ai_chat_messages` aparece en `database.types.ts` (F3: generado, no escrito a mano) |
+
+### Un volumen de Postgres que hubo que recrear
+
+La base local no arrancaba: `supabase_db_lifeos` había sido inicializado con
+PostgreSQL 15 y el CLI levanta ahora un 17.6 — `database files are incompatible
+with server`, y el contenedor se quedaba en `unhealthy`. Antes de borrar nada se
+comprobó qué había dentro del stack que sí estaba en marcha (uno huérfano de
+otro directorio, ocupando los mismos puertos): **cero tablas en `public`, cero
+usuarios**. Con eso a la vista se recreó el volumen y se aplicaron las 45
+migraciones desde cero. El proyecto remoto no se tocó.
+
+### La app, con una sesión real
+
+Se creó un usuario local, se armó su cookie de `@supabase/ssr` a mano y se pidió
+la app por HTTP para mirar el HTML que sale del servidor:
+
+| Petición | Resultado |
+|---|---|
+| `/login` sin sesión | 200, y **sin rail** — está fuera del grupo `(app)`, como debe |
+| `/home` con sesión, sin cookie de plegado | 200 y el rail abierto en el HTML: `class="ai-rail"`, «Asistente», el texto de bienvenida |
+| `/home` con `lifeos_chat_collapsed=1` | 200 y `ai-rail-collapsed`: la franja, no el panel |
+| `/execution`, `/settings`, `/intelligence`, `/activity`, `/money` | 200 las cinco |
+| Copia del botón en `/settings` | «Borrar historial de IA» |
+
+### Un salto de layout que solo se vio mirando el HTML del servidor
+
+El rail no aparecía en la respuesta del servidor: la preferencia de plegado
+estaba en `localStorage`, que solo se lee tras hidratar, así que en escritorio
+el rail entraba un frame tarde y **movía el ancho del contenido en cada carga**.
+Se pasó a cookie, que el layout lee antes de pintar (D-090). No lo habría
+detectado ninguna prueba automática de las que hay: el componente era correcto,
+lo que estaba mal era cuándo sabía lo que tenía que pintar.
+
+### Un fallo de CSS que el orden de capas habría escondido
+
+El rail se ocultaba en móvil con `hidden xl:flex` de Tailwind. No habría
+funcionado: el bloque `.ai-rail { display: flex }` se añade al final de
+`globals.css`, **después** de `@tailwind utilities`, así que gana a `.hidden`
+por orden de aparición y el rail se habría pintado también en un teléfono. El
+corte se movió a media queries dentro del propio bloque (D-090). Se detectó
+leyendo, no en pantalla — no habría saltado en `typecheck` ni en `lint`.
+
+### Lo que NO se verificó
+
+- **Ninguna llamada real al modelo desde aquí.** No hay `GEMINI_API_KEY` en este entorno,
+  así que `planProject`, `recommend` y `chatReply` no se han ejecutado contra la
+  API. Lo que sí está comprobado es que sin llave la app entera sigue en pie:
+  las cinco rutas que embeben IA responden 200 y solo el botón correspondiente
+  avisa (F11). Queda sin ejercitar **todo el trato con la API**, y en concreto
+  tres cosas que se escribieron siguiendo la documentación y no la experiencia:
+
+  1. **La forma del `responseSchema`.** Los tipos van en MAYÚSCULAS (`STRING`,
+     `OBJECT`, `ARRAY`) porque el cuerpo se parsea como JSON de protobuf y un
+     valor de enum se casa por su nombre exacto; en minúscula sería un 400
+     antes de llegar al modelo. Los enums llevan además `format: "enum"`.
+  2. **`thinkingConfig.thinkingBudget`.** Es lo que evita el peor fallo posible
+     —`MAX_TOKENS` con el texto vacío— al gastar el modelo tokens de
+     razonamiento contra el mismo tope que la respuesta. Si la API rechazara el
+     campo, la llamada fallaría entera y no a medias, así que se vería al
+     primer intento.
+  3. **El mapeo de `finishReason` y el mensaje del 429.**
+
+  Es lo primero que hay que mirar con una llave puesta, y en ese orden.
+
+  **Lo que sí se supo al ponerle llave, fuera de este entorno:** la primera
+  llamada real devolvió «This model models/gemini-2.5-flash is no longer
+  available to new users». Eso confirma dos cosas y **ninguna tercera**: que la
+  autenticación por `x-goog-api-key` funciona, y que `httpReason` deja pasar el
+  mensaje de la API tal cual —traía dentro el nombre del sucesor—. No confirma
+  nada del cuerpo: el modelo va en la URL y se rechaza antes de validar
+  `responseSchema`, `thinkingConfig` o los tipos en mayúsculas. Los tres siguen
+  sin ejercitarse, y siguen siendo lo primero que hay que mirar.
+- **El recorrido en un navegador.** Nadie ha escrito en el hilo ni en el chat
+  con el ratón. El plegado del rail, la burbuja de móvil y el botón «Crear» de
+  la tarea propuesta están implementados y tipados, pero no usados.
+- **`pnpm verify` completo.** Se corrieron sus pasos por separado, como la vez
+  anterior y por el mismo motivo: termina en `supabase db reset`.

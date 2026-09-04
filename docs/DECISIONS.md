@@ -510,7 +510,10 @@
 
 ### Personal Development OS: plantillas y lectura medida (agosto 2026)
 
-- **D-044 El catálogo de plantillas vive en código, no en la base.**
+- **D-044 (DEROGADA por D-080, sept-2026) El catálogo de plantillas vive en
+  código, no en la base.** Se conserva escrita porque su razonamiento sigue
+  siendo válido y explica qué se perdió al cambiar de opinión.
+
   `src/lib/domain/development/templates.ts` es contenido, no datos del usuario:
   no tiene dueño, no lleva RLS y no cambia por persona. En código va versionado
   en git, se prueba sin levantar Postgres y no puede divergir entre entornos,
@@ -1296,6 +1299,523 @@ la mitad que ya existía estaba rota.
   Tijuana y en Madrid, así que se formatea en UTC, que es como se guardó. Un
   instante completo (`...T12:00:00Z`) sí la tiene y conserva el comportamiento
   de siempre. Cubierto por `tests/domain/format.test.ts`.
+
+### Un panel de administración, y el catálogo que se muda a la base (septiembre 2026)
+
+- **D-080 · El catálogo de plantillas se muda a `template_catalog` y lo edita un
+  administrador. DEROGA D-044.** Añadir o corregir una plantilla exigía un
+  despliegue, y eso convierte el catálogo en algo que solo se toca cuando
+  alguien programa. Migración `0044_admin_catalogo_plantillas.sql`.
+
+  **Qué se pierde, sin adornos.** `git log` sobre el contenido (quién cambió qué
+  plantilla y cuándo), `git revert` sobre una edición mala, y la imposibilidad
+  de que dos entornos divergan. Las tres eran ventajas reales de D-044 y ninguna
+  se recupera con esto; el panel **no lleva historial ni deshacer**, así que una
+  edición equivocada se arregla volviéndola a escribir.
+
+  **Qué lo compensa.** El miedo CONCRETO de D-044 era que alguien editara en
+  producción y un usuario aplicara una plantilla a medio escribir. Eso lo cierra
+  la columna `status`: una plantilla nace en `draft` y no la ve nadie —lo
+  garantiza la RLS, y lo prueba `supabase/tests/0020`— hasta que se publica. La
+  semilla es idempotente (`on conflict do nothing`) y conserva los `slug` de
+  siempre, así que un entorno nuevo arranca con el catálogo exacto de antes y un
+  redespliegue nunca pisa lo que un administrador ya editó.
+
+  **Lo que NO cambia, y es la mitad importante de D-044:** al usar una plantilla
+  se **copia** a las tablas del usuario. Editarla no le reescribe el tablero ni
+  los pasos a nadie que ya la hubiera aplicado.
+
+- **D-081 · `payload jsonb`, y no cinco tablas relacionales.** Los tres tipos de
+  plantilla tienen formas distintas —proyecto es grupos → tareas → subtareas,
+  rutina es una lista de pasos, hábito es plano— y el contenido se lee entero y
+  siempre: nadie consulta «las tareas de la plantilla X» por separado, porque al
+  aplicarla se copia de una vez. Relacional serían cinco tablas y tres joins
+  para algo que nunca se consulta por partes, más una migración de esquema cada
+  vez que un tipo gane un campo.
+
+  Quien garantiza la forma es `src/lib/domain/templates/schema.ts`, que corre en
+  los DOS extremos: al guardar (lo que no valida no entra) y al leer (una fila
+  que no valida se descarta y las demás se muestran). Es el puesto que ocupaba
+  el compilador cuando el catálogo era un array de un `.ts`, y por eso el
+  esquema **guarda lo que sale del parseo, nunca lo que entró**: así una tarea
+  con `due` o con `impact` pierde el campo antes de llegar a la tabla, que es la
+  forma de seguir cumpliendo las ausencias que documenta `project-templates.ts`
+  ahora que el compilador ya no puede.
+
+- **D-082 · El rol de administrador es de PLATAFORMA, y no toca datos de nadie.**
+  Es el primer rol del esquema que no es de workspace: los de 0003
+  (Owner/Admin/Member/Guest/Viewer) dicen qué puede alguien dentro de un
+  espacio; `profiles.is_admin` dice quién cura el contenido que ven todos. La
+  única tabla que alcanza es `template_catalog`, que no tiene `user_id`. BR-012
+  sigue en pie palabra por palabra, y hay una assertion de pgTAP que lo
+  demuestra: un administrador **no ve el perfil de otro usuario**.
+
+  Se otorga con SQL después de desplegar (ver `/docs/DEPLOY.md`). No hay
+  pantalla para repartir privilegios: es superficie de ataque que no hace falta
+  mientras los administradores se cuenten con los dedos de una mano.
+
+- **D-083 · /admin devuelve 404 a quien no es administrador, no un redirect.**
+  Un redirect a /home contesta «esto existe, pero no es para ti»; un 404 no
+  contesta nada. Y no es la única defensa, es la primera: la RLS rechaza
+  cualquier escritura de quien no es admin, y cada Server Action lo vuelve a
+  comprobar antes de escribir — porque una Server Action es un endpoint HTTP y
+  se puede invocar sin pasar por la pantalla.
+
+- **D-084 · El editor es un formulario, no un campo de JSON.** Un `textarea` con
+  el payload sería una fracción del código y convertiría cada edición en un
+  ejercicio de puntuación: una coma de más y la plantilla no se guarda, sin
+  decir dónde. Con campos, lo único que se puede escribir es lo que el esquema
+  declara.
+
+  Y la **previsualización reusa las funciones del dominio** —`plannedRows`,
+  `templateSummary`, `routineTemplateDuration`—, las mismas que ejecuta la
+  acción que aplica la plantilla. Lo que el administrador ve es literalmente lo
+  que se va a insertar, no una segunda cuenta condenada a divergir de la primera
+  al siguiente cambio.
+
+- **D-085 · Las pruebas de contenido apuntan a la semilla de la migración.**
+  Al salir el catálogo del código, los tests que vigilaban que ninguna tarea
+  trajera fecha, que los colores fueran tokens del design system o que
+  S.A.V.E.R.S. sumara sesenta minutos se quedaban sin objeto. Ahora leen el
+  `insert` de la migración (`tests/domain/seed-catalogo.ts`), que es el catálogo
+  con el que arranca cualquier entorno nuevo, y siguen corriendo sin Postgres.
+  Lo que un administrador escriba después no pasa por ahí: a eso lo protege el
+  esquema zod, al guardarlo y al leerlo.
+
+### El hilo se calla, la IA se unifica y aparece un sitio donde preguntar (septiembre 2026)
+
+- **D-086 · El hilo del proyecto deja de intercalar la actividad.** La 0041 lo
+  estrenó mezclando los eventos de `workspace_activity` entre los mensajes, con
+  el argumento —bueno— de que un cambio de estado explica por qué el siguiente
+  mensaje dice lo que dice. Lo que no se vio entonces es que esa pregunta ya
+  tenía pantalla: `/activity` enseña los mismos eventos, completos, agrupados
+  por día y con su autor al margen. Repetirlos en el hilo no añadía contexto,
+  competía con él: sesenta líneas grises por cada puñado de mensajes.
+
+  El hilo contesta «qué nos dijimos»; `/activity` contesta «qué ha pasado
+  aquí». Son dos preguntas y ahora son dos pantallas.
+
+  **Se cae `src/lib/domain/execution/project-thread.ts` entero**, con sus dos
+  funciones y sus nueve pruebas. `mergeProjectThread` existía para mezclar dos
+  corrientes y ya solo hay una; `describeEvent` se queda sin eventos que
+  describir. Y el desempate por `id` que la mezcla protegía tampoco sobrevive,
+  por una razón concreta y no por descuido: existía porque el comentario y su
+  fila de actividad se escriben en la MISMA operación y podían compartir
+  milisegundo. Sin eventos esa colisión no puede ocurrir, y el
+  `order("created_at")` de la consulta ya deja el orden bien.
+
+  Lo que **no** cambia: `addProjectComment` sigue escribiendo su
+  `recordActivity({ type: "comment.project" })`. Quien mira `/activity` quiere
+  saber que aquí se habló. Lo que se quitó es la lectura, no el registro.
+
+- **D-087 · Un solo proveedor de IA, y sin SDK.** D-075 defendía dos —Anthropic
+  para las recomendaciones, OpenAI para el planificador— con el argumento de
+  que migrar código probado no ganaba nada. Dejó de ser cierto en cuanto
+  apareció una tercera feature: dos proveedores para tres cosas son dos
+  facturas, dos formas de fallar y dos SDK que mantener. Todo pasa a
+  `gemini-3.6-flash`, con `GEMINI_API_KEY` como única llave.
+
+  **Y se habla con la API por `fetch`, sin SDK.** Esto es lo que de verdad se
+  gana, y no es ahorro por ahorro: `recommend.ts` importaba `zod/v4` y
+  `plan-project.ts` la `zod` clásica porque el conversor de esquemas de cada
+  SDK revienta con el núcleo del otro (D-027, D-075). Era una división que no
+  venía de nuestro código sino de sus dependencias, y que obligaba a escribir
+  en la cabecera de los dos archivos que NO se podían unificar. Sin conversor,
+  el problema desaparece: **queda una sola `zod` en todo el repo y caen dos
+  dependencias de runtime** (`openai`, `@anthropic-ai/sdk`), que es la
+  dirección que pide D-008.
+
+  El precio es escribir dos esquemas por feature en vez de uno: el de zod, que
+  EXIGE la forma de la respuesta, y el de `responseSchema`, que se la PIDE al
+  modelo. Se aceptó porque son veinte líneas y porque una deriva entre ambos la
+  caza el `safeParse`, no la pantalla del usuario.
+
+  `generateJson` mantiene el contrato de D-021 palabra por palabra —nunca
+  lanza— y traduce a un motivo legible cada forma de fallar. Una que antes no
+  existía y ahora es normal: el **429 del free tier**. No es una anomalía, es
+  el plan gratuito haciendo su trabajo, y se dice con esas palabras en vez de
+  como un error.
+
+  **Addendum (a los pocos días): el modelo se retiró.** `gemini-2.5-flash` pasó
+  a «no longer available to new users» y la propia API nombró al sucesor,
+  `gemini-3.6-flash`. Se cambió la línea de `GEMINI_MODEL` y ya está — que
+  fuera una línea es la razón por la que la constante vive sola en
+  `gemini-provider.ts` y no repartida por cada feature.
+
+  Lo que confirmó el episodio no es el modelo sino el manejo de errores:
+  `httpReason` devuelve el `detalle` que manda la API para cualquier 4xx que no
+  sea 429/401/403, así que el mensaje llegó íntegro a la pantalla —con el
+  nombre del sucesor dentro— en vez de convertirse en un «no se pudo» genérico.
+  El diagnóstico vino dicho.
+
+  **La API sugiere además migrar a su «Interactions API». No se hizo, a
+  propósito.** Es una recomendación, no un requisito: el mismo mensaje dice
+  «update your code to use models/gemini-3.6-flash», o sea que
+  `:generateContent` sigue sirviendo. Cambiar de superficie de API a ciegas,
+  sin poder ejecutar una sola llamada en este entorno, sería sustituir algo que
+  falla por una razón conocida por algo que puede fallar por razones que no
+  sabríamos leer. Queda como pendiente con nombre, no como deuda escondida.
+
+- **D-088 · Hay un chat, y no contradice al spec.** El spec de Intelligence OS
+  (§2) descartó el chat a propósito: «el valor está en que el sistema note
+  cosas, no en conversar». Sigue siendo verdad para las recomendaciones —nadie
+  quiere teclear para enterarse de que su presupuesto va al 92%—, y por eso el
+  motor no se toca. Lo que ese diseño deja fuera es la pregunta en la otra
+  dirección, «¿en qué me enfoco esta semana?», que ningún motor proactivo puede
+  adivinar. El chat no sustituye al motor: contesta lo que el motor nunca se
+  preguntó.
+
+  **Ve exactamente el mismo contexto, por el mismo sitio.** Reusa
+  `allowedDomains('global')`, el opt-in de `profiles.ai_domains` (vacío por
+  defecto), `buildAliasMap`, `buildContext` y `restore`. Un chat con su propia
+  forma de reunir datos habría sido un SEGUNDO camino por el que salen cifras
+  del servidor, con sus propias reglas y su propia manera de quedarse atrás
+  — y `context.ts` dejaría de ser lo que D-027 promete: un archivo que
+  auditar.
+
+  Para lograrlo hubo que sacar `loadFacts` de `lib/insights/actions.ts` a
+  `lib/insights/facts-loader.ts`. No es un capricho de organización: ese
+  archivo lleva `"use server"`, donde todo lo exportado tiene que ser una
+  Server Action, así que la función solo podía ser privada. La alternativa era
+  una segunda forma de cargar hechos, condenada a divergir de la primera.
+
+  **Con todos los dominios apagados el chat contesta igual**, pero diciendo que
+  no ve nada. Un asistente que se niega a hablar hasta que configures algo es
+  peor que uno honesto sobre lo que no sabe.
+
+- **D-089 · El chat propone tareas; crearlas sigue siendo del usuario.** El
+  modelo devuelve un título y la UI ofrece un botón. No hay ningún camino de
+  escritura nuevo: lo crea `quickAddTask`, que ya existía y que a su vez reusa
+  `createTask` —con su grupo, su posición y su primera fila de
+  `task_history`—, así que del chat no salen tareas de segunda categoría.
+  Mismo criterio que D-075 tomó con el planificador, y por el mismo motivo: lo
+  que un modelo escribe solo en la base de datos de alguien es lo único que no
+  se puede deshacer con un clic.
+
+  El título pasa por `sanitizeProposedTask`, que le quita las fechas por la
+  misma razón que `sanitizePlan`: una fecha inventada deja el tablero lleno de
+  tareas vencidas al mes siguiente.
+
+- **D-090 · El chat es un rail que se pliega, no un drawer ni una pantalla.**
+  Casi todo lo que se le pregunta es SOBRE lo que se está mirando: «¿por cuál
+  empiezo?» delante del tablero, «¿cuánto llevo?» delante del presupuesto. Una
+  ruta `/chat` quita justo el contexto que hace buena la pregunta, y un drawer
+  tapa la pantalla sobre la que se pregunta. Es la tercera columna del grid a
+  partir de 1280px, montada en `AppShell` al lado de `CommandPalette` y por el
+  mismo motivo que aquélla: es el único ancestro de todas las pantallas.
+
+  **Se pliega en vez de cerrarse** porque el tablero de `/execution` con sus
+  cinco columnas es a la vez donde más estorba y donde más falta hace tenerlo
+  cerca; plegado deja la franja con el icono, que es el mismo botón de abrir.
+  Por debajo de 1280px no cabe —272 de menú + contenido + 360 estrangulan la
+  pantalla— y ahí se comporta como los demás paneles del proyecto, reusando
+  `.td-backdrop`/`.td-drawer`.
+
+  **El corte de visibilidad vive en `globals.css` con media queries y no en
+  clases `hidden xl:flex`.** No es preferencia de estilo: el bloque va después
+  de `@tailwind utilities`, así que `.ai-rail { display: flex }` le gana a
+  `.hidden` por orden de aparición y el rail se habría pintado también en un
+  teléfono.
+
+  **Y la preferencia de plegado va en una COOKIE, no en `localStorage`.** La
+  primera versión usaba `localStorage` y al comprobar el HTML del servidor se
+  vio el problema: solo se puede leer después de hidratar, así que el servidor
+  pintaba siempre la misma forma y el ancho del contenido se movía un frame más
+  tarde, en CADA carga de página. La cookie la lee el layout —que ya es
+  dinámico— y el rail llega decidido desde el servidor. Es una preferencia de
+  interfaz, no una sesión: `samesite=lax` y un año.
+
+- **D-091 · Sin streaming, y dicho a propósito.** No hay streaming en ninguna
+  parte del repo: toda la IA es request/response con `useTransition`. Abrirlo
+  para la primera versión de una feature habría sido estrenar un patrón —route
+  handler, `ReadableStream`, reensamblado en cliente— en el sitio con menos
+  información sobre si hace falta. La familia flash responde rápido y el
+  «Pensando…» cubre la espera. Queda apuntado como siguiente paso, no como
+  deuda escondida.
+
+- **D-092 · «Borrar historial de IA» borra también la conversación.** El botón
+  de Configuración vaciaba solo `recommendations`. Con el chat guardando turnos
+  en `ai_chat_messages`, dejarlo como estaba convertía la promesa del botón en
+  media verdad — y precisamente sobre la tabla donde el modelo escribió con más
+  detalle sobre la vida del usuario. El botón se llama ahora «Borrar historial
+  de IA» y hace lo que dice.
+
+### Hábitos dentro de rutinas (Personal Development OS, septiembre 2026)
+
+_Se planificaron como D-086 y D-087, que era lo siguiente libre cuando se
+escribió el diseño. Llegaron después de la rama del catálogo y el chat, que
+ya había ocupado de la D-080 a la D-092; los documentos de diseño de
+`docs/superpowers/` conservan la numeración original porque son el registro
+de lo que se planeó, no de lo que quedó._
+
+- **D-093 · Un hábito no existe fuera de una rutina**: `habits.routine_id` es
+  `not null` (migración 0046) y `routine_steps` desaparece — el paso ES el
+  hábito. Se descartó dejar la relación opcional o mantener una tabla de unión:
+  las dos habrían dejado la invariante en manos de la aplicación, y la
+  aplicación no puede defenderla contra un `insert` que no pase por ella. Con
+  ello se van también `habits.frequency` (la dicta la rutina) y
+  `habits.occupation_id` (el bloque lo ancla la rutina): dos sitios diciendo lo
+  mismo es un sitio donde mentir.
+- **D-094 · `habit_logs` es la única fuente de "¿lo hice hoy?"**: se borra
+  `routine_runs.completed_step_ids`, que era un segundo registro de lo mismo.
+  Consecuencia deliberada: desmarcar un hábito dentro de la rutina ahora **sí**
+  borra el registro del día. Antes no lo hacía —`habitLogEffect`— porque el
+  usuario podía haberlo cumplido por otra vía y la rutina no era dueña de
+  negarlo; con un solo registro esa ambigüedad no existe.
+
+### IA transversal: cadena de modelos, herramientas y memoria (septiembre 2026)
+
+- **D-095 · El modelo deja de ser uno y pasa a ser una cadena.** `GEMINI_MODEL`
+  era una constante y el 429 del free tier dejaba las tres funciones de IA sin
+  servicio hasta el día siguiente. Ahora `GEMINI_MODELS` es
+  `["gemini-3.1-flash-lite", "gemini-3.6-flash"]` y se recorre: cada modelo del
+  plan gratuito tiene su propio contador diario, así que encadenarlos **suma
+  cuota** en vez de esperar a mañana. El primero es el `-lite` porque es el que
+  más peticiones al día trae; el segundo es el que ya estaba en producción.
+
+  **Lo que decide el salto está en una función pura**, `debeSaltarDeModelo`
+  (`src/lib/domain/ai/model-chain.ts`), y no en el bucle: es la única parte de
+  esto que se puede probar sin red, y son seis casos que conviene tener
+  escritos. Salta el **429** (cuota), el **404** (modelo retirado) y los
+  **5xx**. NO salta el 401/403 —la llave fallaría igual en todos y recorrer la
+  cadena solo añade espera antes del mismo mensaje—, ni el **400**, que es
+  nuestro esquema mal formado: saltarlo lo escondería, que es lo contrario de
+  lo que consiguió `httpReason` devolviendo el detalle de la API tal cual. El
+  timeout tampoco encadena: son 60 s por modelo y dos seguidos son dos minutos
+  con un botón girando.
+
+  **Efecto secundario que sí importa:** el episodio de D-087 —un modelo retirado
+  que tumbó la IA entera— ya no puede repetirse igual. El 404 salta y el
+  siguiente contesta.
+
+  **Y `audit_log` deja de registrar una constante.** `GenerateJsonResult` gana
+  `model` con el que de verdad contestó, porque con una cadena dar por hecho el
+  primero es registrar algo falso. Un registro que miente es peor que no
+  tenerlo.
+
+- **D-096 · El chat propone memoria; guardarla sigue siendo del usuario.**
+  Extensión literal de D-089, con el mismo mecanismo y por el mismo motivo: el
+  modelo devuelve `proposedMemoryText`/`proposedMemoryScope` y la UI ofrece un
+  botón «Recordar». **Ninguna tabla nueva** — `memory_items` existe desde 0008
+  con `scope`, `valid_until` y un `origin` que 0027 restringió a
+  `('user','ai')` precisamente para este caso. La escritura reusa
+  `upsertMemoryItem`, que sigue siendo el único sitio que escribe ahí; lo único
+  que se le añadió es el parámetro `origin`.
+
+  **La regla que hace útil la memoria es qué se RECHAZA.** `memory_items` entra
+  en el prompt de todas las features y no caduca sola, así que lo que se cuele
+  se seguirá contando dentro de un año. `sanitizeProposedMemory` descarta lo
+  efímero —«hoy comió avena» es un renglón del diario, no quién eres—, lo que
+  lleva una fecha dentro y lo demasiado corto para significar algo. Aceptar
+  basura aquí es permanente, a diferencia de un botón de tarea que se ignora.
+
+  Dos detalles que costaron una prueba cada uno y se dejan escritos porque
+  volverían a morder: el `(?<!la |las )` delante de «mañana», sin el cual
+  «entrena por la mañana» —el tipo de hecho duradero que esto busca— se
+  rechazaría por contener un adverbio de tiempo que ahí no lo es; y que el
+  regex de fechas se partió en dos objetos, uno con `g` para `replace` y otro
+  sin él para `test`, porque `RegExp.test` sobre un patrón global avanza
+  `lastIndex` y no lo reinicia al acertar: compartir el objeto habría dejado
+  pasar una memoria con fecha una de cada dos veces.
+
+  **La lista de ámbitos se unificó de camino.** Estaba escrita tres veces
+  —el tipo en `domain/insights/memory.ts`, un arreglo en `insights/actions.ts`
+  y habría sido un tercero en el saneador—. Ahora `MEMORY_SCOPES` vive junto al
+  tipo, que se deriva de ella. Un ámbito que la base no admite no falla en la
+  pantalla: falla en el `insert`, con un error de restricción que el usuario no
+  puede interpretar.
+
+- **D-097 · El modelo pregunta por los datos en vez de recibirlos todos.** El
+  contexto eran 40 hechos precocinados (`MAX_FACTS`) y punto: lo que no cupiera
+  ahí no existía para el modelo. Se descartó ensanchar el volcado —meter todos
+  los dominios en cada turno paga el contexto entero en cada pregunta y se come
+  la cuota que D-095 acaba de ganar— y se eligió **function calling**: dos
+  herramientas, `leer_hechos` y `consultar`, que el modelo usa solo cuando le
+  hacen falta.
+
+  **La regla que sostiene todo lo demás: una herramienta devuelve cosas con id,
+  nunca filas anónimas.** El motor entero se apoya en que el modelo no calcula
+  —cita hechos con id estable y `validateAnchoring` descarta lo que cite un id
+  que no se le envió—. Devolver filas sin identificar habría dejado al modelo
+  redactando cifras que nadie puede rastrear, y esa red se habría caído sin que
+  fallara nada visible. Por eso hasta una fila cruda entra como
+  `fila:<tabla>:<uuid>`, y por eso `chatReply` valida las citas contra los
+  hechos del contexto **unidos a** los ids que entregaron las herramientas: sin
+  esa unión, lo que el modelo se molestó en consultar se le descartaría por
+  inventado, justo en las respuestas mejor fundamentadas.
+
+  **La lista blanca vive en `insights/context.ts`, no en `lib/ai/tools.ts`.**
+  Ese archivo dice de sí mismo que es «el ÚNICO punto donde se aplica el filtro
+  de privacidad» (D-027), y repartirlo entre dos sitios habría costado
+  exactamente lo que ese archivo vale: poder auditarlo de una sentada. Es una
+  lista BLANCA —lo que no está, no se consulta—, así que `profiles`,
+  `audit_log`, `ai_chat_messages` o cualquier tabla de workspace quedan fuera
+  sin que nadie tenga que acordarse de excluirlas. Cada entrada declara su
+  dominio (para que `ai_domains` siga mandando) y la columna por la que se
+  acota la ventana. El `satisfies Partial<Record<keyof Database…>>` hace que
+  una tabla mal escrita **no compile**.
+
+  **Dos topes, y los dos por la misma razón:** máximo dos rondas de
+  herramientas y máximo 50 filas por consulta. Lo que devuelve una herramienta
+  viaja DENTRO del prompt de la llamada siguiente, así que sin topes el modelo
+  puede gastarse la ventana y la cuota dando vueltas. En la última ronda se le
+  quitan las herramientas, que es lo que convierte el tope en «ahora contesta»
+  en vez de en un error.
+
+  **La trampa que costó leerse la documentación: `thoughtSignature`.** La serie
+  Gemini 3 devuelve una firma dentro de las partes y hay que reenviarla
+  IDÉNTICA, o la segunda llamada responde 400. Los SDK lo hacen solos; aquí no
+  hay SDK (D-087). La defensa no es copiar el campo —mañana habrá otro— sino no
+  reconstruir nunca el turno del modelo: se reenvía `candidates[0].content`
+  tal cual llegó.
+
+  **Y una red de seguridad que se deja puesta a propósito:** si la petición con
+  herramientas se rechaza con un 400, se reintenta el mismo modelo sin ellas.
+  Combinar `tools` con `responseSchema` está documentado para Gemini 3, pero en
+  este repo no hay **ni una sola llamada real ejercitada** (CHECKS.md) y el
+  chat está montado en todas las pantallas. Vale mil veces más una respuesta
+  sin datos frescos que un rail roto.
+
+  **En Configuración cambió el texto, no solo el código.** Decía que «lo que
+  viaja son cifras ya calculadas», y con `consultar` eso dejó de ser cierto.
+  El botón «Acceso total» marca todas las casillas pero **no guarda**: dejarlo
+  guardar convertiría un clic en autorización para leerlo todo, y el
+  consentimiento sigue estando en Guardar.
+
+### Nutrición dentro de Personal Development OS (septiembre 2026)
+
+- **D-098 · El diario guarda COPIA de los números, no un join a `foods`.** Es lo
+  contrario de la regla de D-093 —«dos sitios diciendo lo mismo es un sitio
+  donde mentir»— y la inversión es deliberada: en Open Food Facts la ficha de un
+  producto la edita cualquiera. Leyendo por join, que un desconocido corrija hoy
+  un yogur **reescribiría lo que desayunaste en marzo**. Un diario que cambia el
+  pasado no mide nada, y medir es lo único que hace útil un diario. `food_id`
+  queda solo como procedencia, con `on delete set null` para que purgar la caché
+  tampoco toque el historial. Lo fija una aserción pgTAP, no la buena voluntad.
+
+  **`food_entries` tampoco lleva el `unique` que sí tienen `habit_logs`,
+  `routine_runs` y `book_progress`.** Allí existe porque marcar es un *toggle* y
+  el doble clic tiene que ser idempotente; aquí dos manzanas son dos manzanas.
+  La protección contra el registro duplicado es que la línea de más se ve en la
+  lista y se borra con un toque, cosa que un toggle duplicado no permitía.
+  `body_measurements` sí lo lleva: un peso por día es un valor, no una lista.
+
+- **D-099 · `foods` es la única tabla del OS sin `user_id`, y su escritura se
+  cierra con GRANT y no con RLS.** El límite de Open Food Facts es de 15
+  peticiones por minuto **por IP**, y todos los usuarios comparten la de Vercel:
+  una caché por usuario no ahorraría ni una petición, que es exactamente para lo
+  que la caché existe. Se aceptó saltarse BR-012/019/027 porque lo que guarda
+  son copias de filas públicas y —esto es lo que la hace inocua— **no registra
+  quién buscó qué**. `source` no admite `'manual'` justo para que esa afirmación
+  siga siendo cierta: un alimento tecleado es dato personal y se queda en el
+  diario.
+
+  La escritura es el punto delicado y por eso no se resolvió con una política:
+  `authenticated` no tiene `insert` ni `update`, escribe `service_role` desde
+  `lib/data/nutrition.ts`. Con `insert` concedido, cualquiera con un token
+  envenenaría por PostgREST la caché que ven todos. Hay una aserción pgTAP
+  dedicada a eso, y es la que justifica toda la excepción.
+
+  **Si en revisión el precio parece alto, la vuelta atrás es de una línea:**
+  `user_id not null` y quitar los grants especiales. El resto del módulo no se
+  mueve, porque el diario nunca depende de `foods`.
+
+- **D-100 · La caché es el índice de búsqueda primario, no un memo.** Se
+  consulta ANTES que la red siempre: un código de barras ya visto son cero
+  peticiones, y en texto basta con cinco filas guardadas para no salir. Un
+  `upsert` fallido —falta la llave de servicio, por ejemplo— se ignora y se
+  devuelven los candidatos igual: una caché que no se puede escribir es una
+  caché lenta, no una búsqueda rota. Y si los proveedores caen pero la caché
+  tenía algo, se devuelve `ok: true` diciéndolo; `books.ts` no puede hacer eso
+  porque no tiene tabla, aquí sale gratis.
+
+- **D-101 · El objetivo diario se CALCULA, y tiene un suelo que es ético y no
+  técnico.** No se guardan cuatro números que nadie recalcularía al cambiar el
+  peso: `dailyTargets` los deriva con Mifflin-St Jeor —elegida sobre
+  Harris-Benedict porque es la que usa el mercado y el usuario puede contrastar
+  el número—. Lo que no es aritmética es el suelo: **la app no puede ser el
+  instrumento con el que alguien se fija 600 kcal al día.** El suelo blando (el
+  metabolismo basal, y 1200/1500 por sexo) lo pone el dominio y lo DICE en
+  `floored` en vez de callarlo; el duro de 1000 lo defiende un `check` de
+  Postgres, donde no se discute.
+
+  **Y la banda de cumplimiento es simétrica (±10 %), que también es una
+  postura.** Quedarse un 20 % por debajo no es cumplir mejor: es otro desvío.
+  Igual que `nutrition.kcal-drift` reporta las dos direcciones con el mismo
+  peso, y que un día sin registrar **no** cuenta como cumplido — contarlo
+  convertiría el abandono en adherencia perfecta.
+
+- **D-102 · La meta de peso obligó a admitir metas DESCENDENTES.** «Bajar a 78
+  kg» es la primera fuente del sistema donde el objetivo está por debajo del
+  valor actual, y con `pctOf` daba 105 % recortado a 100: la meta nacía
+  cumplida. Se añadió `key_results.baseline` —el punto de partida— porque sin él
+  81 kg puede ser casi la meta o no haber empezado, y sin él el resultado clave
+  se declara `stale` en vez de inventarse un número.
+
+  `key_results_source_shape` **no se tocó**: `'nutrition'` no es `'manual'`, así
+  que exige `source_id`, y lo tiene — apunta a `nutrition_profiles.user_id`, que
+  es *la* fila que define los objetivos. Lo que sí hizo falta es
+  `source_metric`, porque una meta de nutrición mide dos cosas distintas y
+  `source_kind` solo dice de qué módulo viene. Se descartó una tabla
+  `nutrition_targets` cuyo único consumidor sería `key_results`.
+
+- **D-103 · Ningún hecho de nutrición nombra un alimento.** «Registraste 3
+  donas» es exactamente el detalle con juicio moral que hace que alguien borre
+  la app. El extractor habla solo en agregados —kcal, gramos de macro, días— y
+  lo comprueba una prueba, porque es el tipo de regla que se erosiona sola en
+  cuanto alguien quiere «dar más contexto». Los hechos descriptivos topan además
+  en 0.4 de peso: el contexto se recorta por peso (`MAX_FACTS`) y nada de
+  nutrición debe desplazar de ahí una racha de hábito rota de dos semanas.
+
+- **D-104 · El enlace con Money OS es una comparación, no un join.** El usuario
+  lo pidió sabiendo que era el más flojo de los cuatro. Lo único cierto que se
+  puede hacer con esos datos es poner lado a lado, para el mismo mes, cuántos
+  movimientos hubo en la categoría «Alimentación» y cuántos días tienen diario
+  — **cero columnas, cero FK, cero joins**, y la advertencia pegada debajo en la
+  propia pantalla.
+
+  Lo que **no** se hace, escrito aquí para que dentro de seis meses nadie «lo
+  arregle» con un heurístico: casar un ticket con comidas (un `journal_entries`
+  es un importe y una fecha, sin un solo renglón de producto), decir cuánto
+  costó lo que comiste, o repartir una compra entre los días en que se consumió.
+  Lo único que haría real ese enlace es capturar renglones de ticket, que es
+  otra feature y grande.
+
+- **D-105 · `habits.meal` es una etiqueta, no una segunda verdad.** Un hábito
+  puede SER una comida, pero marcarlo **no registra nada**: ofrece un enlace al
+  diario. `habit_logs` sigue siendo la única respuesta a «¿lo hice hoy?»
+  (D-094), y lo que un modelo o una pantalla escriben solos en tu base es lo
+  único que no se deshace con un clic (D-089).
+
+### Lo que enseñó la primera llamada real (4-sep-2026)
+
+- **D-106 · Una cadena vacía no es un valor de enum, y el esquema se revisa
+  antes de salir a la red.** `proposedMemoryScope` llevaba `""` dentro de su
+  `enum` para representar «no propongo nada». La API lo rechazó en producción
+  con un mensaje exacto —«`response_schema.properties[proposedMemoryScope]
+  .enum[8]: cannot be empty`»— y **tumbó el chat entero**, porque un
+  `responseSchema` mal formado no falla a medias: falla la petición.
+
+  El arreglo de fondo es que «ninguno» se dice dejando `proposedMemoryText`
+  vacío, que ya era el campo que lo decía; el enum no tenía por qué participar.
+
+  **Y se añadió `problemasDeEsquema` en el dominio, que corre ANTES del
+  `fetch`.** No es cinturón y tirantes: un esquema mal formado es un bug
+  nuestro, no mejora con otro modelo ni con otro intento, y descubrirlo por el
+  400 cuesta una llamada entera y le enseña al usuario un mensaje que no puede
+  interpretar. Comprueba solo lo que se sabe que la API rechaza por forma
+  —enums vacíos y valores vacíos dentro de un enum— y no intenta validar el
+  dialecto completo: un validador que adivina reglas acaba rechazando esquemas
+  buenos, que es peor que el problema. Cubre también los esquemas de las
+  herramientas, que son la misma clase de bug.
+
+  **Lo que confirmó el episodio, y que llevaba meses sin confirmarse:** la
+  llamada llegó al modelo. Hasta ahora `CHECKS.md` decía que ni una sola
+  petición real se había ejercitado desde este repo; el error vino del
+  validador de la API sobre el cuerpo, no de la autenticación ni de la URL. Que
+  `httpReason` dejara pasar el detalle íntegro —con el nombre del campo y el
+  índice del valor— es, por segunda vez (ver D-087), lo que hizo que el
+  diagnóstico viniera dicho.
 
 ## Guardrails aplicados literalmente del prompt de build
 

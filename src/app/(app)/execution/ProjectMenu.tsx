@@ -25,6 +25,7 @@ import { applyAiPlan } from "./ai-plan-actions";
 import { TemplateSelect, TemplatePreview } from "./ProjectTemplatePicker";
 import { moveProject, shareProjectWithGuest, unshareProjectFromGuests } from "@/lib/workspaces/actions";
 import type { WorkspaceSummary } from "@/lib/data/workspaces";
+import type { ProjectTemplate } from "@/lib/domain/execution/project-templates.ts";
 import type { LogEntry, KnowledgeItem } from "./logbook-knowledge-actions";
 import { IconClose, IconTrash } from "@/components/icons";
 
@@ -60,7 +61,8 @@ export default function ProjectMenu({
   workspaces,
   currentWorkspaceId,
   guestAccess,
-  workspaceIsPersonal
+  workspaceIsPersonal,
+  templates
 }: {
   project: ProjectMenuData;
   /** Cuántas tareas se van con el proyecto: el aviso tiene que decirlo. */
@@ -76,6 +78,8 @@ export default function ProjectMenu({
   guestAccess: string | null;
   /** En el espacio personal no hay invitados: la opción ni se ofrece. */
   workspaceIsPersonal: boolean;
+  /** El catálogo publicado; desde 0044 lo lee la página, no un import. */
+  templates: ProjectTemplate[];
 }) {
   const menu = useMenuAnchor();
   const [panel, setPanel] = useState<Panel>(null);
@@ -153,11 +157,12 @@ export default function ProjectMenu({
                   onConfirm={async (draft, selection) => {
                     const result = await applyAiPlan(project.id, draft, selection);
                     if (result.ok) {
-                      // La MISMA pareja que ApplyTemplatePanel y MoveProjectPanel:
-                      // el `replace` fuerza una navegación de verdad y el `refresh`
-                      // trae el árbol nuevo saltándose la caché del router. Con
-                      // `refresh` a secas el tablero se queda igual.
-                      router.replace(`/execution?project=${project.id}`);
+                      // Basta `refresh`. Antes iba acompañado de un `replace` a
+                      // esta misma URL porque `refresh` a secas parecía no hacer
+                      // nada: sí traía el árbol nuevo, pero BoardShell se quedaba
+                      // con el estado viejo y ningún `replace` a la misma ruta lo
+                      // iba a remontar. Eso se arregló donde estaba el fallo, en
+                      // BoardShell, comparando la huella de la estructura.
                       router.refresh();
                     }
                     return result;
@@ -166,7 +171,7 @@ export default function ProjectMenu({
                 />
               )}
               {panel === "template" && (
-                <ApplyTemplatePanel projectId={project.id} taskCount={taskCount} onDone={() => setPanel(null)} />
+                <ApplyTemplatePanel projectId={project.id} taskCount={taskCount} onDone={() => setPanel(null)} templates={templates} />
               )}
               {panel === "edit" && <EditProjectForm project={project} onSaved={() => setPanel(null)} />}
               {panel === "move" && (
@@ -504,11 +509,13 @@ function MenuItem({
 function ApplyTemplatePanel({
   projectId,
   taskCount,
-  onDone
+  onDone,
+  templates
 }: {
   projectId: string;
   taskCount: number;
   onDone: () => void;
+  templates: ProjectTemplate[];
 }) {
   const router = useRouter();
   const [templateId, setTemplateId] = useState("");
@@ -572,9 +579,9 @@ function ApplyTemplatePanel({
 
       <label className="text-xs font-bold">
         Plantilla
-        <TemplateSelect value={templateId} onChange={setTemplateId} />
+        <TemplateSelect value={templateId} onChange={setTemplateId} templates={templates} />
       </label>
-      <TemplatePreview templateId={templateId} />
+      <TemplatePreview templateId={templateId} templates={templates} />
 
       {error && (
         <div className="text-xs" style={{ color: "var(--danger)" }}>
@@ -592,13 +599,11 @@ function ApplyTemplatePanel({
               setError(result.reason ?? "No se pudo aplicar la plantilla.");
               return;
             }
-            // La MISMA pareja que usa MoveProjectPanel unas líneas más arriba,
-            // que es la que en esta pantalla está demostrado que repinta: el
-            // `replace` a la misma URL fuerza una navegación de verdad, y el
-            // `refresh` trae el árbol nuevo saltándose la caché del router.
-            // Con `refresh` a secas el tablero se quedaba igual y había que
-            // salir del proyecto y volver a entrar.
-            router.replace(`/execution?project=${projectId}`);
+            // Solo `refresh`: trae el árbol nuevo, y BoardShell lo adopta al
+            // ver que cambió la huella de la estructura. El `replace` a esta
+            // misma URL que lo acompañaba era cargo cult — el tablero no se
+            // repintaba por la caché del router, sino porque BoardShell tenía
+            // las tareas congeladas en su estado local.
             router.refresh();
             setHecho(result.created ?? { groups: 0, tasks: 0 });
           })

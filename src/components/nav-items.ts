@@ -44,9 +44,13 @@ export const NAV_ITEMS: NavItem[] = [
   // porque ese selector lo usa.
   { href: "/development", label: "Panel", group: "Personal Development OS", icon: "development", color: "var(--c-orange)" },
   { href: "/development/goals", label: "Metas Personales", group: "Personal Development OS", icon: "personalGoals", color: "var(--c-orange)" },
-  { href: "/development/routines", label: "Rutinas", group: "Personal Development OS", icon: "routines", color: "var(--c-orange)" },
-  { href: "/development/habits", label: "Hábitos", group: "Personal Development OS", icon: "habits", color: "var(--c-orange)" },
+  { href: "/development/routines", label: "Rutinas y Hábitos", group: "Personal Development OS", icon: "routines", color: "var(--c-orange)" },
+  // "Hábitos" ya no es una entrada: desde 0046 un hábito no existe fuera de su
+  // rutina, así que una pantalla propia solo podía enseñar una lista sin el
+  // contexto que la hace legible. /development/habits sobrevive como redirect.
+  { href: "/development/habits", label: "Hábitos", group: "Personal Development OS", icon: "habits", color: "var(--c-orange)", hidden: true },
   { href: "/development/library", label: "Biblioteca", group: "Personal Development OS", icon: "library", color: "var(--c-orange)" },
+  { href: "/development/nutrition", label: "Nutrición", group: "Personal Development OS", icon: "nutrition", color: "var(--c-orange)" },
   // "Intelligence OS" ya no es una sección del menú. Anunciarla como tal
   // prometía un cerebro central que todavía no existe: el motor está
   // construido para cinco ámbitos y `analyze()` solo acepta Dinero
@@ -68,5 +72,12 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/wealth", label: "Patrimonio", group: "Money OS (privado)", icon: "wealth", color: "var(--c-green)" },
   { href: "/goals", label: "Metas Financieras", group: "Money OS (privado)", icon: "goals", color: "var(--c-green)" },
   { href: "/household", label: "Hogar y Dependientes", group: "Money OS (privado)", icon: "household", color: "var(--c-green)" },
-  { href: "/settings", label: "Configuración", group: "Cuenta", icon: "settings", color: "var(--muted)" }
+  { href: "/settings", label: "Configuración", group: "Cuenta", icon: "settings", color: "var(--muted)" },
+  // El panel de administración (0044) no puede estar en el menú: esta lista la
+  // importa un componente cliente y es la misma para todo el mundo, así que
+  // ponerlo aquí visible anunciaría la ruta a quien recibe un 404 al abrirla.
+  // Se alcanza desde Configuración, y solo si eres administrador. Figura de
+  // todos modos porque de esta lista sale el título de la barra superior: sin
+  // la entrada, la pantalla se titularía "Life OS".
+  { href: "/admin", label: "Administración", group: "Cuenta", icon: "settings", color: "var(--muted)", hidden: true }
 ];

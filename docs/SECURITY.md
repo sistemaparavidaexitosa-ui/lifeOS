@@ -33,6 +33,38 @@ Cada acción de negocio relevante (crear tarea, cambiar estado, registrar
 transacción, vincular pago de deuda, secuenciar proyecto, etc.) inserta una
 fila con `correlation_id`.
 
+## Administrador de plataforma (migración 0044)
+
+`profiles.is_admin` es el primer privilegio del sistema que no es de workspace.
+Lo que **puede**: leer, escribir, publicar y borrar filas de `template_catalog`
+—el catálogo de plantillas de proyecto, rutina y hábito que ven todos los
+usuarios—. Lo que **no puede**, y no es una promesa sino una consecuencia del
+esquema: `template_catalog` es la única tabla que alcanza, y no tiene `user_id`.
+Ninguna política de ninguna otra tabla menciona `is_admin()`, así que un
+administrador ve exactamente los mismos datos de usuario que cualquier otra
+persona: los suyos. BR-012 no se toca.
+
+Hay una assertion de pgTAP que lo demuestra en vez de afirmarlo
+(`supabase/tests/0020_rls_template_catalog.sql`): con la sesión de un
+administrador, `select ... from profiles where user_id = <otro>` devuelve vacío.
+
+**Tres controles sobre la escritura**, en profundidad:
+
+1. La ruta `/admin` devuelve **404** a quien no es administrador — no un
+   redirect, que confirmaría que existe.
+2. La **RLS** de 0044 rechaza `insert`/`update`/`delete` de quien no lo es.
+3. Cada **Server Action** lo vuelve a comprobar antes de escribir, porque una
+   Server Action es un endpoint HTTP y se puede invocar sin pasar por la
+   pantalla.
+
+El privilegio se otorga con SQL (ver `/docs/DEPLOY.md`); no hay interfaz para
+repartirlo. Cada guardado, publicación, retirada y borrado deja una fila en
+`audit_log` con el usuario que lo hizo.
+
+`anon` no llega a `template_catalog` ni siquiera a lo publicado: la migración
+**revoca** el `select` que `0002` le concede por defecto a toda tabla nueva del
+esquema.
+
 ## Datos de menores de edad (Hogar)
 
 El módulo de Hogar (`family_members`) puede almacenar el nombre de un hijo
