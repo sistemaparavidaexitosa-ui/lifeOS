@@ -67,8 +67,23 @@ export const PLAN_BUDGET: Budget = { maxOutputTokens: 8000, thinkingBudget: 2048
 /** Priorizar y conectar dominios es la tarea más de criterio de las tres. */
 export const RECOMMEND_BUDGET: Budget = { maxOutputTokens: 12000, thinkingBudget: 4096 };
 
-/** Un turno de chat se responde en párrafos, no en informes. */
-export const CHAT_BUDGET: Budget = { maxOutputTokens: 3000, thinkingBudget: 1024 };
+/**
+ * Un turno de chat se responde en párrafos, no en informes.
+ *
+ * EL PENSAMIENTO BAJA AL MÍNIMO, y no por ahorrar tokens: se paga en espera.
+ * Los de razonamiento se generan ANTES de la primera letra de la respuesta, y
+ * el chat no los necesita — la regla número uno de su prompt es «NO calcules
+ * nada», porque las cifras llegan ya calculadas en los hechos. Lo que hace el
+ * modelo aquí es elegir cuáles vienen a cuento y redactarlos; con 1024 tokens
+ * de presupuesto el usuario esperaba por un razonamiento que no se le pidió.
+ *
+ * 128 y no 0: apagarlo del todo es lo más rápido, pero ningún valor de
+ * `thinkingConfig` está ejercitado todavía contra este modelo (CHECKS.md), y
+ * si rechazara el 0 se caería el chat entero. 128 es el suelo documentado para
+ * los `flash` y es el mismo tipo de valor que ya funciona. Si algún día se
+ * confirma que admite 0, esa es la línea.
+ */
+export const CHAT_BUDGET: Budget = { maxOutputTokens: 3000, thinkingBudget: 128 };
 
 /**
  * Ni un modelo lento puede dejar un botón girando para siempre. Mismo criterio

@@ -2188,23 +2188,29 @@ textarea:focus {
 /* ------------------------------------------------------------------------ */
 .mb-row,
 .mb-quickadd {
-  --mb-step: 22px;
+  --mb-step: 26px;
   padding-left: calc(14px + min(var(--mb-depth, 0) * var(--mb-step), 7 * var(--mb-step)));
 }
 
-/* Una guía vertical por cada nivel de ancestro, como el árbol de archivos de
-   un editor. Se dibujan con un degradado repetido y no con elementos: las
-   filas hijas son HERMANAS en el DOM (MondayRow las emite en un Fragment),
-   así que no hay contenedor por nivel del que colgar un borde. */
+/* Guías verticales de nivel, como el árbol de archivos de un editor. Se
+   dibujan con degradados y no con elementos: las filas hijas son HERMANAS en
+   el DOM (MondayRow las emite en un Fragment), así que no hay contenedor por
+   nivel del que colgar un borde.
+
+   Son DOS capas, y no una sola repetida, porque la sangría sola no bastaba
+   para leer el nivel de un vistazo: la primera marca en color el nivel de
+   ESTA fila, y la segunda, apagada, dibuja el rastro de sus ancestros. Así
+   una sub-subtarea no se distingue de una subtarea contando píxeles, sino
+   por dónde cae su marca. `--mb-guide` es el índice de la última guía y
+   repite el mismo tope que la sangría, para que no se despeguen. */
 .mb-row.mb-sub {
-  background-image: repeating-linear-gradient(
-    to right,
-    color-mix(in srgb, var(--line) 85%, transparent) 0 1px,
-    transparent 1px var(--mb-step)
-  );
-  background-repeat: no-repeat;
-  background-size: calc(min(var(--mb-depth, 0), 7) * var(--mb-step)) 100%;
-  background-position: 8px 0;
+  --mb-guide: min(var(--mb-depth, 1) - 1, 6);
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--accent) 60%, transparent) 0 2px, transparent 2px),
+    repeating-linear-gradient(to right, var(--line) 0 2px, transparent 2px var(--mb-step));
+  background-repeat: no-repeat, no-repeat;
+  background-position: calc(8px + var(--mb-guide) * var(--mb-step)) 0, 8px 0;
+  background-size: 2px 100%, calc(var(--mb-guide) * var(--mb-step)) 100%;
 }
 .mb-row:hover {
   background-color: color-mix(in srgb, var(--accent) 4%, var(--surface));
@@ -2378,11 +2384,11 @@ textarea:focus {
      mismo choque de cascada que dejó el tablero sin sangría. */
   .mb-row,
   .mb-quickadd {
-    --mb-step: 13px;
+    --mb-step: 18px;
     padding-left: calc(12px + min(var(--mb-depth, 0) * var(--mb-step), 7 * var(--mb-step)));
   }
   .mb-row.mb-sub {
-    background-position: 6px 0;
+    background-position: calc(6px + var(--mb-guide) * var(--mb-step)) 0, 6px 0;
   }
   .mb-row + .mb-row {
     border-top: 1px solid var(--line);

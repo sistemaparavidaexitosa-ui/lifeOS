@@ -11,11 +11,12 @@
 // vez reusa `createTask`. Mismo criterio que D-075 tomó con el planificador.
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
-import { loadFacts } from "@/lib/insights/facts-loader";
+import { loadFacts, type Db } from "@/lib/insights/facts-loader";
 import { allowedDomains, buildAliasMap, buildContext, restore } from "@/lib/insights/context";
 import { chatReply } from "@/lib/ai/chat";
 import { recortarHistorial, type ChatMessageLike } from "@/lib/domain/ai/chat.ts";
@@ -53,13 +54,13 @@ function toMessage(row: { id: string; role: string; content: string; fact_ids: s
   };
 }
 
-export async function loadChatHistory(): Promise<ChatMessage[]> {
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) return [];
-
+/**
+ * La lectura, sin comprobar sesión: RLS ya decide qué filas se ven, y quien
+ * llama a esto dentro de un turno ya tiene el usuario en la mano. Estaba
+ * pegada a `loadChatHistory`, así que `sendChatMessage` pagaba un viaje a Auth
+ * de más por cada mensaje enviado.
+ */
+async function readHistory(supabase: Db): Promise<ChatMessage[]> {
   // Descendente porque ese es el índice (0045); se le da la vuelta aquí, que
   // es como se lee un chat. Pedirlo ascendente traería los MÁS VIEJOS al topar.
   const { data } = await supabase
@@ -69,6 +70,15 @@ export async function loadChatHistory(): Promise<ChatMessage[]> {
     .limit(MAX_HISTORIAL);
 
   return (data ?? []).map(toMessage).reverse();
+}
+
+export async function loadChatHistory(): Promise<ChatMessage[]> {
+  const supabase = await createClient();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+  return readHistory(supabase);
 }
 
 /**
@@ -90,24 +100,38 @@ export async function sendChatMessage(text: string): Promise<SendResult> {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, reason: "No autenticado" };
 
-  const { error: insertErr } = await supabase
+  // TODO LO QUE NO DEPENDE DE NADA, A LA VEZ — incluido guardar la pregunta.
+  //
+  // Antes esto era una cascada: se esperaba a que la pregunta estuviera
+  // escrita, luego a la zona horaria, luego a las lecturas. Tres esperas de red
+  // en fila que nadie estaba usando para nada, delante de una llamada al modelo
+  // que ya es lenta de por sí. Se lanza la escritura sin esperarla y se recoge
+  // más abajo, justo antes de preguntar: sigue siendo un requisito que la
+  // pregunta quede guardada aunque el modelo falle, pero no hay motivo para
+  // que las lecturas se queden mirando.
+  const guardarPregunta = supabase
     .from("ai_chat_messages")
-    .insert({ user_id: user.id, role: "user", content: message.data });
-  if (insertErr) return { ok: false, reason: insertErr.message };
+    .insert({ user_id: user.id, role: "user", content: message.data })
+    .select("id")
+    .single();
 
-  const today = todayLocal(await getUserTimeZone());
+  const [zonaHoraria, { data: profile }, { data: accounts }, { data: members }, { data: memory }, historial] =
+    await Promise.all([
+      getUserTimeZone(),
+      supabase
+        .from("profiles")
+        .select("quincenal_income, ai_domains, activity_window_start, activity_window_end")
+        .eq("user_id", user.id)
+        .single(),
+      supabase.from("accounts").select("name").order("created_at"),
+      supabase.from("family_members").select("name").order("created_at"),
+      supabase.from("memory_items").select("*").order("created_at", { ascending: false }),
+      // `readHistory` y no `loadChatHistory`: esta función ya comprobó la
+      // sesión, y volver a preguntársela a Auth era otro viaje de red de más.
+      readHistory(supabase)
+    ]);
 
-  const [{ data: profile }, { data: accounts }, { data: members }, { data: memory }, historial] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("quincenal_income, ai_domains, activity_window_start, activity_window_end")
-      .eq("user_id", user.id)
-      .single(),
-    supabase.from("accounts").select("name").order("created_at"),
-    supabase.from("family_members").select("name").order("created_at"),
-    supabase.from("memory_items").select("*").order("created_at", { ascending: false }),
-    loadChatHistory()
-  ]);
+  const today = todayLocal(zonaHoraria);
 
   // El opt-in por dominio manda igual que en `analyze()` (§4.2), y el corte es
   // igual de TEMPRANO: si el usuario no autorizó nada, sus tablas ni se tocan.
@@ -151,20 +175,33 @@ export async function sendChatMessage(text: string): Promise<SendResult> {
     )
   });
 
+  // Aquí sí se espera: si la pregunta no se pudo guardar, no se gasta una
+  // llamada al modelo en un turno que no va a quedar registrado.
+  const { data: pregunta, error: insertErr } = await guardarPregunta;
+  if (insertErr) return { ok: false, reason: insertErr.message };
+
   const result = await chatReply({
     context,
-    // El historial que se acaba de leer YA incluye el turno recién insertado,
-    // que es la pregunta de este mismo turno: se quita para no mandarla dos
-    // veces, una como conversación previa y otra como pregunta.
-    history: recortarHistorial(historial.slice(0, -1)),
+    // El historial se leyó EN PARALELO con la escritura de la pregunta, así que
+    // puede haberla pillado o no según cuál llegara antes. Se descarta por id y
+    // no por posición: así la conversación previa es la misma pase lo que pase,
+    // en vez de depender de una carrera. (Antes era `slice(0, -1)`, que asumía
+    // que siempre estaba la última.)
+    history: recortarHistorial(historial.filter((m) => m.id !== pregunta?.id)),
     message: message.data
   });
 
-  await supabase.from("audit_log").insert({
-    user_id: user.id,
-    action: "ai.chat",
-    object: "global",
-    meta: { domains: context.domains, facts: context.facts.length, ok: result.ok }
+  // El rastro de auditoría no lo está esperando nadie: sale después de que la
+  // respuesta ya viaje al navegador. `after` y no una promesa suelta porque en
+  // una Server Action lo que no se espera se puede quedar a medias al cerrar
+  // la petición.
+  after(async () => {
+    await supabase.from("audit_log").insert({
+      user_id: user.id,
+      action: "ai.chat",
+      object: "global",
+      meta: { domains: context.domains, facts: context.facts.length, ok: result.ok }
+    });
   });
 
   if (!result.ok) return { ok: false, reason: result.reason };
