@@ -2,7 +2,6 @@
 
 import { useTransition, type ReactNode } from "react";
 import { toggleHabitToday } from "./actions";
-import FormSheet from "../FormSheet";
 import FoodSearchForm from "../nutrition/FoodSearchForm";
 import type { Meal } from "@/lib/domain/development/nutrition.ts";
 
@@ -75,11 +74,12 @@ export default function HabitRow({
           // formulario: nada se escribe por el mero hecho de que el hábito sea
           // una comida (D-089/D-105).
           <span className="hb-cue">
-            <FormSheet label={`Registrar ${habit.meal.toLowerCase()}`} title={`Registrar ${habit.meal.toLowerCase()}`}>
-              {(close) => (
-                <FoodSearchForm localDate="" meal={habit.meal as Meal} close={close} habitId={habit.id} />
-              )}
-            </FormSheet>
+            <FoodSearchForm
+              localDate=""
+              meal={habit.meal as Meal}
+              habitId={habit.id}
+              label={`Registrar ${habit.meal.toLowerCase()}`}
+            />
           </span>
         )}
         {(habit.stackAfterName || habit.cue) && (

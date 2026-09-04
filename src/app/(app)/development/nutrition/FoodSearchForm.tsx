@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Field, FormActions } from "../FormSheet";
+import FormSheet, { Field, FormActions } from "../FormSheet";
 import { logFoodEntry, logMealFromRoutine } from "./actions";
 import { scalePer100g, type Meal } from "@/lib/domain/development/nutrition.ts";
 import type { FoodCandidate } from "@/lib/domain/development/nutrition-lookup.ts";
@@ -14,7 +14,31 @@ import type { FoodCandidate } from "@/lib/domain/development/nutrition-lookup.ts
  * funciona igual. Por eso el formulario de captura manual no está escondido
  * tras el fallo de la búsqueda: está siempre, debajo.
  */
+/**
+ * El panel lo abre este componente. La página es un Server Component y no
+ * puede pasarle a `FormSheet` su hijo-función: React lanza «Functions are not
+ * valid as a child of Client Components» y la ruta devuelve 500.
+ */
 export default function FoodSearchForm({
+  localDate,
+  meal,
+  habitId,
+  label
+}: {
+  localDate: string;
+  meal: Meal;
+  habitId?: string;
+  /** Texto del botón. Cambia entre el diario («+ Añadir») y la rutina. */
+  label?: string;
+}) {
+  return (
+    <FormSheet label={label ?? "+ Añadir"} title={`Añadir a ${meal.toLowerCase()}`}>
+      {(close) => <FoodSearchFields localDate={localDate} meal={meal} close={close} habitId={habitId} />}
+    </FormSheet>
+  );
+}
+
+function FoodSearchFields({
   localDate,
   meal,
   close,

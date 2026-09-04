@@ -47,9 +47,10 @@ export default function AiSettings({ enabled }: { enabled: string[] }) {
     <div className="flex flex-col gap-3">
       <form action={setAiDomains} className="flex flex-col gap-2" ref={formRef}>
         <p className="text-xs" style={{ color: "var(--muted)" }}>
-          Solo los dominios que marques salen hacia el modelo. En el análisis viajan cifras ya calculadas; en el chat,
+          <strong>Todo viene encendido</strong>: el chat no sirve de nada si hay que configurarlo antes de la primera
+          pregunta. Aquí apagas lo que no quieras que salga. En el análisis viajan cifras ya calculadas; en el chat,
           además, el modelo puede consultar filas concretas de esos dominios cuando lo necesite para contestar. En los dos
-          casos los nombres de cuentas y personas van sustituidos por alias, y lo que no marques aquí no se toca.
+          casos los nombres de cuentas y personas van sustituidos por alias, y lo que desmarques aquí deja de tocarse.
         </p>
         {DOMAINS.map((value) => (
           <label key={value} className="flex items-center gap-2 text-sm">
