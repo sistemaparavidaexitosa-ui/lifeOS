@@ -19,12 +19,14 @@ insert into public.profiles (user_id, name) values
   ('bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb', 'Otro IA')
 on conflict (user_id) do nothing;
 
--- El opt-in nace vacío: ningún dominio sale hacia el modelo hasta que el
--- usuario lo encienda (§4.2).
+-- El opt-in nace ENCENDIDO desde 0048, invirtiendo lo que fijaba 0027. El chat
+-- transversal tiene que servir sin configurar nada; el interruptor sigue en
+-- /settings para apagar lo que se quiera. Si esta aserción se rompe, el chat
+-- vuelve a nacer sin saber nada de quien pregunta.
 select is(
   (select ai_domains from public.profiles where user_id = 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa'),
-  '{}'::text[],
-  'ai_domains arranca vacío: el opt-in está apagado por defecto'
+  '{money,debt,habits,time,execution,nutrition,activity}'::text[],
+  'ai_domains arranca con TODOS los dominios: no hay nada que configurar (0048)'
 );
 
 select set_config('request.jwt.claims', json_build_object('sub', 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa', 'role', 'authenticated')::text, true);

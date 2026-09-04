@@ -1837,6 +1837,39 @@ de lo que se planeó, no de lo que quedó._
   cazarlo es cargar la ruta con una sesión, y eso es ahora parte de lo que hay
   que hacer antes de dar una pantalla por terminada.
 
+- **D-108 · La IA ve todo por defecto, y esto invierte a D-088 a conciencia.**
+  0027 dejó `ai_domains` vacío con un argumento bueno: ningún dato sale hacia el
+  proveedor del modelo hasta que el usuario lo encienda. Para un motor que
+  analiza el dinero de alguien sin que se lo pidan, era la postura correcta.
+
+  Con el chat transversal dejó de serlo. Una pantalla que se estrena sin saber
+  nada de la vida de quien pregunta —ni sus gastos, ni sus hábitos, ni lo que
+  comió— **no se lee como prudente, se lee como rota**; y el aviso que lo
+  explicaba solo aparecía con la conversación vacía. El dueño del sistema lo
+  dijo con estas palabras: «no quiero tener que configurar nada, el chat siempre
+  debe tener acceso a todo». Migración 0048: el defecto pasa a ser todos los
+  dominios, y los perfiles que ya existían se rellenan una vez.
+
+  **Lo que NO cambia es lo que hace que siga siendo defendible:**
+  - La columna y el interruptor de Configuración → IA se quedan. Esto mueve el
+    defecto, no quita el control, y apagar un dominio sigue funcionando igual.
+  - `allowedDomains` no se toca. `activity` sigue fuera de `global` porque esa
+    exclusión nunca fue de privacidad sino de sentido: global es «tu vida» y
+    aquello es «la semana de tu equipo».
+  - `audit_log` sigue registrando qué dominios viajaron en cada análisis y en
+    cada turno.
+  - La seudonimización sigue puesta: los nombres de cuentas y personas salen
+    como alias y vuelven con `restore`.
+
+  **La consecuencia aceptada, sin adornos:** a partir de aquí las cifras de
+  todos los módulos salen hacia Gemini en cada consulta, y el plan gratuito de
+  Google admite usar los datos del free tier para mejorar sus productos. Se
+  decidió con esa información delante.
+
+  La aserción pgTAP que fijaba «`ai_domains` arranca vacío» se invirtió en vez
+  de borrarse: ahora fija que arranca lleno. Si alguien vuelve a dejarlo vacío,
+  el chat renace sin saber nada de quien pregunta y una prueba lo dice.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo

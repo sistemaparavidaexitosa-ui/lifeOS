@@ -611,6 +611,25 @@ comprobar eso, que es lo que de verdad protege el invariante.
   del layout está puesto y el build genera la ruta, pero la respuesta HTTP no se
   comprobó con una sesión real.
 
+## La IA pasa a ver todo por defecto (4-sep-2026)
+
+El chat parecía roto y no lo estaba: `ai_domains` nacía vacío (0027), así que no
+tenía hechos NI herramientas —`permitidos.length` es 0 y la caja ni se crea— y
+contestaba sin saber nada de quien preguntaba. Migración 0048 lo invierte
+(D-108).
+
+| Comprobación | Resultado |
+|---|---|
+| `pnpm db:reset` con 0048 | ✅ los dos perfiles de la semilla nacen con `{money,debt,habits,time,execution,nutrition,activity}` |
+| `supabase test db` | ✅ 182 aserciones; la de 0008 se invirtió en vez de borrarse y ahora fija que arranca LLENO |
+| `/settings` con sesión real | ✅ las **siete** casillas salen marcadas sin tocar nada |
+| `/development/nutrition`, `/home`, `/settings` | ✅ 200 |
+
+Lo que se comprobó y conviene no olvidar: el `update` de la migración rellena
+solo los perfiles vacíos. No se puede distinguir «nunca lo configuré» de «lo
+apagué todo a conciencia», y se eligió la primera lectura porque el vacío era el
+defecto y nadie lo había cambiado.
+
 ## La página de Nutrición devolvía 500, y por qué no lo vio ninguna herramienta (4-sep-2026)
 
 ### Lo que se ejecutó, y esta vez sí con una sesión real

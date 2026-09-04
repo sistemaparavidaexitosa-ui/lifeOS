@@ -150,8 +150,8 @@ export default function AiChatRail({
       <div className="ai-rail-body" ref={bodyRef}>
         {!messages.length && !pending && (
           <div className="text-xs" style={{ color: "var(--muted)" }}>
-            Pregúntame sobre tu semana, tu dinero o tu tablero. Solo veo los dominios que hayas
-            encendido en Configuración → IA.
+            Pregúntame sobre tu semana, tu dinero, tu tablero o lo que has comido. Veo todos tus
+            módulos; si quieres dejar alguno fuera, se apaga en Configuración → IA.
           </div>
         )}
 
