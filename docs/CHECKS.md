@@ -611,6 +611,44 @@ comprobar eso, que es lo que de verdad protege el invariante.
   del layout está puesto y el build genera la ruta, pero la respuesta HTTP no se
   comprobó con una sesión real.
 
+## Producción: primera llamada real al modelo, y las migraciones que faltaban (4-sep-2026)
+
+Esta sección corrige por fin la frase que este archivo repetía desde agosto
+—«ninguna llamada real al modelo desde aquí»—. Ya la hubo, en producción, y
+enseñó dos cosas.
+
+### Lo que se ejecutó
+
+| Comprobación | Resultado |
+|---|---|
+| `supabase migration list --linked` | ❗ `0046` y `0047` **no estaban aplicadas en el proyecto remoto**: Vercel despliega código, las migraciones son un paso aparte |
+| `supabase db push --dry-run` | ✅ anuncia exactamente esas dos |
+| `supabase db push` | ✅ aplicadas; `migration list` ya no reporta ninguna pendiente |
+| `pnpm typecheck` / `lint` / `test:unit` | ✅ 668 pruebas, 0 fallos |
+
+### El fallo de esquema (D-106)
+
+`proposedMemoryScope` llevaba `""` dentro de su `enum` y la API contestó
+«`response_schema.properties[proposedMemoryScope].enum[8]: cannot be empty`».
+El chat entero dejaba de responder. Arreglado en origen —«ninguno» se dice
+dejando el texto vacío— y con `problemasDeEsquema` corriendo antes del `fetch`,
+para que la próxima vez el fallo se vea sin gastar una llamada.
+
+### Lo que la llamada real SÍ confirmó
+
+- La autenticación por `x-goog-api-key` funciona y la petición llega al
+  validador del cuerpo.
+- `httpReason` deja pasar el detalle de la API íntegro: el mensaje traía el
+  nombre del campo y el índice del valor, así que el diagnóstico vino dicho.
+
+### Lo que sigue SIN confirmar
+
+Nada de lo demás. El 400 se produce **antes** de que el modelo genere, así que
+siguen sin ejercitarse `thinkingConfig`, `propertyOrdering`, el uso de
+herramientas y —sobre todo— el reenvío de `thoughtSignature`, que es el que
+puede tumbar la segunda llamada de cada ronda. Ese sigue siendo el primero de
+la lista.
+
 ## Nutrición dentro de Personal Development OS (4-sep-2026)
 
 ### Lo que se ejecutó

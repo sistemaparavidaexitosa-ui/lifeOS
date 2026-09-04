@@ -48,3 +48,48 @@ export function motivoCadenaAgotada(modelos: number): string {
   const cuantos = modelos === 2 ? "dos" : String(modelos);
   return `Se agotó la cuota gratuita de los ${cuantos} modelos por hoy. Vuelve a intentarlo mañana.`;
 }
+
+/**
+ * La forma mínima de un esquema, repetida aquí para no arrastrar el tipo
+ * completo de `gemini-provider.ts` —que es `server-only`— hasta el dominio.
+ */
+interface EsquemaLike {
+  enum?: string[];
+  items?: EsquemaLike;
+  properties?: Record<string, EsquemaLike>;
+}
+
+/**
+ * Los problemas de un `responseSchema` ANTES de gastar una llamada en
+ * descubrirlos.
+ *
+ * Nació de un fallo real en producción: `proposedMemoryScope` llevaba una
+ * cadena vacía dentro de su `enum` —para representar «no propongo nada»— y la
+ * API contestó «enum[8]: cannot be empty». Costó una llamada entera y le
+ * enseñó al usuario un mensaje que no podía interpretar, cuando el error era
+ * nuestro y se veía sin salir del proceso.
+ *
+ * Comprueba lo único que se sabe que la API rechaza por forma, y no intenta
+ * validar el dialecto entero: un validador que adivina reglas acabaría
+ * rechazando esquemas buenos, que es peor que el problema.
+ */
+export function problemasDeEsquema(esquema: EsquemaLike, ruta = "raíz"): string[] {
+  const problemas: string[] = [];
+
+  if (esquema.enum) {
+    if (!esquema.enum.length) {
+      problemas.push(`${ruta}: el enum está vacío.`);
+    } else if (esquema.enum.some((v) => v.trim() === "")) {
+      // Para decir «ninguno» hay que usar otro campo, no un valor vacío: la
+      // API los rechaza y con razón, porque no son un valor de enum.
+      problemas.push(`${ruta}: el enum tiene un valor vacío.`);
+    }
+  }
+
+  if (esquema.items) problemas.push(...problemasDeEsquema(esquema.items, `${ruta}[]`));
+  for (const [clave, hijo] of Object.entries(esquema.properties ?? {})) {
+    problemas.push(...problemasDeEsquema(hijo, `${ruta}.${clave}`));
+  }
+
+  return problemas;
+}

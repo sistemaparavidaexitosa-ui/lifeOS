@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { debeSaltarDeModelo, motivoCadenaAgotada } from "../../src/lib/domain/ai/model-chain.ts";
+import { debeSaltarDeModelo, motivoCadenaAgotada, problemasDeEsquema } from "../../src/lib/domain/ai/model-chain.ts";
 
 // La tabla de esta prueba ES la decisión de diseño: cuándo tiene sentido gastar
 // el siguiente modelo de la cadena y cuándo sería solo espera de más.
@@ -43,4 +43,51 @@ test("motivoCadenaAgotada: con un solo modelo no habla de varios", () => {
 
 test("motivoCadenaAgotada: con tres o más no inventa el numeral, dice cuántos", () => {
   assert.match(motivoCadenaAgotada(3), /3 modelos/);
+});
+
+// --- Validación del esquema que se le manda al modelo -------------------------
+// Escrito DESPUÉS de que producción devolviera
+// «GenerateContentRequest.generation_config.response_schema.properties
+//  [proposedMemoryScope].enum[8]: cannot be empty».
+// Un esquema mal formado cuesta una llamada entera y un mensaje que el usuario
+// no puede interpretar; se caza antes de salir a la red.
+
+test("problemasDeEsquema: un enum con una cadena vacía se rechaza — es el 400 que llegó de producción", () => {
+  const problemas = problemasDeEsquema({
+    type: "OBJECT",
+    properties: {
+      scope: { type: "STRING", enum: ["goal", ""], format: "enum" }
+    }
+  });
+  assert.strictEqual(problemas.length, 1);
+  assert.match(problemas[0] ?? "", /scope/);
+});
+
+test("problemasDeEsquema: baja por las propiedades anidadas y por los items de un array", () => {
+  assert.strictEqual(
+    problemasDeEsquema({
+      type: "OBJECT",
+      properties: { lista: { type: "ARRAY", items: { type: "STRING", enum: [""] } } }
+    }).length,
+    1
+  );
+});
+
+test("problemasDeEsquema: un enum vacío del todo tampoco sirve", () => {
+  assert.strictEqual(problemasDeEsquema({ type: "STRING", enum: [] }).length, 1);
+});
+
+test("problemasDeEsquema: un esquema sano no da problemas", () => {
+  assert.deepStrictEqual(
+    problemasDeEsquema({
+      type: "OBJECT",
+      properties: {
+        texto: { type: "STRING" },
+        scope: { type: "STRING", enum: ["goal", "habit"], format: "enum" },
+        ids: { type: "ARRAY", items: { type: "STRING" } }
+      },
+      required: ["texto"]
+    }),
+    []
+  );
 });

@@ -38,7 +38,9 @@ const ReplySchema = z.object({
     ),
   proposedMemoryScope: z
     .string()
-    .describe(`El ámbito del hecho anterior. Uno de: ${MEMORY_SCOPES.join(", ")}. Cadena vacía si no propones nada.`)
+    .describe(
+      `El ámbito del hecho anterior. Uno de: ${MEMORY_SCOPES.join(", ")}. Si no propones nada, elige cualquiera: se ignora.`
+    )
 });
 
 /** El mismo contrato, en el dialecto que entiende `responseSchema`. */
@@ -63,8 +65,12 @@ const REPLY_RESPONSE_SCHEMA: GeminiSchema = {
     },
     proposedMemoryScope: {
       type: "STRING",
-      description: `El ámbito del hecho anterior. Cadena vacía si no propones nada.`,
-      enum: [...MEMORY_SCOPES, ""],
+      // SIN cadena vacía dentro del enum: la API la rechaza («enum[…]: cannot
+      // be empty») y tumba la llamada entera. «No propongo nada» se dice
+      // dejando `proposedMemoryText` vacío, no inventando un valor de enum que
+      // no es un valor.
+      description: "El ámbito del hecho anterior. Si no propones nada, elige cualquiera: se ignora.",
+      enum: [...MEMORY_SCOPES],
       format: "enum"
     }
   },
@@ -102,7 +108,7 @@ Sobre 'proposedMemoryText' y 'proposedMemoryScope':
 - Rellénalos SOLO cuando el usuario revele algo sobre sí mismo que seguirá siendo verdad dentro de seis meses: una restricción («soy celíaco»), una preferencia estable («entreno por la mañana»), un objetivo de fondo, una decisión tomada.
 - NO es memoria lo que pasó hoy o ayer, ni una cifra, ni un plan para esta semana. Eso ya está en los datos del sistema y ahí se consulta.
 - Como máximo UNO por turno, en una frase, en tercera persona y sin fechas.
-- En cualquier otro caso, cadena vacía en los dos. Es lo normal.
+- Si no hay nada que recordar —que es lo normal— deja 'proposedMemoryText' VACÍO. El ámbito elige cualquiera de la lista: cuando el texto va vacío, se ignora.
 - Tú no guardas nada: propones. El usuario confirma con un botón.`;
 
 export interface ChatInput {

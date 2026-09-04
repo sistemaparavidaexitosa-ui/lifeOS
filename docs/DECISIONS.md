@@ -1787,6 +1787,36 @@ de lo que se planeó, no de lo que quedó._
   (D-094), y lo que un modelo o una pantalla escriben solos en tu base es lo
   único que no se deshace con un clic (D-089).
 
+### Lo que enseñó la primera llamada real (4-sep-2026)
+
+- **D-106 · Una cadena vacía no es un valor de enum, y el esquema se revisa
+  antes de salir a la red.** `proposedMemoryScope` llevaba `""` dentro de su
+  `enum` para representar «no propongo nada». La API lo rechazó en producción
+  con un mensaje exacto —«`response_schema.properties[proposedMemoryScope]
+  .enum[8]: cannot be empty`»— y **tumbó el chat entero**, porque un
+  `responseSchema` mal formado no falla a medias: falla la petición.
+
+  El arreglo de fondo es que «ninguno» se dice dejando `proposedMemoryText`
+  vacío, que ya era el campo que lo decía; el enum no tenía por qué participar.
+
+  **Y se añadió `problemasDeEsquema` en el dominio, que corre ANTES del
+  `fetch`.** No es cinturón y tirantes: un esquema mal formado es un bug
+  nuestro, no mejora con otro modelo ni con otro intento, y descubrirlo por el
+  400 cuesta una llamada entera y le enseña al usuario un mensaje que no puede
+  interpretar. Comprueba solo lo que se sabe que la API rechaza por forma
+  —enums vacíos y valores vacíos dentro de un enum— y no intenta validar el
+  dialecto completo: un validador que adivina reglas acaba rechazando esquemas
+  buenos, que es peor que el problema. Cubre también los esquemas de las
+  herramientas, que son la misma clase de bug.
+
+  **Lo que confirmó el episodio, y que llevaba meses sin confirmarse:** la
+  llamada llegó al modelo. Hasta ahora `CHECKS.md` decía que ni una sola
+  petición real se había ejercitado desde este repo; el error vino del
+  validador de la API sobre el cuerpo, no de la autenticación ni de la URL. Que
+  `httpReason` dejara pasar el detalle íntegro —con el nombre del campo y el
+  índice del valor— es, por segunda vez (ver D-087), lo que hizo que el
+  diagnóstico viniera dicho.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo

@@ -1,6 +1,6 @@
 import "server-only";
 import { requireGeminiApiKey } from "@/config/env";
-import { debeSaltarDeModelo, motivoCadenaAgotada } from "@/lib/domain/ai/model-chain.ts";
+import { debeSaltarDeModelo, motivoCadenaAgotada, problemasDeEsquema } from "@/lib/domain/ai/model-chain.ts";
 
 /**
  * EL ÚNICO SITIO DEL PROYECTO QUE HABLA CON UN MODELO.
@@ -395,6 +395,20 @@ export async function generateJson<T>(input: GenerateJsonInput<T>): Promise<Gene
     // La validación perezosa (F11) lanza; el contrato de este módulo es no
     // lanzar. Se traduce aquí, una sola vez, en vez de en cada llamador.
     return { ok: false, reason: error instanceof Error ? error.message : "Falta GEMINI_API_KEY." };
+  }
+
+  // El esquema se revisa ANTES de salir a la red. Un `responseSchema` mal
+  // formado no mejora con otro modelo ni con otro intento: es un bug nuestro, y
+  // descubrirlo por el 400 de la API cuesta una llamada y le enseña al usuario
+  // un mensaje que no puede interpretar. Pasó con un `enum` que llevaba una
+  // cadena vacía dentro (D-106).
+  const problemas = [
+    ...problemasDeEsquema(input.schema),
+    // Las herramientas llevan su propio esquema y son la misma clase de bug.
+    ...(input.tools ?? []).flatMap((t) => problemasDeEsquema(t.parameters, `herramienta ${t.name}`))
+  ];
+  if (problemas.length) {
+    return { ok: false, reason: `El esquema de la petición está mal formado: ${problemas.join(" ")}` };
   }
 
   const modelos = input.models ?? GEMINI_MODELS;
