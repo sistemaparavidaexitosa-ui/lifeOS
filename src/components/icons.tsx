@@ -345,6 +345,17 @@ export const IconLibrary = (p: IconProps) =>
     p
   );
 
+/** Nutrición: una manzana, que es el único dibujo de comida legible a 18 px. */
+export const IconNutrition = (p: IconProps) =>
+  base(
+    <>
+      <path d="M12 8c-1.5-2-4-2.5-5.5-1C5 8.5 5 12 6.5 15c1 2 2.5 4 4 4 .8 0 1-.4 1.5-.4s.7.4 1.5.4c1.5 0 3-2 4-4 1.5-3 1.5-6.5 0-8-1.5-1.5-4-1-5.5 1Z" />
+      <path d="M12 8V5" />
+      <path d="M12 5c0-1.5 1-2.5 2.5-2.5" />
+    </>,
+    p
+  );
+
 export const NAV_ICONS = {
   home: IconHome,
   reports: IconReports,
@@ -368,6 +379,7 @@ export const NAV_ICONS = {
   personalGoals: IconPersonalGoals,
   routines: IconRoutines,
   library: IconLibrary,
+  nutrition: IconNutrition,
   insights: IconInsights,
   memory: IconMemory
 } as const;

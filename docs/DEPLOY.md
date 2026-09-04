@@ -143,6 +143,7 @@ git push -u origin main
    | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API → service_role (⚠️ nunca la expongas con prefijo `NEXT_PUBLIC_`) | Production, Preview |
    | `NEXT_PUBLIC_APP_URL` | Tu URL de Vercel, p. ej. `https://lifeos-app.vercel.app` | Production, Preview |
    | `GEMINI_API_KEY` | https://aistudio.google.com/apikey (gratis). **Opcional**: sin ella la app despliega y funciona; solo las tres funciones de IA avisan de que no están configuradas (§1ter) | Production, Preview |
+| `USDA_API_KEY` | https://fdc.nal.usda.gov/api-key-signup (gratis, 1.000 pet./hora). **Opcional**: sin ella el buscador de alimentos cae en Open Food Facts —que no pide llave— y el módulo de Nutrición funciona igual | Production, Preview |
    | `RESEND_API_KEY` | https://resend.com → API Keys. **Opcional**: sin ella la invitación se crea igual y se muestra el enlace para compartirlo a mano (§1bis) | Production, Preview |
    | `EMAIL_FROM` | El remitente de las invitaciones, p. ej. `LifeOS <no-reply@tudominio.com>`. Solo si pusiste `RESEND_API_KEY` | Production, Preview |
 

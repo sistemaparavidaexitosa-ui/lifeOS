@@ -8,6 +8,7 @@ export interface HabitLite {
   id: string;
   name: string;
   category: string;
+  meal?: string | null;
   durationMin: number;
   cue: string;
   twoMinVersion: string;
@@ -119,6 +120,20 @@ export function HabitFields({
         <Field label="Minutos">
           <input name="durationMin" type="number" min={1} defaultValue={habit?.durationMin ?? 5} required />
         </Field>
+      </div>
+
+      <Field label="¿Es una comida? (opcional)">
+        <select name="meal" defaultValue={habit?.meal ?? ""}>
+          <option value="">No es una comida</option>
+          <option value="Desayuno">Desayuno</option>
+          <option value="Almuerzo">Almuerzo</option>
+          <option value="Cena">Cena</option>
+          <option value="Snack">Snack</option>
+        </select>
+      </Field>
+      <div className="text-xs" style={{ color: "var(--muted)" }}>
+        Marcarlo no registra nada por su cuenta: solo enlaza el hábito con esa comida del diario de Nutrición para
+        poder abrirla desde aquí.
       </div>
 
       <Field label="Orden dentro de la rutina">

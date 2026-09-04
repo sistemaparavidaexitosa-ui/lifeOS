@@ -10,7 +10,7 @@ import type { Domain, Fact } from "../domain/insights/types.ts";
 import type { Database } from "../../types/database.types.ts";
 import { activeMemory, type MemoryItemLike } from "../domain/insights/memory.ts";
 
-export type Scope = "money" | "debt" | "habits" | "time" | "execution" | "activity" | "global";
+export type Scope = "money" | "debt" | "habits" | "time" | "execution" | "activity" | "nutrition" | "global";
 
 /** Tope de arranque (§3.2). Los hechos de mayor peso son los que sobreviven. */
 export const MAX_FACTS = 40;
@@ -31,6 +31,8 @@ export function allowedDomains(scope: Scope, options: { projectIsWorkspace?: boo
       return ["debt"];
     case "habits":
       return ["habits"];
+    case "nutrition":
+      return ["nutrition"];
     case "time":
       return ["time"];
     case "execution":
@@ -42,7 +44,9 @@ export function allowedDomains(scope: Scope, options: { projectIsWorkspace?: boo
       // que el usuario pidió sobre sí mismo.
       return ["activity"];
     case "global":
-      return ["money", "debt", "habits", "time", "execution"];
+      // `nutrition` SÍ entra en global —es «tu vida», donde ya viven hábitos y
+      // tiempo—, a diferencia de `activity`, que es la semana del equipo.
+      return ["money", "debt", "habits", "time", "execution", "nutrition"];
   }
 }
 

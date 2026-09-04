@@ -15,6 +15,12 @@ export interface SourceOptions {
   book: SourceOption[];
   financial_goal: SourceOption[];
   savings_goal: SourceOption[];
+  /**
+   * Nutrición tiene UNA sola opción: tu perfil corporal, que es la fila que
+   * define los objetivos contra los que se mide todo. Va como lista igual que
+   * las demás para no abrirle un camino aparte al formulario.
+   */
+  nutrition: SourceOption[];
 }
 
 const KIND_LABEL: Record<keyof SourceOptions | "manual", string> = {
@@ -23,6 +29,7 @@ const KIND_LABEL: Record<keyof SourceOptions | "manual", string> = {
   book: "Libro (páginas leídas)",
   financial_goal: "Meta financiera (monto acumulado)",
   savings_goal: "Ahorro (monto acumulado)",
+  nutrition: "Nutrición (adherencia o peso)",
   manual: "Captura manual"
 };
 
@@ -34,6 +41,8 @@ interface KeyResultLite {
   target: number;
   manualCurrent: number;
   unit: string;
+  sourceMetric?: string;
+  baseline?: number | null;
 }
 
 export default function KeyResultForm({
@@ -70,6 +79,7 @@ function KeyResultFields({
   close: () => void;
 }) {
   const [kind, setKind] = useState(kr?.sourceKind ?? "manual");
+  const [metrica, setMetrica] = useState(kr?.sourceMetric ?? "adherencia");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -120,6 +130,28 @@ function KeyResultFields({
           </select>
           {options.length === 0 && <span className="text-xs">Todavía no tienes nada de este tipo que medir.</span>}
         </Field>
+      )}
+
+      {kind === "nutrition" && (
+        <>
+          <Field label="¿Qué mide?">
+            <select name="sourceMetric" value={metrica} onChange={(e) => setMetrica(e.target.value)}>
+              <option value="adherencia">Adherencia — % de días dentro de tu banda de calorías</option>
+              <option value="peso">Peso — kg</option>
+            </select>
+          </Field>
+          {metrica === "peso" && (
+            <>
+              <Field label="Peso de partida (kg)">
+                <input name="baseline" type="number" step="0.1" min={25} max={400} defaultValue={kr?.baseline ?? ""} required />
+              </Field>
+              <div className="text-xs" style={{ color: "var(--muted)" }}>
+                Hace falta para saber cuánto has avanzado: sin punto de partida, 81 kg puede ser casi la meta o no haber
+                empezado.
+              </div>
+            </>
+          )}
+        </>
       )}
 
       <div className="grid grid-cols-2 gap-3">

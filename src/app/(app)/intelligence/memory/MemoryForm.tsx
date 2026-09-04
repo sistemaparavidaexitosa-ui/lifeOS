@@ -7,6 +7,7 @@ import type { MemoryScope } from "@/lib/domain/insights/memory.ts";
 const SCOPES: [MemoryScope, string][] = [
   ["decision", "Decisión"],
   ["preference", "Preferencia"],
+  ["health", "Salud"],
   ["finance", "Finanzas"],
   ["goal", "Meta"],
   ["project", "Proyecto"],

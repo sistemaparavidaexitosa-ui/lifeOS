@@ -48,6 +48,7 @@ const SCOPE_PATH: Record<Scope, string> = {
   time: "/time",
   execution: "/execution",
   activity: "/activity",
+  nutrition: "/development/nutrition",
   global: "/home"
 };
 

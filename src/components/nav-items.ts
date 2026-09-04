@@ -50,6 +50,7 @@ export const NAV_ITEMS: NavItem[] = [
   // contexto que la hace legible. /development/habits sobrevive como redirect.
   { href: "/development/habits", label: "Hábitos", group: "Personal Development OS", icon: "habits", color: "var(--c-orange)", hidden: true },
   { href: "/development/library", label: "Biblioteca", group: "Personal Development OS", icon: "library", color: "var(--c-orange)" },
+  { href: "/development/nutrition", label: "Nutrición", group: "Personal Development OS", icon: "nutrition", color: "var(--c-orange)" },
   // "Intelligence OS" ya no es una sección del menú. Anunciarla como tal
   // prometía un cerebro central que todavía no existe: el motor está
   // construido para cinco ámbitos y `analyze()` solo acepta Dinero

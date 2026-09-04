@@ -7,6 +7,8 @@ export interface RunnerHabit {
   id: string;
   name: string;
   category: string;
+  /** Si el hábito ES una comida (0047), su nombre. `null` si no lo es. */
+  meal?: string | null;
   durationMin: number;
   cue: string;
   twoMinVersion: string;
@@ -56,7 +58,8 @@ export default function RoutineRunner({
             durationMin: h.durationMin,
             cue: h.cue,
             twoMinVersion: h.twoMinVersion,
-            stackAfterName: h.stackAfterName
+            stackAfterName: h.stackAfterName,
+            meal: h.meal
           }}
           doneToday={h.doneToday}
           streak={h.streak}

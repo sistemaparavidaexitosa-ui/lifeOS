@@ -70,6 +70,29 @@ export function requireGeminiApiKey(): string {
 }
 
 /**
+ * F11: la llave de FoodData Central (USDA), y es OPCIONAL de verdad.
+ *
+ * Solo la exige el buscador de alimentos genéricos. Sin ella la búsqueda cae
+ * en Open Food Facts —que no pide llave— y el módulo de nutrición sigue
+ * funcionando entero: `searchUsda` envuelve esto en un `try/catch` y trata la
+ * ausencia como «este proveedor no pudo contestar», que es un caso que ya
+ * sabía manejar.
+ *
+ * NUNCA usar `DEMO_KEY` como valor por defecto: son 30 peticiones por hora
+ * compartidas con todo internet, así que fallaría de forma intermitente e
+ * inexplicable en vez de fallar claro.
+ */
+export function requireUsdaApiKey(): string {
+  const key = process.env.USDA_API_KEY;
+  if (!key) {
+    throw new Error(
+      "USDA_API_KEY no está definida. Solo la exige el buscador de alimentos genéricos (FoodData Central); sin ella se busca en Open Food Facts — ver /docs/DEPLOY.md."
+    );
+  }
+  return key;
+}
+
+/**
  * F11: ejemplo de validación desacoplada por feature. Ninguna acción que NO
  * use el proveedor de email para invitaciones debe exigir esta variable.
  * Si en el futuro se activa el envío de invitaciones por correo (FR-WSP-003),

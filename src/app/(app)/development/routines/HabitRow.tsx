@@ -2,6 +2,9 @@
 
 import { useTransition, type ReactNode } from "react";
 import { toggleHabitToday } from "./actions";
+import FormSheet from "../FormSheet";
+import FoodSearchForm from "../nutrition/FoodSearchForm";
+import type { Meal } from "@/lib/domain/development/nutrition.ts";
 
 /**
  * Fila de hábito. En móvil la racha ya no compite por la primera línea con el
@@ -27,6 +30,8 @@ export default function HabitRow({
     twoMinVersion: string;
     /** Nombre del hábito ancla, ya resuelto en el servidor. */
     stackAfterName: string | null;
+    /** La comida que ES este hábito (0047), o `null` si no es una comida. */
+    meal?: string | null;
   };
   doneToday: boolean;
   streak: number;
@@ -65,6 +70,18 @@ export default function HabitRow({
             trabajo es recordarte CUÁNDO toca — encerrada en la pantalla de
             edición no la lee nadie, y entonces las tres columnas de la
             migración 0033 no habrían servido para nada. */}
+        {habit.meal && (
+          // Registrar la comida marca también el hábito, pero SOLO al enviar el
+          // formulario: nada se escribe por el mero hecho de que el hábito sea
+          // una comida (D-089/D-105).
+          <span className="hb-cue">
+            <FormSheet label={`Registrar ${habit.meal.toLowerCase()}`} title={`Registrar ${habit.meal.toLowerCase()}`}>
+              {(close) => (
+                <FoodSearchForm localDate="" meal={habit.meal as Meal} close={close} habitId={habit.id} />
+              )}
+            </FormSheet>
+          </span>
+        )}
         {(habit.stackAfterName || habit.cue) && (
           <span className="hb-cue">
             {habit.stackAfterName ? `Después de: ${habit.stackAfterName}` : habit.cue}

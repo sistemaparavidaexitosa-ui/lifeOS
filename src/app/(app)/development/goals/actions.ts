@@ -60,7 +60,10 @@ export async function deletePersonalGoal(id: string) {
 
 const krSchema = z.object({
   title: z.string().min(1),
-  sourceKind: z.enum(["habit", "project", "book", "financial_goal", "savings_goal", "manual"]),
+  sourceKind: z.enum(["habit", "project", "book", "financial_goal", "savings_goal", "nutrition", "manual"]),
+  sourceMetric: z.enum(["adherencia", "peso"]).default("adherencia"),
+  // Solo lo usa una meta de peso, que es descendente. Ver D-098.
+  baseline: z.coerce.number().min(0).nullable().optional(),
   sourceId: z.string().uuid().optional().or(z.literal("")),
   target: z.coerce.number().min(0).default(0),
   manualCurrent: z.coerce.number().min(0).default(0),
@@ -71,6 +74,8 @@ export async function upsertKeyResult(goalId: string, id: string | null, formDat
   const parsed = krSchema.parse({
     title: formData.get("title"),
     sourceKind: formData.get("sourceKind"),
+    sourceMetric: formData.get("sourceMetric") ?? "adherencia",
+    baseline: String(formData.get("baseline") ?? "").trim() === "" ? null : formData.get("baseline"),
     sourceId: formData.get("sourceId") ?? "",
     target: formData.get("target") ?? 0,
     manualCurrent: formData.get("manualCurrent") ?? 0,
@@ -110,6 +115,8 @@ export async function upsertKeyResult(goalId: string, id: string | null, formDat
   const payload = {
     title: parsed.title,
     source_kind: parsed.sourceKind,
+    source_metric: parsed.sourceMetric,
+    baseline: parsed.sourceKind === "nutrition" && parsed.sourceMetric === "peso" ? (parsed.baseline ?? null) : null,
     source_id: sourceId,
     target: parsed.target,
     manual_current: parsed.manualCurrent,

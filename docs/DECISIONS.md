@@ -1682,6 +1682,111 @@ de lo que se planeó, no de lo que quedó._
   guardar convertiría un clic en autorización para leerlo todo, y el
   consentimiento sigue estando en Guardar.
 
+### Nutrición dentro de Personal Development OS (septiembre 2026)
+
+- **D-098 · El diario guarda COPIA de los números, no un join a `foods`.** Es lo
+  contrario de la regla de D-093 —«dos sitios diciendo lo mismo es un sitio
+  donde mentir»— y la inversión es deliberada: en Open Food Facts la ficha de un
+  producto la edita cualquiera. Leyendo por join, que un desconocido corrija hoy
+  un yogur **reescribiría lo que desayunaste en marzo**. Un diario que cambia el
+  pasado no mide nada, y medir es lo único que hace útil un diario. `food_id`
+  queda solo como procedencia, con `on delete set null` para que purgar la caché
+  tampoco toque el historial. Lo fija una aserción pgTAP, no la buena voluntad.
+
+  **`food_entries` tampoco lleva el `unique` que sí tienen `habit_logs`,
+  `routine_runs` y `book_progress`.** Allí existe porque marcar es un *toggle* y
+  el doble clic tiene que ser idempotente; aquí dos manzanas son dos manzanas.
+  La protección contra el registro duplicado es que la línea de más se ve en la
+  lista y se borra con un toque, cosa que un toggle duplicado no permitía.
+  `body_measurements` sí lo lleva: un peso por día es un valor, no una lista.
+
+- **D-099 · `foods` es la única tabla del OS sin `user_id`, y su escritura se
+  cierra con GRANT y no con RLS.** El límite de Open Food Facts es de 15
+  peticiones por minuto **por IP**, y todos los usuarios comparten la de Vercel:
+  una caché por usuario no ahorraría ni una petición, que es exactamente para lo
+  que la caché existe. Se aceptó saltarse BR-012/019/027 porque lo que guarda
+  son copias de filas públicas y —esto es lo que la hace inocua— **no registra
+  quién buscó qué**. `source` no admite `'manual'` justo para que esa afirmación
+  siga siendo cierta: un alimento tecleado es dato personal y se queda en el
+  diario.
+
+  La escritura es el punto delicado y por eso no se resolvió con una política:
+  `authenticated` no tiene `insert` ni `update`, escribe `service_role` desde
+  `lib/data/nutrition.ts`. Con `insert` concedido, cualquiera con un token
+  envenenaría por PostgREST la caché que ven todos. Hay una aserción pgTAP
+  dedicada a eso, y es la que justifica toda la excepción.
+
+  **Si en revisión el precio parece alto, la vuelta atrás es de una línea:**
+  `user_id not null` y quitar los grants especiales. El resto del módulo no se
+  mueve, porque el diario nunca depende de `foods`.
+
+- **D-100 · La caché es el índice de búsqueda primario, no un memo.** Se
+  consulta ANTES que la red siempre: un código de barras ya visto son cero
+  peticiones, y en texto basta con cinco filas guardadas para no salir. Un
+  `upsert` fallido —falta la llave de servicio, por ejemplo— se ignora y se
+  devuelven los candidatos igual: una caché que no se puede escribir es una
+  caché lenta, no una búsqueda rota. Y si los proveedores caen pero la caché
+  tenía algo, se devuelve `ok: true` diciéndolo; `books.ts` no puede hacer eso
+  porque no tiene tabla, aquí sale gratis.
+
+- **D-101 · El objetivo diario se CALCULA, y tiene un suelo que es ético y no
+  técnico.** No se guardan cuatro números que nadie recalcularía al cambiar el
+  peso: `dailyTargets` los deriva con Mifflin-St Jeor —elegida sobre
+  Harris-Benedict porque es la que usa el mercado y el usuario puede contrastar
+  el número—. Lo que no es aritmética es el suelo: **la app no puede ser el
+  instrumento con el que alguien se fija 600 kcal al día.** El suelo blando (el
+  metabolismo basal, y 1200/1500 por sexo) lo pone el dominio y lo DICE en
+  `floored` en vez de callarlo; el duro de 1000 lo defiende un `check` de
+  Postgres, donde no se discute.
+
+  **Y la banda de cumplimiento es simétrica (±10 %), que también es una
+  postura.** Quedarse un 20 % por debajo no es cumplir mejor: es otro desvío.
+  Igual que `nutrition.kcal-drift` reporta las dos direcciones con el mismo
+  peso, y que un día sin registrar **no** cuenta como cumplido — contarlo
+  convertiría el abandono en adherencia perfecta.
+
+- **D-102 · La meta de peso obligó a admitir metas DESCENDENTES.** «Bajar a 78
+  kg» es la primera fuente del sistema donde el objetivo está por debajo del
+  valor actual, y con `pctOf` daba 105 % recortado a 100: la meta nacía
+  cumplida. Se añadió `key_results.baseline` —el punto de partida— porque sin él
+  81 kg puede ser casi la meta o no haber empezado, y sin él el resultado clave
+  se declara `stale` en vez de inventarse un número.
+
+  `key_results_source_shape` **no se tocó**: `'nutrition'` no es `'manual'`, así
+  que exige `source_id`, y lo tiene — apunta a `nutrition_profiles.user_id`, que
+  es *la* fila que define los objetivos. Lo que sí hizo falta es
+  `source_metric`, porque una meta de nutrición mide dos cosas distintas y
+  `source_kind` solo dice de qué módulo viene. Se descartó una tabla
+  `nutrition_targets` cuyo único consumidor sería `key_results`.
+
+- **D-103 · Ningún hecho de nutrición nombra un alimento.** «Registraste 3
+  donas» es exactamente el detalle con juicio moral que hace que alguien borre
+  la app. El extractor habla solo en agregados —kcal, gramos de macro, días— y
+  lo comprueba una prueba, porque es el tipo de regla que se erosiona sola en
+  cuanto alguien quiere «dar más contexto». Los hechos descriptivos topan además
+  en 0.4 de peso: el contexto se recorta por peso (`MAX_FACTS`) y nada de
+  nutrición debe desplazar de ahí una racha de hábito rota de dos semanas.
+
+- **D-104 · El enlace con Money OS es una comparación, no un join.** El usuario
+  lo pidió sabiendo que era el más flojo de los cuatro. Lo único cierto que se
+  puede hacer con esos datos es poner lado a lado, para el mismo mes, cuántos
+  movimientos hubo en la categoría «Alimentación» y cuántos días tienen diario
+  — **cero columnas, cero FK, cero joins**, y la advertencia pegada debajo en la
+  propia pantalla.
+
+  Lo que **no** se hace, escrito aquí para que dentro de seis meses nadie «lo
+  arregle» con un heurístico: casar un ticket con comidas (un `journal_entries`
+  es un importe y una fecha, sin un solo renglón de producto), decir cuánto
+  costó lo que comiste, o repartir una compra entre los días en que se consumió.
+  Lo único que haría real ese enlace es capturar renglones de ticket, que es
+  otra feature y grande.
+
+- **D-105 · `habits.meal` es una etiqueta, no una segunda verdad.** Un hábito
+  puede SER una comida, pero marcarlo **no registra nada**: ofrece un enlace al
+  diario. `habit_logs` sigue siendo la única respuesta a «¿lo hice hoy?»
+  (D-094), y lo que un modelo o una pantalla escriben solos en tu base es lo
+  único que no se deshace con un clic (D-089).
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo

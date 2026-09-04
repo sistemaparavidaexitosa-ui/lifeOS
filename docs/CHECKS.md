@@ -611,6 +611,48 @@ comprobar eso, que es lo que de verdad protege el invariante.
   del layout está puesto y el build genera la ruta, pero la respuesta HTTP no se
   comprobó con una sesión real.
 
+## Nutrición dentro de Personal Development OS (4-sep-2026)
+
+### Lo que se ejecutó
+
+| Comprobación | Resultado |
+|---|---|
+| `pnpm verify` (cadena completa) | ✅ install → typecheck → lint → test:unit → build → `db reset` → `db test`, todo en verde |
+| `pnpm test:unit` | ✅ **664 pruebas**, 0 fallos (eran 574) |
+| `pnpm build` | ✅ exit 0; `/development/nutrition` aparece en el listado de rutas |
+| `pnpm db:reset` (47 migraciones + seed) | ✅ la 0047 aplica sin error desde cero |
+| `supabase test db` | ✅ **23 archivos, 182 aserciones**, incluido `0022_rls_nutricion.sql` (17) |
+| `pnpm gen:types:local` | ✅ `nutrition_profiles`, `body_measurements`, `foods`, `food_entries`, `key_results.source_metric` y `key_results.baseline` aparecen en `database.types.ts` (F3) |
+
+La base local se reseteó varias veces durante el trabajo. Antes de la primera se
+comprobó su contenido: 2 usuarios y 3 tareas, exactamente la semilla. **No había
+datos reales que perder** y el proyecto remoto no se tocó.
+
+### Un bug que se detectó leyendo, no en pantalla
+
+**Dos campos con el mismo `name` en el formulario de alimentos.** Los macros del
+alimento elegido iban en `input hidden` pintados siempre, y convivían con los
+campos visibles de captura manual: `FormData.get` se queda con el primero, que
+iba vacío, así que **registrar a mano habría fallado siempre**. Los ocultos
+pasan a pintarse solo cuando hay un alimento elegido. Da igual de todas formas
+para la integridad: el servidor recalcula los macros desde `(per100g, gramos)` y
+los vuelve a validar, porque eso lo edita cualquiera desde el navegador.
+
+### Lo que NO se verificó
+
+- **Ninguna llamada real a USDA ni a Open Food Facts.** No hay `USDA_API_KEY` en
+  este entorno, y a Open Food Facts no se ha salido. Lo que está probado es la
+  normalización de sus respuestas contra cuerpos escritos a mano
+  (`development-nutrition-lookup.test.ts`, 16 casos), incluidos los dos errores
+  que más caro salen: usar `energy_100g` (kJ) en vez de `energy-kcal_100g`, y
+  descartar un alimento sin energía en vez de inventarle 0 kcal. Sin ejercitar
+  quedan: la forma real de las respuestas, el `User-Agent` obligatorio de OFF
+  —incumplirlo se castiga con bloqueo de IP—, y que la caché evite de verdad la
+  segunda petición.
+- **El recorrido en un navegador.** Nadie ha registrado una comida con el ratón.
+  El buscador, el panel del perfil corporal y el formulario de peso compilan y
+  tienen sus acciones probadas por tipos, pero no se han visto funcionar.
+
 ## Cadena de modelos · Herramientas · Memoria (3/4-sep-2026)
 
 ### Lo que se ejecutó

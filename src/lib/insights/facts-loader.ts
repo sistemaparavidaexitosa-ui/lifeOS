@@ -26,6 +26,11 @@ import { executionFacts } from "@/lib/domain/insights/facts/execution.ts";
 import { habitsFacts, type HabitFrequency } from "@/lib/domain/insights/facts/habits.ts";
 import { debtFacts } from "@/lib/domain/insights/facts/debt.ts";
 import { activityFacts, type UnreadMentionLike } from "@/lib/domain/insights/facts/activity.ts";
+import { nutritionFacts } from "@/lib/domain/insights/facts/nutrition.ts";
+import type {
+  ActivityLevel as NutritionActivityLevel,
+  NutritionGoal
+} from "@/lib/domain/development/nutrition.ts";
 import { occupationAppliesOn } from "@/lib/domain/time.ts";
 import { addDaysISO } from "@/lib/domain/datetime.ts";
 import { loadMyTasks, type MyTaskRow } from "@/lib/data/tasks";
@@ -175,6 +180,79 @@ async function loadDomainFacts(supabase: Db, userId: string, domain: Domain, tod
             occupationId: r.occupation_id
           })),
           routineRuns: (runs ?? []).map((r) => ({ routineId: r.routine_id, date: r.local_date }))
+        },
+        today
+      );
+    }
+
+    case "nutrition": {
+      // 40 días, la MISMA ventana que hábitos y por el mismo argumento: cubre
+      // los 30 de observación más el tramo previo contra el que se compara una
+      // racha rota.
+      const desde = addDaysISO(today, -39);
+
+      const [{ data: perfil }, { data: entradas }, { data: pesos }] = await Promise.all([
+        supabase.from("nutrition_profiles").select("*").eq("user_id", userId).maybeSingle(),
+        supabase
+          .from("food_entries")
+          .select("local_date, meal, kcal, protein_g, carbs_g, fat_g")
+          .eq("user_id", userId)
+          .gte("local_date", desde)
+          .lte("local_date", today),
+        supabase
+          .from("body_measurements")
+          .select("local_date, weight_kg")
+          .eq("user_id", userId)
+          .gte("local_date", desde)
+          .lte("local_date", today)
+      ]);
+
+      // Los totales por día se arman aquí porque el extractor es puro y recibe
+      // días, no filas. La aritmética de verdad —objetivos, adherencia,
+      // tendencia— sigue viviendo en el dominio.
+      const porDia = new Map<string, { kcal: number; proteinG: number; carbsG: number; fatG: number; n: number }>();
+      const porComida = { Desayuno: new Set<string>(), Almuerzo: new Set<string>(), Cena: new Set<string>(), Snack: new Set<string>() };
+
+      for (const e of entradas ?? []) {
+        const acc = porDia.get(e.local_date) ?? { kcal: 0, proteinG: 0, carbsG: 0, fatG: 0, n: 0 };
+        porDia.set(e.local_date, {
+          kcal: acc.kcal + Number(e.kcal),
+          proteinG: acc.proteinG + Number(e.protein_g),
+          carbsG: acc.carbsG + Number(e.carbs_g),
+          fatG: acc.fatG + Number(e.fat_g),
+          n: acc.n + 1
+        });
+        const comida = e.meal as keyof typeof porComida;
+        if (porComida[comida]) porComida[comida].add(e.local_date);
+      }
+
+      return nutritionFacts(
+        {
+          profile: perfil
+            ? {
+                sex: perfil.sex === "Mujer" ? "Mujer" : "Hombre",
+                birthDate: perfil.birth_date,
+                heightCm: Number(perfil.height_cm),
+                weightKg: Number(perfil.weight_kg),
+                activityLevel: perfil.activity_level as NutritionActivityLevel,
+                goal: perfil.goal as NutritionGoal,
+                proteinGPerKg: Number(perfil.protein_g_per_kg),
+                fatPct: perfil.fat_pct,
+                kcalOverride: perfil.kcal_override
+              }
+            : null,
+          days: [...porDia.entries()].map(([date, v]) => ({
+            date,
+            total: { kcal: v.kcal, proteinG: v.proteinG, carbsG: v.carbsG, fatG: v.fatG },
+            entryCount: v.n
+          })),
+          measurements: (pesos ?? []).map((m) => ({ localDate: m.local_date, weightKg: Number(m.weight_kg) })),
+          mealCounts: {
+            Desayuno: porComida.Desayuno.size,
+            Almuerzo: porComida.Almuerzo.size,
+            Cena: porComida.Cena.size,
+            Snack: porComida.Snack.size
+          }
         },
         today
       );

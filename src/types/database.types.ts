@@ -234,6 +234,33 @@ export type Database = {
         }
         Relationships: []
       }
+      body_measurements: {
+        Row: {
+          body_fat_pct: number | null
+          created_at: string
+          id: string
+          local_date: string
+          user_id: string
+          weight_kg: number
+        }
+        Insert: {
+          body_fat_pct?: number | null
+          created_at?: string
+          id?: string
+          local_date: string
+          user_id: string
+          weight_kg: number
+        }
+        Update: {
+          body_fat_pct?: number | null
+          created_at?: string
+          id?: string
+          local_date?: string
+          user_id?: string
+          weight_kg?: number
+        }
+        Relationships: []
+      }
       book_notes: {
         Row: {
           book_id: string
@@ -820,6 +847,116 @@ export type Database = {
           },
         ]
       }
+      food_entries: {
+        Row: {
+          brand: string
+          carbs_g: number
+          created_at: string
+          fat_g: number
+          food_id: string | null
+          grams: number
+          id: string
+          kcal: number
+          local_date: string
+          meal: string
+          name: string
+          position: number
+          protein_g: number
+          user_id: string
+        }
+        Insert: {
+          brand?: string
+          carbs_g?: number
+          created_at?: string
+          fat_g?: number
+          food_id?: string | null
+          grams: number
+          id?: string
+          kcal: number
+          local_date: string
+          meal: string
+          name: string
+          position?: number
+          protein_g?: number
+          user_id: string
+        }
+        Update: {
+          brand?: string
+          carbs_g?: number
+          created_at?: string
+          fat_g?: number
+          food_id?: string | null
+          grams?: number
+          id?: string
+          kcal?: number
+          local_date?: string
+          meal?: string
+          name?: string
+          position?: number
+          protein_g?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "food_entries_food_id_fkey"
+            columns: ["food_id"]
+            isOneToOne: false
+            referencedRelation: "foods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      foods: {
+        Row: {
+          brand: string
+          carbs_100g: number
+          created_at: string
+          fat_100g: number
+          fetched_at: string
+          id: string
+          kcal_100g: number
+          name: string
+          protein_100g: number
+          search: unknown
+          serving_g: number | null
+          serving_label: string
+          source: string
+          source_ref: string
+        }
+        Insert: {
+          brand?: string
+          carbs_100g?: number
+          created_at?: string
+          fat_100g?: number
+          fetched_at?: string
+          id?: string
+          kcal_100g: number
+          name: string
+          protein_100g?: number
+          search?: unknown
+          serving_g?: number | null
+          serving_label?: string
+          source: string
+          source_ref: string
+        }
+        Update: {
+          brand?: string
+          carbs_100g?: number
+          created_at?: string
+          fat_100g?: number
+          fetched_at?: string
+          id?: string
+          kcal_100g?: number
+          name?: string
+          protein_100g?: number
+          search?: unknown
+          serving_g?: number | null
+          serving_label?: string
+          source?: string
+          source_ref?: string
+        }
+        Relationships: []
+      }
       habit_logs: {
         Row: {
           completed_at: string
@@ -856,6 +993,7 @@ export type Database = {
           cue: string
           duration_min: number
           id: string
+          meal: string | null
           name: string
           position: number
           routine_id: string
@@ -869,6 +1007,7 @@ export type Database = {
           cue?: string
           duration_min?: number
           id?: string
+          meal?: string | null
           name: string
           position?: number
           routine_id: string
@@ -882,6 +1021,7 @@ export type Database = {
           cue?: string
           duration_min?: number
           id?: string
+          meal?: string | null
           name?: string
           position?: number
           routine_id?: string
@@ -1116,6 +1256,7 @@ export type Database = {
       }
       key_results: {
         Row: {
+          baseline: number | null
           created_at: string
           goal_id: string
           id: string
@@ -1123,11 +1264,13 @@ export type Database = {
           position: number
           source_id: string | null
           source_kind: string
+          source_metric: string
           target: number
           title: string
           unit: string
         }
         Insert: {
+          baseline?: number | null
           created_at?: string
           goal_id: string
           id?: string
@@ -1135,11 +1278,13 @@ export type Database = {
           position?: number
           source_id?: string | null
           source_kind?: string
+          source_metric?: string
           target?: number
           title: string
           unit?: string
         }
         Update: {
+          baseline?: number | null
           created_at?: string
           goal_id?: string
           id?: string
@@ -1147,6 +1292,7 @@ export type Database = {
           position?: number
           source_id?: string | null
           source_kind?: string
+          source_metric?: string
           target?: number
           title?: string
           unit?: string
@@ -1476,6 +1622,51 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      nutrition_profiles: {
+        Row: {
+          activity_level: string
+          birth_date: string
+          created_at: string
+          fat_pct: number
+          goal: string
+          height_cm: number
+          kcal_override: number | null
+          protein_g_per_kg: number
+          sex: string
+          updated_at: string
+          user_id: string
+          weight_kg: number
+        }
+        Insert: {
+          activity_level?: string
+          birth_date: string
+          created_at?: string
+          fat_pct?: number
+          goal?: string
+          height_cm: number
+          kcal_override?: number | null
+          protein_g_per_kg?: number
+          sex: string
+          updated_at?: string
+          user_id: string
+          weight_kg: number
+        }
+        Update: {
+          activity_level?: string
+          birth_date?: string
+          created_at?: string
+          fat_pct?: number
+          goal?: string
+          height_cm?: number
+          kcal_override?: number | null
+          protein_g_per_kg?: number
+          sex?: string
+          updated_at?: string
+          user_id?: string
+          weight_kg?: number
+        }
+        Relationships: []
       }
       occupations: {
         Row: {

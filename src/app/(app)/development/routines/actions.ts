@@ -128,7 +128,11 @@ const habitSchema = z.object({
   // hábito sin señal sigue siendo un hábito válido, solo que más frágil.
   cue: z.string().max(240).optional().default(""),
   twoMinVersion: z.string().max(240).optional().default(""),
-  stackAfterHabitId: z.string().uuid().optional().or(z.literal(""))
+  stackAfterHabitId: z.string().uuid().optional().or(z.literal("")),
+  // Migración 0047: un hábito puede SER una comida. Etiqueta, no una segunda
+  // verdad — completarlo sigue escribiendo en `habit_logs` (D-094) y esto solo
+  // permite que el ejecutor de la rutina ofrezca abrir el diario.
+  meal: z.enum(["Desayuno", "Almuerzo", "Cena", "Snack"]).optional().or(z.literal(""))
 });
 
 /**
@@ -148,7 +152,8 @@ export async function upsertHabit(routineId: string, id: string | null, formData
     position: formData.get("position") ?? 0,
     cue: formData.get("cue") ?? "",
     twoMinVersion: formData.get("twoMinVersion") ?? "",
-    stackAfterHabitId: formData.get("stackAfterHabitId") ?? ""
+    stackAfterHabitId: formData.get("stackAfterHabitId") ?? "",
+    meal: formData.get("meal") ?? ""
   });
 
   const supabase = await createClient();
@@ -165,7 +170,8 @@ export async function upsertHabit(routineId: string, id: string | null, formData
     duration_min: parsed.durationMin,
     cue: parsed.cue.trim(),
     two_min_version: parsed.twoMinVersion.trim(),
-    stack_after_habit_id: parsed.stackAfterHabitId || null
+    stack_after_habit_id: parsed.stackAfterHabitId || null,
+    meal: parsed.meal || null
   };
 
   if (id) {
