@@ -7,7 +7,6 @@
 
 import { HABIT_CATEGORY_ORDER, type HabitTemplate } from "@/lib/domain/development/templates.ts";
 
-const FRECUENCIAS = ["Diario", "Semanal", "Entre semana", "Fin de semana"] as const;
 
 export default function HabitTemplateFields({
   value,
@@ -32,16 +31,6 @@ export default function HabitTemplateFields({
             {HABIT_CATEGORY_ORDER.map((c) => (
               <option key={c} value={c}>
                 {c}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label className="block text-xs font-bold mb-1">Frecuencia</label>
-          <select value={value.frequency} onChange={(e) => set({ frequency: e.target.value as HabitTemplate["frequency"] })}>
-            {FRECUENCIAS.map((f) => (
-              <option key={f} value={f}>
-                {f}
               </option>
             ))}
           </select>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { upsertRoutine, deleteRoutine, upsertRoutineStep, deleteRoutineStep } from "./actions";
+import { upsertRoutine, deleteRoutine } from "./actions";
 import FormSheet, { Field, FormActions } from "../FormSheet";
 
 export interface OccupationLite {
@@ -11,11 +11,6 @@ export interface OccupationLite {
   end: string;
 }
 
-export interface HabitLite {
-  id: string;
-  name: string;
-}
-
 const FRECUENCIAS = ["Diario", "Semanal", "Entre semana", "Fin de semana"] as const;
 
 interface RoutineLite {
@@ -23,15 +18,19 @@ interface RoutineLite {
   name: string;
   frequency: string;
   occupationId: string | null;
+  identity: string;
   active: boolean;
 }
 
 export default function RoutineForm({
   routine,
-  occupations
+  occupations,
+  habitCount = 0
 }: {
   routine?: RoutineLite;
   occupations: OccupationLite[];
+  /** Cuántos hábitos cuelgan de esta rutina. Solo se usa para avisar al borrar. */
+  habitCount?: number;
 }) {
   return (
     <FormSheet
@@ -39,18 +38,38 @@ export default function RoutineForm({
       title={routine ? "Editar rutina" : "Nueva rutina"}
       variant={routine ? "ghost" : "primary"}
     >
-      {(close) => <RoutineFields routine={routine} occupations={occupations} close={close} />}
+      {(close) => (
+        <RoutineFields routine={routine} occupations={occupations} habitCount={habitCount} close={close} />
+      )}
     </FormSheet>
   );
+}
+
+/**
+ * Lo que se pierde al borrar la rutina, dicho antes de borrarla.
+ *
+ * Desde 0046 esto no es el aviso de cortesía que era: `habits.routine_id` es
+ * `on delete cascade` y `habit_logs` cuelga del hábito, así que borrar la
+ * rutina encadena hasta las rachas. Antes el hábito sobrevivía en su propia
+ * pantalla; ahora no queda dónde recuperarlo.
+ */
+function avisoDeBorrado(nombre: string, habitCount: number): string {
+  if (habitCount === 0) {
+    return `¿Eliminar la rutina "${nombre}"? Está vacía, así que no te llevas ningún hábito por delante.`;
+  }
+  const habitos = habitCount === 1 ? "1 hábito" : `${habitCount} hábitos`;
+  return `¿Eliminar la rutina "${nombre}"? Se van con ella sus ${habitos} y todo su historial: las rachas se borran con ellos y no se pueden deshacer.`;
 }
 
 function RoutineFields({
   routine,
   occupations,
+  habitCount,
   close
 }: {
   routine?: RoutineLite;
   occupations: OccupationLite[];
+  habitCount: number;
   close: () => void;
 }) {
   const [pending, startTransition] = useTransition();
@@ -74,6 +93,20 @@ function RoutineFields({
       <Field label="Nombre de la rutina">
         <input name="name" placeholder="Ej. arranque de la mañana" defaultValue={routine?.name} required />
       </Field>
+
+      <Field label="¿En quién te conviertes al sostenerla?">
+        <input
+          name="identity"
+          placeholder="Ej. soy alguien que no negocia sus mañanas"
+          defaultValue={routine?.identity ?? ""}
+          maxLength={160}
+          autoCapitalize="sentences"
+        />
+      </Field>
+      <p className="text-xs" style={{ color: "var(--muted)" }}>
+        Opcional, y lo más útil del formulario. Una rutina se abandona cuando compite con quien crees que eres, y se
+        sostiene cuando lo confirma.
+      </p>
 
       <Field label="Frecuencia">
         <select name="frequency" defaultValue={routine?.frequency ?? "Diario"}>
@@ -113,7 +146,8 @@ function RoutineFields({
         onCancel={close}
         onDelete={
           routine
-            ? () =>
+            ? () => {
+                if (!window.confirm(avisoDeBorrado(routine.name, habitCount))) return;
                 startTransition(async () => {
                   try {
                     await deleteRoutine(routine.id);
@@ -121,120 +155,8 @@ function RoutineFields({
                   } catch (e) {
                     setError(e instanceof Error ? e.message : "Error");
                   }
-                })
-            : undefined
-        }
-      />
-    </form>
-  );
-}
-
-interface StepLite {
-  id: string;
-  title: string;
-  durationMin: number;
-  habitId: string | null;
-  position: number;
-}
-
-export function StepForm({
-  routineId,
-  step,
-  position,
-  habits,
-  block = false
-}: {
-  routineId: string;
-  step?: StepLite;
-  position: number;
-  habits: HabitLite[];
-  block?: boolean;
-}) {
-  return (
-    <FormSheet label={step ? "Editar" : "+ Paso"} title={step ? "Editar paso" : "Nuevo paso"} block={block}>
-      {(close) => <StepFields routineId={routineId} step={step} position={position} habits={habits} close={close} />}
-    </FormSheet>
-  );
-}
-
-function StepFields({
-  routineId,
-  step,
-  position,
-  habits,
-  close
-}: {
-  routineId: string;
-  step?: StepLite;
-  position: number;
-  habits: HabitLite[];
-  close: () => void;
-}) {
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-
-  return (
-    <form
-      action={(fd) =>
-        startTransition(async () => {
-          try {
-            await upsertRoutineStep(routineId, step?.id ?? null, fd);
-            setError(null);
-            close();
-          } catch (e) {
-            setError(e instanceof Error ? e.message : "Error");
-          }
-        })
-      }
-      className="flex flex-col gap-3"
-    >
-      <Field label="Paso">
-        <input name="title" placeholder="Ej. Meditar 10 min" defaultValue={step?.title} required />
-      </Field>
-
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Minutos">
-          <input name="durationMin" type="number" min={1} defaultValue={step?.durationMin ?? 5} required />
-        </Field>
-        <Field label="Orden">
-          <input name="position" type="number" min={0} defaultValue={step?.position ?? position} />
-        </Field>
-      </div>
-
-      <Field label="Hábito ligado">
-        <select name="habitId" defaultValue={step?.habitId ?? ""}>
-          <option value="">— sin ligar —</option>
-          {habits.map((h) => (
-            <option key={h.id} value={h.id}>
-              {h.name}
-            </option>
-          ))}
-        </select>
-      </Field>
-
-      <p className="text-xs" style={{ color: "var(--muted)" }}>
-        Si ligas el paso a un hábito, completarlo aquí marca ese hábito de hoy: la racha no se bifurca.
-      </p>
-      {error && (
-        <div className="text-xs" style={{ color: "var(--danger)" }}>
-          {error}
-        </div>
-      )}
-
-      <FormActions
-        pending={pending}
-        onCancel={close}
-        onDelete={
-          step
-            ? () =>
-                startTransition(async () => {
-                  try {
-                    await deleteRoutineStep(step.id);
-                    close();
-                  } catch (e) {
-                    setError(e instanceof Error ? e.message : "Error");
-                  }
-                })
+                });
+              }
             : undefined
         }
       />

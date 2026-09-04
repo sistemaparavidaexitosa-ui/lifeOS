@@ -35,6 +35,7 @@ declare
   v_dbt1 uuid := '00000000-0000-4000-8000-000000000301';
   v_dbt2 uuid := '00000000-0000-4000-8000-000000000302';
   v_occ_lectura uuid := '00000000-0000-4000-8000-000000000401';
+  v_rut_lectura uuid := '00000000-0000-4000-8000-000000000451';
   v_hab1 uuid := '00000000-0000-4000-8000-000000000501';
   v_bk1 uuid := '00000000-0000-4000-8000-000000000601';
   v_fam_spouse uuid := '00000000-0000-4000-8000-000000000701';
@@ -280,14 +281,27 @@ begin
   values (v_occ_lectura, v_user_id, 'Lectura antes de dormir', '20:30', '21:00', 'Personal', true)
   on conflict (id) do update set title = excluded.title, start_time = excluded.start_time, end_time = excluded.end_time;
 
+  -- Desde 0046 ningún hábito existe fuera de una rutina, y el bloque horario
+  -- lo ancla la rutina y no el hábito. La identidad viene rellena a
+  -- propósito: es lo primero que se lee bajo el título y en local se vería
+  -- siempre vacía si no la sembráramos.
+  insert into public.routines (id, user_id, name, frequency, occupation_id, identity, position)
+  values (v_rut_lectura, v_user_id, 'Cierre del día', 'Diario', v_occ_lectura,
+          'Soy alguien que termina el día leyendo, no rascando el teléfono', 0)
+  on conflict (id) do update set
+    name = excluded.name, frequency = excluded.frequency,
+    occupation_id = excluded.occupation_id, identity = excluded.identity,
+    position = excluded.position;
+
   -- El hábito viene con la forma de «Hábitos atómicos» (migración 0033): la
   -- señal y la versión de dos minutos, que son lo que se prueba al abrir la
   -- pantalla. Sin ellas, los campos nuevos se verían siempre vacíos en local.
-  insert into public.habits (id, user_id, name, frequency, category, occupation_id, cue, two_min_version)
-  values (v_hab1, v_user_id, 'Leer 20 minutos', 'Diario', 'Aprendizaje', v_occ_lectura,
+  insert into public.habits (id, user_id, name, category, routine_id, position, duration_min, cue, two_min_version)
+  values (v_hab1, v_user_id, 'Leer 20 minutos', 'Aprendizaje', v_rut_lectura, 0, 20,
           'Después de meterme a la cama', 'Leer una página')
   on conflict (id) do update set
-    name = excluded.name, occupation_id = excluded.occupation_id,
+    name = excluded.name, routine_id = excluded.routine_id,
+    position = excluded.position, duration_min = excluded.duration_min,
     cue = excluded.cue, two_min_version = excluded.two_min_version;
 
   insert into public.books (id, user_id, title, author, status, current_page, total_pages, started_at, category)

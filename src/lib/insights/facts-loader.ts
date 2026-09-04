@@ -27,6 +27,7 @@ import { habitsFacts, type HabitFrequency } from "@/lib/domain/insights/facts/ha
 import { debtFacts } from "@/lib/domain/insights/facts/debt.ts";
 import { activityFacts, type UnreadMentionLike } from "@/lib/domain/insights/facts/activity.ts";
 import { occupationAppliesOn } from "@/lib/domain/time.ts";
+import { addDaysISO } from "@/lib/domain/datetime.ts";
 import { loadMyTasks, type MyTaskRow } from "@/lib/data/tasks";
 import type { JournalEntryLike, ProjectStatus } from "@/lib/domain/types.ts";
 import type { Domain, Fact } from "@/lib/domain/insights/types.ts";
@@ -142,10 +143,19 @@ async function loadDomainFacts(supabase: Db, userId: string, domain: Domain, tod
     }
 
     case "habits": {
+      // Los registros se piden por ventana: `max_rows = 1000` en config.toml
+      // trunca en silencio y sin orden fijo, así que a partir de unos meses el
+      // motor vería un histórico con agujeros y afirmaría rachas que no son.
+      // 40 días cubren con holgura la ventana de observación de habitsFacts
+      // —30 días— y la racha previa que compara para detectar la que se rompió.
+      const desdeLogs = addDaysISO(today, -39);
+
+      // Desde 0046 el hábito NO tiene frecuencia ni bloque horario propios: los
+      // pone la rutina de la que cuelga, que es el único sitio donde se dicen.
       const [{ data: habits }, { data: logs }, { data: routines }, { data: runs }] = await Promise.all([
-        supabase.from("habits").select("id, name, frequency, occupation_id").eq("user_id", userId),
-        supabase.from("habit_logs").select("habit_id, log_date"),
-        supabase.from("routines").select("id, name, routine_steps(id)").eq("user_id", userId),
+        supabase.from("habits").select("id, name, routine_id, routines(frequency)").eq("user_id", userId),
+        supabase.from("habit_logs").select("habit_id, log_date").gte("log_date", desdeLogs).lte("log_date", today),
+        supabase.from("routines").select("id, name, occupation_id, habits(id)").eq("user_id", userId),
         supabase.from("routine_runs").select("routine_id, local_date")
       ]);
 
@@ -154,11 +164,16 @@ async function loadDomainFacts(supabase: Db, userId: string, domain: Domain, tod
           habits: (habits ?? []).map((h) => ({
             id: h.id,
             name: h.name,
-            frequency: h.frequency as HabitFrequency,
-            occupationId: h.occupation_id
+            routineId: h.routine_id,
+            routineFrequency: (h.routines?.frequency ?? "Diario") as HabitFrequency
           })),
           logs: (logs ?? []).map((l) => ({ habitId: l.habit_id, date: l.log_date })),
-          routines: (routines ?? []).map((r) => ({ id: r.id, name: r.name, stepCount: (r.routine_steps ?? []).length })),
+          routines: (routines ?? []).map((r) => ({
+            id: r.id,
+            name: r.name,
+            habitCount: (r.habits ?? []).length,
+            occupationId: r.occupation_id
+          })),
           routineRuns: (runs ?? []).map((r) => ({ routineId: r.routine_id, date: r.local_date }))
         },
         today

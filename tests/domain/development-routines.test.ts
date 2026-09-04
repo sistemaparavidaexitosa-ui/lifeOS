@@ -6,11 +6,10 @@ import {
   routineProgress,
   routineFitsBlock,
   routineAdherence,
-  nextCompletedSteps,
-  habitLogEffect
+  routineRunComplete,
+  routineRunNeedsWrite,
+  toggleHabitEffect
 } from "../../src/lib/domain/development/routines.ts";
-import { habitStreak } from "../../src/lib/domain/habits.ts";
-import type { HabitLogLike } from "../../src/lib/domain/types.ts";
 
 // 2026-08-22 es sábado; 2026-08-24 es lunes; 2026-08-26 es miércoles.
 
@@ -34,28 +33,28 @@ test("routineDueToday: Semanal se ancla al lunes", () => {
   assert.strictEqual(routineDueToday("Semanal", "2026-08-26"), false);
 });
 
-test("routineProgress: cuenta pasos hechos y minutos que faltan", () => {
-  const steps = [
-    { id: "s1", durationMin: 10 },
-    { id: "s2", durationMin: 15 },
-    { id: "s3", durationMin: 5 }
+test("routineProgress: cuenta hábitos hechos y minutos que faltan", () => {
+  const habits = [
+    { id: "h1", durationMin: 10 },
+    { id: "h2", durationMin: 15 },
+    { id: "h3", durationMin: 5 }
   ];
-  assert.deepStrictEqual(routineProgress(["s1"], steps), { done: 1, total: 3, pct: 33, remainingMin: 20 });
+  assert.deepStrictEqual(routineProgress(["h1"], habits), { done: 1, total: 3, pct: 33, remainingMin: 20 });
 });
 
-test("routineProgress: una rutina sin pasos va en 0, no en NaN", () => {
+test("routineProgress: una rutina sin hábitos va en 0, no en NaN", () => {
   assert.deepStrictEqual(routineProgress([], []), { done: 0, total: 0, pct: 0, remainingMin: 0 });
 });
 
-test("routineProgress: ignora ids de pasos que ya no existen", () => {
-  const steps = [{ id: "s1", durationMin: 10 }];
-  assert.strictEqual(routineProgress(["s1", "s-borrado"], steps).done, 1);
+test("routineProgress: ignora registros de hábitos que ya no están en la rutina", () => {
+  const habits = [{ id: "h1", durationMin: 10 }];
+  assert.strictEqual(routineProgress(["h1", "h-de-otra-rutina"], habits).done, 1);
 });
 
-test("routineFitsBlock: 30 min de pasos no caben en un bloque de 20", () => {
-  const steps = [{ id: "s1", durationMin: 20 }, { id: "s2", durationMin: 10 }];
-  assert.strictEqual(routineFitsBlock(steps, { start: "06:00", end: "06:20" }), false);
-  assert.strictEqual(routineFitsBlock(steps, { start: "06:00", end: "07:00" }), true);
+test("routineFitsBlock: 30 min de hábitos no caben en un bloque de 20", () => {
+  const habits = [{ id: "h1", durationMin: 20 }, { id: "h2", durationMin: 10 }];
+  assert.strictEqual(routineFitsBlock(habits, { start: "06:00", end: "06:20" }), false);
+  assert.strictEqual(routineFitsBlock(habits, { start: "06:00", end: "07:00" }), true);
 });
 
 test("routineFitsBlock: sin bloque anclado no hay conflicto posible", () => {
@@ -72,58 +71,41 @@ test("routineAdherence: un rango donde la rutina nunca toca devuelve 0, no divid
   assert.strictEqual(routineAdherence([], "Fin de semana", "2026-08-24", "2026-08-26"), 0);
 });
 
-test("nextCompletedSteps: alterna sin duplicar", () => {
-  assert.deepStrictEqual(nextCompletedSteps([], "s1"), ["s1"]);
-  assert.deepStrictEqual(nextCompletedSteps(["s1"], "s1"), []);
-  assert.deepStrictEqual(nextCompletedSteps(["s1"], "s2"), ["s1", "s2"]);
+test("routineRunComplete: se cierra solo cuando TODOS los hábitos tienen registro hoy", () => {
+  assert.strictEqual(routineRunComplete(["h1", "h2"], ["h1"]), false);
+  assert.strictEqual(routineRunComplete(["h1", "h2"], ["h1", "h2"]), true);
 });
 
-test("habitLogEffect: marcar un paso ligado a un hábito no marcado hoy lo inserta", () => {
-  assert.strictEqual(habitLogEffect("h1", true, false), "insert");
+test("routineRunComplete: una rutina sin hábitos NO se da por hecha", () => {
+  // Sin esto, una rutina recién creada aparecería cumplida sin haber hecho
+  // nada, y contaminaría la adherencia a 30 días con días regalados.
+  assert.strictEqual(routineRunComplete([], []), false);
 });
 
-test("habitLogEffect: si el hábito ya se marcó hoy no se duplica la fila", () => {
-  assert.strictEqual(habitLogEffect("h1", true, true), "noop");
+test("routineRunComplete: registros de hábitos ajenos no cierran la rutina", () => {
+  assert.strictEqual(routineRunComplete(["h1", "h2"], ["h1", "h9"]), false);
 });
 
-test("habitLogEffect: desmarcar el paso NO desmarca el hábito", () => {
-  assert.strictEqual(habitLogEffect("h1", false, true), "noop");
+test("routineRunNeedsWrite: si hoy ya hay ejecución, se corrige siempre", () => {
+  // Los dos casos que dejaban `completed_at` mintiendo cuando solo lo
+  // recalculaba el toggle: añadir un hábito a una rutina ya cerrada hoy, y
+  // borrar el último que quedaba sin marcar.
+  assert.strictEqual(routineRunNeedsWrite(true, false), true);
+  assert.strictEqual(routineRunNeedsWrite(true, true), true);
 });
 
-test("habitLogEffect: un paso sin hábito ligado no toca habit_logs", () => {
-  assert.strictEqual(habitLogEffect(null, true, false), "noop");
+test("routineRunNeedsWrite: sin ejecución hoy, solo se escribe si la rutina queda cerrada", () => {
+  // Editar no es ejecutar: crear la fila por un cambio de nombre le daría a la
+  // rutina un `started_at` que nadie provocó, y el motor dejaría de avisar de
+  // que lleva días sin correrse.
+  assert.strictEqual(routineRunNeedsWrite(false, false), false);
+  assert.strictEqual(routineRunNeedsWrite(false, true), true);
 });
 
-// El puente rutina → hábito, verificado como pide §9 del spec: la racha tiene
-// que dar lo mismo se haya cerrado el hábito desde la rutina o desde
-// /development/habits. Se simula el almacén de `habit_logs` con la misma regla
-// que aplica la Server Action: insertar solo cuando `habitLogEffect` lo dice, y
-// nunca dos veces la misma fecha (índice único `(habit_id, log_date)`).
-function applyToggle(logs: HabitLogLike[], habitId: string | null, willBeDone: boolean, today: string): HabitLogLike[] {
-  const already = logs.some((l) => l.habitId === habitId && l.date === today);
-  if (habitLogEffect(habitId, willBeDone, already) !== "insert" || habitId === null) return logs;
-  return [...logs, { habitId, date: today }];
-}
-
-test("puente rutina → hábito: marcar el paso deja exactamente una fila en habit_logs", () => {
-  const today = "2026-08-26";
-  let logs: HabitLogLike[] = [];
-  logs = applyToggle(logs, "h1", true, today);
-  logs = applyToggle(logs, "h1", false, today); // desmarcar el paso
-  logs = applyToggle(logs, "h1", true, today); // y volver a marcarlo
-  assert.strictEqual(logs.filter((l) => l.habitId === "h1" && l.date === today).length, 1);
-});
-
-test("puente rutina → hábito: la racha es la misma que marcando desde /development/habits", () => {
-  const ayer = "2026-08-25";
-  const hoy = "2026-08-26";
-  const previos: HabitLogLike[] = [{ habitId: "h1", date: ayer }];
-
-  // Camino A: el hábito se cierra ejecutando el paso de la rutina.
-  const porRutina = applyToggle(previos, "h1", true, hoy);
-  // Camino B: el hábito se marca directo en /development/habits (misma fila).
-  const porHabitos: HabitLogLike[] = [...previos, { habitId: "h1", date: hoy }];
-
-  assert.strictEqual(habitStreak("h1", porRutina, hoy), habitStreak("h1", porHabitos, hoy));
-  assert.strictEqual(habitStreak("h1", porRutina, hoy), 2);
+test("toggleHabitEffect: marcar inserta, desmarcar borra", () => {
+  // La fusión cambia una conducta deliberada del modelo viejo: cuando el paso
+  // y el hábito eran dos registros, desmarcar el paso NO borraba la racha.
+  // Ahora son el mismo registro, así que desmarcar es desmarcar.
+  assert.strictEqual(toggleHabitEffect(false), "insert");
+  assert.strictEqual(toggleHabitEffect(true), "delete");
 });

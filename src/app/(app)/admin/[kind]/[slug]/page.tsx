@@ -51,7 +51,6 @@ function enBlanco(kind: TemplateKind): Payload {
     id: "",
     name: "",
     category: "Salud",
-    frequency: "Diario",
     cue: "Después de ",
     twoMinVersion: "",
     why: ""

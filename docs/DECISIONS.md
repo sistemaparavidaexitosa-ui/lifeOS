@@ -1540,6 +1540,29 @@ la mitad que ya existía estaba rota.
   detalle sobre la vida del usuario. El botón se llama ahora «Borrar historial
   de IA» y hace lo que dice.
 
+### Hábitos dentro de rutinas (Personal Development OS, septiembre 2026)
+
+_Se planificaron como D-086 y D-087, que era lo siguiente libre cuando se
+escribió el diseño. Llegaron después de la rama del catálogo y el chat, que
+ya había ocupado de la D-080 a la D-092; los documentos de diseño de
+`docs/superpowers/` conservan la numeración original porque son el registro
+de lo que se planeó, no de lo que quedó._
+
+- **D-093 · Un hábito no existe fuera de una rutina**: `habits.routine_id` es
+  `not null` (migración 0046) y `routine_steps` desaparece — el paso ES el
+  hábito. Se descartó dejar la relación opcional o mantener una tabla de unión:
+  las dos habrían dejado la invariante en manos de la aplicación, y la
+  aplicación no puede defenderla contra un `insert` que no pase por ella. Con
+  ello se van también `habits.frequency` (la dicta la rutina) y
+  `habits.occupation_id` (el bloque lo ancla la rutina): dos sitios diciendo lo
+  mismo es un sitio donde mentir.
+- **D-094 · `habit_logs` es la única fuente de "¿lo hice hoy?"**: se borra
+  `routine_runs.completed_step_ids`, que era un segundo registro de lo mismo.
+  Consecuencia deliberada: desmarcar un hábito dentro de la rutina ahora **sí**
+  borra el registro del día. Antes no lo hacía —`habitLogEffect`— porque el
+  usuario podía haberlo cumplido por otra vía y la rutina no era dueña de
+  negarlo; con un solo registro esa ambigüedad no existe.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo

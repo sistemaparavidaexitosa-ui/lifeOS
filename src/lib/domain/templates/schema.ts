@@ -123,11 +123,14 @@ export const routineTemplateSchema = z.object({
 // «Hábitos atómicos» que development/templates.ts documenta. Un hábito sin
 // `cue` no se ejecuta, se recuerda con culpa; sin `twoMinVersion` se abandona
 // el primer día malo. Por eso los tres son obligatorios.
+// Sin `frequency`: desde 0046 un hábito no vive suelto, siempre está dentro de
+// una rutina, y es la rutina la que dice cuándo toca. El esquema guarda lo que
+// sale del parseo y no lo que entró, así que las filas del catálogo sembradas
+// por 0044 —que todavía la traen— la pierden al leerse, sin migración de datos.
 export const habitTemplateSchema = z.object({
   id: slugSchema,
   name: texto(120),
   category: categoriaHabito,
-  frequency: frecuencia,
   cue: texto(200),
   twoMinVersion: texto(200),
   why: texto(280)

@@ -3,29 +3,25 @@
 import { useTransition, type ReactNode } from "react";
 import { toggleHabitToday } from "./actions";
 
-interface OccupationLite {
-  id: string;
-  title: string;
-}
-
 /**
  * Fila de hábito. En móvil la racha ya no compite por la primera línea con el
- * nombre: baja junto a la frecuencia y la categoría, que es donde se lee como
+ * nombre: baja junto a la duración y la categoría, que es donde se lee como
  * un dato más del hábito. El nombre puede ser largo — `min-w-0` es lo que
  * impide que empuje el botón de marcar fuera de la pantalla.
  */
 export default function HabitRow({
+  routineId,
   habit,
   doneToday,
   streak,
-  occupation,
   action
 }: {
+  routineId: string;
   habit: {
     id: string;
     name: string;
-    frequency: string;
     category: string;
+    durationMin: number;
     /** «Después de X…» — la intención de implementación (migración 0033). */
     cue: string;
     twoMinVersion: string;
@@ -34,7 +30,6 @@ export default function HabitRow({
   };
   doneToday: boolean;
   streak: number;
-  occupation: OccupationLite | null;
   /** Botón de edición: viaja desde el Server Component para vivir en la fila. */
   action?: ReactNode;
 }) {
@@ -57,7 +52,7 @@ export default function HabitRow({
           color: doneToday ? "#fff" : "inherit"
         }}
         disabled={pending}
-        onClick={() => startTransition(() => toggleHabitToday(habit.id))}
+        onClick={() => startTransition(() => toggleHabitToday(routineId, habit.id))}
         aria-label={doneToday ? "Marcar como no cumplido" : "Marcar como cumplido"}
       >
         {doneToday ? "✓" : ""}
@@ -83,8 +78,7 @@ export default function HabitRow({
         )}
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs" style={{ color: "var(--muted)", overflowWrap: "anywhere" }}>
-            {habit.frequency} · {habit.category}
-            {occupation ? ` · ligado a ${occupation.title}` : ""}
+            {habit.durationMin} min · {habit.category}
           </span>
           <span className="sm:hidden">{streakChip}</span>
         </div>

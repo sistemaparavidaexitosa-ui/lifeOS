@@ -29,7 +29,7 @@ function resumir(kind: TemplateKind, t: ProjectTemplate | RoutineTemplate | Habi
     return `${r.steps.length} pasos · ${routineTemplateDuration(r)} min · ${r.frequency}`;
   }
   const h = t as HabitTemplate;
-  return `${h.category} · ${h.frequency}`;
+  return h.category;
 }
 
 export default async function AdminKindPage({ params }: { params: Promise<{ kind: string }> }) {

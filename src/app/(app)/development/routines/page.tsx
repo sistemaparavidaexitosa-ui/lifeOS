@@ -10,11 +10,14 @@ import {
   routineAdherence,
   type Frequency
 } from "@/lib/domain/development/routines.ts";
+import { habitStreak, habitDoneToday } from "@/lib/domain/habits.ts";
 import { CardHeader, ModuleNote, SectionHeader } from "../FormSheet";
-import RoutineForm, { StepForm, type OccupationLite } from "./RoutineForm";
+import RoutineForm, { type OccupationLite } from "./RoutineForm";
 import RoutineTemplates from "./RoutineTemplates";
 import { listTemplates } from "@/lib/data/templates";
-import RoutineRunner, { type RunnerStep } from "./RoutineRunner";
+import HabitTemplates from "./HabitTemplates";
+import HabitForm from "./HabitForm";
+import RoutineRunner, { type RunnerHabit } from "./RoutineRunner";
 import { getSessionUser } from "@/lib/data/session";
 
 export default async function RoutinesPage() {
@@ -25,58 +28,82 @@ export default async function RoutinesPage() {
   // "Hoy" se calcula ANTES de consultar: la ventana de adherencia depende de él.
   const today = todayLocal(await getUserTimeZone());
   const from = addDaysISO(today, -29);
+  // Los registros se piden por ventana y no enteros: `max_rows = 1000` en
+  // config.toml trunca cualquier consulta más larga SIN avisar y en un orden
+  // que nadie fija, así que diez hábitos bastarían para que a los cien días la
+  // pantalla empezara a perder días sueltos —racha mal contada, casilla de hoy
+  // en blanco, y el clic para recuperarla chocando contra el índice único de
+  // (habit_id, log_date)—. 400 días acota cualquier racha que esta pantalla
+  // sepa dibujar.
+  const desdeLogs = addDaysISO(today, -399);
 
-  const [{ data: routines }, { data: steps }, { data: occupations }, { data: habits }, { data: runs }] = await Promise.all([
-    supabase.from("routines").select("*").order("position"),
-    supabase.from("routine_steps").select("*").order("position"),
-    supabase.from("occupations").select("id, title, start_time, end_time"),
-    supabase.from("habits").select("id, name").order("name"),
-    supabase.from("routine_runs").select("*").gte("local_date", from).lte("local_date", today)
-  ]);
+  const [{ data: routines }, { data: habits }, { data: occupations }, { data: habitLogs }, { data: runs }] =
+    await Promise.all([
+      supabase.from("routines").select("*").order("position"),
+      supabase.from("habits").select("*").order("position"),
+      supabase.from("occupations").select("id, title, start_time, end_time"),
+      supabase.from("habit_logs").select("habit_id, log_date").gte("log_date", desdeLogs).lte("log_date", today),
+      supabase.from("routine_runs").select("*").gte("local_date", from).lte("local_date", today)
+    ]);
 
   const occById = new Map((occupations ?? []).map((o) => [o.id, o]));
   const habitById = new Map((habits ?? []).map((h) => [h.id, h.name]));
+  const logs = (habitLogs ?? []).map((l) => ({ habitId: l.habit_id, date: l.log_date }));
+  const doneToday = new Set(logs.filter((l) => l.date === today).map((l) => l.habitId));
+
   const occOptions: OccupationLite[] = (occupations ?? []).map((o) => ({
     id: o.id,
     title: o.title,
     start: o.start_time.slice(0, 5),
     end: o.end_time.slice(0, 5)
   }));
+  // Candidatos para apilar: todos los hábitos del usuario, de cualquier rutina.
+  // El apilamiento puede cruzar rutinas; el orden solo describe el de la propia.
   const habitOptions = (habits ?? []).map((h) => ({ id: h.id, name: h.name }));
 
   const rows = (routines ?? []).map((r) => {
-    const own = (steps ?? []).filter((s) => s.routine_id === r.id);
-    const stepLikes = own.map((s) => ({ id: s.id, durationMin: s.duration_min }));
-    const run = (runs ?? []).find((x) => x.routine_id === r.id && x.local_date === today) ?? null;
+    const own = (habits ?? []).filter((h) => h.routine_id === r.id);
+    const habitLikes = own.map((h) => ({ id: h.id, durationMin: h.duration_min }));
     const occ = r.occupation_id ? occById.get(r.occupation_id) ?? null : null;
     const block = occ ? { start: occ.start_time, end: occ.end_time } : null;
-    const completedDates = (runs ?? []).filter((x) => x.routine_id === r.id && x.completed_at !== null).map((x) => x.local_date);
+    const completedDates = (runs ?? [])
+      .filter((x) => x.routine_id === r.id && x.completed_at !== null)
+      .map((x) => x.local_date);
+    const doneIds = own.filter((h) => doneToday.has(h.id)).map((h) => h.id);
 
     return {
       routine: r,
-      steps: own,
-      // El botón de editar viaja DENTRO de cada paso. Antes todos los "Editar
-      // paso" se acumulaban en una fila al pie de la tarjeta: seis pasos daban
-      // seis botones idénticos, sin decir cuál era cuál, y en móvil ocupaban
-      // más alto que la propia rutina.
-      runnerSteps: own.map<RunnerStep>((s) => ({
-        id: s.id,
-        title: s.title,
-        durationMin: s.duration_min,
-        habitName: s.habit_id ? habitById.get(s.habit_id) ?? null : null,
+      habits: own,
+      runnerHabits: own.map<RunnerHabit>((h) => ({
+        id: h.id,
+        name: h.name,
+        category: h.category,
+        durationMin: h.duration_min,
+        cue: h.cue,
+        twoMinVersion: h.two_min_version,
+        stackAfterName: h.stack_after_habit_id ? habitById.get(h.stack_after_habit_id) ?? null : null,
+        doneToday: habitDoneToday(h.id, logs, today),
+        streak: habitStreak(h.id, logs, today),
         action: (
-          <StepForm
+          <HabitForm
             routineId={r.id}
-            step={{ id: s.id, title: s.title, durationMin: s.duration_min, habitId: s.habit_id, position: s.position }}
-            position={s.position}
-            habits={habitOptions}
+            position={h.position}
+            otherHabits={habitOptions}
+            habit={{
+              id: h.id,
+              name: h.name,
+              category: h.category,
+              durationMin: h.duration_min,
+              cue: h.cue,
+              twoMinVersion: h.two_min_version,
+              stackAfterHabitId: h.stack_after_habit_id
+            }}
           />
         )
       })),
-      completedStepIds: run?.completed_step_ids ?? [],
       due: routineDueToday(r.frequency as Frequency, today),
-      progress: routineProgress(run?.completed_step_ids ?? [], stepLikes),
-      fits: routineFitsBlock(stepLikes, block),
+      progress: routineProgress(doneIds, habitLikes),
+      fits: routineFitsBlock(habitLikes, block),
       occ,
       adherence: routineAdherence(completedDates, r.frequency as Frequency, from, today)
     };
@@ -86,7 +113,7 @@ export default async function RoutinesPage() {
   const otras = rows.filter((r) => !r.due || !r.routine.active);
 
   function renderRoutine(row: (typeof rows)[number], dimmed: boolean) {
-    const { routine, occ, progress, fits, adherence, runnerSteps, completedStepIds, steps: own } = row;
+    const { routine, occ, progress, fits, adherence, runnerHabits, habits: own } = row;
     return (
       <Card key={routine.id}>
         <div style={dimmed ? { opacity: 0.65 } : undefined}>
@@ -107,11 +134,13 @@ export default async function RoutinesPage() {
             }
             action={
               <RoutineForm
+                habitCount={own.length}
                 routine={{
                   id: routine.id,
                   name: routine.name,
                   frequency: routine.frequency,
                   occupationId: routine.occupation_id,
+                  identity: routine.identity,
                   active: routine.active
                 }}
                 occupations={occOptions}
@@ -120,40 +149,27 @@ export default async function RoutinesPage() {
           />
         </div>
 
+        {/* La identidad preside la rutina y no se esconde en el formulario:
+            su trabajo es recordarte por qué la sostienes, y encerrada en la
+            pantalla de edición no la lee nadie. */}
+        {routine.identity && (
+          <p className="ah-why mt-2">{routine.identity}</p>
+        )}
+
         <div className="mt-2.5">
           <div className="flex justify-between gap-2 text-xs mb-1" style={{ color: "var(--muted)" }}>
             <span>
-              {progress.done} de {progress.total} pasos
+              {progress.done} de {progress.total} hábitos
             </span>
             <span className="flex-shrink-0">{progress.remainingMin} min por delante</span>
           </div>
           <Progress pct={progress.pct} kind={!fits ? "warn" : undefined} />
         </div>
 
-        {row.due && routine.active ? (
-          <RoutineRunner routineId={routine.id} steps={runnerSteps} completedStepIds={completedStepIds} today={today} />
-        ) : (
-          <div className="mt-2.5 flex flex-col">
-            {own.map((s) => (
-              <div key={s.id} className="flex items-start gap-2 py-1.5" style={{ borderTop: "1px solid var(--line)" }}>
-                <span className="grow min-w-0 text-sm" style={{ color: "var(--muted)", overflowWrap: "anywhere" }}>
-                  {s.title} · {s.duration_min} min
-                </span>
-                <span className="flex-shrink-0">
-                  <StepForm
-                    routineId={routine.id}
-                    step={{ id: s.id, title: s.title, durationMin: s.duration_min, habitId: s.habit_id, position: s.position }}
-                    position={s.position}
-                    habits={habitOptions}
-                  />
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
+        <RoutineRunner routineId={routine.id} habits={runnerHabits} today={today} />
 
         <div className="mt-2.5">
-          <StepForm routineId={routine.id} position={own.length} habits={habitOptions} block />
+          <HabitForm routineId={routine.id} position={own.length} otherHabits={habitOptions} label="+ Hábito" />
         </div>
       </Card>
     );
@@ -162,13 +178,24 @@ export default async function RoutinesPage() {
   return (
     <div className="flex flex-col gap-3.5">
       <ModuleNote>
-        Una rutina solo aporta el orden de sus pasos: el bloque horario sigue viviendo en Autogestión del Tiempo y la racha
-        sigue viviendo en Hábitos. Completar un paso ligado a un hábito lo marca allá, sin duplicarlo.
+        Cada hábito vive dentro de una rutina y toca cuando toca ella. El bloque horario sigue viviendo en Autogestión
+        del Tiempo: la rutina se ancla a uno que ya existe. Todo esto es privado, sin relación con Workspaces (BR-027).
       </ModuleNote>
 
       <SectionHeader
         action={
           <span className="flex gap-2">
+            {/* Las dos plantillas bajan su catálogo desde el servidor (0044):
+                esta página ya es un Server Component y lo tiene en la mano. */}
+            <HabitTemplates
+              routines={(routines ?? []).map((r) => ({
+                id: r.id,
+                name: r.name,
+                habitCount: (habits ?? []).filter((h) => h.routine_id === r.id).length
+              }))}
+              otherHabits={habitOptions}
+              templates={await listTemplates("habit")}
+            />
             <RoutineTemplates occupations={occOptions} templates={await listTemplates("routine")} />
             <RoutineForm occupations={occOptions} />
           </span>
@@ -179,7 +206,10 @@ export default async function RoutinesPage() {
 
       {!rows.length && (
         <Card>
-          <EmptyState icon="🔁" text="Crea tu primera rutina, o parte de una plantilla: Mañana Milagrosa (S.A.V.E.R.S.) o el Club de las 5 AM (20/20/20). Ánclala a un bloque de tu Autogestión del Tiempo y sus pasos pueden ser hábitos que ya llevas." />
+          <EmptyState
+            icon="🔁"
+            text="Crea tu primera rutina, o parte de una plantilla: Mañana Milagrosa (S.A.V.E.R.S.) o el Club de las 5 AM (20/20/20). Ánclala a un bloque de tu Autogestión del Tiempo, y sus hábitos llevarán racha desde el primer día."
+          />
         </Card>
       )}
 

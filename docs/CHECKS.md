@@ -621,7 +621,7 @@ comprobar eso, que es lo que de verdad protege el invariante.
 | `pnpm lint` | ✅ sin warnings ni errores |
 | `pnpm test:unit` | ✅ **574 pruebas**, 0 fallos (eran 572: −9 de `execution-project-thread`, +11 de `ai-chat`) |
 | `pnpm build` | ✅ compila; 30 rutas |
-| `supabase start` (45 migraciones + seed) | ✅ la 0045 aplica sin error |
+| `supabase start` (46 migraciones + seed) | ✅ la 0045 aplica sin error; la 0046 llegó después y NO se ha ejercitado |
 | `supabase test db` | ✅ **21 archivos, 156 pruebas**, incluido el nuevo `0021_rls_chat_ia.sql` (6 casos) |
 | `pnpm gen:types:local` | ✅ `ai_chat_messages` aparece en `database.types.ts` (F3: generado, no escrito a mano) |
 

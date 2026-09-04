@@ -54,12 +54,29 @@ function Contenido({
   const [occupationId, setOccupationId] = useState("");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  // Los hábitos que la plantilla NO sembró porque el usuario ya los tenía en
+  // otra rutina. Es información, no un fallo: la rutina existe, solo que con
+  // menos hábitos de los que se acaban de leer en la lista de arriba, y no
+  // decirlo la haría parecer rota.
+  const [saltados, setSaltados] = useState<string[] | null>(null);
 
   if (elegida) {
     const total = routineTemplateDuration(elegida);
     return (
       <div className="flex flex-col gap-3">
-        <button type="button" className="nb-crumb-back" style={{ alignSelf: "flex-start" }} onClick={() => setElegida(null)}>
+        <button
+          type="button"
+          className="nb-crumb-back"
+          style={{ alignSelf: "flex-start" }}
+          onClick={() => {
+            // El aviso pertenece a la rutina que se acaba de crear: si se
+            // vuelve al catálogo, arrastrarlo a la siguiente plantilla haría
+            // que hablara de hábitos que esa no tiene.
+            setElegida(null);
+            setSaltados(null);
+            setError(null);
+          }}
+        >
           ← Todas las plantillas
         </button>
 
@@ -103,29 +120,56 @@ function Contenido({
           </div>
         )}
 
+        {saltados && (
+          <div className="text-xs" style={{ color: "var(--muted)" }}>
+            Rutina creada. Estos ya los tienes en otras rutinas, así que no se han duplicado:{" "}
+            <b>{saltados.join(", ")}</b>. Un hábito solo puede vivir en una rutina a la vez.
+          </div>
+        )}
+
         <div className="flex flex-col-reverse sm:flex-row gap-2">
-          <button type="button" className="btn-ghost btn-sm w-full sm:w-auto" onClick={close} disabled={pending}>
-            Cancelar
-          </button>
-          <span className="hidden sm:block grow" />
-          <button
-            type="button"
-            className="btn-primary btn-sm w-full sm:w-auto"
-            disabled={pending}
-            onClick={() =>
-              startTransition(async () => {
-                const result = await createRoutineFromTemplate(elegida.id, occupationId);
-                if (!result.ok) {
-                  setError(result.reason ?? "No se pudo crear la rutina.");
-                  return;
+          {saltados ? (
+            <>
+              <span className="hidden sm:block grow" />
+              <button type="button" className="btn-primary btn-sm w-full sm:w-auto" onClick={close}>
+                Entendido
+              </button>
+            </>
+          ) : (
+            <>
+              <button type="button" className="btn-ghost btn-sm w-full sm:w-auto" onClick={close} disabled={pending}>
+                Cancelar
+              </button>
+              <span className="hidden sm:block grow" />
+              <button
+                type="button"
+                className="btn-primary btn-sm w-full sm:w-auto"
+                disabled={pending}
+                onClick={() =>
+                  startTransition(async () => {
+                    const result = await createRoutineFromTemplate(elegida.id, occupationId);
+                    if (!result.ok) {
+                      setError(result.reason ?? "No se pudo crear la rutina.");
+                      return;
+                    }
+                    // Con hábitos saltados el panel se queda abierto: cerrarlo
+                    // enseñaría la rutina incompleta sin haber contado por qué,
+                    // y el aviso se perdería en el mismo clic que lo genera.
+                    if (result.skipped && result.skipped.length > 0) {
+                      setError(null);
+                      setSaltados(result.skipped);
+                      router.refresh();
+                      return;
+                    }
+                    close();
+                    router.refresh();
+                  })
                 }
-                close();
-                router.refresh();
-              })
-            }
-          >
-            {pending ? "Creando…" : "Crear esta rutina"}
-          </button>
+              >
+                {pending ? "Creando…" : "Crear esta rutina"}
+              </button>
+            </>
+          )}
         </div>
       </div>
     );
@@ -134,8 +178,8 @@ function Contenido({
   return (
     <div className="flex flex-col gap-2">
       <p className="text-xs" style={{ color: "var(--muted)" }}>
-        Se copian a tus rutinas: después las editas como cualquier otra. Si un paso coincide con un hábito que ya llevas,
-        queda ligado a él para no partir tu racha en dos.
+        Se copian a tus rutinas: después las editas como cualquier otra. Si un paso es un hábito que ya llevas en otra
+        rutina, se salta y te lo decimos: un hábito solo puede vivir en una, y duplicarlo partiría tu racha en dos.
       </p>
 
       {templates.map((t) => (

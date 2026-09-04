@@ -36,8 +36,9 @@ export interface RoutineTemplateStep {
   detail: string;
   /**
    * Texto con el que se intenta reconocer un hábito que el usuario YA tenga,
-   * para ligar el paso a él (`routine_steps.habit_id`) en vez de duplicarlo.
-   * La migración 0024 lo dice: la racha no se bifurca.
+   * para NO sembrarlo de nuevo al usar la plantilla. Desde 0046 el paso ES el
+   * hábito, así que aquí ya no hay nada que ligar —solo evitar el duplicado
+   * que bifurcaría la racha en dos filas con el mismo nombre.
    */
   habitHint?: string;
 }
@@ -71,12 +72,16 @@ export function routineTemplateDuration(template: RoutineTemplate): number {
  *     fallar. Es la que se hace el día malo, y la que sostiene la racha.
  *   - `why`: en qué se apoya, para que quien elija la plantilla entienda la
  *     regla y pueda escribir la suya después.
+ *
+ * Sin `frequency`: desde 0046 un hábito no vive suelto, siempre está dentro de
+ * una rutina, y es la rutina la que toca cuando toca. Una plantilla de hábito
+ * que propusiera una frecuencia estaría proponiendo algo que el formulario ya
+ * no tiene dónde guardar.
  */
 export interface HabitTemplate {
   id: string;
   name: string;
   category: HabitCategory;
-  frequency: Frequency;
   cue: string;
   twoMinVersion: string;
   why: string;
@@ -105,8 +110,15 @@ export function habitTemplatesByCategory(
  * Busca, entre los hábitos que el usuario ya tiene, uno que corresponda al paso
  * de una plantilla de rutina. Comparación laxa a propósito —sin acentos, sin
  * mayúsculas y por inclusión— porque el usuario escribió "Leer 20 min" y la
- * plantilla dice "leer": exigir igualdad exacta nunca encontraría nada, y el
- * coste de fallar es solo que el paso no queda ligado.
+ * plantilla dice "leer": exigir igualdad exacta nunca encontraría nada.
+ *
+ * Desde 0046 fallar aquí SÍ cuesta. Cuando el paso y el hábito eran dos filas,
+ * un falso positivo solo dejaba el paso sin ligar; ahora un acierto de más hace
+ * que el paso no se siembre y la rutina nazca incompleta. Por eso `hint` es
+ * siempre el `habitHint` de la plantilla —escrito para que sea comparado— y
+ * nunca el título del paso, que se escribió para leerse ("Silencio",
+ * "Crecer") y compararlo era invitar a la coincidencia por accidente. Y por eso
+ * quien la usa tiene que CONTAR lo que se saltó en vez de callarlo.
  */
 export function matchHabitForStep(
   hint: string | undefined,

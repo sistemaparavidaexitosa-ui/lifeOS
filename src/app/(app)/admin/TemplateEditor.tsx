@@ -218,7 +218,7 @@ function Previsualizacion({ kind, payload }: { kind: TemplateKind; payload: Payl
   return (
     <div className="text-xs" style={{ color: "var(--muted)" }}>
       <p>
-        Prellena el formulario de hábito: {t.category} · {t.frequency}.
+        Prellena el formulario de hábito: {t.category}. La frecuencia la pone la rutina en la que se meta.
       </p>
       <p style={{ marginTop: 4 }}>No lo crea en silencio — la señal es personal y el usuario la reescribe antes de guardar.</p>
     </div>
