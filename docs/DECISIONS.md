@@ -1898,6 +1898,90 @@ de lo que se planeó, no de lo que quedó._
   rail enseña un aviso en ámbar cuando la respuesta salió degradada. Diagnosticar
   esto a ciegas costó una ronda entera; con esto, la próxima se ve.
 
+### Notificaciones push (2026-09-04)
+
+- **D-100 Se REVIERTE «no hay ningún proceso que despierte a nadie»**. La
+  migración `0038` fijó `reminders.remind_on` como FECHA y no marca de tiempo,
+  con este argumento textual: *«No hay ningún proceso que despierte a nadie...
+  Prometer una hora exacta sería prometer algo que no existe.»* Era honesto
+  mientras fue cierto. La `0051` añade `remind_at` y programa `pg_cron` cada
+  cinco minutos contra `/api/push/dispatch`, así que ya hay un proceso y la
+  hora deja de ser una promesa vacía.
+  **Lo que NO se revierte**: la `0040` dice que las automatizaciones del
+  usuario no tienen disparadores por TIEMPO, y sigue en pie. El reloj es del
+  sistema y no aparece en `/settings`: nadie puede crear una regla «cada
+  lunes». Eso sería otra decisión, con otras consecuencias.
+
+- **D-101 El cifrado de Web Push se escribe a mano, sin `web-push`**. D-008
+  sigue intacta: RFC 8291 (`aes128gcm`) y la firma VAPID (RFC 8292) se
+  implementan enteros con `crypto.subtle` —ECDH P-256, HKDF y AES-GCM son
+  primitivas de la plataforma—, así que la dependencia no compraba nada que no
+  tuviéramos. Es el mismo criterio que llevó a hablarle a Resend por `fetch`
+  (D-022) y no el de `@anthropic-ai/sdk`, donde el paquete sí aportaba la
+  salida estructurada.
+  Lo que hace defendible escribir criptografía propia es que **es
+  verificable**: RFC 8291 §5 y su Apéndice A traen vectores de prueba, y
+  `tests/domain/push-encrypt.test.ts` reproduce el mensaje del RFC octeto a
+  octeto con la clave efímera inyectada.
+
+- **D-102 Se descartó el push SIN payload**. La alternativa era empujar un
+  aviso vacío y que el service worker fuera a buscar el texto a
+  `/api/push/pending`. Se descartó por su modo de fallo, no por su coste:
+  `userVisibleOnly` obliga a mostrar una notificación sí o sí, así que cuando
+  ese `fetch` fallara —sesión caducada, sin cobertura— el navegador enseñaría
+  «Este sitio se ha actualizado en segundo plano» y, repetido, **revocaría la
+  suscripción**. El fallo no era «no suena»: era «suena con un texto que no
+  escribimos y a la tercera dejas de recibir avisos».
+  El argumento de privacidad que lo sostenía tampoco se pierde: con RFC 8291 el
+  contenido va cifrado extremo a extremo y ni FCM ni APNs pueden leerlo. La
+  ruta `/api/push/pending` se mantiene solo como red de seguridad del service
+  worker.
+
+- **D-103 `pg_cron` en Supabase y no Vercel Cron**. En el plan Hobby de Vercel
+  un cron se ejecuta UNA VEZ AL DÍA, lo que convertiría «recuérdamelo a las
+  15:30» en «recuérdamelo cuando le toque al plan». `pg_cron` da granularidad
+  de minuto, está en el plan gratis de Supabase y vive junto a los datos que
+  consulta. El bloque de la `0051` que programa el job está envuelto en un
+  `exception when others`: `pnpm verify` termina en `supabase db reset`, y la
+  Postgres local no siempre puede cargar `pg_cron` — si lanzara, la feature
+  entera bloquearía el pipeline.
+
+- **D-104 La URL y el secreto del reloj viven en Supabase Vault**, nunca en el
+  `.sql`. Escribirlos en la migración los dejaría en git para siempre. Se
+  cargan a mano una vez por proyecto (ver `/docs/DEPLOY.md`) y la migración los
+  lee de `vault.decrypted_secrets`; si faltan, avisa por consola y no programa
+  nada en vez de fallar.
+
+- **D-105 `src/lib/supabase/admin.ts` se usa también desde una Server Action**,
+  ampliando su regla de «solo Route Handlers». Para avisarte a TI hay que leer
+  TUS suscripciones, y quien provoca el aviso es otra persona. La RLS de
+  `push_subscriptions` no expone las ajenas a propósito —`endpoint` + `p256dh`
+  + `auth` bastan para hacerle sonar el teléfono a cualquiera— y un
+  `security definer` que las devolviera sería esa misma exposición con otro
+  nombre. El alcance está acotado a `src/lib/push/send.ts`, que solo lee esa
+  tabla y nunca lanza.
+
+- **D-106 `notifications` no tiene política de INSERT**. Una notificación se le
+  crea a OTRA persona, así que `with check (user_id = auth.uid())` haría lo
+  contrario de lo que hace falta, y una política que dejara escribir la fila
+  ajena convertiría la bandeja en un buzón abierto: cualquiera podría hacerte
+  sonar el teléfono con el texto que quisiera. Se entra por
+  `enqueue_notification` (`security definer`, exige compartir un espacio
+  activo) o por `service_role` desde el despachador.
+
+- **D-107 Al marcar leída una mención se escribe TAMBIÉN `comment_reads`**. No
+  es redundancia: `src/lib/insights/facts-loader.ts` construye con esa tabla el
+  hecho «tienes N menciones sin leer» de Intelligence OS. Escribir solo
+  `notifications.read_at` haría que el motor siguiera afirmando que tienes
+  menciones pendientes semanas después de haberlas leído.
+
+- **D-108 `task_assignees` gana `user_id` sin perder `user_name`** (migración
+  `0050`), calcando lo que `0037` hizo con las menciones. `user_name` sostiene
+  el histórico, `loadMyTasks` y la propiedad de tareas; `user_id` sostiene el
+  aviso. En el backfill, un nombre repetido dentro del mismo espacio deja la
+  fila en NULL: es preferible que esa tarea no avise a que avise a la persona
+  equivocada.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo

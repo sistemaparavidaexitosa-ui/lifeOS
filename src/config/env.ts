@@ -15,7 +15,12 @@ const publicSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
   NEXT_PUBLIC_APP_NAME: z.string().default("Life OS"),
   NEXT_PUBLIC_DEFAULT_LOCALE: z.string().default("es-MX"),
-  NEXT_PUBLIC_DEFAULT_CURRENCY: z.string().default("MXN")
+  NEXT_PUBLIC_DEFAULT_CURRENCY: z.string().default("MXN"),
+  // Clave PÚBLICA VAPID. Es pública de verdad: el navegador la necesita en
+  // `pushManager.subscribe()` para que el servicio de push (FCM/APNs) sepa
+  // que los envíos firmados con la privada son nuestros. Con `default("")`
+  // la app arranca sin ella y `PushSetup` simplemente no ofrece activar.
+  NEXT_PUBLIC_VAPID_PUBLIC_KEY: z.string().default("")
 });
 
 // safeParse: NUNCA lanza. Si faltan variables en build time, se usan los
@@ -27,7 +32,8 @@ const parsedPublic = publicSchema.safeParse({
   NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
   NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME,
   NEXT_PUBLIC_DEFAULT_LOCALE: process.env.NEXT_PUBLIC_DEFAULT_LOCALE,
-  NEXT_PUBLIC_DEFAULT_CURRENCY: process.env.NEXT_PUBLIC_DEFAULT_CURRENCY
+  NEXT_PUBLIC_DEFAULT_CURRENCY: process.env.NEXT_PUBLIC_DEFAULT_CURRENCY,
+  NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
 });
 
 export const publicEnv = parsedPublic.success
@@ -104,4 +110,62 @@ export function requireResendApiKey(): string {
     throw new Error("RESEND_API_KEY no está definida. Solo se requiere para enviar invitaciones por correo (FR-WSP-003).");
   }
   return key;
+}
+
+/**
+ * F11: las llaves de Web Push, exigidas SOLO por `src/lib/push/send.ts`.
+ *
+ * La privada se guarda como un JWK COMPLETO en una sola variable, no como `d`
+ * y las coordenadas por separado. Reconstruir una clave EC desde trozos
+ * sueltos es la fuente clásica de bugs de este terreno: basta con que `x` o
+ * `y` lleguen con un byte de padding de más para que `importKey` acepte la
+ * clave y la firma salga inválida — y el servicio de push responde a eso con
+ * un 401 que no explica nada.
+ *
+ * Sin estas variables la app funciona entera y las notificaciones
+ * simplemente no salen: `sendPush` nunca lanza, devuelve `{sent:false}`.
+ */
+export function requireVapidKeys(): { privateJwk: JsonWebKey; publicKey: string; subject: string } {
+  const raw = process.env.VAPID_PRIVATE_JWK;
+  if (!raw) {
+    throw new Error(
+      "VAPID_PRIVATE_JWK no está definida. Solo la exigen las notificaciones push — genera el par con `node scripts/generate-vapid.mjs` (ver /docs/DEPLOY.md)."
+    );
+  }
+
+  let privateJwk: JsonWebKey;
+  try {
+    privateJwk = JSON.parse(raw) as JsonWebKey;
+  } catch {
+    throw new Error("VAPID_PRIVATE_JWK no es un JSON válido. Debe ser el JWK completo que imprime `node scripts/generate-vapid.mjs`.");
+  }
+
+  const publicKey = publicEnv.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  if (!publicKey) {
+    throw new Error("NEXT_PUBLIC_VAPID_PUBLIC_KEY no está definida. Es la mitad pública del par de VAPID_PRIVATE_JWK.");
+  }
+
+  /**
+   * `sub` identifica a quien envía, y Apple RECHAZA el push si no es un
+   * `mailto:` o un `https:` válido. El default apunta a la propia app porque
+   * una URL siempre existe; un correo real es mejor si lo hay.
+   */
+  const subject = process.env.VAPID_SUBJECT || publicEnv.NEXT_PUBLIC_APP_URL;
+
+  return { privateJwk, publicKey, subject };
+}
+
+/**
+ * F11: el secreto que separa a pg_cron de cualquiera que descubra la URL del
+ * despachador. Esa ruta corre sin sesión (la llama la base de datos, no un
+ * navegador), así que es lo ÚNICO que la protege.
+ */
+export function requirePushDispatchSecret(): string {
+  const secret = process.env.PUSH_DISPATCH_SECRET;
+  if (!secret) {
+    throw new Error(
+      "PUSH_DISPATCH_SECRET no está definida. La exige /api/push/dispatch, que corre sin sesión porque lo invoca pg_cron — ver /docs/DEPLOY.md."
+    );
+  }
+  return secret;
 }

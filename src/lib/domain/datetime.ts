@@ -65,6 +65,18 @@ export function hourInTimeZone(timeZone: string, now: Date = new Date()): number
   return Number(p.hour) % 24;
 }
 
+/**
+ * Hora local en «HH:MM». La necesita el despachador de notificaciones para
+ * decidir si ya pasó la hora de un recordatorio, donde los minutos importan:
+ * con `hourInTimeZone` a secas, «recuérdamelo a las 15:30» sonaría a las 15:00.
+ */
+export function timeInTimeZone(timeZone: string, now: Date = new Date()): string {
+  const p = partsIn(timeZone, now);
+  // El `% 24` de hourInTimeZone existe porque Intl devuelve "24" a medianoche
+  // en algunos entornos; aquí hace la misma falta.
+  return `${String(Number(p.hour) % 24).padStart(2, "0")}:${p.minute}`;
+}
+
 /** Saludo según la hora REAL del usuario. */
 export function greetingFor(hour: number): string {
   if (hour < 12) return "Buenos días";

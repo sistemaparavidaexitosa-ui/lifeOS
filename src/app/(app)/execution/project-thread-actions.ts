@@ -23,6 +23,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { recordActivity } from "@/lib/data/activity";
+import { notifyMentions } from "@/lib/push/triggers";
 import { parseMentions, type RosterMember } from "@/lib/domain/execution/mentions.ts";
 import type { ThreadCommentLike } from "@/lib/domain/execution/thread.ts";
 
@@ -139,17 +140,21 @@ export async function addProjectComment(projectId: string, body: string) {
 
   const { userIds: mentionedUserIds, names: mentions } = parseMentions(trimmed, roster);
 
-  const { error } = await supabase.from("comments").insert({
-    subject_type: "project",
-    subject_id: id,
-    author_id: user.id,
-    author_name: profile?.name ?? user.email ?? "Usuario",
-    body: trimmed,
-    // Las dos: `mentions` sostiene lo que se pinta y el histórico;
-    // `mentioned_user_ids` sostiene la bandeja (migración 0037).
-    mentions,
-    mentioned_user_ids: mentionedUserIds
-  });
+  const { data: creado, error } = await supabase
+    .from("comments")
+    .insert({
+      subject_type: "project",
+      subject_id: id,
+      author_id: user.id,
+      author_name: profile?.name ?? user.email ?? "Usuario",
+      body: trimmed,
+      // Las dos: `mentions` sostiene lo que se pinta y el histórico;
+      // `mentioned_user_ids` sostiene la bandeja (migración 0037).
+      mentions,
+      mentioned_user_ids: mentionedUserIds
+    })
+    .select("id")
+    .single();
   if (error) throw new Error(error.message);
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "comment.add", object: id, meta: { mentions } });
@@ -163,6 +168,23 @@ export async function addProjectComment(projectId: string, body: string) {
     type: "comment.project",
     text: `escribió en el hilo de "${project.title}"`
   });
+
+  // ESTE AVISO NO PUEDE FALTAR AQUÍ. Este archivo nunca despachó
+  // automatizaciones —asimetría heredada con addTaskComment— y repetir esa
+  // omisión con las notificaciones significaría que «@Victor, aplica las
+  // migraciones» escrito en el hilo de un proyecto no suena en ningún teléfono.
+  if (creado && mentionedUserIds.length) {
+    await notifyMentions({
+      commentId: creado.id,
+      subjectType: "project",
+      subjectId: id,
+      subjectTitle: project.title,
+      authorId: user.id,
+      authorName: profile?.name ?? "Alguien",
+      body: trimmed,
+      mentionedUserIds
+    });
+  }
 
   revalidatePath("/execution");
 }

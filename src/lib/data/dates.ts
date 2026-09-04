@@ -12,6 +12,7 @@ export {
   greetingFor,
   hourInTimeZone,
   isValidTimeZone,
+  timeInTimeZone,
   todayInTimeZone,
   weekStartISO
 } from "@/lib/domain/datetime.ts";

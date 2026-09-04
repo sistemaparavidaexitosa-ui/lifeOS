@@ -3,7 +3,8 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
-import MentionsBell from "@/components/MentionsBell";
+import NotificationsBell from "@/components/NotificationsBell";
+import PushSetup from "@/components/PushSetup";
 import { getPersonalWorkspace } from "@/lib/data/workspaces";
 import { getSessionUser } from "@/lib/data/session";
 
@@ -41,11 +42,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       // esperar medio segundo a que aparezca.
       bell={
         <Suspense fallback={null}>
-          <MentionsBell />
+          <NotificationsBell />
         </Suspense>
       }
     >
       {children}
+      {/*
+        No pinta nada: registra el service worker y revalida la suscripción en
+        cada carga. Va dentro de AppShell y no en el <head> porque solo tiene
+        sentido con sesión — a quien no ha entrado no hay a quién avisar.
+      */}
+      <PushSetup />
     </AppShell>
   );
 }

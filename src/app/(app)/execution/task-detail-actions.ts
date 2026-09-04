@@ -10,6 +10,9 @@ import { parseMentions, type RosterMember } from "@/lib/domain/execution/mention
 import { dispatchAutomations } from "@/lib/automations/dispatch";
 import { createClient } from "@/lib/supabase/server";
 import { recordActivity } from "@/lib/data/activity";
+import { notifyAssignments, notifyMentions } from "@/lib/push/triggers";
+import { todayLocal } from "@/lib/data/dates";
+import { getUserTimeZone } from "@/lib/data/profile";
 import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
 
 export interface TaskDetailTask {
@@ -268,13 +271,40 @@ export async function setTaskAssignees(taskId: string, userNames: string[]) {
   const { data: task } = await supabase.from("tasks").select("id, project_id, title").eq("id", taskId).single();
   if (!task) throw new Error("Tarea no encontrada");
 
+  // QUIÉN ESTABA ANTES. Se lee antes de borrar porque sin eso no hay forma de
+  // saber a quién avisar: esta función reemplaza la lista entera, así que sin
+  // el estado previo cada guardado volvería a sonarle a todos los responsables,
+  // incluidos los que ya lo eran desde hace semanas.
+  const { data: previos } = await supabase.from("task_assignees").select("user_id").eq("task_id", taskId);
+  const yaEstaban = new Set((previos ?? []).map((a) => a.user_id).filter((id): id is string => Boolean(id)));
+
+  // El roster resuelve NOMBRE → user_id. Antes de 0050 esta función no lo
+  // cargaba —solo leía el nombre del propio perfil para comparar textos— y por
+  // eso «me asignaron a mí» era una adivinanza. Es la misma consulta que ya
+  // hacen getTaskDetail y addTaskComment.
+  const { data: project } = await supabase.from("projects").select("workspace_id").eq("id", task.project_id).single();
+  let roster: RosterMember[] = [];
+  if (project?.workspace_id) {
+    const { data: rows } = await supabase.rpc("list_workspace_members", { p_workspace_id: project.workspace_id });
+    roster = (rows ?? []).map((m: { user_id: string; user_name: string }) => ({ userId: m.user_id, name: m.user_name }));
+  }
+  const idPorNombre = new Map(roster.map((m) => [m.name, m.userId]));
+
   const { error: delErr } = await supabase.from("task_assignees").delete().eq("task_id", taskId);
   if (delErr) throw new Error(delErr.message);
 
   if (userNames.length) {
-    const { error: insErr } = await supabase
-      .from("task_assignees")
-      .insert(userNames.map((userName) => ({ task_id: taskId, user_name: userName })));
+    const { error: insErr } = await supabase.from("task_assignees").insert(
+      userNames.map((userName) => ({
+        task_id: taskId,
+        user_name: userName,
+        // NULL si el nombre no está en el roster: es alguien de fuera del
+        // espacio, o un nombre escrito a mano. La fila se guarda igual —la
+        // etiqueta sigue sirviendo— pero no habrá a quién avisar, y eso es
+        // preferible a avisar a quien se llame parecido (migración 0050).
+        user_id: idPorNombre.get(userName) ?? null
+      }))
+    );
     if (insErr) throw new Error(insErr.message);
   }
 
@@ -291,11 +321,27 @@ export async function setTaskAssignees(taskId: string, userNames: string[]) {
     type: "task.assigned",
     taskId,
     projectId: task.project_id,
-    // La asignación se guarda por NOMBRE (task_assignees.user_name, sin FK), así
-    // que «me asignaron a mí» se resuelve comparando con el del perfil. Es la
-    // misma limitación que documenta loadMyTasks.
-    assignedToMe: Boolean(propio?.name && userNames.includes(propio.name))
+    // Ahora por id y no comparando nombres: dos «Ana» en el mismo espacio
+    // hacían verdadera esta bandera para las dos.
+    assignedToMe: userNames.some((n) => idPorNombre.get(n) === user.id)
   });
+
+  // Solo a los NUEVOS. `yaEstaban` es lo que separa «te acaban de asignar
+  // esto» de «alguien tocó la lista y tú seguías dentro».
+  const nuevosUserIds = userNames
+    .map((n) => idPorNombre.get(n))
+    .filter((id): id is string => Boolean(id) && !yaEstaban.has(id as string));
+
+  if (nuevosUserIds.length) {
+    await notifyAssignments({
+      taskId,
+      taskTitle: task.title,
+      actorId: user.id,
+      actorName: propio?.name ?? "Alguien",
+      nuevosUserIds,
+      todayISO: todayLocal(await getUserTimeZone())
+    });
+  }
 
   revalidatePath("/execution");
 }
@@ -347,17 +393,23 @@ export async function addTaskComment(taskId: string, body: string) {
 
   const { userIds: mentionedUserIds, names: mentions } = parseMentions(trimmed, roster);
 
-  const { error } = await supabase.from("comments").insert({
-    subject_type: "task",
-    subject_id: taskId,
-    author_id: user.id,
-    author_name: profile?.name ?? user.email ?? "Usuario",
-    body: trimmed,
-    // Las dos: `mentions` sostiene el histórico ya escrito y lo que se pinta;
-    // `mentioned_user_ids` sostiene la bandeja (migración 0037).
-    mentions,
-    mentioned_user_ids: mentionedUserIds
-  });
+  const { data: creado, error } = await supabase
+    .from("comments")
+    .insert({
+      subject_type: "task",
+      subject_id: taskId,
+      author_id: user.id,
+      author_name: profile?.name ?? user.email ?? "Usuario",
+      body: trimmed,
+      // Las dos: `mentions` sostiene el histórico ya escrito y lo que se pinta;
+      // `mentioned_user_ids` sostiene la bandeja (migración 0037).
+      mentions,
+      mentioned_user_ids: mentionedUserIds
+    })
+    // El id hace falta para la clave de idempotencia del aviso
+    // (`mention:<comment_id>`): sin él, un reintento sonaría dos veces.
+    .select("id")
+    .single();
   if (error) throw new Error(error.message);
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "comment.add", object: taskId, meta: { mentions } });
@@ -377,6 +429,22 @@ export async function addTaskComment(taskId: string, body: string) {
     // automatización es del usuario, y «cuando me mencionen» significa a él.
     mentionsMe: mentionedUserIds.includes(user.id)
   });
+
+  // El aviso al teléfono de los mencionados. Va al final y no lanza: el
+  // comentario ya está guardado, y que APNs esté caído no puede convertir eso
+  // en un error en pantalla.
+  if (creado && mentionedUserIds.length) {
+    await notifyMentions({
+      commentId: creado.id,
+      subjectType: "task",
+      subjectId: taskId,
+      subjectTitle: task.title,
+      authorId: user.id,
+      authorName: profile?.name ?? "Alguien",
+      body: trimmed,
+      mentionedUserIds
+    });
+  }
 
   revalidatePath("/execution");
 }
