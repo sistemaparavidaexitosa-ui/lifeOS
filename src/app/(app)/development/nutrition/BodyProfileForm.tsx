@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Field, FormActions } from "../FormSheet";
+import FormSheet, { Field, FormActions } from "../FormSheet";
 import { upsertBodyProfile } from "./actions";
 
 export interface PerfilActual {
@@ -24,7 +24,24 @@ const ACTIVIDADES: [string, string][] = [
   ["Muy alto", "Muy alto — trabajo físico o dos sesiones"]
 ];
 
-export default function BodyProfileForm({ perfil, close }: { perfil: PerfilActual | null; close: () => void }) {
+/**
+ * El panel lo abre ESTE componente, no la página.
+ *
+ * `FormSheet` recibe sus hijos como función (`(close) => …`), y una función no
+ * se puede pasar de un Server Component a uno de cliente: React lanza
+ * «Functions are not valid as a child of Client Components» y la página
+ * devuelve 500. Por eso todos los formularios del módulo envuelven su propio
+ * FormSheet y la página solo los renderiza — mismo reparto que `HabitForm`.
+ */
+export default function BodyProfileForm({ perfil }: { perfil: PerfilActual | null }) {
+  return (
+    <FormSheet label={perfil ? "Perfil" : "Crear perfil"} title="Perfil corporal" variant={perfil ? "ghost" : "primary"}>
+      {(close) => <BodyProfileFields perfil={perfil} close={close} />}
+    </FormSheet>
+  );
+}
+
+function BodyProfileFields({ perfil, close }: { perfil: PerfilActual | null; close: () => void }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 

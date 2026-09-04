@@ -611,6 +611,39 @@ comprobar eso, que es lo que de verdad protege el invariante.
   del layout está puesto y el build genera la ruta, pero la respuesta HTTP no se
   comprobó con una sesión real.
 
+## La página de Nutrición devolvía 500, y por qué no lo vio ninguna herramienta (4-sep-2026)
+
+### Lo que se ejecutó, y esta vez sí con una sesión real
+
+Se levantó `pnpm dev`, se pidió un token al GoTrue local con el usuario de la
+semilla y se armó a mano la cookie de `@supabase/ssr` (`sb-127-auth-token`,
+`base64-` + JSON de la sesión). Con esa cookie:
+
+| Ruta | Antes | Después |
+|---|---|---|
+| sonda con el patrón exacto (función como hijo) | **500** | — (borrada) |
+| `/development/nutrition` | **500** | ✅ 200, con las cuatro comidas, «Crear perfil», «Anotar peso», «Adherencia» y «Este mes» |
+| `/development`, `/development/routines`, `/development/goals`, `/development/library`, `/home`, `/settings`, `/intelligence/memory` | — | ✅ 200 |
+
+### Por qué no lo vio nada
+
+El error es `Functions are not valid as a child of Client Components`, y lo
+lanza React al RENDERIZAR. `tsc`, `lint` y `next build` pasan los tres: la
+página es dinámica, así que no se prerenderiza y nadie la ejecuta hasta que
+llega una petición. **`pnpm verify` no lo habría cazado nunca.**
+
+Se comprobó primero con una sonda mínima —un Server Component pasándole a
+`FormSheet` un hijo-función— para no arreglar a ciegas: 500 y el mensaje
+exacto. La hipótesis anterior (faltaban las migraciones) era cierta pero **no
+era la causa de esta pantalla**: aplicarlas no la arregló, y eso fue lo que
+obligó a volver a empezar en vez de seguir insistiendo.
+
+### Lo que esto añade a la lista de siempre
+
+«El recorrido en un navegador» dejaba de ser una nota al pie: es la única forma
+de ver esta clase de fallo. Queda como paso obligatorio antes de dar por
+terminada una pantalla nueva, y la receta de la cookie está descrita arriba.
+
 ## Producción: primera llamada real al modelo, y las migraciones que faltaban (4-sep-2026)
 
 Esta sección corrige por fin la frase que este archivo repetía desde agosto

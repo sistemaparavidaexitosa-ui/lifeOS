@@ -1,14 +1,23 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Field, FormActions } from "../FormSheet";
+import FormSheet, { Field, FormActions } from "../FormSheet";
 import { upsertWeight } from "./actions";
 
 /**
  * El peso de hoy. Un `upsert` por (usuario, día): pesarse dos veces la misma
  * mañana no son dos datos, es el mismo corregido.
  */
-export default function WeightForm({ actual, close }: { actual: number | null; close: () => void }) {
+/** El panel lo abre este componente; la página no puede pasar la función hija. */
+export default function WeightForm({ actual }: { actual: number | null }) {
+  return (
+    <FormSheet label="Anotar peso" title="Peso de hoy">
+      {(close) => <WeightFields actual={actual} close={close} />}
+    </FormSheet>
+  );
+}
+
+function WeightFields({ actual, close }: { actual: number | null; close: () => void }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 

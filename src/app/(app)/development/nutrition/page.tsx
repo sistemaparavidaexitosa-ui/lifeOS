@@ -20,7 +20,7 @@ import {
   type NutritionGoal,
   type Sex
 } from "@/lib/domain/development/nutrition.ts";
-import FormSheet, { CardHeader, ModuleNote, SectionHeader } from "../FormSheet";
+import { CardHeader, ModuleNote, SectionHeader } from "../FormSheet";
 import BodyProfileForm from "./BodyProfileForm";
 import WeightForm from "./WeightForm";
 import FoodSearchForm from "./FoodSearchForm";
@@ -150,11 +150,7 @@ export default async function NutritionPage({ searchParams }: { searchParams: Pr
               "Sin perfil corporal"
             )
           }
-          action={
-            <FormSheet label={perfil ? "Perfil" : "Crear perfil"} title="Perfil corporal" variant={perfil ? "ghost" : "primary"}>
-              {(close) => <BodyProfileForm perfil={perfilLike ? { ...perfilLike } : null} close={close} />}
-            </FormSheet>
-          }
+          action={<BodyProfileForm perfil={perfilLike ? { ...perfilLike } : null} />}
         />
 
         {objetivos && progreso ? (
@@ -191,11 +187,7 @@ export default async function NutritionPage({ searchParams }: { searchParams: Pr
             <CardHeader
               title={comida}
               meta={`${porComida[comida].kcal} kcal`}
-              action={
-                <FormSheet label="+ Añadir" title={`Añadir a ${comida.toLowerCase()}`}>
-                  {(close) => <FoodSearchForm localDate={dia} meal={comida} close={close} />}
-                </FormSheet>
-              }
+              action={<FoodSearchForm localDate={dia} meal={comida} />}
             />
             <div className="flex flex-col gap-1 mt-2.5">
               {suyas.length ? (
@@ -214,11 +206,7 @@ export default async function NutritionPage({ searchParams }: { searchParams: Pr
         <CardHeader
           title="Peso y constancia"
           meta={peso !== null ? `${peso} kg` : "Sin mediciones"}
-          action={
-            <FormSheet label="Anotar peso" title="Peso de hoy">
-              {(close) => <WeightForm actual={peso} close={close} />}
-            </FormSheet>
-          }
+          action={<WeightForm actual={peso} />}
         />
         <div className="flex gap-2 flex-wrap mt-2.5">
           <Stat label="Adherencia (30 d)" value={`${adherencia} %`} />

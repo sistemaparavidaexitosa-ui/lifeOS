@@ -1817,6 +1817,26 @@ de lo que se planeó, no de lo que quedó._
   índice del valor— es, por segunda vez (ver D-087), lo que hizo que el
   diagnóstico viniera dicho.
 
+- **D-107 · El `FormSheet` lo abre el formulario, nunca la página.** La página de
+  Nutrición devolvía 500 en producción con «Functions are not valid as a child
+  of Client Components»: un Server Component no puede pasarle a un componente
+  de cliente un hijo que es una función, y `FormSheet` recibe los suyos como
+  `(close) => …`.
+
+  Lo revelador es que **el repo ya lo hacía bien en todas partes y sin decirlo**:
+  `goals/page.tsx`, `routines/page.tsx`, `library/page.tsx` y el panel importan
+  de `FormSheet.tsx` únicamente los helpers (`CardHeader`, `ModuleNote`,
+  `SectionHeader`), y el panel siempre lo abre un componente de cliente —
+  `HabitForm`, `GoalForm`, `BookForm`—. Era una convención sostenida por
+  costumbre, y la primera pantalla que no la conocía se cayó.
+
+  Ahora `BodyProfileForm`, `WeightForm` y `FoodSearchForm` son dueños de su
+  propio `FormSheet` y la página solo los renderiza. Queda escrito aquí porque
+  **ni `tsc` ni `lint` ni `next build` lo detectan**: la página es dinámica, así
+  que el error solo aparece al renderizarla con una petición real. La forma de
+  cazarlo es cargar la ruta con una sesión, y eso es ahora parte de lo que hay
+  que hacer antes de dar una pantalla por terminada.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo
