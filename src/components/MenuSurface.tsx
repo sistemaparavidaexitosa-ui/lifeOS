@@ -76,6 +76,28 @@ export default function MenuSurface({
   // la esquina superior izquierda hasta su sitio definitivo.
   useLayoutEffect(place, [place]);
 
+  /**
+   * Reposicionar cuando cambia el TAMAÑO del menú, no solo cuando se mueve el
+   * ancla.
+   *
+   * Los popovers del tablero tienen contenido de altura fija, así que colocar
+   * una vez bastaba. El menú de menciones no: pasa de seis candidatos a uno
+   * mientras escribes, y con `data-placement="top"` la posición es
+   * `a.top - GAP - s.height` — depende de la altura. Sin esto, el menú
+   * conservaba el `top` calculado para la altura anterior y quedaba flotando
+   * separado del campo. Se veía sobre todo en el teléfono, porque allí el
+   * campo está al final de un hilo largo y casi siempre voltea hacia arriba.
+   */
+  useEffect(() => {
+    const surface = surfaceRef.current;
+    if (!surface || typeof ResizeObserver === "undefined") return;
+    // Reposicionar no cambia el tamaño (el alto sale del contenido y el ancho
+    // es una prop), así que esto no puede realimentarse.
+    const observer = new ResizeObserver(place);
+    observer.observe(surface);
+    return () => observer.disconnect();
+  }, [place]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
