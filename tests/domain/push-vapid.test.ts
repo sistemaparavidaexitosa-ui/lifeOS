@@ -153,3 +153,40 @@ test("jwkFromPrivateKey rechaza una pública que no es un punto sin comprimir", 
     /65 octetos|sin comprimir/i
   );
 });
+
+// ─── ¿Son pareja las dos mitades? ───────────────────────────────────────────
+//
+// Hay DOS causas para que el servicio de push conteste 401/403, con arreglos
+// distintos, y el código de estado no las distingue:
+//
+//   a) la pública y la privada configuradas no son pareja → hay que corregir
+//      las variables de entorno;
+//   b) sí lo son, pero el dispositivo se suscribió con una clave ANTERIOR →
+//      hay que desactivar y volver a activar en ese dispositivo.
+//
+// Confundirlas cuesta horas, así que se comprueba (a) antes de enviar.
+
+test("isVapidPair distingue un par correcto de dos mitades que no casan", async () => {
+  const { isVapidPair, jwkFromPrivateKey } = await import("../../src/lib/domain/push/vapid.ts");
+
+  const crear = async () => {
+    const par = (await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+      "sign",
+      "verify"
+    ])) as CryptoKeyPair;
+    return {
+      jwk: await crypto.subtle.exportKey("jwk", par.privateKey),
+      publica: toBase64Url(new Uint8Array(await crypto.subtle.exportKey("raw", par.publicKey)))
+    };
+  };
+
+  const uno = await crear();
+  const otro = await crear();
+
+  assert.equal(await isVapidPair(uno.jwk, uno.publica), true, "un par legítimo debería validar");
+
+  // El caso real que motivó esto: la `d` de un par con la pública de otro. Es
+  // lo que pasa al cambiar de par y actualizar solo una de las dos variables.
+  const mezclado = jwkFromPrivateKey(uno.jwk.d as string, otro.publica);
+  assert.equal(await isVapidPair(mezclado, otro.publica), false, "dos mitades de pares distintos NO son pareja");
+});

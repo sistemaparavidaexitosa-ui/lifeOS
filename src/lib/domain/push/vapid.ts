@@ -55,6 +55,50 @@ export function jwkFromPrivateKey(privateKeyBase64Url: string, publicKeyBase64Ur
   };
 }
 
+/**
+ * ¿La privada y la pública configuradas son realmente pareja?
+ *
+ * Firma con una y verifica con la otra. No hay atajo aritmético: WebCrypto no
+ * expone la multiplicación escalar que haría falta para derivar el punto
+ * público desde `d`, así que la única comprobación posible es usarlas.
+ *
+ * POR QUÉ MERECE LA PENA HACERLO ANTES DE ENVIAR
+ * FCM y APNs contestan 401/403 a DOS problemas distintos que se arreglan de
+ * forma distinta: que las llaves no casen entre sí (se corrigen las variables)
+ * o que el dispositivo se suscribiera con una clave anterior (se desactiva y se
+ * vuelve a activar allí). El código de estado no los separa; esto sí.
+ *
+ * Ojo con la trampa que hace falsamente tranquilizador un JWK: si `x` e `y` se
+ * reconstruyen desde la pública (`jwkFromPrivateKey`), SIEMPRE coincidirán con
+ * ella. Lo que puede no casar es `d`, y eso solo se ve firmando.
+ */
+export async function isVapidPair(privateJwk: JsonWebKey, publicKeyBase64Url: string): Promise<boolean> {
+  try {
+    const privada = await crypto.subtle.importKey("jwk", privateJwk, { name: "ECDSA", namedCurve: "P-256" }, false, [
+      "sign"
+    ]);
+    const publica = await crypto.subtle.importKey(
+      "raw",
+      fromBase64Url(publicKeyBase64Url) as unknown as ArrayBuffer,
+      { name: "ECDSA", namedCurve: "P-256" },
+      false,
+      ["verify"]
+    );
+
+    const muestra = new TextEncoder().encode("vapid-pair-check");
+    const firma = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, privada, muestra);
+    return await crypto.subtle.verify(
+      { name: "ECDSA", hash: "SHA-256" },
+      publica,
+      firma,
+      muestra as unknown as ArrayBuffer
+    );
+  } catch {
+    // Una clave que ni siquiera importa tampoco es pareja de nada.
+    return false;
+  }
+}
+
 export interface VapidCredentials {
   /** JWK completo de la clave privada P-256 (ver `requireVapidKeys`). */
   privateJwk: JsonWebKey;
