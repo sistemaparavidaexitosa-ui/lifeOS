@@ -75,13 +75,32 @@ if (!esPareja) {
   throw new Error("La privada y la pública NO son pareja. No uses estas claves.");
 }
 
+// Los dos destinos piden el MISMO valor con distinta envoltura, y mezclarlos
+// es un error real que ya ocurrió: en un archivo .env el JWK va entre comillas
+// simples (si no, el `#` o los espacios podrían cortarlo), pero el formulario
+// de Vercel guarda lo que pegues TAL CUAL — comillas incluidas—, y entonces
+// JSON.parse revienta. Por eso se imprimen por separado en vez de una lista
+// que sirva "para los dos".
 console.log(`
 ✓ Comprobado: la privada reimportada firma y la pública la verifica (65 octetos, firma de 64).
-Pega esto en .env.local (y en las variables de Vercel):
+
+━━ Para .env.local (aquí el JWK VA entre comillas) ━━
 
 NEXT_PUBLIC_VAPID_PUBLIC_KEY=${publicB64}
 VAPID_PRIVATE_JWK='${JSON.stringify(privateJwk)}'
 VAPID_SUBJECT=mailto:tu-correo@ejemplo.com
+
+━━ Para Vercel — Settings › Environment Variables ━━
+   Un valor por campo, SIN comillas. El JWK empieza por { y termina en }.
+
+NEXT_PUBLIC_VAPID_PUBLIC_KEY
+${publicB64}
+
+VAPID_PRIVATE_JWK
+${JSON.stringify(privateJwk)}
+
+VAPID_SUBJECT
+mailto:tu-correo@ejemplo.com
 
 ⚠️  VAPID_PRIVATE_JWK es un SECRETO: nunca con prefijo NEXT_PUBLIC_, nunca en git.
 ⚠️  Si algún día lo cambias, TODAS las suscripciones existentes dejan de valer y

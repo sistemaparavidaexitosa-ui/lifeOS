@@ -133,11 +133,27 @@ export function requireVapidKeys(): { privateJwk: JsonWebKey; publicKey: string;
     );
   }
 
+  // Se quitan las comillas envolventes antes de parsear, y no es indulgencia
+  // gratuita: `scripts/generate-vapid.mjs` imprime la línea lista para pegar en
+  // `.env.local`, donde el JWK VA entre comillas simples. Quien copie esa misma
+  // línea al formulario de Vercel guarda el valor literal —comillas incluidas—
+  // y JSON.parse falla con un mensaje que no señala la causa. Aceptar las dos
+  // formas cuesta una línea; diagnosticarlo cuesta una tarde.
+  const limpio = raw.trim().replace(/^(['"])([\s\S]*)\1$/, "$2");
+
   let privateJwk: JsonWebKey;
   try {
-    privateJwk = JSON.parse(raw) as JsonWebKey;
+    privateJwk = JSON.parse(limpio) as JsonWebKey;
   } catch {
-    throw new Error("VAPID_PRIVATE_JWK no es un JSON válido. Debe ser el JWK completo que imprime `node scripts/generate-vapid.mjs`.");
+    throw new Error(
+      `VAPID_PRIVATE_JWK no es un JSON válido (empieza por «${limpio.slice(0, 12)}…»). Debe ser el objeto completo que imprime \`node scripts/generate-vapid.mjs\`, empezando por { y terminando en }.`
+    );
+  }
+
+  // Un JWK que parsea pero no es una clave privada EC pasaría hasta `importKey`
+  // y fallaría allí con un error de WebCrypto que no menciona la variable.
+  if (privateJwk.kty !== "EC" || !privateJwk.d) {
+    throw new Error("VAPID_PRIVATE_JWK parsea pero no es una clave privada EC (falta `kty: \"EC\"` o el componente `d`).");
   }
 
   const publicKey = publicEnv.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
