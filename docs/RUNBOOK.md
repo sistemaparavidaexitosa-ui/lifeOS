@@ -60,6 +60,51 @@ TODOS los errores de una vez, arréglalos juntos, y solo entonces corre
 4. Si se confirma una política RLS faltante, aplica el fix como migración
    nueva (nunca edites una migración ya aplicada) y despliega de inmediato.
 
+## No me llegan las notificaciones
+
+Se comprueba en este orden, de fuera hacia dentro. Cada paso descarta el
+siguiente.
+
+1. **¿El dispositivo está suscrito?** Configuración → Notificaciones. Si dice
+   «Activar en este dispositivo», es que no lo está: la suscripción es del
+   NAVEGADOR, no de la cuenta, así que activarla en el portátil no activa el
+   teléfono.
+2. **¿Es un iPhone sin instalar?** iOS solo entrega Web Push a una app añadida
+   a la pantalla de inicio (16.4+). En Safari normal no llega nada y no hay
+   nada que arreglar en el servidor. La pantalla de Configuración lo detecta y
+   enseña los pasos.
+3. **¿Está bloqueado el permiso?** Si el usuario pulsó «Bloquear» alguna vez,
+   desde la app ya no se puede volver a preguntar: hay que hacerlo desde los
+   ajustes de sitio del navegador.
+4. **¿Hay fila en la base?**
+   ```sql
+   select endpoint, failure_count, last_seen_at from public.push_subscriptions where user_id = '<uuid>';
+   ```
+   Sin fila, el paso 1 no llegó a guardar. Con `failure_count` alto, el
+   servicio de push viene rechazando los envíos.
+5. **¿Se creó el aviso?**
+   ```sql
+   select kind, title, created_at, delivered_at, delivery_attempts
+   from public.notifications where user_id = '<uuid>' order by created_at desc limit 10;
+   ```
+   - Sin filas → el disparador no se ejecutó (mira el paso 7).
+   - Con `delivered_at` nulo y `delivery_attempts` ≥ 3 → se creó pero el envío
+     falló tres veces y se dejó de insistir. El aviso sigue en la campana.
+6. **¿Corre el reloj?** Solo afecta a recordatorios y vencimientos; las
+   menciones y asignaciones no lo usan.
+   ```sql
+   select jobname, active from cron.job where jobname = 'lifeos_push_dispatch';
+   select status, return_message, start_time from cron.job_run_details order by start_time desc limit 5;
+   ```
+   Si no existe el job, faltan los secretos en Vault (ver `/docs/DEPLOY.md`).
+7. **¿Están las llaves?** Sin `VAPID_PRIVATE_JWK` la app funciona igual y
+   `sendPush` devuelve `{sent: 0}` sin lanzar — a propósito. En Vercel:
+   Settings → Environment Variables.
+
+**Nunca es un bug**: el sonido personalizado (no existe en la web), la alarma
+insistente (`requireInteraction` solo funciona en escritorio), y que No Molestar
+retenga el aviso. Están dichos en la propia pantalla de Configuración.
+
 ## Runbook de datos faltantes
 
 Si `/reports` muestra "Datos faltantes: transacciones sin conciliar", es

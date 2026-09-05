@@ -1623,6 +1623,78 @@ export type Database = {
           },
         ]
       }
+      notification_prefs: {
+        Row: {
+          assignments: boolean
+          created_at: string
+          digest_hour: number
+          due_digest: boolean
+          mentions: boolean
+          reminders: boolean
+          user_id: string
+        }
+        Insert: {
+          assignments?: boolean
+          created_at?: string
+          digest_hour?: number
+          due_digest?: boolean
+          mentions?: boolean
+          reminders?: boolean
+          user_id: string
+        }
+        Update: {
+          assignments?: boolean
+          created_at?: string
+          digest_hour?: number
+          due_digest?: boolean
+          mentions?: boolean
+          reminders?: boolean
+          user_id?: string
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          body: string
+          created_at: string
+          dedupe_key: string
+          delivered_at: string | null
+          delivery_attempts: number
+          href: string
+          id: string
+          kind: string
+          read_at: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          body?: string
+          created_at?: string
+          dedupe_key: string
+          delivered_at?: string | null
+          delivery_attempts?: number
+          href: string
+          id?: string
+          kind: string
+          read_at?: string | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          dedupe_key?: string
+          delivered_at?: string | null
+          delivery_attempts?: number
+          href?: string
+          id?: string
+          kind?: string
+          read_at?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       nutrition_profiles: {
         Row: {
           activity_level: string
@@ -1926,6 +1998,42 @@ export type Database = {
           },
         ]
       }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          failure_count: number
+          id: string
+          last_seen_at: string
+          p256dh: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          failure_count?: number
+          id?: string
+          last_seen_at?: string
+          p256dh: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          failure_count?: number
+          id?: string
+          last_seen_at?: string
+          p256dh?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       reading_plan_weeks: {
         Row: {
           book_id: string
@@ -2014,6 +2122,8 @@ export type Database = {
           created_at: string
           done: boolean
           id: string
+          notified_at: string | null
+          remind_at: string | null
           remind_on: string
           subject_id: string
           subject_type: string
@@ -2024,6 +2134,8 @@ export type Database = {
           created_at?: string
           done?: boolean
           id?: string
+          notified_at?: string | null
+          remind_at?: string | null
           remind_on: string
           subject_id: string
           subject_type: string
@@ -2034,6 +2146,8 @@ export type Database = {
           created_at?: string
           done?: boolean
           id?: string
+          notified_at?: string | null
+          remind_at?: string | null
           remind_on?: string
           subject_id?: string
           subject_type?: string
@@ -2160,14 +2274,17 @@ export type Database = {
       task_assignees: {
         Row: {
           task_id: string
+          user_id: string | null
           user_name: string
         }
         Insert: {
           task_id: string
+          user_id?: string | null
           user_name: string
         }
         Update: {
           task_id?: string
+          user_id?: string | null
           user_name?: string
         }
         Relationships: [
@@ -2552,6 +2669,17 @@ export type Database = {
           tablename: string
           with_check: string
         }[]
+      }
+      enqueue_notification: {
+        Args: {
+          p_body: string
+          p_dedupe_key: string
+          p_href: string
+          p_kind: string
+          p_title: string
+          p_user_id: string
+        }
+        Returns: string
       }
       has_notebook_access: { Args: { p_notebook_id: string }; Returns: boolean }
       has_project_access: { Args: { p_project_id: string }; Returns: boolean }

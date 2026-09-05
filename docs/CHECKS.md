@@ -883,3 +883,46 @@ leyendo, no en pantalla — no habría saltado en `typecheck` ni en `lint`.
   la tarea propuesta están implementados y tipados, pero no usados.
 - **`pnpm verify` completo.** Se corrieron sus pasos por separado, como la vez
   anterior y por el mismo motivo: termina en `supabase db reset`.
+
+---
+
+## Notificaciones push (migraciones 0049–0052) — 4-sep-2026
+
+Entorno: máquina del owner, pila local de Supabase en Docker (`supabase_db_lifeos`).
+
+### ✅ EJECUTADO OK
+
+| Comprobación | Evidencia |
+|---|---|
+| `pnpm typecheck` | Limpio |
+| `pnpm lint` | `✔ No ESLint warnings or errors` |
+| `pnpm test:unit` | **688 pruebas en verde** (677 antes + 11 nuevas) |
+| `pnpm build` | `✓ Compiled successfully`; aparecen `/manifest.webmanifest` (estática) y `/api/push/{dispatch,pending,resubscribe}` |
+| **Cifrado RFC 8291** | `tests/domain/push-encrypt.test.ts` reproduce **octeto a octeto** el mensaje del §5 del RFC y la cabecera de 86 octetos del Apéndice A, con salt y clave efímera inyectados. Más una ida y vuelta que descifra con la clave del receptor |
+| **Firma VAPID** | `tests/domain/push-vapid.test.ts`: `aud` = origen (no la URL con el token), `exp` ≤ 24 h, firma de 64 octetos (r‖s, formato JOSE) que **verifica** contra la pública anunciada en `k=` |
+| Migraciones 0049–0052 | Aplicadas con `supabase migration up --local`. Antes se validaron dentro de una transacción revertida |
+| **pgTAP `0023_rls_notificaciones.sql`** | **10/10.** Incluye: nadie lee las `push_subscriptions` ajenas; `notifications` no admite INSERT directo (ni propio); `enqueue_notification` funciona entre compañeros de espacio y falla con un desconocido; la misma `dedupe_key` deja **una** fila |
+| **La carcasa PWA se sirve SIN sesión** | Contra el build de producción: `/manifest.webmanifest` → `200 application/manifest+json`; `/sw.js` → `200 application/javascript`; `/icons/icon-192.png` → `200 image/png`. Control: `/home` → `307` a `/login`. **Este era el fallo más probable de toda la feature** |
+| CSP | La respuesta lleva `worker-src 'self'` y `manifest-src 'self'` junto al `script-src ... 'strict-dynamic'` |
+| Autenticación del despachador | Sin `PUSH_DISPATCH_SECRET` → `503`; sin cabecera → `401`; cabecera incorrecta → `401`; correcta → `200` |
+| **Recordatorio a su hora** | Recordatorio con `remind_on = ayer`, `remind_at = 09:00` → el despachador creó la notificación con el `href` correcto y marcó `notified_at`. Segunda pasada: `0` |
+| **Resumen de vencimientos** | 2 tareas venciendo hoy + 1 atrasada, asignadas por `user_id` → **un solo** aviso: «3 tareas te esperan / 2 vencen hoy · 1 atrasada», `dedupe_key = due:2026-09-04`. Segunda pasada: no duplica |
+| Iconos | Los 5 PNG generados por `scripts/generate-icons.mjs` se abrieron y se vieron correctos |
+
+### ⚠️ NO EJECUTADO
+
+- **Un teléfono real.** No se ha activado el permiso ni ha sonado ningún
+  dispositivo. Todo lo verificable sin hardware está arriba —incluido que el
+  cuerpo cifrado coincide con el vector del RFC—, pero **la entrega de punta a
+  punta contra FCM o APNs no se ha probado**, y con ella el registro del
+  service worker en un navegador real, la instalación en iOS y el sonido. Es lo
+  primero que hay que hacer con las llaves VAPID puestas.
+- **Los disparadores de mención y de asignación end-to-end.** Están tipados,
+  enganchados y sus piezas (RPC, RLS, idempotencia) probadas en pgTAP, pero
+  nadie ha escrito un `@nombre` en un navegador con dos cuentas. El camino del
+  reloj sí se ejercitó entero contra la base real.
+- **`pg_cron` programando de verdad.** El bloque de la `0051` corrió y reportó
+  correctamente que faltan los secretos en Vault, así que **no hay job creado**.
+  Con Vault cargado no se ha probado.
+- **`pnpm verify` completo.** Se corrieron sus pasos por separado, por el mismo
+  motivo de siempre: termina en `supabase db reset`, que borra la base local.

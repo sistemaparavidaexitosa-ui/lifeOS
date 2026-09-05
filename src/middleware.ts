@@ -76,6 +76,14 @@ export async function middleware(request: NextRequest) {
     // Se sigue guardando la URL, no el archivo (D-002).
     `img-src 'self' data: blob:`,
     `font-src 'self' data:`,
+    // F5 (ampliación, notificaciones push): `worker-src` y `manifest-src` NO
+    // son opcionales aquí. `script-src` lleva `'strict-dynamic'`, que ANULA el
+    // `'self'` para todo lo que no venga de un script con nonce; y `worker-src`
+    // cae en cascada a `child-src` y de ahí a `script-src`. Sin declararlo
+    // aparte, `navigator.serviceWorker.register('/sw.js')` queda bloqueado por
+    // la CSP, y sin service worker no hay push en ningún teléfono.
+    `worker-src 'self'`,
+    `manifest-src 'self'`,
     `connect-src 'self' ${supabaseHost} https://*.supabase.co wss://*.supabase.co`,
     `frame-ancestors 'none'`,
     `base-uri 'self'`,
@@ -148,10 +156,23 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
   const isAuthRoute = pathname.startsWith("/login") || pathname.startsWith("/auth");
-  const isPublicAsset = pathname.startsWith("/_next") || pathname.startsWith("/favicon");
+  // La carcasa de la PWA es pública a la fuerza. El navegador pide `/sw.js` y
+  // `/manifest.webmanifest` en momentos en los que puede no haber sesión (antes
+  // de entrar, o al instalar desde la pantalla de inicio en iOS). Si se
+  // redirigen a /login, el navegador recibe HTML donde espera JSON o
+  // JavaScript: el manifest se ignora, el service worker no registra y NO HAY
+  // NINGÚN ERROR que apunte a la causa. Ninguno de estos archivos contiene
+  // dato alguno del usuario.
+  const isPwaShell =
+    pathname === "/sw.js" || pathname === "/manifest.webmanifest" || pathname.startsWith("/icons/");
+  const isPublicAsset = pathname.startsWith("/_next") || pathname.startsWith("/favicon") || isPwaShell;
   // `/api/health` es el smoke check post-deploy (DEPLOY.md paso 4): se
   // consulta desde fuera, sin sesión, y debe seguir respondiendo 200.
   const isHealthCheck = pathname === "/api/health";
+  // `/api/push/dispatch` lo invoca pg_cron desde la base, no un navegador: no
+  // hay cookie que valga. Lo que lo protege es `PUSH_DISPATCH_SECRET`, que la
+  // propia ruta compara en tiempo constante.
+  const isPushDispatch = pathname === "/api/push/dispatch";
   const isApiRoute = pathname.startsWith("/api/");
   // /invite/[token] es pública a propósito: el invitado llega desde el correo
   // SIN cuenta todavía. Si se redirigiera a /login, perdería el token y no
@@ -165,7 +186,16 @@ export async function middleware(request: NextRequest) {
   // el layout de (app) vuelve a comprobar la sesión y redirige por su cuenta
   // ("defensa en profundidad", app/(app)/layout.tsx), los Route Handlers
   // devuelven 401 solos, y por debajo de todo sigue estando RLS.
-  if (!user && authReachable && !isAuthRoute && !isPublicAsset && !isInvite && !isHealthCheck && pathname !== "/") {
+  if (
+    !user &&
+    authReachable &&
+    !isAuthRoute &&
+    !isPublicAsset &&
+    !isInvite &&
+    !isHealthCheck &&
+    !isPushDispatch &&
+    pathname !== "/"
+  ) {
     // Una ruta de API no se redirige a /login: quien la llama es `fetch`, no
     // un navegador, y recibiría el HTML del login con estado 200 en vez de un
     // error que pueda leer. Devuelve el mismo cuerpo que ya usan los Route
@@ -194,6 +224,6 @@ export const config = {
      * públicos, para no gastar el refresco de sesión en peticiones que no lo
      * necesitan.
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"
+    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.webmanifest|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"
   ]
 };

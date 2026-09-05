@@ -117,6 +117,66 @@ UI mostrará el motivo devuelto por el proveedor.
 `http://localhost:3000` (el default), los enlaces del correo no funcionarán
 para nadie más.
 
+## 1quater) Notificaciones push (que el teléfono suene)
+
+Opcional: sin esto la app funciona entera y no sale ningún aviso. Son cuatro
+variables y dos secretos en Vault.
+
+### a) Generar el par VAPID
+
+```bash
+node scripts/generate-vapid.mjs
+```
+
+Imprime las tres variables ya con el formato correcto. Pégalas en `.env.local`
+para desarrollo y en Vercel → Settings → Environment Variables para producción:
+
+| Variable | Qué es |
+|---|---|
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Pública de verdad: el navegador la necesita al suscribirse |
+| `VAPID_PRIVATE_JWK` | **Secreto.** JWK completo, en una sola variable |
+| `VAPID_SUBJECT` | `mailto:` o `https:`. Apple rechaza cualquier otra cosa |
+| `PUSH_DISPATCH_SECRET` | Lo único que protege `/api/push/dispatch`. `openssl rand -base64 32` |
+
+⚠️ Cambiar `VAPID_PRIVATE_JWK` invalida **todas** las suscripciones existentes:
+cada teléfono tendría que volver a activar las notificaciones.
+
+### b) Programar el reloj (Supabase → SQL Editor)
+
+La migración `0051` no lleva la URL ni el secreto dentro —quedarían en git—, así
+que los lee de Vault. Cárgalos una vez, con tu dominio real:
+
+```sql
+select vault.create_secret('https://tu-app.vercel.app/api/push/dispatch', 'push_dispatch_url');
+select vault.create_secret('<el mismo PUSH_DISPATCH_SECRET de Vercel>',   'push_dispatch_secret');
+```
+
+Y vuelve a ejecutar el bloque final de `0051` (o `supabase db push`) para que
+programe el job. Comprobación:
+
+```sql
+select jobname, schedule, active from cron.job where jobname = 'lifeos_push_dispatch';
+select * from cron.job_run_details order by start_time desc limit 5;
+```
+
+Si no cargas los secretos, la migración lo dice por consola y **no programa
+nada**: los avisos instantáneos (menciones, asignaciones) siguen funcionando;
+solo faltarían los recordatorios a su hora y el resumen de vencimientos.
+
+### c) Comprobar
+
+```bash
+curl -s -o /dev/null -w "%{http_code} %{content_type}\n" https://tu-app/manifest.webmanifest
+```
+
+Tiene que dar `200 application/manifest+json`. **Si sale un 307 hacia /login**,
+el middleware está interceptando la carcasa de la PWA y iOS no podrá instalar
+la app — revisa el `matcher` y `isPwaShell` en `src/middleware.ts`.
+
+Luego, en el teléfono: Configuración → Notificaciones → «Activar en este
+dispositivo» → «Enviar una de prueba». En iPhone hay que añadir antes la app a
+la pantalla de inicio; la propia pantalla lo explica si detecta que falta.
+
 ## 2) GitHub
 
 ```bash

@@ -64,11 +64,19 @@ Componente → Fuente de datos → Acción real.
 
 ## Privacidad (BR-012/019/020/027)
 
-**Intelligence OS es la única parte que envía datos fuera del servidor**, y solo
-cuando pulsas «Analizar»: viajan hechos ya calculados, en texto, con los nombres
+Dos partes de la app hablan con el exterior, y ninguna más.
+
+**1. Intelligence OS**, y solo cuando pulsas «Analizar»: viajan hechos ya calculados, en texto, con los nombres
 de cuentas y personas sustituidos por alias, y únicamente de los dominios que
 hayas encendido en Configuración (todos apagados por defecto). Nunca filas
 crudas de la base. El filtro vive en `src/lib/insights/context.ts`.
+
+**2. Las notificaciones push**, si las activas en un dispositivo. El aviso pasa
+por los servidores de Google (Android) o Apple (iPhone), que es el único camino
+que existe para hacer sonar un teléfono desde la web. **Su contenido va cifrado
+de extremo a extremo** (RFC 8291, `src/lib/domain/push/encrypt.ts`): ni Google
+ni Apple pueden leer quién te mencionó ni qué te dijo. Sí ven que hubo un aviso
+y cuándo. Nada de esto ocurre si no activas las notificaciones.
 
 ## Administración del catálogo de plantillas
 

@@ -53,6 +53,7 @@ export default function AiChatRail({
   const [proposal, setProposal] = useState<string | null>(null);
   const [created, setCreated] = useState(false);
   const [memoria, setMemoria] = useState<{ text: string; scope: string } | null>(null);
+  const [nota, setNota] = useState<string | null>(null);
   const [recordado, setRecordado] = useState(false);
   const [pending, startTransition] = useTransition();
 
@@ -106,6 +107,7 @@ export default function AiChatRail({
     setCreated(false);
     setMemoria(null);
     setRecordado(false);
+    setNota(null);
 
     startTransition(async () => {
       const result = await sendChatMessage(texto);
@@ -116,6 +118,7 @@ export default function AiChatRail({
       setMessages((prev) => [...prev, result.reply!]);
       setProposal(result.proposedTask ?? null);
       setMemoria(result.proposedMemory ?? null);
+      setNota(result.nota ?? null);
     });
   }
 
@@ -238,6 +241,12 @@ export default function AiChatRail({
         {recordado && (
           <div className="text-xs" style={{ color: "var(--muted)" }}>
             Guardado. Lo puedes editar o borrar en Inteligencia → Memoria.
+          </div>
+        )}
+
+        {nota && (
+          <div className="text-xs" style={{ color: "var(--warn)" }}>
+            {nota}
           </div>
         )}
 

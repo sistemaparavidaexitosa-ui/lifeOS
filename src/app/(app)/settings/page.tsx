@@ -5,6 +5,7 @@ import { Card } from "@/components/ui";
 import { updateProfile } from "./actions";
 import AiSettings from "./AiSettings";
 import Automations, { type AutomationRow } from "./Automations";
+import PushNotifications from "./PushNotifications";
 import type { ActionType, TriggerType } from "@/lib/domain/automations/rules.ts";
 import { getSessionUser } from "@/lib/data/session";
 import { isPlatformAdmin } from "@/lib/data/templates";
@@ -105,6 +106,11 @@ export default async function SettingsPage() {
         <a href="/time" className="btn-ghost btn-sm" style={{ marginTop: 10 }}>
           Editar en Autogestión del Tiempo
         </a>
+      </Card>
+
+      <Card>
+        <h3 className="font-bold mb-2">Notificaciones</h3>
+        <PushNotifications />
       </Card>
 
       <Card>
