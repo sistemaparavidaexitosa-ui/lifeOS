@@ -75,12 +75,15 @@ if (!esPareja) {
   throw new Error("La privada y la pública NO son pareja. No uses estas claves.");
 }
 
-// Los dos destinos piden el MISMO valor con distinta envoltura, y mezclarlos
-// es un error real que ya ocurrió: en un archivo .env el JWK va entre comillas
-// simples (si no, el `#` o los espacios podrían cortarlo), pero el formulario
-// de Vercel guarda lo que pegues TAL CUAL — comillas incluidas—, y entonces
-// JSON.parse revienta. Por eso se imprimen por separado en vez de una lista
-// que sirva "para los dos".
+// Los dos destinos reciben la MISMA clave en distinto formato, y no es un
+// capricho: en un archivo .env el JWK entrecomillado funciona, pero en el
+// formulario de Vercel no sobrevive. Su importador de .env quita las comillas
+// dobles del valor y, con un JSON, arrasa también las de dentro, dejando
+// `{kty:EC,...}`. Ocurrió dos veces.
+//
+// Por eso a Vercel se le da solo el componente `d`: 43 caracteres base64url,
+// sin llaves, comas ni comillas. No hay parser que pueda estropearlo, y
+// `requireVapidKeys()` reconstruye el resto desde la clave pública.
 console.log(`
 ✓ Comprobado: la privada reimportada firma y la pública la verifica (65 octetos, firma de 64).
 
@@ -91,13 +94,15 @@ VAPID_PRIVATE_JWK='${JSON.stringify(privateJwk)}'
 VAPID_SUBJECT=mailto:tu-correo@ejemplo.com
 
 ━━ Para Vercel — Settings › Environment Variables ━━
-   Un valor por campo, SIN comillas. El JWK empieza por { y termina en }.
+   Añádelas UNA A UNA en su campo. NO uses el importador de .env: su parser
+   quita las comillas dobles del valor, y con un JWK se lleva también las de
+   dentro. Por eso aquí la privada va sin puntuación ninguna.
 
 NEXT_PUBLIC_VAPID_PUBLIC_KEY
 ${publicB64}
 
 VAPID_PRIVATE_JWK
-${JSON.stringify(privateJwk)}
+${privateJwk.d}
 
 VAPID_SUBJECT
 mailto:tu-correo@ejemplo.com

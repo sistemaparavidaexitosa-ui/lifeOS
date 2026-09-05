@@ -11,7 +11,49 @@
 // Lógica pura: recibe las credenciales y devuelve una cadena. Ni red, ni
 // entorno, ni Supabase — quien lee las variables es `requireVapidKeys()`.
 
-import { toBase64Url } from "./base64url.ts";
+import { fromBase64Url, toBase64Url } from "./base64url.ts";
+
+/**
+ * Reconstruye el JWK de la clave privada a partir de su componente `d` y de la
+ * clave pública que ya tenemos configurada.
+ *
+ * POR QUÉ EXISTE
+ * La alternativa era guardar el JWK entero en la variable de entorno, y eso
+ * falló dos veces en la práctica: el objeto lleva llaves, comas y comillas, y
+ * al pegarlo en el importador masivo de variables de Vercel su parser quita las
+ * comillas dobles del valor —incluidas las de DENTRO— dejando `{kty:EC,...}`,
+ * que ya no es JSON. Un secreto que hay que transportar por un formulario web
+ * no puede depender de que sobreviva su puntuación.
+ *
+ * `d` en base64url son 43 caracteres sin un solo signo: no hay parser que se lo
+ * coma. Es además la forma que usa todo el ecosistema de Web Push.
+ *
+ * LA OBJECIÓN A ESTO ERA REAL Y SIGUE ATENDIDA: reconstruir una clave EC desde
+ * trozos sueltos es la fuente clásica de bugs, porque `x` e `y` mal alineados
+ * producen una firma inválida y un 401 mudo. Aquí no hay trozos sueltos —
+ * `x` e `y` salen del ÚNICO sitio donde ya viven, la clave pública, así que no
+ * pueden desincronizarse entre sí. Lo único que puede no casar es `d` con esa
+ * pública, que es exactamente lo que comprueba `generate-vapid.mjs` al crearlas.
+ */
+export function jwkFromPrivateKey(privateKeyBase64Url: string, publicKeyBase64Url: string): JsonWebKey {
+  const raw = fromBase64Url(publicKeyBase64Url);
+
+  // 0x04 ‖ X(32) ‖ Y(32): el formato «sin comprimir» de X9.62, que es el que
+  // anuncia el navegador al suscribirse.
+  if (raw.length !== 65 || raw[0] !== 0x04) {
+    throw new Error(
+      `La clave pública VAPID debe ser un punto sin comprimir de 65 octetos que empiece por 0x04 (recibidos ${raw.length}).`
+    );
+  }
+
+  return {
+    kty: "EC",
+    crv: "P-256",
+    d: privateKeyBase64Url.trim(),
+    x: toBase64Url(raw.slice(1, 33)),
+    y: toBase64Url(raw.slice(33, 65))
+  };
+}
 
 export interface VapidCredentials {
   /** JWK completo de la clave privada P-256 (ver `requireVapidKeys`). */

@@ -106,3 +106,50 @@ test("la firma verifica contra la clave pública anunciada en `k`", async () => 
 test("un endpoint que no es una URL falla claro, no produce un token inválido", async () => {
   await assert.rejects(() => vapidAuthorization("no-soy-una-url", CREDS), /endpoint/i);
 });
+
+// ─── La clave privada sin puntuación ────────────────────────────────────────
+//
+// El JWK completo lleva llaves, comas y comillas, y eso lo hace frágil de
+// transportar: pegado en el importador masivo de variables de Vercel, su
+// parser quita las comillas dobles del valor y se lleva también las de DENTRO,
+// dejando `{kty:EC,...}`, que ya no es JSON. Pasó de verdad, dos veces.
+//
+// La salida es aceptar solo el componente `d` —43 caracteres base64url, sin un
+// solo signo de puntuación— y reconstruir el resto desde la clave pública, que
+// ya tenemos y ya validamos. `x` e `y` NO se configuran aparte: salen de ese
+// único sitio, así que no pueden desincronizarse entre sí.
+
+test("jwkFromPrivateKey reconstruye una clave que firma de verdad", async () => {
+  const { jwkFromPrivateKey } = await import("../../src/lib/domain/push/vapid.ts");
+
+  // Un par real, para poder comprobar contra su propia mitad pública.
+  const par = (await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+    "sign",
+    "verify"
+  ])) as CryptoKeyPair;
+  const original = await crypto.subtle.exportKey("jwk", par.privateKey);
+  const publica = toBase64Url(new Uint8Array(await crypto.subtle.exportKey("raw", par.publicKey)));
+
+  // Solo se le da `d` y la pública: ni `x` ni `y`.
+  const reconstruido = jwkFromPrivateKey(original.d as string, publica);
+
+  assert.equal(reconstruido.x, original.x, "la X reconstruida no coincide con la original");
+  assert.equal(reconstruido.y, original.y, "la Y reconstruida no coincide con la original");
+
+  // Y la prueba que importa: firma con la reconstruida, verifica con la pública.
+  const clave = await crypto.subtle.importKey("jwk", reconstruido, { name: "ECDSA", namedCurve: "P-256" }, false, [
+    "sign"
+  ]);
+  const msg = new TextEncoder().encode("reconstruida");
+  const firma = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, clave, msg);
+  const ok = await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, par.publicKey, firma, msg);
+  assert.ok(ok, "la clave reconstruida no produce una firma válida");
+});
+
+test("jwkFromPrivateKey rechaza una pública que no es un punto sin comprimir", async () => {
+  const { jwkFromPrivateKey } = await import("../../src/lib/domain/push/vapid.ts");
+  await assert.rejects(
+    async () => jwkFromPrivateKey("loquesea", toBase64Url(new Uint8Array(64))),
+    /65 octetos|sin comprimir/i
+  );
+});
