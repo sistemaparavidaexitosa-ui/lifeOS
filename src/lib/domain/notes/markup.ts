@@ -51,8 +51,14 @@ export type Block =
 // escribir un asterisco literal. El resto del orden es el de siempre —
 // código antes que negrita, negrita antes que cursiva, enlace explícito
 // antes que enlace suelto.
-const ESCAPABLES = "\\`*~+[|";
-
+//
+// Los caracteres escapables son exactamente los de la primera alternativa:
+// \ ` * ~ + [ |
+// Viven ahí y sólo ahí a propósito. Tenerlos además en una constante aparte
+// crea dos fuentes de verdad que se desincronizan en silencio: la constante
+// diría una cosa y el motor haría otra, y quien la lea se fiará de la que no
+// manda. `escapeInlineText` escapa ese mismo conjunto, y las pruebas de ida y
+// vuelta son las que sujetan que las dos listas coincidan.
 const INLINE_PATTERN =
   /\\([\\`*~+[|])|`([^`\n]+)`|\*\*([^*\n]+)\*\*|\+\+([^+\n]+)\+\+|~~([^~\n]+)~~|\*([^*\n]+)\*|\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<]+)/g;
 

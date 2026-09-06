@@ -3398,3 +3398,70 @@ textarea:focus {
   border-radius: 6px;
   font-size: 14px;
 }
+
+/* ── Editor de notas: barra de formato ───────────────────────────────────── */
+.nb-formatbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  /* Sin teclado, la barra descansa sobre la zona de gestos del iPhone. */
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+.nb-formatbar-fila {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  overflow-x: auto;
+}
+.nb-fb {
+  min-width: 36px;
+  height: 34px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg);
+  font-size: 15px;
+  flex: none;
+}
+.nb-fb.activo {
+  background: var(--surface-2, rgba(127, 127, 127, 0.16));
+  font-weight: 700;
+}
+.nb-fb:disabled {
+  opacity: 0.35;
+}
+.nb-fb-bold { font-weight: 800; }
+.nb-fb-italic { font-style: italic; }
+.nb-fb-underline { text-decoration: underline; }
+.nb-fb-strike { text-decoration: line-through; }
+.nb-fb-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  flex: none;
+}
+.nb-fb-spacer { flex: 1 1 auto; }
+.nb-formatbar-menu {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--border);
+}
+.nb-fb-estilo {
+  padding: 10px 14px;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+}
+.nb-fb-estilo.activo {
+  background: var(--surface-2, rgba(127, 127, 127, 0.16));
+}
+/* El documento deja hueco para la barra: sin esto el último párrafo queda
+   debajo y no se puede escribir en él. */
+.nb-doc {
+  padding-bottom: 96px;
+}
