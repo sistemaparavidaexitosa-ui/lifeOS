@@ -3371,3 +3371,30 @@ textarea:focus {
   color: var(--muted);
   pointer-events: none;
 }
+
+/* ── Editor de notas: tablas en edición ───────────────────────────────────
+   Cualificados con .nb-prose para EMPATAR la especificidad de las reglas de
+   lectura (.nb-prose .nb-table th). Sin eso el `padding: 0` pierde y las
+   celdas quedan con doble relleno: el de la celda y el del contenteditable. */
+.nb-prose .nb-table-edit td,
+.nb-prose .nb-table-edit th {
+  padding: 0;
+}
+.nb-prose .nb-table-edit .nb-celda {
+  padding: 6px 10px;
+  min-width: 96px;
+}
+.nb-prose .nb-table-edit .nb-table-ctl {
+  border: 0;
+  width: 34px;
+  text-align: center;
+}
+.nb-table-ctl button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  font-size: 14px;
+}
