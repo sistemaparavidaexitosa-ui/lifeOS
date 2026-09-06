@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
 
@@ -21,9 +22,7 @@ export async function approveDailyPlan(formData: FormData) {
   });
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const { data: oneTask, error: oneTaskErr } = await supabase.from("tasks").select("id, title").eq("id", parsed.oneThingTaskId).single();
@@ -74,9 +73,7 @@ export async function closeoutTask(formData: FormData) {
   });
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const { data: task } = await supabase.from("tasks").select("status, version").eq("id", parsed.taskId).single();
@@ -103,9 +100,7 @@ export async function closeoutTask(formData: FormData) {
 export async function saveDailyLearning(text: string) {
   if (!text.trim()) return;
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   await supabase.from("logbook").insert({ user_id: user.id, type: "learning", text: text.trim() });
@@ -116,9 +111,7 @@ export async function saveDailyLearning(text: string) {
 /** FR-PLN-005, BR-004: la revisión semanal produce un snapshot APROBADO E INMUTABLE. */
 export async function approveWeeklyReview() {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const { data: tasks } = await supabase.from("tasks").select("id, status, project_id");

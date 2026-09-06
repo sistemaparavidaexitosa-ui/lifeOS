@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
 import { scalePer100g } from "@/lib/domain/development/nutrition.ts";
@@ -56,9 +57,7 @@ export async function upsertBodyProfile(formData: FormData): Promise<{ ok: boole
   }
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "No autenticado" };
 
   const { error } = await supabase.from("nutrition_profiles").upsert(
@@ -104,9 +103,7 @@ export async function upsertWeight(formData: FormData): Promise<{ ok: boolean; r
   if (!parsed.success) return { ok: false, reason: "El peso no es un valor válido." };
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "No autenticado" };
 
   const hoy = todayLocal(await getUserTimeZone());
@@ -187,9 +184,7 @@ export async function logFoodEntry(localDate: string, formData: FormData): Promi
   if (!fila) return { ok: false, reason: "Los valores nutricionales de ese alimento no cuadran." };
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "No autenticado" };
 
   const dia = /^\d{4}-\d{2}-\d{2}$/.test(localDate) ? localDate : todayLocal(await getUserTimeZone());
@@ -245,9 +240,7 @@ export async function logMealFromRoutine(
   formData: FormData
 ): Promise<{ ok: boolean; reason?: string }> {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "No autenticado" };
 
   const hoy = todayLocal(await getUserTimeZone());

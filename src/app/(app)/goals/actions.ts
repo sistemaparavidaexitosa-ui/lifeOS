@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 import { round2 } from "@/lib/domain/budget.ts";
 
 const goalSchema = z.object({
@@ -28,9 +29,7 @@ export async function upsertFinancialGoal(id: string | null, formData: FormData)
   });
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const payload = {

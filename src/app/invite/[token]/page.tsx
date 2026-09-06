@@ -10,6 +10,7 @@
 // enumerar miembros ni ver el correo invitado completo.
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 import { Card } from "@/components/ui";
 import { fdate } from "@/lib/format";
 import AcceptButton from "./AcceptButton";
@@ -18,13 +19,12 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
   const { token } = await params;
   const supabase = await createClient();
 
-  const [{ data: previewRows }, { data: auth }] = await Promise.all([
+  const [{ data: previewRows }, user] = await Promise.all([
     supabase.rpc("invitation_preview", { p_token: token }),
-    supabase.auth.getUser()
+    getSessionUser()
   ]);
 
   const preview = Array.isArray(previewRows) ? previewRows[0] : previewRows;
-  const user = auth?.user ?? null;
 
   if (!preview || preview.state === "NotFound") {
     return (

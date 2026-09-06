@@ -4,6 +4,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
 import { toggleHabitEffect, routineRunComplete, routineRunNeedsWrite } from "@/lib/domain/development/routines.ts";
@@ -33,9 +34,7 @@ export async function upsertRoutine(id: string | null, formData: FormData) {
   });
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const payload = {
@@ -157,9 +156,7 @@ export async function upsertHabit(routineId: string, id: string | null, formData
   });
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const payload = {
@@ -222,9 +219,7 @@ export async function deleteHabit(id: string) {
  */
 export async function toggleHabitToday(routineId: string, habitId: string) {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const today = todayLocal(await getUserTimeZone());
@@ -298,9 +293,7 @@ export async function createRoutineFromTemplate(
   if (!template) return { ok: false, reason: "Esa plantilla ya no existe." };
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "Tu sesión expiró. Vuelve a iniciar sesión." };
 
   const { data: routine, error } = await supabase

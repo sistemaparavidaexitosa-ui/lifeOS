@@ -13,6 +13,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 import { recordActivity } from "@/lib/data/activity";
 import { evaluateTransition } from "@/lib/domain/task-state.ts";
 import { STATUS_META } from "./status-meta";
@@ -22,9 +23,7 @@ const idListSchema = z.array(z.string().uuid()).min(1).max(500);
 
 async function requireUser() {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
   return { supabase, user };
 }

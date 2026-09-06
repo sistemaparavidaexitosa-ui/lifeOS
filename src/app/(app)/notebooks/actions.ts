@@ -10,6 +10,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 import { describeDbError, type ActionResult } from "@/lib/supabase/errors";
 
 /**
@@ -19,9 +20,7 @@ import { describeDbError, type ActionResult } from "@/lib/supabase/errors";
  */
 async function firmaDelUsuario(): Promise<{ id: string; name: string } | null> {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return null;
 
   const { data: profile } = await supabase.from("profiles").select("name").eq("user_id", user.id).single();

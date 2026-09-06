@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { isValidTimeZone } from "@/lib/domain/datetime.ts";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 
 const profileSchema = z.object({
   name: z.string().min(1),
@@ -25,9 +26,7 @@ export async function updateProfile(formData: FormData) {
     cycle: formData.get("cycle")
   });
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
   const { error } = await supabase.from("profiles").update(parsed).eq("user_id", user.id);
   if (error) throw new Error(error.message);
@@ -44,9 +43,7 @@ export async function updateProfile(formData: FormData) {
 
 export async function toggleTheme(theme: "light" | "dark") {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
   await supabase.from("profiles").update({ theme }).eq("user_id", user.id);
   revalidatePath("/settings");

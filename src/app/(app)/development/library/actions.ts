@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 import { todayLocal, weekStartISO } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
 import { isAllowedCoverUrl, BOOK_CATEGORIES, type BookCategory } from "@/lib/domain/development/book-lookup.ts";
@@ -82,9 +83,7 @@ export async function upsertBook(id: string | null, formData: FormData): Promise
   }
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "No autenticado." };
 
   const t0 = todayLocal(await getUserTimeZone());

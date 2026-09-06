@@ -8,6 +8,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 import { evaluateTransition } from "@/lib/domain/task-state.ts";
 import { DONE_EMOJI } from "@/lib/domain/execution/reactions.ts";
 import { presetDate, type ReminderPreset } from "@/lib/domain/execution/reminders.ts";
@@ -39,9 +40,7 @@ export async function toggleReaction(commentId: string, emoji: string, intent: "
   if (!parsed.success) return { ok: false, reason: "Reacción no válida." };
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "No autenticado" };
 
   await supabase
@@ -83,9 +82,7 @@ export async function reactDone(commentId: string, taskId: string, intent: "add"
   if (intent === "remove") return { ok: true };
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "No autenticado" };
 
   const { data: task } = await supabase.from("tasks").select("*").eq("id", taskId).single();
@@ -136,9 +133,7 @@ export async function pinCommentToLogbook(commentId: string, type: PinType): Pro
   if (!LOG_TYPES.includes(type)) return { ok: false, reason: "Tipo no válido." };
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "No autenticado" };
 
   const { data: comment } = await supabase
@@ -194,9 +189,7 @@ export async function createReminder(
   if (!PRESETS.includes(preset)) return { ok: false, reason: "Plazo no válido." };
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "No autenticado" };
 
   // El día se decide en la zona del perfil, no en la del servidor: con UTC, un
@@ -218,9 +211,7 @@ export async function createReminder(
 
 export async function completeReminder(id: string): Promise<void> {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return;
 
   await supabase.from("reminders").update({ done: true }).eq("id", id).eq("user_id", user.id);

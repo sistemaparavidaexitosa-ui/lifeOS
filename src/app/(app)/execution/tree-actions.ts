@@ -14,6 +14,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 import { recordActivity } from "@/lib/data/activity";
 
 const setParentSchema = z.object({
@@ -35,9 +36,7 @@ export async function setTaskParent(taskId: string, parentTaskId: string | null)
   }
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const { data: task } = await supabase.from("tasks").select("version, project_id").eq("id", parsed.taskId).single();
@@ -80,9 +79,7 @@ export async function setTaskGroup(taskId: string, groupId: string) {
   const parsed = setGroupSchema.parse({ taskId, groupId });
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const { data: task } = await supabase.from("tasks").select("version").eq("id", parsed.taskId).single();
@@ -108,9 +105,7 @@ export async function createTaskGroup(input: { projectId: string; name: string; 
   const parsed = createGroupSchema.parse(input);
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const { count } = await supabase
@@ -140,9 +135,7 @@ export async function renameTaskGroup(groupId: string, name: string) {
   const parsed = renameGroupSchema.parse({ groupId, name });
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   // El nombre anterior y el proyecto se leen antes del update: «renombró el
@@ -181,9 +174,7 @@ export async function deleteTaskGroup(groupId: string, fallbackGroupId: string) 
   }
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const { data: doomed } = await supabase.from("task_groups").select("name, project_id").eq("id", parsed.groupId).single();

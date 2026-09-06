@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 
 const memberSchema = z.object({
   name: z.string().min(1),
@@ -19,9 +20,7 @@ export async function upsertFamilyMember(id: string | null, formData: FormData) 
   });
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const payload = { name: parsed.name, relationship: parsed.relationship, member_type: parsed.memberType };
@@ -44,9 +43,7 @@ export async function upsertFamilyMember(id: string | null, formData: FormData) 
  */
 export async function deleteFamilyMember(id: string) {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const { error } = await supabase.from("family_members").delete().eq("id", id);

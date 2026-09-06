@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 import { round2 } from "@/lib/domain/budget.ts";
 
 const cardSchema = z.object({
@@ -24,9 +25,7 @@ export async function upsertCashbackCard(id: string | null, formData: FormData) 
   });
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const payload = {
@@ -60,9 +59,7 @@ export async function deleteCashbackCard(id: string) {
 export async function redeemCashback(cardId: string, amount: number) {
   if (amount <= 0) return;
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const { error } = await supabase.from("cashback_redemptions").insert({ card_id: cardId, amount: round2(amount) });

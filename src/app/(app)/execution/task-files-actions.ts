@@ -11,6 +11,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 
 const recordSchema = z.object({
   taskId: z.string().uuid(),
@@ -35,9 +36,7 @@ export async function recordTaskFileUpload(input: {
   const parsed = recordSchema.parse(input);
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const { error } = await supabase.from("task_files").insert({
@@ -69,9 +68,7 @@ export async function deleteTaskFile(fileId: string, storagePath: string) {
   const parsed = deleteSchema.parse({ fileId, storagePath });
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const { error: storageErr } = await supabase.storage.from("task-files").remove([parsed.storagePath]);

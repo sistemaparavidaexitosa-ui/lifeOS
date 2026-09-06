@@ -20,6 +20,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 import { actionFailed, actionOk, type ActionResult } from "@/lib/supabase/errors";
 import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
@@ -35,9 +36,7 @@ export async function updateActivityWindow(formData: FormData) {
   if (parsed.end <= parsed.start) throw new Error("El fin debe ser posterior al inicio (BR-017).");
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const { error } = await supabase
@@ -99,9 +98,7 @@ export async function upsertOccupation(id: string | null, formData: FormData): P
   if (parsed.end <= parsed.start) return { ok: false, reason: "El fin debe ser posterior al inicio." };
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "No autenticado." };
 
   const payload = {
@@ -132,9 +129,7 @@ export async function upsertOccupation(id: string | null, formData: FormData): P
 /** FR-HAB-006, BR-026: eliminar la ocupación NO borra los hábitos ligados (la FK ya usa ON DELETE SET NULL). */
 export async function deleteOccupation(id: string): Promise<ActionResult> {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "No autenticado." };
 
   const { error } = await supabase.from("occupations").delete().eq("id", id);
@@ -162,9 +157,7 @@ export async function assignTaskToDate(taskId: string, date: string) {
   const parsedDate = isoDate.parse(date);
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const isToday = parsedDate === todayLocal(await getUserTimeZone());
@@ -191,9 +184,7 @@ export async function assignTaskToSlot(taskId: string) {
  */
 export async function unassignTaskDue(taskId: string) {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const { error } = await supabase.from("tasks").update({ due: null, impact: false }).eq("id", taskId);

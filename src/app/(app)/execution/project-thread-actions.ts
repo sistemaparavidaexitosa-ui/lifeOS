@@ -22,6 +22,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 import { recordActivity } from "@/lib/data/activity";
 import { notifyMentions } from "@/lib/push/triggers";
 import { parseMentions, type RosterMember } from "@/lib/domain/execution/mentions.ts";
@@ -49,9 +50,7 @@ export async function getProjectThread(projectId: string): Promise<ProjectThread
   const id = z.string().uuid().parse(projectId);
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const { data: project, error: projectErr } = await supabase
@@ -120,9 +119,7 @@ export async function addProjectComment(projectId: string, body: string) {
   if (!trimmed) return;
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const { data: project } = await supabase.from("projects").select("id, title, workspace_id").eq("id", id).single();

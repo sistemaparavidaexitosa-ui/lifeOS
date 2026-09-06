@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
 import { loadFacts } from "./facts-loader";
@@ -54,9 +55,7 @@ const SCOPE_PATH: Record<Scope, string> = {
 
 export async function analyze(scope: Scope): Promise<AnalyzeResult> {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, created: 0, reason: "No autenticado" };
 
   const today = todayLocal(await getUserTimeZone());
@@ -235,9 +234,7 @@ export async function analyze(scope: Scope): Promise<AnalyzeResult> {
  */
 export async function setRecommendationStatus(id: string, to: RecommendationStatus): Promise<{ ok: boolean; reason?: string }> {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "No autenticado" };
 
   const { data: current } = await supabase.from("recommendations").select("status").eq("id", id).single();
@@ -310,9 +307,7 @@ export async function upsertMemoryItem(
   if (!(MEMORY_SCOPES as readonly string[]).includes(scope)) return { ok: false, reason: "Ámbito inválido." };
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "No autenticado" };
 
   const payload = { scope, text, valid_until: validUntilRaw || null };
@@ -344,9 +339,7 @@ export async function setAiDomains(formData: FormData): Promise<void> {
   const domains = (Object.keys(DOMAIN_LABEL) as Domain[]).filter((d) => formData.get(`domain.${d}`) === "on");
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return;
 
   await supabase.from("profiles").update({ ai_domains: domains }).eq("user_id", user.id);
@@ -366,9 +359,7 @@ export async function setAiDomains(formData: FormData): Promise<void> {
  */
 export async function clearAiHistory(): Promise<void> {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return;
 
   await supabase.from("recommendations").delete().eq("user_id", user.id);
@@ -383,9 +374,7 @@ export async function clearAiHistory(): Promise<void> {
 /** §4.4: borrar toda la memoria. */
 export async function clearMemory(): Promise<void> {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return;
 
   await supabase.from("memory_items").delete().eq("user_id", user.id);

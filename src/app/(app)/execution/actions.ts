@@ -2,6 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 import { getPersonalWorkspace } from "@/lib/data/workspaces";
 import { recordActivity } from "@/lib/data/activity";
 import { evaluateTransition } from "@/lib/domain/task-state.ts";
@@ -63,9 +64,7 @@ export async function createProject(formData: FormData) {
   });
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const workspaceId = parsed.workspaceId ?? (await getPersonalWorkspace())?.id;
@@ -158,9 +157,7 @@ export async function deleteProject(projectId: string) {
   const id = z.string().uuid().parse(projectId);
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   // El título y el espacio se leen ANTES de borrar: después no hay fila de la
@@ -255,9 +252,7 @@ export async function createTask(formData: FormData): Promise<CreatedTaskRow> {
   });
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   let resolvedGroupId: string | null = parsed.groupId ?? null;
@@ -347,9 +342,7 @@ export async function renameTask(taskId: string, title: string) {
   if (!trimmed) return;
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const { data: task } = await supabase.from("tasks").select("version").eq("id", taskId).single();
@@ -365,9 +358,7 @@ export async function renameTask(taskId: string, title: string) {
 /** Columna "Timeline" (migración 0018): actualiza el rango start_date/due de una tarea. */
 export async function updateTaskDates(taskId: string, startDate: string | null, due: string | null) {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const { data: task } = await supabase.from("tasks").select("version").eq("id", taskId).single();
@@ -384,9 +375,7 @@ export async function updateTaskDates(taskId: string, startDate: string | null, 
 /** FR-EXE-003/004/005: aplica la máquina de estados con validación real de dependencias. */
 export async function setTaskStatus(taskId: string, to: TaskStatus) {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const { data: task, error: taskErr } = await supabase.from("tasks").select("*").eq("id", taskId).single();
@@ -442,9 +431,7 @@ export async function requestProjectSequence(projectId: string) {
 /** BR-022, FR-INT-008: solo se llama tras la confirmación EXPLÍCITA del usuario. */
 export async function applyProjectSequence(projectId: string, order: string[]) {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "project.sequence.apply", object: projectId, meta: { order } });
@@ -452,9 +439,7 @@ export async function applyProjectSequence(projectId: string, order: string[]) {
 }
 export async function deleteTask(taskId: string) {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   // Igual que en deleteProject: el título se lee antes, o el evento se queda
@@ -509,9 +494,7 @@ export async function patchProject(projectId: string, patch: ProjectPatch) {
   const parsed = patchProjectSchema.parse({ projectId, ...patch });
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const { data: project } = await supabase.from("projects").select("version, title").eq("id", parsed.projectId).single();
@@ -555,9 +538,7 @@ export async function updateProject(formData: FormData) {
   });
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const { data: project } = await supabase

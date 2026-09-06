@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 import { round2 } from "@/lib/domain/budget.ts";
 
 const accountSchema = z.object({
@@ -21,9 +22,7 @@ export async function createAccount(formData: FormData) {
   });
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const { error } = await supabase.from("accounts").insert({
@@ -70,9 +69,7 @@ export async function postTransaction(formData: FormData) {
   });
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const effectiveAt = parsed.effectiveAt ?? new Date().toISOString().slice(0, 10);
@@ -147,9 +144,7 @@ export async function reconcileEntry(entryId: string) {
 /** BR: un movimiento publicado no se elimina, se reversa con un asiento inverso. */
 export async function reverseEntry(entryId: string) {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const { data: entry } = await supabase.from("journal_entries").select("*, journal_lines(*)").eq("id", entryId).single();

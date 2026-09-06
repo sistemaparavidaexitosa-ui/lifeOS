@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 import { sendPush } from "./send";
 
 /**
@@ -28,9 +29,7 @@ export async function savePushSubscription(
   userAgent?: string
 ): Promise<PushActionResult> {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "No autenticado" };
 
   const endpoint = subscription?.endpoint;
@@ -73,9 +72,7 @@ export async function savePushSubscription(
 
 export async function deletePushSubscription(endpoint: string): Promise<PushActionResult> {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "No autenticado" };
 
   // El `eq("user_id")` es redundante con la RLS y va igualmente: la política
@@ -98,10 +95,7 @@ export async function deletePushSubscription(endpoint: string): Promise<PushActi
  * a otra persona que te mencione.
  */
 export async function sendTestPush(): Promise<PushActionResult> {
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "No autenticado" };
 
   const resultado = await sendPush(user.id, {

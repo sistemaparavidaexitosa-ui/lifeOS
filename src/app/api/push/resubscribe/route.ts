@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 
 export const dynamic = "force-dynamic";
 
@@ -13,9 +14,7 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(request: Request) {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return NextResponse.json({ ok: false, reason: "No autenticado" }, { status: 401 });
 
   let cuerpo: { anterior?: string; nueva?: { endpoint?: string; keys?: { p256dh?: string; auth?: string } } };

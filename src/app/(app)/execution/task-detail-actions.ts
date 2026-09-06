@@ -9,6 +9,7 @@ import { z } from "zod";
 import { parseMentions, type RosterMember } from "@/lib/domain/execution/mentions.ts";
 import { dispatchAutomations } from "@/lib/automations/dispatch";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 import { recordActivity } from "@/lib/data/activity";
 import { notifyAssignments, notifyMentions } from "@/lib/push/triggers";
 import { todayLocal } from "@/lib/data/dates";
@@ -86,9 +87,7 @@ export interface TaskDetailResult {
 
 export async function getTaskDetail(taskId: string): Promise<TaskDetailResult> {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const { data: task, error: taskErr } = await supabase.from("tasks").select("*").eq("id", taskId).single();
@@ -201,9 +200,7 @@ export async function updateTaskDetails(formData: FormData) {
   });
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const { data: task, error: taskErr } = await supabase.from("tasks").select("version").eq("id", parsed.taskId).single();
@@ -243,9 +240,7 @@ export async function updateTaskDescription(taskId: string, description: string)
   const parsed = updateDescriptionSchema.parse({ taskId, description });
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const { data: task } = await supabase.from("tasks").select("version").eq("id", parsed.taskId).single();
@@ -263,9 +258,7 @@ export async function updateTaskDescription(taskId: string, description: string)
 
 export async function setTaskAssignees(taskId: string, userNames: string[]) {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const { data: task } = await supabase.from("tasks").select("id, project_id, title").eq("id", taskId).single();
@@ -348,9 +341,7 @@ export async function setTaskAssignees(taskId: string, userNames: string[]) {
 
 export async function setTaskDeps(taskId: string, depIds: string[]) {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const { data: task } = await supabase.from("tasks").select("version").eq("id", taskId).single();
@@ -369,9 +360,7 @@ export async function addTaskComment(taskId: string, body: string) {
   if (!trimmed) return;
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const { data: task } = await supabase.from("tasks").select("project_id, title").eq("id", taskId).single();

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 import { round2 } from "@/lib/domain/budget.ts";
 import { accountBalance, netWorth } from "@/lib/domain/money.ts";
 
@@ -24,9 +25,7 @@ export async function upsertAsset(id: string | null, formData: FormData) {
   });
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const payload = { name: parsed.name, kind: parsed.kind, value: round2(parsed.value), as_of: parsed.asOf, source: parsed.source };
@@ -50,9 +49,7 @@ export async function deleteAsset(id: string) {
 /** FR-WLT-002, BR-004: snapshot inmutable — nunca se edita destructivamente, se genera uno nuevo. */
 export async function createNetWorthSnapshot() {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const [{ data: accounts }, { data: entries }, { data: investments }, { data: assets }, { data: debts }, { data: liabilities }] = await Promise.all([

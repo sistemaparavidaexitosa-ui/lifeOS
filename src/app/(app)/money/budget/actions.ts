@@ -2,6 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 import { round2, carryoverOffered } from "@/lib/domain/budget.ts";
 import { quincenaFromKey, shiftQuincena } from "@/lib/domain/quincena.ts";
 
@@ -39,9 +40,7 @@ const createLineSchema = editLineSchema.extend({
  */
 export async function upsertBudgetLine(id: string | null, formData: FormData) {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   // ---------------------------------------------------------------------------
@@ -201,9 +200,7 @@ export async function applyCarryover(budgetId: string, periodKey: string) {
   const parsed = carryoverSchema.parse({ budgetId, periodKey });
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const amount = await computeCarryoverAmount(supabase, parsed.budgetId, parsed.periodKey);
@@ -230,9 +227,7 @@ export async function removeCarryover(budgetId: string, periodKey: string) {
   const parsed = carryoverSchema.parse({ budgetId, periodKey });
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const { error } = await supabase
@@ -267,9 +262,7 @@ export async function updateQuincenalIncome(formData: FormData) {
   const parsed = incomeSchema.parse({ quincenalIncome: formData.get("quincenalIncome") });
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const { error } = await supabase

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 import { evaluateTransition } from "@/lib/domain/task-state.ts";
 import { presetDate, type ReminderPreset } from "@/lib/domain/execution/reminders.ts";
 import { todayLocal } from "@/lib/data/dates";
@@ -32,9 +33,7 @@ import type { TaskStatus } from "@/lib/domain/types.ts";
 export async function dispatchAutomations(event: AutomationEvent): Promise<void> {
   try {
     const supabase = await createClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
+    const user = await getSessionUser();
     if (!user) return;
 
     const { data: rows } = await supabase

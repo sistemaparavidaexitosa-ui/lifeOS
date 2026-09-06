@@ -4,6 +4,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 
 const goalSchema = z.object({
   title: z.string().min(1),
@@ -23,9 +24,7 @@ export async function upsertPersonalGoal(id: string | null, formData: FormData) 
   });
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const payload = {
@@ -83,9 +82,7 @@ export async function upsertKeyResult(goalId: string, id: string | null, formDat
   });
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("No autenticado");
 
   const sourceId = parsed.sourceKind === "manual" ? null : parsed.sourceId || null;

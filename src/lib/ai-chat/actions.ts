@@ -14,6 +14,7 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
 import { loadFacts, type Db } from "@/lib/insights/facts-loader";
@@ -84,9 +85,7 @@ async function readHistory(supabase: Db): Promise<ChatMessage[]> {
 
 export async function loadChatHistory(): Promise<ChatMessage[]> {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return [];
   return readHistory(supabase);
 }
@@ -105,9 +104,7 @@ export async function sendChatMessage(text: string): Promise<SendResult> {
   if (!message.success) return { ok: false, reason: "Escribe algo primero." };
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "No autenticado" };
 
   // TODO LO QUE NO DEPENDE DE NADA, A LA VEZ — incluido guardar la pregunta.
@@ -306,9 +303,7 @@ export async function createMemoryFromChat(text: string, scope: string): Promise
  */
 export async function clearChat(): Promise<void> {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return;
 
   await supabase.from("ai_chat_messages").delete().eq("user_id", user.id);

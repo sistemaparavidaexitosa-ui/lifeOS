@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 import { searchFoods } from "@/lib/data/nutrition";
 
 export const dynamic = "force-dynamic";
@@ -21,10 +21,7 @@ export const dynamic = "force-dynamic";
  * inició sesión.
  */
 export async function GET(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) {
     return NextResponse.json({ ok: false, foods: [], reason: "No autenticado" }, { status: 401 });
   }
