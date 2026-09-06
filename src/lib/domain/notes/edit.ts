@@ -31,7 +31,7 @@ export function plainLength(content: Inline[]): number {
 
 /** Copia un fragmento cambiándole el texto y conservando lo demás (el href). */
 function conTexto(parte: Inline, text: string): Inline {
-  return parte.kind === "link" ? { ...parte, text } : { ...parte, text };
+  return { ...parte, text };
 }
 
 export function sliceInlines(content: Inline[], start: number, end: number): Inline[] {
@@ -100,16 +100,261 @@ export function applyMark(
   return fusionar(out);
 }
 
-/** Pega fragmentos contiguos del mismo tipo. Espeja a markup.ts. */
+/**
+ * Pega fragmentos contiguos del mismo tipo. Espeja a markup.ts.
+ *
+ * Los enlaces se funden entre sí sólo cuando comparten `href`: si no, marcar
+ * a medias un enlace lo partiría en varios nodos `link` con el mismo destino
+ * que ya nunca volverían a juntarse (y el serializador escribiría el mismo
+ * href repetido en vez de un único enlace).
+ */
 function fusionar(partes: Inline[]): Inline[] {
   const out: Inline[] = [];
   for (const parte of partes) {
     const previa = out[out.length - 1];
-    if (previa && previa.kind === parte.kind && parte.kind !== "link") {
+    if (previa && puedenFundirse(previa, parte)) {
       out[out.length - 1] = conTexto(previa, previa.text + parte.text);
       continue;
     }
     out.push(parte);
   }
   return out.length ? out : [{ kind: "text", text: "" }];
+}
+
+/** Dos fragmentos se funden si son del mismo tipo — y, si son enlaces, del mismo destino. */
+function puedenFundirse(a: Inline, b: Inline): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === "link" && b.kind === "link") return a.href === b.href;
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// OPERACIONES DE BLOQUE (Task 7)
+//
+// Lo de arriba edita el CONTENIDO de una línea (marcas). Lo de aquí abajo
+// edita la ESTRUCTURA del documento: qué estilo tiene un bloque, cómo lo
+// parte Enter, cómo lo funde Backspace. Reutiliza `plainLength` y
+// `sliceInlines` de más arriba en vez de reimplementar el recorte de texto.
+// ---------------------------------------------------------------------------
+
+/** Los estilos que ofrece el menú «Aa» del editor. */
+export type BlockStyle =
+  | "title"
+  | "heading"
+  | "subheading"
+  | "body"
+  | "mono"
+  | "quote"
+  | "bullets"
+  | "ordered"
+  | "todo"
+  | "table";
+
+/**
+ * Las líneas editables de un bloque, en el ORDEN en que el editor las pinta.
+ * El índice dentro de este arreglo ES el índice de línea que usan
+ * `splitBlock` y el cursor del editor: si este orden no coincide con el que
+ * pinta la pantalla, el cursor salta al sitio equivocado. Por eso una tabla
+ * devuelve primero el encabezado y luego las filas.
+ */
+export function textoDeBloque(block: Block): Inline[][] {
+  switch (block.kind) {
+    case "bullets":
+    case "ordered":
+      return block.items;
+    case "todo":
+      return block.items.map((item) => item.content);
+    case "table":
+      return [...block.head, ...block.rows.flat()];
+    case "mono":
+      return [[{ kind: "text", text: block.text }]];
+    default:
+      return [block.content];
+  }
+}
+
+/** El estilo del menú «Aa» que le corresponde al bloque tal como está. */
+export function styleOf(block: Block): BlockStyle {
+  switch (block.kind) {
+    case "heading":
+      return block.level === 1 ? "title" : block.level === 2 ? "heading" : "subheading";
+    case "bullets":
+      return "bullets";
+    case "ordered":
+      return "ordered";
+    case "todo":
+      return "todo";
+    case "quote":
+      return "quote";
+    case "mono":
+      return "mono";
+    case "table":
+      return "table";
+    default:
+      return "body";
+  }
+}
+
+/** El texto llano de una línea: concatena los fragmentos, sin separador. */
+function textoLlano(linea: Inline[]): string {
+  return linea.map((parte) => parte.text).join("");
+}
+
+/**
+ * Une varias líneas en un único `Inline[]`, separadas por un salto de línea
+ * que el párrafo (y el resto de bloques de una sola línea) sí respeta.
+ * Fusiona los fragmentos resultantes con `fusionar`, así que dos líneas de
+ * puro texto quedan como UN nodo — necesario para que el resultado sea
+ * idéntico al que produciría escribir ese texto de una sola vez, y también
+ * para normalizar el caso de cero líneas al nodo de texto vacío de siempre.
+ */
+function aplanar(lineas: Inline[][]): Inline[] {
+  const partes: Inline[] = [];
+  lineas.forEach((linea, i) => {
+    if (i > 0) partes.push({ kind: "text", text: "\n" });
+    partes.push(...linea);
+  });
+  return fusionar(partes);
+}
+
+/**
+ * Convierte un bloque a cualquier estilo. Es TOTAL a propósito: convertir
+ * cualquier bloque en cualquier estilo tiene que estar definido, incluidos
+ * tabla→texto y texto→tabla. La regla que lo gobierna todo: NUNCA se pierde
+ * texto — un caso sin definir aquí es un caso que el editor resolvería
+ * improvisando en producción.
+ */
+export function setBlockStyle(block: Block, style: BlockStyle): Block {
+  const lineas = textoDeBloque(block);
+  const primera = lineas[0] ?? [{ kind: "text" as const, text: "" }];
+
+  switch (style) {
+    case "title":
+      return { kind: "heading", level: 1, content: aplanar(lineas) };
+    case "heading":
+      return { kind: "heading", level: 2, content: aplanar(lineas) };
+    case "subheading":
+      return { kind: "heading", level: 3, content: aplanar(lineas) };
+    case "quote":
+      return { kind: "quote", content: aplanar(lineas) };
+    case "bullets":
+      return { kind: "bullets", items: lineas };
+    case "ordered":
+      return { kind: "ordered", items: lineas };
+    case "todo":
+      return { kind: "todo", items: lineas.map((content) => ({ done: false, content })) };
+    case "mono":
+      return { kind: "mono", text: lineas.map(textoLlano).join("\n") };
+    case "table":
+      // Una 2×2 con lo que había en la primera línea, como hace el iPhone.
+      return {
+        kind: "table",
+        head: [primera, [{ kind: "text", text: "" }]],
+        rows: [[[{ kind: "text", text: "" }], [{ kind: "text", text: "" }]]]
+      };
+    default:
+      // "body": ningún caso lo captura arriba, cae aquí a propósito.
+      return { kind: "paragraph", content: aplanar(lineas) };
+  }
+}
+
+/** Marca o desmarca el ítem `index` de una lista de casillas. No-op en cualquier otro bloque. */
+export function toggleTodo(block: Block, index: number): Block {
+  if (block.kind !== "todo") return block;
+  return {
+    kind: "todo",
+    items: block.items.map((item, i) => (i === index ? { ...item, done: !item.done } : item))
+  };
+}
+
+/**
+ * Enter. `itemIndex` es la línea dentro del bloque (0 salvo en listas y
+ * tablas), `offset` la posición del cursor en ella. Devuelve los dos
+ * bloques resultantes.
+ */
+export function splitBlock(block: Block, itemIndex: number, offset: number): [Block, Block] {
+  const lineas = textoDeBloque(block);
+  const linea = lineas[itemIndex] ?? [];
+  const izquierda = fusionar(sliceInlines(linea, 0, offset));
+  const derecha = fusionar(sliceInlines(linea, offset, plainLength(linea)));
+
+  switch (block.kind) {
+    case "bullets":
+    case "ordered":
+      return [
+        { kind: block.kind, items: [...lineas.slice(0, itemIndex), izquierda] },
+        { kind: block.kind, items: [derecha, ...lineas.slice(itemIndex + 1)] }
+      ];
+    case "todo":
+      return [
+        {
+          kind: "todo",
+          items: [...block.items.slice(0, itemIndex), { done: false, content: izquierda }]
+        },
+        {
+          kind: "todo",
+          items: [{ done: false, content: derecha }, ...block.items.slice(itemIndex + 1)]
+        }
+      ];
+    case "heading":
+      // Lo que hace el iPhone: el título no se propaga a la línea
+      // siguiente, que nace como Cuerpo.
+      return [{ ...block, content: izquierda }, { kind: "paragraph", content: derecha }];
+    case "mono":
+    case "table":
+      // Partir un bloque monoespaciado o una tabla por una "línea" no tiene
+      // un segundo bloque natural que crear (no hay marcas que cortar en el
+      // mono, ni una segunda tabla). Para no perder texto ni inventar una
+      // forma que no existe en el dialecto, ambos lados conservan el bloque
+      // intacto; es tarea del editor (fuera de esta pieza pura) decidir si
+      // ofrece Enter dentro de estos bloques.
+      return [block, block];
+    default:
+      // Sólo quedan "paragraph" y "quote": ambos tienen `content`.
+      return [
+        { ...block, content: izquierda },
+        { ...block, content: derecha }
+      ];
+  }
+}
+
+/**
+ * Backspace al inicio de `b`. Funde la última línea de `a` con la primera de
+ * `b`. Devuelve `null` cuando fundir no significa nada — con una tabla o un
+ * bloque monoespaciado — en cuyo caso quien llama sólo mueve el foco.
+ */
+export function mergeBlocks(a: Block, b: Block): Block | null {
+  if (a.kind === "table" || b.kind === "table") return null;
+  if (a.kind === "mono" || b.kind === "mono") return null;
+
+  const lineasA = textoDeBloque(a);
+  const lineasB = textoDeBloque(b);
+  const ultima = lineasA[lineasA.length - 1] ?? [];
+  const primera = lineasB[0] ?? [];
+  const fundida = fusionar([...ultima, ...primera]);
+  const restoB = lineasB.slice(1);
+
+  if (a.kind === "bullets" || a.kind === "ordered") {
+    return { kind: a.kind, items: [...lineasA.slice(0, -1), fundida, ...restoB] };
+  }
+
+  if (a.kind === "todo") {
+    const ultimoA = a.items[a.items.length - 1];
+    return {
+      kind: "todo",
+      items: [
+        ...a.items.slice(0, -1),
+        { done: ultimoA?.done ?? false, content: fundida },
+        ...restoB.map((content) => ({ done: false, content }))
+      ]
+    };
+  }
+
+  // Sólo quedan "heading", "paragraph" y "quote": bloques de una sola línea.
+  // El resto de líneas de `b` (sólo puede haberlas si `b` era una lista) no
+  // cabe en una única línea de estos bloques y se descarta a propósito: es
+  // lo mismo que hace el iPhone al fundir un párrafo con el primer ítem de
+  // una lista — sólo ese ítem se une, el resto de la lista queda para que el
+  // editor decida qué hacer con él.
+  return { ...a, content: fundida };
 }
