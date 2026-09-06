@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/data/session";
+import { describeDbError } from "@/lib/supabase/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +48,6 @@ export async function POST(request: Request) {
     { onConflict: "endpoint" }
   );
 
-  if (error) return NextResponse.json({ ok: false, reason: error.message }, { status: 500 });
+  if (error) return NextResponse.json({ ok: false, reason: describeDbError(error) }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

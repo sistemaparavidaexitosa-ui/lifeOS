@@ -8,6 +8,7 @@ import { getSessionUser } from "@/lib/data/session";
 import { todayForUser } from "@/lib/data/profile";
 import { scalePer100g } from "@/lib/domain/development/nutrition.ts";
 import { plausibleMacros } from "@/lib/domain/development/nutrition-lookup.ts";
+import { actionFailed, type ActionResult } from "@/lib/supabase/errors";
 
 /**
  * Acciones del diario de nutrición.
@@ -39,7 +40,7 @@ const perfilSchema = z.object({
   kcalOverride: z.coerce.number().int().min(1000).max(6000).nullable().optional()
 });
 
-export async function upsertBodyProfile(formData: FormData): Promise<{ ok: boolean; reason?: string }> {
+export async function upsertBodyProfile(formData: FormData): Promise<ActionResult> {
   const overrideCrudo = String(formData.get("kcalOverride") ?? "").trim();
   const parsed = perfilSchema.safeParse({
     sex: formData.get("sex"),
@@ -76,7 +77,7 @@ export async function upsertBodyProfile(formData: FormData): Promise<{ ok: boole
     },
     { onConflict: "user_id" }
   );
-  if (error) return { ok: false, reason: error.message };
+  if (error) return actionFailed(error);
 
   repintar();
   return { ok: true };
@@ -94,7 +95,7 @@ const pesoSchema = z.object({
  * guarda el vigente, porque el cálculo de objetivos no puede depender de que
  * exista una medición de hoy.
  */
-export async function upsertWeight(formData: FormData): Promise<{ ok: boolean; reason?: string }> {
+export async function upsertWeight(formData: FormData): Promise<ActionResult> {
   const grasaCruda = String(formData.get("bodyFatPct") ?? "").trim();
   const parsed = pesoSchema.safeParse({
     weightKg: formData.get("weightKg"),
@@ -117,7 +118,7 @@ export async function upsertWeight(formData: FormData): Promise<{ ok: boolean; r
     },
     { onConflict: "user_id,local_date" }
   );
-  if (error) return { ok: false, reason: error.message };
+  if (error) return actionFailed(error);
 
   await supabase.from("nutrition_profiles").update({ weight_kg: parsed.data.weightKg }).eq("user_id", user.id);
 
@@ -176,7 +177,7 @@ function filaDesde(parsed: z.infer<typeof entradaSchema>) {
   };
 }
 
-export async function logFoodEntry(localDate: string, formData: FormData): Promise<{ ok: boolean; reason?: string }> {
+export async function logFoodEntry(localDate: string, formData: FormData): Promise<ActionResult> {
   const parsed = leerEntrada(formData);
   if (!parsed.success) return { ok: false, reason: parsed.error.issues[0]?.message ?? "Revisa el alimento." };
 
@@ -201,13 +202,13 @@ export async function logFoodEntry(localDate: string, formData: FormData): Promi
   const { error } = await supabase
     .from("food_entries")
     .insert({ ...fila, user_id: user.id, local_date: dia, position: count ?? 0 });
-  if (error) return { ok: false, reason: error.message };
+  if (error) return actionFailed(error);
 
   repintar();
   return { ok: true };
 }
 
-export async function updateFoodEntry(id: string, formData: FormData): Promise<{ ok: boolean; reason?: string }> {
+export async function updateFoodEntry(id: string, formData: FormData): Promise<ActionResult> {
   const parsed = leerEntrada(formData);
   if (!parsed.success) return { ok: false, reason: parsed.error.issues[0]?.message ?? "Revisa el alimento." };
 
@@ -216,7 +217,7 @@ export async function updateFoodEntry(id: string, formData: FormData): Promise<{
 
   const supabase = await createClient();
   const { error } = await supabase.from("food_entries").update(fila).eq("id", id);
-  if (error) return { ok: false, reason: error.message };
+  if (error) return actionFailed(error);
 
   repintar();
   return { ok: true };
@@ -238,7 +239,7 @@ export async function updateFoodEntry(id: string, formData: FormData): Promise<{
 export async function logMealFromRoutine(
   habitId: string,
   formData: FormData
-): Promise<{ ok: boolean; reason?: string }> {
+): Promise<ActionResult> {
   const supabase = await createClient();
   const user = await getSessionUser();
   if (!user) return { ok: false, reason: "No autenticado" };
@@ -253,7 +254,7 @@ export async function logMealFromRoutine(
   const { error } = await supabase
     .from("habit_logs")
     .upsert({ habit_id: habitId, log_date: hoy }, { onConflict: "habit_id,log_date", ignoreDuplicates: true });
-  if (error) return { ok: false, reason: error.message };
+  if (error) return actionFailed(error);
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "habit.complete", object: habitId });
 

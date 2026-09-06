@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/data/session";
 import type { Json } from "@/types/database.types";
 import { isImpactAction, type ActionType, type TriggerType } from "@/lib/domain/automations/rules.ts";
+import { actionFailed } from "@/lib/supabase/errors";
 
 /**
  * Alta y baja de reglas. La ejecución vive en dispatch.ts; aquí solo se
@@ -81,7 +82,7 @@ export async function upsertAutomation(formData: FormData): Promise<AutomationRe
     authorized: isImpactAction(d.actionType as ActionType) ? d.authorized : true,
     enabled: true
   });
-  if (error) return { ok: false, reason: error.message };
+  if (error) return actionFailed(error);
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "automation.create", object: d.name });
   revalidatePath("/settings");

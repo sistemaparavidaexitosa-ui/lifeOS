@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { parseQuery, isSearchable, type SearchKind } from "@/lib/domain/search/query.ts";
+import { describeDbError } from "@/lib/supabase/errors";
 
 /**
  * Búsqueda transversal del espacio.
@@ -50,7 +51,7 @@ export async function searchWorkspace(workspaceId: string, raw: string): Promise
     p_since: parsed.sinceISO ?? undefined
   });
 
-  if (error) return { ok: false, hits: [], unknown: parsed.unknown, reason: error.message };
+  if (error) return { ok: false, hits: [], unknown: parsed.unknown, reason: describeDbError(error) };
 
   return {
     ok: true,

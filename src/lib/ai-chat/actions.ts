@@ -26,6 +26,7 @@ import { quickAddTask } from "@/lib/search/quick-add";
 import { upsertMemoryItem } from "@/lib/insights/actions";
 import type { Domain } from "@/lib/domain/insights/types.ts";
 import type { MemoryItemLike, MemoryScope } from "@/lib/domain/insights/memory.ts";
+import type { ActionResult } from "@/lib/supabase/errors";
 
 /**
  * Cuántos turnos se PINTAN. Más que los que viajan al modelo (MAX_TURNOS):
@@ -285,7 +286,7 @@ export async function createTaskFromChat(workspaceId: string, title: string) {
  * el único sitio que escribe en `memory_items`, con `origin: "ai"` para que en
  * `/intelligence/memory` se vea de dónde salió el texto.
  */
-export async function createMemoryFromChat(text: string, scope: string): Promise<{ ok: boolean; reason?: string }> {
+export async function createMemoryFromChat(text: string, scope: string): Promise<ActionResult> {
   // Se vuelve a sanear en el servidor: lo que llega del cliente es lo que el
   // navegador quiera mandar, no necesariamente lo que el modelo propuso.
   const limpia = sanitizeProposedMemory({ text, scope });

@@ -5,6 +5,7 @@
 
 import { fromBase64Url, toBase64Url } from "@/lib/domain/push/base64url.ts";
 import { deletePushSubscription, savePushSubscription } from "./actions";
+import type { ActionResult } from "@/lib/supabase/errors";
 
 export type EstadoPush =
   /** El navegador no sabe de service workers ni de push. */
@@ -120,7 +121,7 @@ export async function estadoPush(): Promise<EstadoPush> {
  * Pide permiso y suscribe. **Tiene que llamarse desde un gesto del usuario**:
  * iOS rechaza `requestPermission()` fuera de un clic.
  */
-export async function activarPush(): Promise<{ ok: boolean; reason?: string }> {
+export async function activarPush(): Promise<ActionResult> {
   if (!soportaPush()) return { ok: false, reason: "Este navegador no admite notificaciones." };
   if (esIosSinInstalar()) {
     return {
@@ -166,7 +167,7 @@ export async function activarPush(): Promise<{ ok: boolean; reason?: string }> {
   }
 }
 
-export async function desactivarPush(): Promise<{ ok: boolean; reason?: string }> {
+export async function desactivarPush(): Promise<ActionResult> {
   try {
     const registro = await navigator.serviceWorker.getRegistration();
     const suscripcion = await registro?.pushManager.getSubscription();

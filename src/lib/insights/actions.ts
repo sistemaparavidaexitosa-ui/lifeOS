@@ -13,6 +13,7 @@ import { recommendationFingerprint } from "@/lib/domain/insights/fingerprint.ts"
 import { canTransition, REJECTION_STATUSES, type RecommendationStatus } from "@/lib/domain/insights/states.ts";
 import { DOMAIN_LABEL, type Domain } from "@/lib/domain/insights/types.ts";
 import { MEMORY_SCOPES, type MemoryItemLike, type MemoryOrigin, type MemoryScope } from "@/lib/domain/insights/memory.ts";
+import { actionFailed, describeDbError, type ActionResult } from "@/lib/supabase/errors";
 
 /**
  * Intelligence OS — el análisis lo dispara el usuario y es informativo.
@@ -211,7 +212,7 @@ export async function analyze(scope: Scope): Promise<AnalyzeResult> {
 
   if (rows.length) {
     const { error } = await supabase.from("recommendations").insert(rows);
-    if (error) return { ok: false, created: 0, reason: error.message };
+    if (error) return { ok: false, created: 0, reason: describeDbError(error) };
   }
 
   revalidatePath(SCOPE_PATH[scope]);
@@ -232,7 +233,7 @@ export async function analyze(scope: Scope): Promise<AnalyzeResult> {
  * valida contra el estado REAL en la base, no contra el que traiga el cliente:
  * la bandeja puede estar desactualizada en otra pestaña.
  */
-export async function setRecommendationStatus(id: string, to: RecommendationStatus): Promise<{ ok: boolean; reason?: string }> {
+export async function setRecommendationStatus(id: string, to: RecommendationStatus): Promise<ActionResult> {
   const supabase = await createClient();
   const user = await getSessionUser();
   if (!user) return { ok: false, reason: "No autenticado" };
@@ -244,7 +245,7 @@ export async function setRecommendationStatus(id: string, to: RecommendationStat
   if (!canTransition(from, to)) return { ok: false, reason: `No se puede pasar de ${from} a ${to}.` };
 
   const { error } = await supabase.from("recommendations").update({ status: to }).eq("id", id);
-  if (error) return { ok: false, reason: error.message };
+  if (error) return actionFailed(error);
 
   await supabase.from("audit_log").insert({
     user_id: user.id,
@@ -263,7 +264,7 @@ export async function setRecommendationStatus(id: string, to: RecommendationStat
  * un estado vivo: sigue esperando decisión, pero ya no es lo que el modelo
  * escribió y la bandeja lo distingue.
  */
-export async function editRecommendationText(id: string, text: string): Promise<{ ok: boolean; reason?: string }> {
+export async function editRecommendationText(id: string, text: string): Promise<ActionResult> {
   const limpio = text.trim();
   if (!limpio) return { ok: false, reason: "El texto no puede quedar vacío." };
 
@@ -275,7 +276,7 @@ export async function editRecommendationText(id: string, text: string): Promise<
   }
 
   const { error } = await supabase.from("recommendations").update({ text: limpio, status: "Edited" }).eq("id", id);
-  if (error) return { ok: false, reason: error.message };
+  if (error) return actionFailed(error);
 
   revalidatePath("/money");
   revalidatePath("/intelligence");
@@ -297,7 +298,7 @@ export async function upsertMemoryItem(
   id: string | null,
   formData: FormData,
   origin: MemoryOrigin = "user"
-): Promise<{ ok: boolean; reason?: string }> {
+): Promise<ActionResult> {
   const text = String(formData.get("text") ?? "").trim();
   const scope = String(formData.get("scope") ?? "");
   const validUntilRaw = String(formData.get("validUntil") ?? "").trim();
@@ -313,7 +314,7 @@ export async function upsertMemoryItem(
   const { error } = id
     ? await supabase.from("memory_items").update(payload).eq("id", id)
     : await supabase.from("memory_items").insert({ ...payload, user_id: user.id, origin });
-  if (error) return { ok: false, reason: error.message };
+  if (error) return actionFailed(error);
 
   revalidatePath("/intelligence/memory");
   return { ok: true };

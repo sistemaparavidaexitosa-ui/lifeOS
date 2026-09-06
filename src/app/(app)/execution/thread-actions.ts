@@ -15,6 +15,7 @@ import { presetDate, type ReminderPreset } from "@/lib/domain/execution/reminder
 
 import { todayForUser } from "@/lib/data/profile";
 import type { TaskStatus } from "@/lib/domain/types.ts";
+import { actionFailed } from "@/lib/supabase/errors";
 
 export interface ThreadActionResult {
   ok: boolean;
@@ -54,7 +55,7 @@ export async function toggleReaction(commentId: string, emoji: string, intent: "
     const { error } = await supabase
       .from("comment_reactions")
       .insert({ comment_id: parsed.data.commentId, user_id: user.id, emoji: parsed.data.emoji });
-    if (error) return { ok: false, reason: error.message };
+    if (error) return actionFailed(error);
   }
 
   revalidatePath("/execution");
@@ -102,7 +103,7 @@ export async function reactDone(commentId: string, taskId: string, intent: "add"
     .from("tasks")
     .update({ status: "Completed", completed_at: new Date().toISOString(), version: task.version + 1 })
     .eq("id", taskId);
-  if (error) return { ok: false, reason: error.message };
+  if (error) return actionFailed(error);
 
   await supabase.from("task_history").insert({ task_id: taskId, from_state: task.status, to_state: "Completed" });
   await supabase
@@ -170,7 +171,7 @@ export async function pinCommentToLogbook(commentId: string, type: PinType): Pro
     // frases sueltas que nadie sabe a qué respondían.
     text: `${comment.body} — ${comment.author_name}, en «${donde}»`
   });
-  if (error) return { ok: false, reason: error.message };
+  if (error) return actionFailed(error);
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "logbook.pin", object: commentId, meta: { type } });
   revalidatePath("/execution");
@@ -203,7 +204,7 @@ export async function createReminder(
     text: text.slice(0, 300),
     remind_on: presetDate(preset, today)
   });
-  if (error) return { ok: false, reason: error.message };
+  if (error) return actionFailed(error);
 
   revalidatePath("/home");
   return { ok: true };
