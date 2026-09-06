@@ -13,7 +13,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "lint": "next lint",
-    "test:unit": "node --experimental-strip-types --test tests/domain/*.test.ts",
+    "test:unit": "node --experimental-strip-types --test tests/domain/*.test.ts tests/dom/*.test.ts",
     "gen:types": "supabase gen types typescript --linked > src/types/database.types.ts",
     "gen:types:local": "supabase gen types typescript --local > src/types/database.types.ts",
     "db:reset": "supabase db reset",
@@ -33,12 +33,14 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "3.2.0",
+    "@types/jsdom": "^30.0.0",
     "@types/node": "24.13.3",
     "@types/react": "19.1.9",
     "@types/react-dom": "19.1.9",
     "autoprefixer": "10.4.20",
     "eslint": "9.18.0",
     "eslint-config-next": "15.5.23",
+    "jsdom": "^30.0.1",
     "postcss": "8.4.49",
     "tailwindcss": "3.4.17",
     "typescript": "5.7.3"

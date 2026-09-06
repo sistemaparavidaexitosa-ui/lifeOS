@@ -149,14 +149,17 @@ export default function NoteDoc({ blocks, onChange, cursor, onCursor, readOnly }
       }
     }
 
-    // El cursor viene leído del DOM, no adivinado. `seq` sube para que la
-    // línea lo reponga tras el repintado: sin eso el campo se queda sin cursor
-    // y deja de aceptar texto.
-    reemplazar(
-      bi,
-      [conLinea(bloque, ii, content)],
-      mover({ block: bi, item: ii, start: caret, end: caret })
-    );
+    // El offset viene leído del DOM, no adivinado — lo necesita la barra de
+    // formato para saber sobre qué actuar. Pero `seq` NO sube: teclear no
+    // mueve el cursor, ya está donde el navegador lo puso, y subirlo haría
+    // repintar y reponer en cada tecla, que es de donde salían los fallos.
+    reemplazar(bi, [conLinea(bloque, ii, content)], {
+      ...cursor,
+      block: bi,
+      item: ii,
+      start: caret,
+      end: caret
+    });
   }
 
   function alPulsar(e: KeyboardEvent<HTMLDivElement>, bi: number, ii: number) {

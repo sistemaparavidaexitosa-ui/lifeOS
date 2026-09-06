@@ -1024,6 +1024,32 @@ podido verificar en un navegador. Si vuelve a fallar, el problema no es el
 arreglo sino la arquitectura: dejar que React reconcilie los hijos de un
 `contenteditable` pelea de raíz con que el navegador sea dueño del cursor.
 
+#### La reescritura: React deja de renderizar el contenteditable (6-sep-2026)
+
+Tres intentos fallidos sobre el mismo síntoma dejaron de ser un fallo y pasaron
+a ser la arquitectura. La premisa del diseño —«mientras se escribe, el DOM
+manda; React no toca el nodo»— **nunca se implementó**: `content` era una prop y
+React reconciliaba los hijos en cada tecla, destruyendo el cursor.
+
+Lo que se hizo, en este orden y a propósito:
+
+1. **Primero la red.** `jsdom` entra como devDependency. **No toca D-008**, que
+   habla de dependencias de RUNTIME y las enumera; el repo ya tenía diez
+   devDependencies. La decisión anterior de no meterlo fue una preferencia, y
+   es la razón por la que seis fallos pasaron 756 pruebas verdes.
+2. **Pruebas que reproducen los fallos**, en rojo antes de tocar nada:
+   `tests/dom/linea-dom.test.ts`, incluidas las dos que dan nombre al problema
+   («teclear no debe repintar» y «un cambio del modelo sí repinta y repone la
+   selección»).
+3. **La lógica de DOM sale del .tsx** a `src/lib/dom/linea-dom.ts`, porque
+   `node --test` no procesa JSX y dentro de un .tsx nada tiene pruebas.
+4. **`EditableLine` ya no da hijos a React.** El nodo se pinta a mano y sólo
+   cuando el modelo trae algo distinto de lo que el propio nodo reportó. Al
+   teclear, el modelo devuelve lo emitido, no se repinta, y el cursor se queda
+   donde el navegador lo puso.
+
+`pnpm test:unit` pasa a cubrir `tests/dom/` además de `tests/domain/`: 764 verdes.
+
 **Las 16 filas originales siguen sin ejecutarse salvo las anotadas.** El editor compila, pasa las
 pruebas de dominio y construye, pero **nadie lo ha abierto en un teléfono**.
 Hasta que esta tabla se rellene con resultados reales, no se puede afirmar que

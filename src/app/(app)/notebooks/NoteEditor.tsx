@@ -42,7 +42,7 @@ import {
   type MarcaInline
 } from "@/lib/domain/notes/edit.ts";
 import NoteDoc, { conLinea, type Cursor } from "./NoteDoc";
-import { leerDom } from "./EditableLine";
+import { leerDom } from "@/lib/dom/linea-dom.ts";
 import NoteBody from "./NoteBody";
 import FormatBar from "./FormatBar";
 import { fdatetime } from "@/lib/format";
