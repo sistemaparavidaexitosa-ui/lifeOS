@@ -200,8 +200,21 @@ test("splitBlock: Enter tras un encabezado abre un párrafo, no otro encabezado"
   assert.deepStrictEqual(b, parrafo(""));
 });
 
+test("splitBlock: Enter dentro de un bloque monoespaciado parte su texto, no lo duplica", () => {
+  const [a, b] = splitBlock({ kind: "mono", text: "unodos" }, 0, 3);
+  assert.deepStrictEqual(a, { kind: "mono", text: "uno" });
+  assert.deepStrictEqual(b, { kind: "mono", text: "dos" });
+});
+
+test("splitBlock: Enter en una tabla la deja intacta y abre un párrafo detrás", () => {
+  const tabla: Block = { kind: "table", head: [texto("a")], rows: [] };
+  const [a, b] = splitBlock(tabla, 0, 0);
+  assert.deepStrictEqual(a, tabla);
+  assert.deepStrictEqual(b, parrafo(""));
+});
+
 test("mergeBlocks: Backspace al inicio funde dos párrafos", () => {
-  assert.deepStrictEqual(mergeBlocks(parrafo("hola"), parrafo("mundo")), parrafo("holamundo"));
+  assert.deepStrictEqual(mergeBlocks(parrafo("hola"), parrafo("mundo")), [parrafo("holamundo")]);
 });
 
 test("mergeBlocks: fundir con una tabla o un bloque monoespaciado NO se hace", () => {
@@ -213,7 +226,31 @@ test("mergeBlocks: fundir con una tabla o un bloque monoespaciado NO se hace", (
   );
 });
 
-test("mergeBlocks: un párrafo absorbe el primer ítem de la lista siguiente", () => {
+test("mergeBlocks: un párrafo absorbe el primer ítem y el RESTO de la lista sobrevive", () => {
   const lista: Block = { kind: "bullets", items: [texto("uno"), texto("dos")] };
-  assert.deepStrictEqual(mergeBlocks(parrafo("hola "), lista), parrafo("hola uno"));
+  assert.deepStrictEqual(mergeBlocks(parrafo("hola "), lista), [
+    parrafo("hola uno"),
+    { kind: "bullets", items: [texto("dos")] }
+  ]);
+});
+
+test("mergeBlocks: si la lista se queda sin ítems, no deja un bloque vacío detrás", () => {
+  const lista: Block = { kind: "bullets", items: [texto("uno")] };
+  assert.deepStrictEqual(mergeBlocks(parrafo("hola "), lista), [parrafo("hola uno")]);
+});
+
+test("mergeBlocks: el ítem que sobra de una lista de casillas conserva su `done`", () => {
+  // El caso donde perder el estado sería invisible hasta que alguien
+  // perdiera su racha: el segundo pendiente ya estaba marcado como hecho.
+  const lista: Block = {
+    kind: "todo",
+    items: [
+      { done: false, content: texto("uno") },
+      { done: true, content: texto("dos") }
+    ]
+  };
+  assert.deepStrictEqual(mergeBlocks(parrafo("hola "), lista), [
+    parrafo("hola uno"),
+    { kind: "todo", items: [{ done: true, content: texto("dos") }] }
+  ]);
 });

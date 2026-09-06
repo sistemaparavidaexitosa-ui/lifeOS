@@ -301,14 +301,20 @@ export function splitBlock(block: Block, itemIndex: number, offset: number): [Bl
       // siguiente, que nace como Cuerpo.
       return [{ ...block, content: izquierda }, { kind: "paragraph", content: derecha }];
     case "mono":
+      // Sin marcas que cortar: cada mitad es texto llano. Devolver el mismo
+      // bloque dos veces (como hacía la versión anterior) lo duplicaría en
+      // pantalla en vez de partirlo — quien llama reemplaza el bloque
+      // original por estos dos.
+      return [
+        { kind: "mono", text: textoLlano(izquierda) },
+        { kind: "mono", text: textoLlano(derecha) }
+      ];
     case "table":
-      // Partir un bloque monoespaciado o una tabla por una "línea" no tiene
-      // un segundo bloque natural que crear (no hay marcas que cortar en el
-      // mono, ni una segunda tabla). Para no perder texto ni inventar una
-      // forma que no existe en el dialecto, ambos lados conservan el bloque
-      // intacto; es tarea del editor (fuera de esta pieza pura) decidir si
-      // ofrece Enter dentro de estos bloques.
-      return [block, block];
+      // Partir una tabla por una celda no tiene un segundo bloque natural
+      // (no hay una segunda tabla que crear). La tabla se queda intacta y
+      // Enter simplemente abre una línea nueva debajo, como el resto de
+      // bloques: un párrafo vacío.
+      return [block, { kind: "paragraph", content: [{ kind: "text", text: "" }] }];
     default:
       // Sólo quedan "paragraph" y "quote": ambos tienen `content`.
       return [
@@ -322,8 +328,14 @@ export function splitBlock(block: Block, itemIndex: number, offset: number): [Bl
  * Backspace al inicio de `b`. Funde la última línea de `a` con la primera de
  * `b`. Devuelve `null` cuando fundir no significa nada — con una tabla o un
  * bloque monoespaciado — en cuyo caso quien llama sólo mueve el foco.
+ *
+ * Devuelve un ARREGLO de bloques, no uno solo: si a `b` le sobran líneas
+ * (sólo puede pasar cuando `b` es una lista), esas líneas no caben en el
+ * bloque fundido y se devuelven DETRÁS como un bloque propio — nunca se
+ * tiran. Un solo `Block` de vuelta no podría decir «lo fundido MÁS lo que
+ * quedó de la lista» sin perder una de las dos partes.
  */
-export function mergeBlocks(a: Block, b: Block): Block | null {
+export function mergeBlocks(a: Block, b: Block): Block[] | null {
   if (a.kind === "table" || b.kind === "table") return null;
   if (a.kind === "mono" || b.kind === "mono") return null;
 
@@ -332,29 +344,46 @@ export function mergeBlocks(a: Block, b: Block): Block | null {
   const ultima = lineasA[lineasA.length - 1] ?? [];
   const primera = lineasB[0] ?? [];
   const fundida = fusionar([...ultima, ...primera]);
-  const restoB = lineasB.slice(1);
 
+  const fundido = conUltimaLinea(a, fundida);
+  const sobrante = sobranteDe(b);
+
+  return sobrante ? [fundido, sobrante] : [fundido];
+}
+
+/** El bloque `a` que le llega a `mergeBlocks` una vez descartadas tabla y mono. */
+type BloqueFundible = Exclude<Block, { kind: "table" } | { kind: "mono" }>;
+
+/** `a` con su última línea reemplazada por `fundida`, conservando su tipo (y el `done` del último ítem si era una lista de casillas). */
+function conUltimaLinea(a: BloqueFundible, fundida: Inline[]): Block {
   if (a.kind === "bullets" || a.kind === "ordered") {
-    return { kind: a.kind, items: [...lineasA.slice(0, -1), fundida, ...restoB] };
+    return { kind: a.kind, items: [...a.items.slice(0, -1), fundida] };
   }
-
   if (a.kind === "todo") {
-    const ultimoA = a.items[a.items.length - 1];
+    const ultimo = a.items[a.items.length - 1];
     return {
       kind: "todo",
-      items: [
-        ...a.items.slice(0, -1),
-        { done: ultimoA?.done ?? false, content: fundida },
-        ...restoB.map((content) => ({ done: false, content }))
-      ]
+      items: [...a.items.slice(0, -1), { done: ultimo?.done ?? false, content: fundida }]
     };
   }
-
-  // Sólo quedan "heading", "paragraph" y "quote": bloques de una sola línea.
-  // El resto de líneas de `b` (sólo puede haberlas si `b` era una lista) no
-  // cabe en una única línea de estos bloques y se descarta a propósito: es
-  // lo mismo que hace el iPhone al fundir un párrafo con el primer ítem de
-  // una lista — sólo ese ítem se une, el resto de la lista queda para que el
-  // editor decida qué hacer con él.
+  // Sólo quedan "heading", "paragraph" y "quote": una sola línea.
   return { ...a, content: fundida };
+}
+
+/**
+ * Lo que le sobra a `b` una vez que su primera línea ya se fundió — como
+ * bloque propio, con SU tipo y (si es de casillas) su `done` intacto.
+ * `null` si no sobra nada: fundir no debe dejar un bloque vacío detrás.
+ */
+function sobranteDe(b: Block): Block | null {
+  if (b.kind === "bullets" || b.kind === "ordered") {
+    const resto = b.items.slice(1);
+    return resto.length ? { kind: b.kind, items: resto } : null;
+  }
+  if (b.kind === "todo") {
+    const resto = b.items.slice(1);
+    return resto.length ? { kind: "todo", items: resto } : null;
+  }
+  // "heading", "paragraph" y "quote" sólo tienen una línea: nunca sobra nada.
+  return null;
 }
