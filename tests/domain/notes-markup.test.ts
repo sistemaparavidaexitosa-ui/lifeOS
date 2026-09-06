@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import {
   parseInline,
   parseNote,
+  serializeNote,
+  serializeInline,
   noteExcerpt,
   noteDisplayTitle,
   NOTA_SIN_TITULO,
@@ -150,4 +152,70 @@ test("noteDisplayTitle: sin título, cae a la primera línea sin su marcado", ()
 
 test("noteDisplayTitle: sin título y sin cuerpo, un nombre de reserva", () => {
   assert.strictEqual(noteDisplayTitle("", "   \n  "), NOTA_SIN_TITULO);
+});
+
+test("parseInline: la barra invertida escapa el marcado", () => {
+  // Sin esto, escribir «2 * 3 * 4» en el editor convierte « 3 » en cursiva
+  // sola mientras tecleas. Es el fallo más desconcertante que puede tener.
+  assert.deepStrictEqual(parseInline("2 \\* 3 \\* 4"), [{ kind: "text", text: "2 * 3 * 4" }]);
+});
+
+test("parseInline: los fragmentos de texto contiguos salen fusionados", () => {
+  // La aritmética de offsets de edit.ts asume un solo fragmento por tramo de
+  // texto; dos seguidos harían que applyMark marque el trozo equivocado.
+  assert.deepStrictEqual(parseInline("a \\* b \\* c"), [{ kind: "text", text: "a * b * c" }]);
+});
+
+test("serializeInline: escapa lo que volvería a parsearse como marcado", () => {
+  assert.strictEqual(serializeInline([{ kind: "text", text: "2 * 3" }]), "2 \\* 3");
+  assert.strictEqual(serializeInline([{ kind: "bold", text: "ya" }]), "**ya**");
+});
+
+test("serializeInline: la barra vertical sólo se escapa dentro de una celda", () => {
+  // En un párrafo un `|` es inofensivo y llenar el texto de barras invertidas
+  // sería ensuciar lo que la gente lee en crudo.
+  const contenido = [{ kind: "text" as const, text: "a | b" }];
+  assert.strictEqual(serializeInline(contenido), "a | b");
+  assert.strictEqual(serializeInline(contenido, { pipe: true }), "a \\| b");
+});
+
+test("serializeNote: un párrafo que empieza como otro bloque se escapa", () => {
+  // «# no es un título» escrito como texto debe volver como texto, no como
+  // encabezado. El escapado de inicio de línea es lo único que lo impide.
+  const bloques = parseNote("\\# no es un título");
+  assert.strictEqual(serializeNote(bloques), "\\# no es un título");
+  assert.deepStrictEqual(parseNote(serializeNote(bloques)), bloques);
+});
+
+test("serializeNote: ida y vuelta sobre el dialecto de hoy", () => {
+  const cuerpo = "# Acta\n\n- uno\n- **dos**\n\n1. primero\n\n> una cita\n\nver [aquí](https://ejemplo.com)";
+  assert.deepStrictEqual(parseNote(serializeNote(parseNote(cuerpo))), parseNote(cuerpo));
+});
+
+// El corpus vive aquí y CRECE con cada bloque nuevo (tareas 2 a 5). Es la red
+// que detecta que un bloque nuevo rompió el ida y vuelta de otro.
+export const CORPUS_ROUND_TRIP = [
+  "",
+  "texto llano",
+  "2 \\* 3 \\* 4",
+  "una \\\\ barra invertida",
+  "# título\n## subtítulo\n### sub-sub",
+  "- uno\n- dos\n\n1. a\n2. b",
+  "> cita\n> de dos líneas",
+  "**negrita** *cursiva* `código` [x](https://a.b) https://suelto.com",
+  "\\# no es un título",
+  "\\- no es una viñeta",
+  "párrafo con | barra vertical",
+  "línea uno\nlínea dos del mismo párrafo"
+];
+
+test("round-trip: el árbol es un punto fijo para todo el corpus", () => {
+  for (const cuerpo of CORPUS_ROUND_TRIP) {
+    const arbol = parseNote(cuerpo);
+    assert.deepStrictEqual(
+      parseNote(serializeNote(arbol)),
+      arbol,
+      `ida y vuelta rota para: ${JSON.stringify(cuerpo)}`
+    );
+  }
 });

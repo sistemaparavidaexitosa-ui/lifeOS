@@ -42,8 +42,14 @@ export type Block =
  * `javascript:` no puede llegar a construirse. Esa es la única defensa que hace
  * falta, y conviene que viva aquí y no en quien pinta.
  */
+// El escape va PRIMERO: `\*` tiene que ganarle a `*`, o nunca se podría
+// escribir un asterisco literal. El resto del orden es el de siempre —
+// código antes que negrita, negrita antes que cursiva, enlace explícito
+// antes que enlace suelto.
+const ESCAPABLES = "\\`*~+[|";
+
 const INLINE_PATTERN =
-  /`([^`\n]+)`|\*\*([^*\n]+)\*\*|\*([^*\n]+)\*|\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<]+)/g;
+  /\\([\\`*~+[|])|`([^`\n]+)`|\*\*([^*\n]+)\*\*|\*([^*\n]+)\*|\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<]+)/g;
 
 export function parseInline(line: string): Inline[] {
   const out: Inline[] = [];
@@ -58,9 +64,12 @@ export function parseInline(line: string): Inline[] {
     if (match.index > last) {
       out.push({ kind: "text", text: line.slice(last, match.index) });
     }
-    const [, code, bold, italic, linkText, linkHref, bareUrl] = match;
+    const [, escapado, code, bold, italic, linkText, linkHref, bareUrl] = match;
 
-    if (code !== undefined) out.push({ kind: "code", text: code });
+    // Un carácter escapado es texto y nada más: se emite tal cual y la
+    // fusión posterior lo pega al tramo que lo rodea.
+    if (escapado !== undefined) out.push({ kind: "text", text: escapado });
+    else if (code !== undefined) out.push({ kind: "code", text: code });
     else if (bold !== undefined) out.push({ kind: "bold", text: bold });
     else if (italic !== undefined) out.push({ kind: "italic", text: italic });
     else if (linkText !== undefined && linkHref !== undefined) {
@@ -73,10 +82,27 @@ export function parseInline(line: string): Inline[] {
   }
 
   if (last < line.length) out.push({ kind: "text", text: line.slice(last) });
-  // Una línea vacía sigue siendo una línea: devolver [] haría desaparecer el
-  // párrafo entero en quien pinta.
   if (!out.length) out.push({ kind: "text", text: "" });
-  return out;
+  return fusionarTexto(out);
+}
+
+/**
+ * Pega los fragmentos de texto contiguos en uno solo. Sin esto, «a \* b»
+ * saldría en tres piezas y la aritmética de offsets de edit.ts marcaría el
+ * trozo equivocado al aplicar una marca.
+ */
+function fusionarTexto(partes: Inline[]): Inline[] {
+  const out: Inline[] = [];
+  for (const parte of partes) {
+    const previa = out[out.length - 1];
+    if (parte.kind === "text" && previa?.kind === "text") {
+      out[out.length - 1] = { kind: "text", text: previa.text + parte.text };
+      continue;
+    }
+    out.push(parte);
+  }
+  // Un único fragmento vacío es legítimo (línea en blanco); varios, no.
+  return out.length > 1 ? out.filter((p) => !(p.kind === "text" && p.text === "")) : out;
 }
 
 const HEADING = /^(#{1,3})\s+(.*)$/;
@@ -125,6 +151,15 @@ export function parseNote(body: string): Block[] {
 
     if (!line.trim()) {
       flush();
+      continue;
+    }
+
+    // Una línea que empieza por `\` seguido de una marca de bloque es texto a
+    // propósito: quien escribió «\# hola» quiere ver «# hola». parseInline
+    // deshace el escape; aquí sólo hay que impedir que se lea como bloque.
+    if (/^\s*\\[#>|*\-`]|^\s*\\\d/.test(line)) {
+      if (bullets.length || ordered.length || quote.length) flush();
+      paragraph.push(line);
       continue;
     }
 
@@ -210,4 +245,83 @@ export function noteDisplayTitle(title: string, body: string): string {
 
   const clean = inlineText(parseInline(firstLine.replace(HEADING, "$2").replace(BULLET, "$1")));
   return clean.length > 60 ? `${clean.slice(0, 59).trimEnd()}…` : clean || NOTA_SIN_TITULO;
+}
+
+/**
+ * Inversa de `parseNote`. No devuelve el texto original byte a byte —
+ * normaliza— sino un texto que vuelve a parsearse al MISMO árbol. Esa es la
+ * propiedad que sostiene el editor: abrir una nota y guardarla no la deforma.
+ */
+export function serializeNote(blocks: Block[]): string {
+  return blocks.map(serializeBlock).join("\n\n");
+}
+
+function serializeBlock(block: Block): string {
+  switch (block.kind) {
+    case "heading":
+      return `${"#".repeat(block.level)} ${serializeInline(block.content)}`;
+    case "bullets":
+      return block.items.map((item) => `- ${serializeInline(item)}`).join("\n");
+    case "ordered":
+      return block.items.map((item, i) => `${i + 1}. ${serializeInline(item)}`).join("\n");
+    case "quote":
+      return serializeInline(block.content)
+        .split("\n")
+        .map((linea) => `> ${linea}`)
+        .join("\n");
+    default:
+      // Un párrafo conserva sus saltos internos (ver parseNote), y cada línea
+      // se protege por separado: basta con que UNA empiece por «#» para que al
+      // volver a parsear se parta el párrafo en dos bloques.
+      return serializeInline(block.content).split("\n").map(escaparInicioDeLinea).join("\n");
+  }
+}
+
+/**
+ * Caracteres que, al inicio de una línea, la convertirían en otro bloque.
+ * `*` y `-` sólo son peligrosos si BULLET los reconocería como tales, es
+ * decir seguidos de espacio: sin el lookahead, un párrafo que EMPIEZA con
+ * negrita («**negrita**...») escapaba el primer asterisco de más y el
+ * ida-y-vuelta lo convertía en cursiva rota.
+ */
+const INICIO_DE_BLOQUE = /^(\s*)([#>|]|[*-](?=\s)|\d+[.)]|```)/;
+
+function escaparInicioDeLinea(linea: string): string {
+  return linea.replace(INICIO_DE_BLOQUE, (_, sangria: string, marca: string) => {
+    return `${sangria}\\${marca}`;
+  });
+}
+
+export function escapeInlineText(text: string, opts?: { pipe?: boolean }): string {
+  // La barra invertida sólo necesita duplicarse cuando el carácter que la
+  // sigue es uno de los que INLINE_PATTERN reconoce como escapable: si no lo
+  // es (p. ej. una `#` suelta), una sola barra ya vuelve a parsearse como el
+  // mismo texto literal, y duplicarla de más rompería la igualdad byte a byte
+  // que exige «serializeNote: un párrafo que empieza como otro bloque se
+  // escapa». Va primero o se escaparían las que acabamos de meter.
+  const escapado = text.replace(/\\(?=[\\`*~+[|])/g, "\\\\").replace(/([`*~+[])/g, "\\$1");
+  return opts?.pipe ? escapado.replace(/\|/g, "\\|") : escapado;
+}
+
+export function serializeInline(content: Inline[], opts?: { pipe?: boolean }): string {
+  return content
+    .map((parte) => {
+      switch (parte.kind) {
+        case "bold":
+          return `**${escapeInlineText(parte.text, opts)}**`;
+        case "italic":
+          return `*${escapeInlineText(parte.text, opts)}*`;
+        case "code":
+          // Dentro de comillas invertidas nada se interpreta, así que escapar
+          // ahí rompería el literal en vez de protegerlo.
+          return `\`${parte.text}\``;
+        case "link":
+          return parte.text === parte.href
+            ? parte.href
+            : `[${escapeInlineText(parte.text, opts)}](${parte.href})`;
+        default:
+          return escapeInlineText(parte.text, opts);
+      }
+    })
+    .join("");
 }
