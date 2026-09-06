@@ -1389,7 +1389,7 @@ git commit -m "Aplicar negrita a media palabra necesita aritmética, no un repla
   - `setBlockStyle(block: Block, style: BlockStyle): Block`
   - `toggleTodo(block: Block, index: number): Block`
   - `splitBlock(block: Block, itemIndex: number, offset: number): [Block, Block]`
-  - `mergeBlocks(a: Block, b: Block): Block | null`
+  - `mergeBlocks(a: Block, b: Block): Block[] | null`
   - `textoDeBloque(block: Block): Inline[][]` — las líneas editables de un bloque, en orden
 
 - [ ] **Step 1: Escribir las pruebas que fallan**
@@ -1482,7 +1482,7 @@ test("splitBlock: Enter tras un encabezado abre un párrafo, no otro encabezado"
 });
 
 test("mergeBlocks: Backspace al inicio funde dos párrafos", () => {
-  assert.deepStrictEqual(mergeBlocks(parrafo("hola"), parrafo("mundo")), parrafo("holamundo"));
+  assert.deepStrictEqual(mergeBlocks(parrafo("hola"), parrafo("mundo")), [parrafo("holamundo")]);
 });
 
 test("mergeBlocks: fundir con una tabla o un bloque monoespaciado NO se hace", () => {
@@ -1494,9 +1494,34 @@ test("mergeBlocks: fundir con una tabla o un bloque monoespaciado NO se hace", (
   );
 });
 
-test("mergeBlocks: un párrafo absorbe el primer ítem de la lista siguiente", () => {
+test("mergeBlocks: un párrafo absorbe el primer ítem y el RESTO de la lista sobrevive", () => {
+  // Devolver un solo bloque obligaba a tirar los ítems sobrantes: pulsar
+  // Backspace al inicio de una lista borraba en silencio todo lo que venía
+  // detrás del primer ítem. Por eso mergeBlocks devuelve un ARRAY.
   const lista: Block = { kind: "bullets", items: [texto("uno"), texto("dos")] };
-  assert.deepStrictEqual(mergeBlocks(parrafo("hola "), lista), parrafo("hola uno"));
+  assert.deepStrictEqual(mergeBlocks(parrafo("hola "), lista), [
+    parrafo("hola uno"),
+    { kind: "bullets", items: [texto("dos")] }
+  ]);
+});
+
+test("mergeBlocks: si la lista se queda sin ítems, no deja un bloque vacío detrás", () => {
+  const lista: Block = { kind: "bullets", items: [texto("uno")] };
+  assert.deepStrictEqual(mergeBlocks(parrafo("hola "), lista), [parrafo("hola uno")]);
+});
+
+test("splitBlock: Enter dentro de un bloque monoespaciado parte su texto, no lo duplica", () => {
+  // Devolver [block, block] duplicaría el bloque entero en pantalla.
+  const [a, b] = splitBlock({ kind: "mono", text: "unodos" }, 0, 3);
+  assert.deepStrictEqual(a, { kind: "mono", text: "uno" });
+  assert.deepStrictEqual(b, { kind: "mono", text: "dos" });
+});
+
+test("splitBlock: Enter en una tabla la deja intacta y abre un párrafo detrás", () => {
+  const tabla: Block = { kind: "table", head: [texto("a")], rows: [] };
+  const [a, b] = splitBlock(tabla, 0, 0);
+  assert.deepStrictEqual(a, tabla);
+  assert.deepStrictEqual(b, parrafo(""));
 });
 ```
 
@@ -2147,6 +2172,8 @@ export default function NoteDoc({ blocks, onChange, cursor, onCursor, readOnly }
       const previo = blocks[bi - 1];
       if (!previo) return;
       e.preventDefault();
+      // mergeBlocks devuelve un ARRAY: al fundir con una lista, el bloque
+      // fundido viene primero y el resto de la lista sobrevive detrás.
       const fundido = mergeBlocks(previo, bloque);
       const lineasPrevias = textoDeBloque(previo);
       const ultima = lineasPrevias[lineasPrevias.length - 1] ?? [];
@@ -2156,7 +2183,7 @@ export default function NoteDoc({ blocks, onChange, cursor, onCursor, readOnly }
         onCursor({ block: bi - 1, item: lineasPrevias.length - 1, start: plainLength(ultima), end: plainLength(ultima) });
         return;
       }
-      onChange([...blocks.slice(0, bi - 1), fundido, ...blocks.slice(bi + 1)], {
+      onChange([...blocks.slice(0, bi - 1), ...fundido, ...blocks.slice(bi + 1)], {
         block: bi - 1,
         item: lineasPrevias.length - 1,
         start: plainLength(ultima),
