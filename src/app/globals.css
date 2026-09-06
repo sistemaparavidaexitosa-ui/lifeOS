@@ -3357,3 +3357,17 @@ textarea:focus {
     display: none;
   }
 }
+
+/* ── Editor de notas: la línea editable ───────────────────────────────── */
+.nb-line {
+  outline: none;
+  min-height: 1.65em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  -webkit-user-select: text;
+}
+.nb-line[data-empty="true"]::before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+  pointer-events: none;
+}
