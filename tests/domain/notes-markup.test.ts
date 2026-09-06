@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import {
   parseInline,
   parseNote,
+  serializeNote,
+  serializeInline,
   noteExcerpt,
   noteDisplayTitle,
   NOTA_SIN_TITULO,
@@ -52,6 +54,31 @@ test("parseInline: un esquema que no es http(s) NO produce un enlace", () => {
   const parts = parseInline("[pulsa aquí](javascript:alert(1))");
   assert.ok(parts.every((p) => p.kind !== "link"));
   assert.deepStrictEqual(parts, [{ kind: "text", text: "[pulsa aquí](javascript:alert(1))" }]);
+});
+
+test("parseInline: subrayado y tachado", () => {
+  assert.deepStrictEqual(parseInline("esto va ++subrayado++ y esto ~~fuera~~"), [
+    { kind: "text", text: "esto va " },
+    { kind: "underline", text: "subrayado" },
+    { kind: "text", text: " y esto " },
+    { kind: "strike", text: "fuera" }
+  ]);
+});
+
+test("parseInline: dos guiones bajos NO son subrayado", () => {
+  // En CommonMark `__x__` es negrita. Si aquí fuese subrayado, quien pegue
+  // Markdown de fuera vería subrayado donde escribió negrita.
+  assert.deepStrictEqual(parseInline("__esto__"), [{ kind: "text", text: "__esto__" }]);
+});
+
+test("serializeInline: subrayado y tachado vuelven a su sintaxis", () => {
+  assert.strictEqual(
+    serializeInline([
+      { kind: "underline", text: "a" },
+      { kind: "strike", text: "b" }
+    ]),
+    "++a++~~b~~"
+  );
 });
 
 test("parseInline: una línea vacía sigue devolviendo un fragmento", () => {
@@ -150,4 +177,241 @@ test("noteDisplayTitle: sin título, cae a la primera línea sin su marcado", ()
 
 test("noteDisplayTitle: sin título y sin cuerpo, un nombre de reserva", () => {
   assert.strictEqual(noteDisplayTitle("", "   \n  "), NOTA_SIN_TITULO);
+});
+
+test("parseInline: la barra invertida escapa el marcado", () => {
+  // Sin esto, escribir «2 * 3 * 4» en el editor convierte « 3 » en cursiva
+  // sola mientras tecleas. Es el fallo más desconcertante que puede tener.
+  assert.deepStrictEqual(parseInline("2 \\* 3 \\* 4"), [{ kind: "text", text: "2 * 3 * 4" }]);
+});
+
+test("parseInline: los fragmentos de texto contiguos salen fusionados", () => {
+  // La aritmética de offsets de edit.ts asume un solo fragmento por tramo de
+  // texto; dos seguidos harían que applyMark marque el trozo equivocado.
+  assert.deepStrictEqual(parseInline("a \\* b \\* c"), [{ kind: "text", text: "a * b * c" }]);
+});
+
+test("serializeInline: escapa lo que volvería a parsearse como marcado", () => {
+  assert.strictEqual(serializeInline([{ kind: "text", text: "2 * 3" }]), "2 \\* 3");
+  assert.strictEqual(serializeInline([{ kind: "bold", text: "ya" }]), "**ya**");
+});
+
+test("serializeInline: la barra vertical sólo se escapa dentro de una celda", () => {
+  // En un párrafo un `|` es inofensivo y llenar el texto de barras invertidas
+  // sería ensuciar lo que la gente lee en crudo.
+  const contenido = [{ kind: "text" as const, text: "a | b" }];
+  assert.strictEqual(serializeInline(contenido), "a | b");
+  assert.strictEqual(serializeInline(contenido, { pipe: true }), "a \\| b");
+});
+
+test("serializeNote: un párrafo que empieza como otro bloque se escapa", () => {
+  // «# no es un título» escrito como texto debe volver como texto, no como
+  // encabezado. El escapado de inicio de línea es lo único que lo impide.
+  const bloques = parseNote("\\# no es un título");
+  assert.strictEqual(serializeNote(bloques), "\\# no es un título");
+  assert.deepStrictEqual(parseNote(serializeNote(bloques)), bloques);
+});
+
+test("serializeNote: ida y vuelta sobre el dialecto de hoy", () => {
+  const cuerpo = "# Acta\n\n- uno\n- **dos**\n\n1. primero\n\n> una cita\n\nver [aquí](https://ejemplo.com)";
+  assert.deepStrictEqual(parseNote(serializeNote(parseNote(cuerpo))), parseNote(cuerpo));
+});
+
+test("parseNote: una tabla con encabezado y filas", () => {
+  const bloques = parseNote("| Área | Entrega |\n|---|---|\n| Diseño | 12/9 |\n| Dev | 20/9 |");
+  assert.strictEqual(bloques.length, 1);
+  const tabla = bloques[0] as Extract<Block, { kind: "table" }>;
+  assert.strictEqual(tabla.kind, "table");
+  assert.deepStrictEqual(tabla.head, [
+    [{ kind: "text", text: "Área" }],
+    [{ kind: "text", text: "Entrega" }]
+  ]);
+  assert.strictEqual(tabla.rows.length, 2);
+});
+
+test("parseNote: una fila corta o larga se normaliza al ancho del encabezado", () => {
+  // Sin esto, una fila desalineada rompería la rejilla del editor.
+  const tabla = parseNote("| a | b |\n|---|---|\n| sola |\n| 1 | 2 | 3 |")[0] as Extract<
+    Block,
+    { kind: "table" }
+  >;
+  assert.deepStrictEqual(
+    tabla.rows.map((fila) => fila.length),
+    [2, 2]
+  );
+});
+
+test("parseNote: la alineación se acepta pero no se guarda", () => {
+  // Alinear columnas no está en el menú del iPhone; sostener un dato que
+  // nadie puede cambiar es cómo se acumulan los formatos muertos.
+  const tabla = parseNote("| a | b |\n|:---:|---:|\n| 1 | 2 |")[0] as Extract<
+    Block,
+    { kind: "table" }
+  >;
+  assert.strictEqual(tabla.kind, "table");
+  assert.ok(!("align" in tabla));
+});
+
+test("parseNote: sin fila separadora NO es una tabla", () => {
+  // Un párrafo con barras verticales es más común que una tabla a medias.
+  const bloques = parseNote("| esto | es texto |");
+  assert.deepStrictEqual(
+    bloques.map((b) => b.kind),
+    ["paragraph"]
+  );
+});
+
+test("noteDisplayTitle: una nota que empieza por tabla se titula con su primera celda", () => {
+  assert.strictEqual(noteDisplayTitle("", "| Área | Due |\n|---|---|\n| a | b |"), "Área");
+});
+
+test("serializeNote: la barra vertical dentro de una celda se escapa", () => {
+  const tabla = parseNote("| a \\| b | c |\n|---|---|\n| 1 | 2 |")[0] as Extract<
+    Block,
+    { kind: "table" }
+  >;
+  assert.deepStrictEqual(tabla.head[0], [{ kind: "text", text: "a | b" }]);
+  assert.ok(serializeNote([tabla]).includes("a \\| b"));
+});
+
+// El corpus vive aquí y CRECE con cada bloque nuevo (tareas 2 a 5). Es la red
+// que detecta que un bloque nuevo rompió el ida y vuelta de otro.
+export const CORPUS_ROUND_TRIP = [
+  "",
+  "texto llano",
+  "2 \\* 3 \\* 4",
+  "una \\\\ barra invertida",
+  "# título\n## subtítulo\n### sub-sub",
+  "- uno\n- dos\n\n1. a\n2. b",
+  "> cita\n> de dos líneas",
+  "**negrita** *cursiva* `código` [x](https://a.b) https://suelto.com",
+  "\\# no es un título",
+  "\\- no es una viñeta",
+  "párrafo con | barra vertical",
+  "línea uno\nlínea dos del mismo párrafo",
+  "#YOLO sin espacio",
+  "##dos sin espacio",
+  "++subrayado++ y ~~tachado~~ juntos",
+  "un más + suelto y una tilde ~ suelta",
+  "- [ ] sin hacer\n- [x] hecha",
+  "- [x] hecha\n- [ ]",
+  "- viñeta normal\n\n- [ ] casilla",
+  "```\npnpm verify\n```",
+  "antes\n\n```\ncódigo\n```\n\ndespués",
+  "| Área | Entrega |\n|---|---|\n| Diseño | 12/9 |",
+  "| a \\| b | c |\n|---|---|\n| 1 | 2 |",
+  "texto\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\nmás texto"
+];
+
+test("parseNote: las casillas son su propio bloque", () => {
+  const bloques = parseNote("- [ ] pendiente\n- [x] hecho");
+  assert.strictEqual(bloques.length, 1);
+  const bloque = bloques[0] as Extract<Block, { kind: "todo" }>;
+  assert.strictEqual(bloque.kind, "todo");
+  assert.deepStrictEqual(
+    bloque.items.map((i) => i.done),
+    [false, true]
+  );
+  assert.deepStrictEqual(bloque.items[1]?.content, [{ kind: "text", text: "hecho" }]);
+});
+
+test("parseNote: una casilla no se mezcla con las viñetas de al lado", () => {
+  // «- [ ] x» empieza igual que una viñeta; si el orden de las expresiones
+  // está mal, la casilla acaba siendo un ítem de lista con corchetes.
+  const bloques = parseNote("- viñeta\n- [ ] casilla");
+  assert.deepStrictEqual(
+    bloques.map((b) => b.kind),
+    ["bullets", "todo"]
+  );
+});
+
+test("parseNote: una casilla VACÍA sigue siendo una casilla", () => {
+  // El editor crea una en cada Enter; si volviera como viñeta «[ ]», pulsar
+  // Enter en una lista de pendientes la destruiría.
+  const bloques = parseNote("- [x] hecho\n- [ ]");
+  const bloque = bloques[0] as Extract<Block, { kind: "todo" }>;
+  assert.strictEqual(bloque.kind, "todo");
+  assert.strictEqual(bloque.items.length, 2);
+  assert.deepStrictEqual(bloque.items[1]?.content, [{ kind: "text", text: "" }]);
+});
+
+test("parseNote: la X mayúscula también marca", () => {
+  const bloques = parseNote("- [X] hecho");
+  assert.strictEqual((bloques[0] as Extract<Block, { kind: "todo" }>).items[0]?.done, true);
+});
+
+test("noteExcerpt: el resumen incluye el texto de las casillas", () => {
+  assert.strictEqual(noteExcerpt("- [x] comprar café\n- [ ] pagar luz"), "comprar café · pagar luz");
+});
+
+test("noteDisplayTitle: una nota sin título que empieza por casilla no muestra los corchetes", () => {
+  // La lista de cuadernos enseña este texto. «[ ] pagar luz» como nombre de
+  // una nota es basura visible en la primera pantalla del módulo.
+  assert.strictEqual(noteDisplayTitle("", "- [ ] pagar luz\nmás cosas"), "pagar luz");
+});
+
+test("noteDisplayTitle: también sirve para una cita", () => {
+  assert.strictEqual(noteDisplayTitle("", "> una cita"), "una cita");
+});
+
+test("parseNote: el bloque monoespaciado conserva su texto tal cual", () => {
+  const bloques = parseNote("```\npnpm verify\n  sangrado\n```");
+  assert.strictEqual(bloques.length, 1);
+  const bloque = bloques[0] as Extract<Block, { kind: "mono" }>;
+  assert.strictEqual(bloque.kind, "mono");
+  // Nada se interpreta dentro: ni el marcado ni el escape.
+  assert.strictEqual(bloque.text, "pnpm verify\n  sangrado");
+});
+
+test("parseNote: dentro del bloque monoespaciado el marcado NO se interpreta", () => {
+  const bloque = parseNote("```\n**no es negrita**\n```")[0] as Extract<Block, { kind: "mono" }>;
+  assert.strictEqual(bloque.text, "**no es negrita**");
+});
+
+test("parseNote: una valla sin cerrar termina con el cuerpo, no se come la nota", () => {
+  const bloques = parseNote("texto\n\n```\nsin cerrar");
+  assert.deepStrictEqual(
+    bloques.map((b) => b.kind),
+    ["paragraph", "mono"]
+  );
+});
+
+test("parseNote: la etiqueta de lenguaje se ignora", () => {
+  // El iPhone tampoco resalta sintaxis; aceptar la etiqueta obligaría a
+  // decidir qué hacer con un lenguaje desconocido.
+  const bloque = parseNote("```ts\nconst a = 1\n```")[0] as Extract<Block, { kind: "mono" }>;
+  assert.strictEqual(bloque.text, "const a = 1");
+});
+
+test("noteDisplayTitle: una nota que empieza por bloque monoespaciado usa su primera línea", () => {
+  assert.strictEqual(noteDisplayTitle("", "```\npnpm verify\n```"), "pnpm verify");
+});
+
+test("noteDisplayTitle: sin título propio, un título largo se recorta a 60 caracteres", () => {
+  // Igual que noteExcerpt, pero para el título: la revisión de la Task 3 lo
+  // comprobó a mano y no quedó ninguna prueba que detecte una regresión aquí.
+  const largo = "palabra ".repeat(20).trim();
+  const titulo = noteDisplayTitle("", largo);
+  assert.strictEqual(titulo.length, 60);
+  assert.ok(titulo.endsWith("…"));
+});
+
+test("serializeNote: un hashtag al inicio de línea no es un título y no se escapa", () => {
+  // HEADING exige espacio tras la almohadilla; sin él, «#YOLO» ya es un
+  // párrafo normal y escaparlo de más lo dejaría con una barra invertida
+  // literal la próxima vez que se abriera la nota.
+  const bloques = parseNote("#YOLO sin espacio");
+  assert.strictEqual(serializeNote(bloques), "#YOLO sin espacio");
+  assert.deepStrictEqual(parseNote(serializeNote(bloques)), bloques);
+});
+
+test("round-trip: el árbol es un punto fijo para todo el corpus", () => {
+  for (const cuerpo of CORPUS_ROUND_TRIP) {
+    const arbol = parseNote(cuerpo);
+    assert.deepStrictEqual(
+      parseNote(serializeNote(arbol)),
+      arbol,
+      `ida y vuelta rota para: ${JSON.stringify(cuerpo)}`
+    );
+  }
 });

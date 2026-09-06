@@ -155,11 +155,22 @@ export async function saveNote(
     .object({
       noteId: z.string().uuid(),
       title: z.string().max(300),
-      body: z.string(),
+      // Hoy escribir mucho cuesta escribirlo; con formato en vivo, pegar un
+      // documento entero es un gesto. 256 KB son ~40.000 palabras: nadie
+      // escribe eso en una nota, y quien lo pega no quería hacerlo.
+      body: z.string().max(262_144, "La nota es demasiado larga para guardarse."),
       expectedVersion: z.number().int().positive()
     })
     .safeParse({ noteId, title, body, expectedVersion });
-  if (!parsed.success) return { ok: false, reason: "No se pudo guardar: los datos de la nota no son válidos." };
+  if (!parsed.success) {
+    // El mensaje del esquema llega al usuario: «demasiado larga» se puede
+    // actuar, «datos no válidos» no.
+    const primero = parsed.error.issues[0];
+    return {
+      ok: false,
+      reason: primero?.message ?? "No se pudo guardar: los datos de la nota no son válidos."
+    };
+  }
 
   const firma = await firmaDelUsuario();
   if (!firma) return { ok: false, reason: "Tu sesión expiró. Vuelve a iniciar sesión — copia tu texto antes de recargar." };

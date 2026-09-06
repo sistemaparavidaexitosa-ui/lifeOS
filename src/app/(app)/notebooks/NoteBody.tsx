@@ -47,6 +47,46 @@ export default function NoteBody({ body }: { body: string }) {
             );
           case "quote":
             return <blockquote key={i}>{renderInline(block.content)}</blockquote>;
+          case "mono":
+            return (
+              <pre key={i} className="nb-mono">
+                <code>{block.text}</code>
+              </pre>
+            );
+          case "todo":
+            return (
+              <ul key={i} className="nb-todo">
+                {block.items.map((item, j) => (
+                  <li key={j} className={item.done ? "hecha" : undefined}>
+                    <input type="checkbox" checked={item.done} disabled readOnly />
+                    <span>{renderInline(item.content)}</span>
+                  </li>
+                ))}
+              </ul>
+            );
+          case "table":
+            return (
+              <div key={i} className="nb-table-wrap">
+                <table className="nb-table">
+                  <thead>
+                    <tr>
+                      {block.head.map((celda, j) => (
+                        <th key={j}>{renderInline(celda)}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {block.rows.map((fila, j) => (
+                      <tr key={j}>
+                        {fila.map((celda, k) => (
+                          <td key={k}>{renderInline(celda)}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
           default:
             return <p key={i}>{renderInline(block.content)}</p>;
         }
@@ -62,6 +102,10 @@ function renderInline(content: Inline[]) {
         return <b key={i}>{part.text}</b>;
       case "italic":
         return <i key={i}>{part.text}</i>;
+      case "underline":
+        return <u key={i}>{part.text}</u>;
+      case "strike":
+        return <s key={i}>{part.text}</s>;
       case "code":
         return <code key={i}>{part.text}</code>;
       case "link":

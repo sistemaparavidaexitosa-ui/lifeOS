@@ -134,9 +134,15 @@ para desarrollo y en Vercel → Settings → Environment Variables para producci
 | Variable | Qué es |
 |---|---|
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Pública de verdad: el navegador la necesita al suscribirse |
-| `VAPID_PRIVATE_JWK` | **Secreto.** JWK completo, en una sola variable |
+| `VAPID_PRIVATE_JWK` | **Secreto.** El componente `d`: 43 caracteres, sin llaves ni comillas |
 | `VAPID_SUBJECT` | `mailto:` o `https:`. Apple rechaza cualquier otra cosa |
 | `PUSH_DISPATCH_SECRET` | Lo único que protege `/api/push/dispatch`. `openssl rand -base64 32` |
+
+⚠️ **Añádelas una a una, en su campo.** NO uses el importador de `.env` de
+Vercel: su parser quita las comillas dobles del valor, así que un JWK entero
+llega como `{kty:EC,...}` y ya no es JSON. Por eso el script entrega la privada
+como `d` a secas, sin un solo signo de puntuación que se pueda perder. (El JWK
+completo se sigue aceptando, para no invalidar instalaciones anteriores.)
 
 ⚠️ Cambiar `VAPID_PRIVATE_JWK` invalida **todas** las suscripciones existentes:
 cada teléfono tendría que volver a activar las notificaciones.

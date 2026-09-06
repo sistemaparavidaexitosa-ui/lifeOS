@@ -8,6 +8,7 @@
 // la acción invocada no los use.
 
 import { z } from "zod";
+import { jwkFromPrivateKey, normalizeVapidSubject } from "@/lib/domain/push/vapid.ts";
 
 const publicSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().url().default("http://localhost:54321"),
@@ -133,24 +134,40 @@ export function requireVapidKeys(): { privateJwk: JsonWebKey; publicKey: string;
     );
   }
 
-  let privateJwk: JsonWebKey;
-  try {
-    privateJwk = JSON.parse(raw) as JsonWebKey;
-  } catch {
-    throw new Error("VAPID_PRIVATE_JWK no es un JSON válido. Debe ser el JWK completo que imprime `node scripts/generate-vapid.mjs`.");
-  }
-
   const publicKey = publicEnv.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   if (!publicKey) {
     throw new Error("NEXT_PUBLIC_VAPID_PUBLIC_KEY no está definida. Es la mitad pública del par de VAPID_PRIVATE_JWK.");
   }
 
+  // Se quitan las comillas envolventes: el script imprime la línea lista para
+  // `.env.local`, donde el JWK VA entrecomillado, y esa misma línea acaba
+  // pegada en el formulario de Vercel, que guarda el valor literal.
+  const limpio = raw.trim().replace(/^(['"])([\s\S]*)\1$/, "$2");
+
+  // FORMA PREFERIDA: solo el componente `d`, 43 caracteres base64url sin un
+  // signo de puntuación. Se admite el JWK entero por compatibilidad, pero es
+  // frágil de transportar — el importador masivo de variables de Vercel le
+  // quita las comillas dobles, también las de dentro, y lo deja como
+  // `{kty:EC,...}`, que ya no es JSON. Ocurrió dos veces antes de esto.
+  const privateJwk: JsonWebKey = limpio.startsWith("{")
+    ? parsearJwk(limpio)
+    : jwkFromPrivateKey(limpio, publicKey);
+
   /**
-   * `sub` identifica a quien envía, y Apple RECHAZA el push si no es un
-   * `mailto:` o un `https:` válido. El default apunta a la propia app porque
-   * una URL siempre existe; un correo real es mejor si lo hay.
+   * `sub` identifica a quien envía. Apple lo VALIDA: si no es un `mailto:` o un
+   * `https:`, responde 403 `BadJwtToken` — el mismo error que da una firma
+   * inválida, así que sin esta comprobación se confunden dos causas muy
+   * distintas.
+   *
+   * Se valida aquí y no se deja pasar porque el default es una trampa: cae a
+   * `NEXT_PUBLIC_APP_URL`, que en local (y en un despliegue mal configurado) es
+   * `http://localhost:3000` — sintácticamente una URL, y rechazada por Apple.
    */
-  const subject = process.env.VAPID_SUBJECT || publicEnv.NEXT_PUBLIC_APP_URL;
+  // La normalización vive en el dominio y está probada allí: admite el correo
+  // suelto (le pone `mailto:`), quita comillas, y rechaza con un mensaje
+  // concreto lo que Apple rechazaría — incluidos los huecos de documentación
+  // sin rellenar, que se han pegado tal cual más de una vez.
+  const subject = normalizeVapidSubject(process.env.VAPID_SUBJECT || publicEnv.NEXT_PUBLIC_APP_URL);
 
   return { privateJwk, publicKey, subject };
 }
@@ -168,4 +185,30 @@ export function requirePushDispatchSecret(): string {
     );
   }
   return secret;
+}
+
+/**
+ * Lee el JWK completo, la forma antigua de `VAPID_PRIVATE_JWK`.
+ *
+ * Se conserva para no invalidar las instalaciones que ya lo tienen puesto, pero
+ * el mensaje de error empuja a la forma simple: si el objeto llegó sin sus
+ * comillas internas, no hay nada que reparar en el texto y sí una variable que
+ * sustituir por algo que ningún parser pueda estropear.
+ */
+function parsearJwk(valor: string): JsonWebKey {
+  let jwk: JsonWebKey;
+  try {
+    jwk = JSON.parse(valor) as JsonWebKey;
+  } catch {
+    throw new Error(
+      `VAPID_PRIVATE_JWK no es un JSON válido (empieza por «${valor.slice(0, 14)}…»). Si las comillas de dentro han desaparecido, las quitó el importador de variables. Sustituye el valor por SOLO el componente \`d\` (43 caracteres, sin llaves ni comillas) que imprime \`node scripts/generate-vapid.mjs\`.`
+    );
+  }
+
+  // Un JWK que parsea pero no es una clave privada EC pasaría hasta `importKey`
+  // y fallaría allí con un error de WebCrypto que no menciona la variable.
+  if (jwk.kty !== "EC" || !jwk.d) {
+    throw new Error('VAPID_PRIVATE_JWK parsea pero no es una clave privada EC (falta `kty: "EC"` o el componente `d`).');
+  }
+  return jwk;
 }

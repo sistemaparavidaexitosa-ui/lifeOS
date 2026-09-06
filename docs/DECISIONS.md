@@ -2003,3 +2003,65 @@ implementa:
 | F12 (phone-frame en móvil) | `globals.css` (`100dvh`, `env(safe-area-inset-*)`), `layout.tsx` (`viewportFit: "cover"`) |
 | F13 (seed no idempotente) | `supabase/seed.sql` (todo `ON CONFLICT` fija TODOS los campos gate) |
 | F14 (warning ESLint cosmético) | Documentado en `/docs/CHECKS.md`, no bloqueante |
+
+### Notas con formato en vivo (septiembre 2026)
+
+- **D-111 · Las tablas entran, y D-038 se amplía sólo en eso.** D-038 dijo que
+  un cuaderno «no necesita tablas» y era un juicio correcto **para un
+  textarea**: una tabla en sintaxis pipe, tecleada con el pulgar, no la usa
+  nadie. Al pasar el editor a formato en vivo la tabla deja de ser sintaxis y
+  pasa a ser una rejilla que se toca, y el argumento se cae. Lo que **no**
+  cambia de D-038 es lo que de verdad importaba: sigue sin haber librería de
+  Markdown, sigue devolviendo un árbol y no HTML, y `NoteBody`/`EditableLine`
+  siguen creando elementos de React. La lista blanca de `EditableLine`
+  (`b, i, u, s, code, a[href^=http]`, y todo lo demás colapsa a texto) extiende
+  esa misma garantía al lado de la ENTRADA, que con un textarea no existía
+  porque no había DOM que ensuciar.
+
+- **D-112 · El cuerpo se sigue guardando como texto, y por eso no hay
+  migración.** `markup.ts` gana `serializeNote` como inversa de `parseNote`, y
+  el editor trabaja sobre el árbol. Guardar JSON habría obligado a rehacer la
+  columna generada `notes.search`, `search_notes()` (0032), `search_workspace()`
+  (0039) y los `ts_headline`, más una migración de datos — a cambio de nada que
+  el set de formato del iPhone necesite. La propiedad que lo sujeta es
+  `parse(serialize(parse(x))) ≡ parse(x)`: el árbol es punto fijo, el texto se
+  normaliza. Todo lo escrito con el dialecto anterior sigue siendo válido; la
+  primera vez que se guarde una nota vieja, el texto se normaliza (`* viñeta`
+  sale como `- viñeta`) sin cambiar su contenido.
+
+- **D-113 · La barra de formato va abajo; las acciones siguen arriba.** D-040
+  puso las acciones arriba porque «una barra fija abajo pelea con el teclado y
+  con la barra de gestos», y sigue siendo cierto para guardar, borrar y volver.
+  La barra de FORMATO es otra cosa: actúa sobre la selección y tiene que estar
+  donde está el pulgar. Va anclada sobre el teclado leyendo
+  `visualViewport.height`, porque en Safari de iOS el teclado no reduce el
+  viewport de layout y un `bottom: 0` acaba DEBAJO del teclado. Sin soporte cae
+  a estática. **Es una excepción acotada a D-040, no su derogación.**
+
+- **D-114 · Ni `execCommand` ni librería de editor: el modelo manda.** Las
+  marcas se aplican con operaciones puras sobre el árbol (`edit.ts`) y luego se
+  restaura el cursor por offset, en vez de pedirle al navegador que modifique
+  el DOM. `execCommand` está deprecado y cada navegador escupe un HTML distinto
+  (Safari mete `<font>`, Chrome `<div>`); convertir ese HTML a nuestro dialecto
+  sería el pantano que D-038 evitó. Una librería (Lexical, TipTap) lo
+  resolvería, pero añade un peer de React —el riesgo `ERESOLVE` que D-008
+  existe para evitar— y aun así habría que serializar su modelo al nuestro.
+  **D-008 sigue intacto: cero dependencias nuevas.** La única excepción es
+  `document.execCommand("insertText")` al pegar, que inserta TEXTO LLANO y
+  conserva el undo nativo dentro del bloque; su salida no es marcado.
+
+- **D-115 · El volcado del bloque enfocado antes de guardar.** El
+  contenteditable de la línea con foco es NO controlado —React lo pinta al
+  montarlo y no vuelve a tocarlo— porque si repintara en cada tecla el cursor
+  saltaría y el dictado de iOS se rompería. La consecuencia incómoda es que el
+  modelo va un paso por detrás del DOM mientras se escribe, así que `guardar()`
+  lee el DOM de esa línea antes de serializar. En `visibilitychange` sobre
+  todo: bloquear el teléfono a media palabra es justo el momento que D-040
+  existe para proteger, y sin ese volcado se perdería lo último tecleado.
+
+- **D-116 · `saveNote` tiene tope de 256 KB.** Antes `body` era un `z.string()`
+  sin límite. Con un textarea, escribir mucho costaba escribirlo; con formato
+  en vivo, pegar un documento entero es un gesto. 256 KB son unas 40.000
+  palabras: nadie escribe eso en una nota, y quien lo pega no quería hacerlo.
+  El mensaje del esquema llega al usuario, porque «demasiado larga» se puede
+  actuar y «datos no válidos» no.

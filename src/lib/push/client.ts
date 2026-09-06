@@ -3,7 +3,7 @@
 // server" y sin `server-only`: esto corre en el cliente y lo usan tanto el
 // registro silencioso del layout como el botón de Configuración.
 
-import { fromBase64Url } from "@/lib/domain/push/base64url.ts";
+import { fromBase64Url, toBase64Url } from "@/lib/domain/push/base64url.ts";
 import { deletePushSubscription, savePushSubscription } from "./actions";
 
 export type EstadoPush =
@@ -56,6 +56,48 @@ export async function registrarServiceWorker(): Promise<ServiceWorkerRegistratio
   }
 }
 
+/**
+ * ¿Esta suscripción se creó con la clave pública que usamos AHORA?
+ *
+ * Una suscripción queda atada para siempre a la `applicationServerKey` con la
+ * que nació. Si las llaves del servidor cambian, la vieja no se invalida sola:
+ * sigue existiendo en el navegador, sigue pareciendo buena, y el servicio de
+ * push rechaza cada envío —Apple con un 403 `BadJwtToken`— porque la firma no
+ * corresponde a la clave que anunció aquel día.
+ *
+ * Peor aún: la especificación hace que `subscribe()` FALLE con
+ * `InvalidStateError` si ya hay una suscripción con otra clave. Sin detectar
+ * esto, rotar las llaves dejaba la app en un callejón del que solo se salía
+ * borrando los datos del sitio a mano.
+ */
+function creadaConLaClaveActual(suscripcion: PushSubscription, esperada: string): boolean {
+  const enUso = suscripcion.options?.applicationServerKey;
+  if (!enUso) return false;
+  try {
+    return toBase64Url(new Uint8Array(enUso)) === esperada;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Suelta una suscripción que ya no sirve, en el navegador y en el servidor.
+ * Silenciosa a propósito: es limpieza, no una acción del usuario.
+ */
+async function descartar(suscripcion: PushSubscription): Promise<void> {
+  const endpoint = suscripcion.endpoint;
+  try {
+    await suscripcion.unsubscribe();
+  } catch {
+    /* Da igual: lo que importa es no volver a ofrecerla como válida. */
+  }
+  try {
+    await deletePushSubscription(endpoint);
+  } catch {
+    /* La fila huérfana la limpiará el primer 410 del servicio de push. */
+  }
+}
+
 export async function estadoPush(): Promise<EstadoPush> {
   if (!soportaPush()) return esIosSinInstalar() ? "ios-sin-instalar" : "no-soportado";
   if (esIosSinInstalar()) return "ios-sin-instalar";
@@ -63,7 +105,15 @@ export async function estadoPush(): Promise<EstadoPush> {
 
   const registro = await navigator.serviceWorker.getRegistration();
   const suscripcion = await registro?.pushManager.getSubscription();
-  return suscripcion ? "activo" : "disponible";
+  if (!suscripcion) return "disponible";
+
+  // Una suscripción atada a una clave anterior NO está activa por mucho que
+  // exista: cada envío se rechaza. Decir «activo» ahí era mentir al usuario y
+  // esconderle el único botón que lo arregla.
+  const clave = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  if (clave && !creadaConLaClaveActual(suscripcion, clave)) return "disponible";
+
+  return "activo";
 }
 
 /**
@@ -92,6 +142,14 @@ export async function activarPush(): Promise<{ ok: boolean; reason?: string }> {
   // `ready` y no el registro a secas: recién instalado todavía no está activo,
   // y suscribirse contra uno que aún no controla la página falla.
   await navigator.serviceWorker.ready;
+
+  // Soltar primero cualquier suscripción de una clave anterior. Sin esto,
+  // `subscribe()` lanza `InvalidStateError` en vez de reemplazarla, y el
+  // usuario se queda sin forma de reactivar desde la interfaz.
+  const existente = await registro.pushManager.getSubscription();
+  if (existente && !creadaConLaClaveActual(existente, clave)) {
+    await descartar(existente);
+  }
 
   try {
     const suscripcion = await registro.pushManager.subscribe({
@@ -138,9 +196,18 @@ export async function revalidarSuscripcion(): Promise<void> {
     const registro = (await navigator.serviceWorker.getRegistration()) ?? (await registrarServiceWorker());
     if (!registro) return;
     const suscripcion = await registro.pushManager.getSubscription();
-    if (suscripcion) {
-      await savePushSubscription(suscripcion.toJSON() as never, navigator.userAgent);
+    if (!suscripcion) return;
+
+    // Si nació con otra clave, se descarta en vez de refrescarla. Antes se
+    // volvía a guardar en cada carga, así que la fila muerta se mantenía viva
+    // sola y el servidor seguía empujando contra ella para siempre.
+    const clave = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+    if (clave && !creadaConLaClaveActual(suscripcion, clave)) {
+      await descartar(suscripcion);
+      return;
     }
+
+    await savePushSubscription(suscripcion.toJSON() as never, navigator.userAgent);
   } catch {
     /* Silencioso a propósito: es mantenimiento, no una acción del usuario. */
   }

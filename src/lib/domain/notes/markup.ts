@@ -1,11 +1,20 @@
 // Subconjunto propio de Markdown para el cuerpo de una nota.
 //
 // POR QUÉ NO UNA LIBRERÍA
-// D-008 fija cero dependencias de runtime nuevas, y aquí no hay motivo para
-// romperlo: un cuaderno de equipo necesita títulos, listas, negrita y enlaces,
-// no tablas ni notas al pie. Eso cabe en un archivo, se prueba entero, y evita
-// arrastrar un parser de Markdown completo (y su superficie de seguridad) al
-// bundle del cliente.
+// D-008 fija cero dependencias de runtime nuevas, y el dialecto que hace falta
+// —títulos, listas, casillas, tablas, marcas y enlaces— cabe en este archivo,
+// se prueba entero, y evita arrastrar un parser de Markdown completo (y su
+// superficie de seguridad) al bundle del cliente. Las tablas entraron al
+// volverse el editor WYSIWYG (D-111): dejaron de ser sintaxis que alguien
+// teclea y pasaron a ser una rejilla que se toca.
+//
+// POR QUÉ ADEMÁS SERIALIZA
+// El editor trabaja sobre el ÁRBOL, no sobre el texto, así que necesita la
+// inversa. La propiedad que lo sostiene todo:
+//     parse(serialize(parse(x))) ≡ parse(x)
+// No devuelve el texto byte a byte —normaliza— sino un texto que vuelve al
+// mismo árbol. Sin eso, abrir una nota y guardarla la deformaría mientras se
+// escribe, que es el fallo más desconcertante que puede tener un editor.
 //
 // POR QUÉ DEVUELVE DATOS Y NO HTML
 // El cuerpo lo escribe un colaborador. Si esto produjera una cadena de HTML,
@@ -23,6 +32,8 @@ export type Inline =
   | { kind: "bold"; text: string }
   | { kind: "italic"; text: string }
   | { kind: "code"; text: string }
+  | { kind: "underline"; text: string }
+  | { kind: "strike"; text: string }
   | { kind: "link"; text: string; href: string };
 
 export type Block =
@@ -30,7 +41,10 @@ export type Block =
   | { kind: "paragraph"; content: Inline[] }
   | { kind: "bullets"; items: Inline[][] }
   | { kind: "ordered"; items: Inline[][] }
-  | { kind: "quote"; content: Inline[] };
+  | { kind: "quote"; content: Inline[] }
+  | { kind: "todo"; items: { done: boolean; content: Inline[] }[] }
+  | { kind: "mono"; text: string }
+  | { kind: "table"; head: Inline[][]; rows: Inline[][][] };
 
 /**
  * Un solo recorrido para todo lo que va dentro de una línea. El ORDEN de las
@@ -42,8 +56,20 @@ export type Block =
  * `javascript:` no puede llegar a construirse. Esa es la única defensa que hace
  * falta, y conviene que viva aquí y no en quien pinta.
  */
+// El escape va PRIMERO: `\*` tiene que ganarle a `*`, o nunca se podría
+// escribir un asterisco literal. El resto del orden es el de siempre —
+// código antes que negrita, negrita antes que cursiva, enlace explícito
+// antes que enlace suelto.
+//
+// Los caracteres escapables son exactamente los de la primera alternativa:
+// \ ` * ~ + [ |
+// Viven ahí y sólo ahí a propósito. Tenerlos además en una constante aparte
+// crea dos fuentes de verdad que se desincronizan en silencio: la constante
+// diría una cosa y el motor haría otra, y quien la lea se fiará de la que no
+// manda. `escapeInlineText` escapa ese mismo conjunto, y las pruebas de ida y
+// vuelta son las que sujetan que las dos listas coincidan.
 const INLINE_PATTERN =
-  /`([^`\n]+)`|\*\*([^*\n]+)\*\*|\*([^*\n]+)\*|\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<]+)/g;
+  /\\([\\`*~+[|])|`([^`\n]+)`|\*\*([^*\n]+)\*\*|\+\+([^+\n]+)\+\+|~~([^~\n]+)~~|\*([^*\n]+)\*|\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<]+)/g;
 
 export function parseInline(line: string): Inline[] {
   const out: Inline[] = [];
@@ -58,10 +84,15 @@ export function parseInline(line: string): Inline[] {
     if (match.index > last) {
       out.push({ kind: "text", text: line.slice(last, match.index) });
     }
-    const [, code, bold, italic, linkText, linkHref, bareUrl] = match;
+    const [, escapado, code, bold, underline, strike, italic, linkText, linkHref, bareUrl] = match;
 
-    if (code !== undefined) out.push({ kind: "code", text: code });
+    // Un carácter escapado es texto y nada más: se emite tal cual y la
+    // fusión posterior lo pega al tramo que lo rodea.
+    if (escapado !== undefined) out.push({ kind: "text", text: escapado });
+    else if (code !== undefined) out.push({ kind: "code", text: code });
     else if (bold !== undefined) out.push({ kind: "bold", text: bold });
+    else if (underline !== undefined) out.push({ kind: "underline", text: underline });
+    else if (strike !== undefined) out.push({ kind: "strike", text: strike });
     else if (italic !== undefined) out.push({ kind: "italic", text: italic });
     else if (linkText !== undefined && linkHref !== undefined) {
       out.push({ kind: "link", text: linkText, href: linkHref });
@@ -73,16 +104,81 @@ export function parseInline(line: string): Inline[] {
   }
 
   if (last < line.length) out.push({ kind: "text", text: line.slice(last) });
-  // Una línea vacía sigue siendo una línea: devolver [] haría desaparecer el
-  // párrafo entero en quien pinta.
   if (!out.length) out.push({ kind: "text", text: "" });
-  return out;
+  return fusionarTexto(out);
+}
+
+/**
+ * Pega los fragmentos de texto contiguos en uno solo. Sin esto, «a \* b»
+ * saldría en tres piezas y la aritmética de offsets de edit.ts marcaría el
+ * trozo equivocado al aplicar una marca.
+ */
+function fusionarTexto(partes: Inline[]): Inline[] {
+  const out: Inline[] = [];
+  for (const parte of partes) {
+    const previa = out[out.length - 1];
+    if (parte.kind === "text" && previa?.kind === "text") {
+      out[out.length - 1] = { kind: "text", text: previa.text + parte.text };
+      continue;
+    }
+    out.push(parte);
+  }
+  // Un único fragmento vacío es legítimo (línea en blanco); varios, no.
+  return out.length > 1 ? out.filter((p) => !(p.kind === "text" && p.text === "")) : out;
 }
 
 const HEADING = /^(#{1,3})\s+(.*)$/;
+// TODO va ANTES que BULLET al probarse: «- [ ] x» encaja en las dos, y la
+// casilla es la lectura más específica.
+//
+// El texto es OPCIONAL a propósito. El editor crea un ítem vacío en cada
+// Enter, y al serializarlo sale «- [ ] » cuyo espacio final se pierde en el
+// trimEnd() de parseNote: exigiendo texto, ese ítem volvería como una viñeta
+// que dice «[ ]». Rompería el ida y vuelta en la interacción más común.
+const TODO = /^[-*]\s+\[([ xX])\](?:\s+(.*))?$/;
 const BULLET = /^[-*]\s+(.*)$/;
 const ORDERED = /^\d+[.)]\s+(.*)$/;
 const QUOTE = /^>\s?(.*)$/;
+
+const FILA_TABLA = /^\s*\|.*\|\s*$/;
+// La separadora acepta `:` de alineación para no romper con Markdown pegado
+// de fuera, pero la alineación se descarta al construir el bloque.
+const SEPARADORA_TABLA = /^\s*\|(\s*:?-{3,}:?\s*\|)+\s*$/;
+
+function esFilaDeTabla(linea: string): boolean {
+  return FILA_TABLA.test(linea) && !SEPARADORA_TABLA.test(linea);
+}
+
+function esSeparadoraDeTabla(linea: string): boolean {
+  return SEPARADORA_TABLA.test(linea.trimEnd());
+}
+
+/**
+ * Parte una fila en celdas por las barras verticales NO escapadas. El
+ * `split` normal no vale: se llevaría por delante el `\|` de una celda que
+ * contiene una barra a propósito.
+ */
+function celdasDeFila(linea: string): Inline[][] {
+  const cuerpo = linea.trim().replace(/^\|/, "").replace(/\|$/, "");
+  const celdas: string[] = [];
+  let actual = "";
+  for (let k = 0; k < cuerpo.length; k++) {
+    const c = cuerpo[k];
+    if (c === "\\" && cuerpo[k + 1] === "|") {
+      actual += "\\|";
+      k++;
+      continue;
+    }
+    if (c === "|") {
+      celdas.push(actual);
+      actual = "";
+      continue;
+    }
+    actual += c;
+  }
+  celdas.push(actual);
+  return celdas.map((celda) => parseInline(celda.trim()));
+}
 
 /**
  * Divide el cuerpo en bloques.
@@ -100,6 +196,8 @@ export function parseNote(body: string): Block[] {
   let bullets: string[] = [];
   let ordered: string[] = [];
   let quote: string[] = [];
+  let todos: { done: boolean; text: string }[] = [];
+  let mono: string[] | null = null;
 
   function flush() {
     if (paragraph.length) {
@@ -118,13 +216,48 @@ export function parseNote(body: string): Block[] {
       blocks.push({ kind: "quote", content: parseInline(quote.join("\n")) });
       quote = [];
     }
+    if (todos.length) {
+      blocks.push({
+        kind: "todo",
+        items: todos.map((t) => ({ done: t.done, content: parseInline(t.text) }))
+      });
+      todos = [];
+    }
   }
 
-  for (const raw of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i] ?? "";
     const line = raw.trimEnd();
+
+    // Dentro de una valla no se interpreta NADA: ni bloques, ni escapes, ni
+    // marcado. Sólo se busca el cierre.
+    if (mono !== null) {
+      if (/^```/.test(line)) {
+        blocks.push({ kind: "mono", text: mono.join("\n") });
+        mono = null;
+      } else {
+        mono.push(raw);
+      }
+      continue;
+    }
+
+    if (/^```/.test(line)) {
+      flush();
+      mono = [];
+      continue;
+    }
 
     if (!line.trim()) {
       flush();
+      continue;
+    }
+
+    // Una línea que empieza por `\` seguido de una marca de bloque es texto a
+    // propósito: quien escribió «\# hola» quiere ver «# hola». parseInline
+    // deshace el escape; aquí sólo hay que impedir que se lea como bloque.
+    if (/^\s*\\[#>|*\-`]|^\s*\\\d/.test(line)) {
+      if (bullets.length || ordered.length || quote.length) flush();
+      paragraph.push(line);
       continue;
     }
 
@@ -139,30 +272,62 @@ export function parseNote(body: string): Block[] {
       continue;
     }
 
+    const casilla = TODO.exec(line);
+    if (casilla) {
+      if (paragraph.length || bullets.length || ordered.length || quote.length) flush();
+      todos.push({ done: (casilla[1] ?? " ").toLowerCase() === "x", text: casilla[2] ?? "" });
+      continue;
+    }
+
     const bullet = BULLET.exec(line);
     if (bullet) {
-      if (paragraph.length || ordered.length || quote.length) flush();
+      if (paragraph.length || ordered.length || quote.length || todos.length) flush();
       bullets.push(bullet[1] ?? "");
       continue;
     }
 
     const numbered = ORDERED.exec(line);
     if (numbered) {
-      if (paragraph.length || bullets.length || quote.length) flush();
+      if (paragraph.length || bullets.length || quote.length || todos.length) flush();
       ordered.push(numbered[1] ?? "");
+      continue;
+    }
+
+    // Una tabla exige DOS líneas: la de encabezado y la separadora. Sin la
+    // segunda, un párrafo con barras verticales se leería como tabla.
+    if (esFilaDeTabla(line) && esSeparadoraDeTabla(lines[i + 1] ?? "")) {
+      flush();
+      const head = celdasDeFila(line);
+      const rows: Inline[][][] = [];
+      let j = i + 2;
+      while (j < lines.length && esFilaDeTabla(lines[j] ?? "")) {
+        const celdas = celdasDeFila(lines[j] ?? "");
+        // Ancho fijo = ancho del encabezado. Recorta lo que sobra y rellena
+        // con celdas vacías lo que falta.
+        rows.push(
+          Array.from({ length: head.length }, (_, c) => celdas[c] ?? [{ kind: "text" as const, text: "" }])
+        );
+        j++;
+      }
+      blocks.push({ kind: "table", head, rows });
+      i = j - 1;
       continue;
     }
 
     const quoted = QUOTE.exec(line);
     if (quoted) {
-      if (paragraph.length || bullets.length || ordered.length) flush();
+      if (paragraph.length || bullets.length || ordered.length || todos.length) flush();
       quote.push(quoted[1] ?? "");
       continue;
     }
 
-    if (bullets.length || ordered.length || quote.length) flush();
+    if (bullets.length || ordered.length || quote.length || todos.length) flush();
     paragraph.push(line);
   }
+
+  // Una valla sin cerrar termina donde termina el cuerpo. Tragarse el resto
+  // de la nota sería peor que cerrarla sola.
+  if (mono !== null) blocks.push({ kind: "mono", text: mono.join("\n") });
 
   flush();
   return blocks;
@@ -177,6 +342,9 @@ export function noteExcerpt(body: string, max = 140): string {
   const plain = parseNote(body)
     .flatMap((block) => {
       if (block.kind === "bullets" || block.kind === "ordered") return block.items.map(inlineText);
+      if (block.kind === "todo") return block.items.map((item) => inlineText(item.content));
+      if (block.kind === "mono") return [block.text];
+      if (block.kind === "table") return [...block.head, ...block.rows.flat()].map(inlineText);
       return [inlineText(block.content)];
     })
     .join(" · ")
@@ -202,12 +370,123 @@ export function noteDisplayTitle(title: string, body: string): string {
   const trimmed = title.trim();
   if (trimmed) return trimmed;
 
-  const firstLine = body
-    .split("\n")
-    .map((l) => l.trim())
-    .find((l) => l.length > 0);
-  if (!firstLine) return NOTA_SIN_TITULO;
+  // Reusar el parser en vez de quitar el marcado a mano: así cada bloque
+  // nuevo del dialecto queda cubierto sin tocar esta función otra vez.
+  const [primero] = parseNote(body);
+  if (!primero) return NOTA_SIN_TITULO;
 
-  const clean = inlineText(parseInline(firstLine.replace(HEADING, "$2").replace(BULLET, "$1")));
-  return clean.length > 60 ? `${clean.slice(0, 59).trimEnd()}…` : clean || NOTA_SIN_TITULO;
+  const lineas =
+    primero.kind === "bullets" || primero.kind === "ordered"
+      ? primero.items
+      : primero.kind === "todo"
+        ? primero.items.map((item) => item.content)
+        : primero.kind === "mono"
+          ? [[{ kind: "text" as const, text: primero.text }]]
+          : primero.kind === "table"
+            ? primero.head
+            : [primero.content];
+
+  const clean = (inlineText(lineas[0] ?? []).split("\n")[0] ?? "").trim();
+  if (!clean) return NOTA_SIN_TITULO;
+  return clean.length > 60 ? `${clean.slice(0, 59).trimEnd()}…` : clean;
+}
+
+/**
+ * Inversa de `parseNote`. No devuelve el texto original byte a byte —
+ * normaliza— sino un texto que vuelve a parsearse al MISMO árbol. Esa es la
+ * propiedad que sostiene el editor: abrir una nota y guardarla no la deforma.
+ */
+export function serializeNote(blocks: Block[]): string {
+  return blocks.map(serializeBlock).join("\n\n");
+}
+
+function serializeBlock(block: Block): string {
+  switch (block.kind) {
+    case "heading":
+      return `${"#".repeat(block.level)} ${serializeInline(block.content)}`;
+    case "bullets":
+      return block.items.map((item) => `- ${serializeInline(item)}`).join("\n");
+    case "todo":
+      return block.items
+        .map((item) => `- [${item.done ? "x" : " "}] ${serializeInline(item.content)}`)
+        .join("\n");
+    case "ordered":
+      return block.items.map((item, i) => `${i + 1}. ${serializeInline(item)}`).join("\n");
+    case "quote":
+      return serializeInline(block.content)
+        .split("\n")
+        .map((linea) => `> ${linea}`)
+        .join("\n");
+    case "mono":
+      return `\`\`\`\n${block.text}\n\`\`\``;
+    case "table": {
+      const fila = (celdas: Inline[][]) =>
+        `| ${celdas.map((c) => serializeInline(c, { pipe: true })).join(" | ")} |`;
+      // La separadora se escribe siempre igual: sin alineación que sostener.
+      const separadora = `|${block.head.map(() => "---").join("|")}|`;
+      return [fila(block.head), separadora, ...block.rows.map(fila)].join("\n");
+    }
+    default:
+      // Un párrafo conserva sus saltos internos (ver parseNote), y cada línea
+      // se protege por separado: basta con que UNA empiece por «#» para que al
+      // volver a parsear se parta el párrafo en dos bloques.
+      return serializeInline(block.content).split("\n").map(escaparInicioDeLinea).join("\n");
+  }
+}
+
+/**
+ * Caracteres que, al inicio de una línea, la convertirían en otro bloque.
+ * `*` y `-` sólo son peligrosos si BULLET los reconocería como tales, es
+ * decir seguidos de espacio: sin el lookahead, un párrafo que EMPIEZA con
+ * negrita («**negrita**...») escapaba el primer asterisco de más y el
+ * ida-y-vuelta lo convertía en cursiva rota. Lo mismo le pasaba a `#`: sin su
+ * propio lookahead, un hashtag («#YOLO») se escapaba de más aunque HEADING
+ * exige espacio tras la almohadilla para leerse como título. `>` y `|` no
+ * necesitan lookahead: QUOTE acepta el espacio opcional (cualquier `>` inicial
+ * es un título de cita), y `|` sí revierte su escape en parseInline.
+ */
+const INICIO_DE_BLOQUE = /^(\s*)(#(?=\s)|[>|]|[*-](?=\s)|\d+[.)]|```)/;
+
+function escaparInicioDeLinea(linea: string): string {
+  return linea.replace(INICIO_DE_BLOQUE, (_, sangria: string, marca: string) => {
+    return `${sangria}\\${marca}`;
+  });
+}
+
+export function escapeInlineText(text: string, opts?: { pipe?: boolean }): string {
+  // La barra invertida sólo necesita duplicarse cuando el carácter que la
+  // sigue es uno de los que INLINE_PATTERN reconoce como escapable: si no lo
+  // es (p. ej. una `#` suelta), una sola barra ya vuelve a parsearse como el
+  // mismo texto literal, y duplicarla de más rompería la igualdad byte a byte
+  // que exige «serializeNote: un párrafo que empieza como otro bloque se
+  // escapa». Va primero o se escaparían las que acabamos de meter.
+  const escapado = text.replace(/\\(?=[\\`*~+[|])/g, "\\\\").replace(/([`*~+[])/g, "\\$1");
+  return opts?.pipe ? escapado.replace(/\|/g, "\\|") : escapado;
+}
+
+export function serializeInline(content: Inline[], opts?: { pipe?: boolean }): string {
+  return content
+    .map((parte) => {
+      switch (parte.kind) {
+        case "bold":
+          return `**${escapeInlineText(parte.text, opts)}**`;
+        case "underline":
+          return `++${escapeInlineText(parte.text, opts)}++`;
+        case "strike":
+          return `~~${escapeInlineText(parte.text, opts)}~~`;
+        case "italic":
+          return `*${escapeInlineText(parte.text, opts)}*`;
+        case "code":
+          // Dentro de comillas invertidas nada se interpreta, así que escapar
+          // ahí rompería el literal en vez de protegerlo.
+          return `\`${parte.text}\``;
+        case "link":
+          return parte.text === parte.href
+            ? parte.href
+            : `[${escapeInlineText(parte.text, opts)}](${parte.href})`;
+        default:
+          return escapeInlineText(parte.text, opts);
+      }
+    })
+    .join("");
 }

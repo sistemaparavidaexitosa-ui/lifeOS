@@ -106,3 +106,120 @@ test("la firma verifica contra la clave pública anunciada en `k`", async () => 
 test("un endpoint que no es una URL falla claro, no produce un token inválido", async () => {
   await assert.rejects(() => vapidAuthorization("no-soy-una-url", CREDS), /endpoint/i);
 });
+
+// ─── La clave privada sin puntuación ────────────────────────────────────────
+//
+// El JWK completo lleva llaves, comas y comillas, y eso lo hace frágil de
+// transportar: pegado en el importador masivo de variables de Vercel, su
+// parser quita las comillas dobles del valor y se lleva también las de DENTRO,
+// dejando `{kty:EC,...}`, que ya no es JSON. Pasó de verdad, dos veces.
+//
+// La salida es aceptar solo el componente `d` —43 caracteres base64url, sin un
+// solo signo de puntuación— y reconstruir el resto desde la clave pública, que
+// ya tenemos y ya validamos. `x` e `y` NO se configuran aparte: salen de ese
+// único sitio, así que no pueden desincronizarse entre sí.
+
+test("jwkFromPrivateKey reconstruye una clave que firma de verdad", async () => {
+  const { jwkFromPrivateKey } = await import("../../src/lib/domain/push/vapid.ts");
+
+  // Un par real, para poder comprobar contra su propia mitad pública.
+  const par = (await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+    "sign",
+    "verify"
+  ])) as CryptoKeyPair;
+  const original = await crypto.subtle.exportKey("jwk", par.privateKey);
+  const publica = toBase64Url(new Uint8Array(await crypto.subtle.exportKey("raw", par.publicKey)));
+
+  // Solo se le da `d` y la pública: ni `x` ni `y`.
+  const reconstruido = jwkFromPrivateKey(original.d as string, publica);
+
+  assert.equal(reconstruido.x, original.x, "la X reconstruida no coincide con la original");
+  assert.equal(reconstruido.y, original.y, "la Y reconstruida no coincide con la original");
+
+  // Y la prueba que importa: firma con la reconstruida, verifica con la pública.
+  const clave = await crypto.subtle.importKey("jwk", reconstruido, { name: "ECDSA", namedCurve: "P-256" }, false, [
+    "sign"
+  ]);
+  const msg = new TextEncoder().encode("reconstruida");
+  const firma = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, clave, msg);
+  const ok = await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, par.publicKey, firma, msg);
+  assert.ok(ok, "la clave reconstruida no produce una firma válida");
+});
+
+test("jwkFromPrivateKey rechaza una pública que no es un punto sin comprimir", async () => {
+  const { jwkFromPrivateKey } = await import("../../src/lib/domain/push/vapid.ts");
+  await assert.rejects(
+    async () => jwkFromPrivateKey("loquesea", toBase64Url(new Uint8Array(64))),
+    /65 octetos|sin comprimir/i
+  );
+});
+
+// ─── ¿Son pareja las dos mitades? ───────────────────────────────────────────
+//
+// Hay DOS causas para que el servicio de push conteste 401/403, con arreglos
+// distintos, y el código de estado no las distingue:
+//
+//   a) la pública y la privada configuradas no son pareja → hay que corregir
+//      las variables de entorno;
+//   b) sí lo son, pero el dispositivo se suscribió con una clave ANTERIOR →
+//      hay que desactivar y volver a activar en ese dispositivo.
+//
+// Confundirlas cuesta horas, así que se comprueba (a) antes de enviar.
+
+test("isVapidPair distingue un par correcto de dos mitades que no casan", async () => {
+  const { isVapidPair, jwkFromPrivateKey } = await import("../../src/lib/domain/push/vapid.ts");
+
+  const crear = async () => {
+    const par = (await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+      "sign",
+      "verify"
+    ])) as CryptoKeyPair;
+    return {
+      jwk: await crypto.subtle.exportKey("jwk", par.privateKey),
+      publica: toBase64Url(new Uint8Array(await crypto.subtle.exportKey("raw", par.publicKey)))
+    };
+  };
+
+  const uno = await crear();
+  const otro = await crear();
+
+  assert.equal(await isVapidPair(uno.jwk, uno.publica), true, "un par legítimo debería validar");
+
+  // El caso real que motivó esto: la `d` de un par con la pública de otro. Es
+  // lo que pasa al cambiar de par y actualizar solo una de las dos variables.
+  const mezclado = jwkFromPrivateKey(uno.jwk.d as string, otro.publica);
+  assert.equal(await isVapidPair(mezclado, otro.publica), false, "dos mitades de pares distintos NO son pareja");
+});
+
+// ─── El `sub`, que tiene que valer para Apple Y para Google ─────────────────
+//
+// RFC 8292 pide una URI `mailto:` o `https:`. Apple lo aplica al pie de la
+// letra y responde 403 `BadJwtToken` a cualquier otra cosa —el MISMO error que
+// da una firma inválida—, así que un `sub` mal escrito se diagnostica como un
+// problema de criptografía. FCM es más tolerante, pero una sola forma válida
+// sirve para los dos, y es la que se normaliza aquí.
+//
+// Se admite el correo suelto porque es lo que la gente escribe: `mailto:` no es
+// decoración, es el esquema, pero nadie lo teclea de memoria.
+
+test("normalizeVapidSubject acepta las formas que la gente escribe de verdad", async () => {
+  const { normalizeVapidSubject } = await import("../../src/lib/domain/push/vapid.ts");
+
+  assert.equal(normalizeVapidSubject("mailto:ana@ejemplo.com"), "mailto:ana@ejemplo.com");
+  assert.equal(normalizeVapidSubject("ana@ejemplo.com"), "mailto:ana@ejemplo.com", "un correo suelto se prefija");
+  assert.equal(normalizeVapidSubject("  ana@ejemplo.com  "), "mailto:ana@ejemplo.com");
+  assert.equal(normalizeVapidSubject("'ana@ejemplo.com'"), "mailto:ana@ejemplo.com", "comillas del .env pegadas");
+  assert.equal(normalizeVapidSubject("MAILTO:ana@ejemplo.com"), "mailto:ana@ejemplo.com", "el esquema no distingue mayúsculas");
+  assert.equal(normalizeVapidSubject("https://mi-app.vercel.app"), "https://mi-app.vercel.app");
+});
+
+test("normalizeVapidSubject rechaza lo que Apple rechazaría, y lo dice", async () => {
+  const { normalizeVapidSubject } = await import("../../src/lib/domain/push/vapid.ts");
+
+  // El default en local. Es una URL válida y aun así APNs la rechaza.
+  assert.throws(() => normalizeVapidSubject("http://localhost:3000"), /https/i);
+  // Los huecos de la documentación pegados tal cual: han pasado los dos.
+  assert.throws(() => normalizeVapidSubject("mailto:..."), /correo|https/i);
+  assert.throws(() => normalizeVapidSubject("https://tu-dominio-de-produccion"), /dominio|punto/i);
+  assert.throws(() => normalizeVapidSubject(""), /VAPID_SUBJECT/);
+});
