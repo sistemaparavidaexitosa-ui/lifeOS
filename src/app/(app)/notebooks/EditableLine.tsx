@@ -21,14 +21,23 @@ import type { Inline } from "@/lib/domain/notes/markup.ts";
 
 export interface EditableLineProps {
   content: Inline[];
-  /** Al escribir. NO repinta: el DOM es la fuente de verdad mientras hay foco. */
-  onChange: (content: Inline[]) => void;
+  /** Al escribir: el contenido leído del DOM y DÓNDE quedó el cursor.
+   *  El offset viaja con el contenido a propósito. React reconcilia los hijos
+   *  de este contenteditable en cada cambio de `content` —eso no se puede
+   *  evitar sin congelar los callbacks y quedarse con closures rancias—, así
+   *  que el cursor se pierde y hay que reponerlo. Reponerlo en una posición
+   *  adivinada fue el fallo que hacía escribir al revés. */
+  onChange: (content: Inline[], caret: number) => void;
   /** Enter, Backspace y flechas los decide NoteDoc, que es quien ve los bloques. */
   onKey: (e: KeyboardEvent<HTMLDivElement>) => void;
   onSelect: (start: number, end: number) => void;
   autoFocus?: boolean;
-  /** Dónde poner el cursor cuando el MODELO lo pide. `null` = no tocar el DOM. */
+  /** Inicio del tramo a restaurar. `null` = no tocar el DOM. */
   caret?: number | null;
+  /** Fin del tramo. Si difiere de `caret`, se restaura la SELECCIÓN entera:
+   *  colapsarla borraría lo que el usuario acaba de seleccionar para dar
+   *  formato, que es justo cuando hace falta. */
+  caretEnd?: number | null;
   /** Sube cada vez que el modelo pide un cursor nuevo. Es lo que distingue
    *  «el modelo movió el cursor» de «el usuario está tecleando»: sin este
    *  contador, el efecto se disparaba en CADA tecla y devolvía el cursor al
@@ -129,21 +138,17 @@ export function offsetDelCursor(el: HTMLElement): { start: number; end: number }
   return { start: Math.min(a, b), end: Math.max(a, b) };
 }
 
-/** Coloca el cursor en un offset de texto visible. */
-export function ponerCursor(el: HTMLElement, offset: number): void {
-  const sel = window.getSelection();
-  if (!sel) return;
-  const rango = document.createRange();
+/** Localiza un offset de texto visible como (nodo, desplazamiento) del DOM. */
+function puntoEn(el: HTMLElement, offset: number): { nodo: Node; pos: number } | null {
   let restante = offset;
-  let colocado = false;
+  let encontrado: { nodo: Node; pos: number } | null = null;
 
   const recorrer = (nodo: Node): void => {
-    if (colocado) return;
+    if (encontrado) return;
     if (nodo.nodeType === Node.TEXT_NODE) {
       const largo = nodo.textContent?.length ?? 0;
       if (restante <= largo) {
-        rango.setStart(nodo, restante);
-        colocado = true;
+        encontrado = { nodo, pos: restante };
         return;
       }
       restante -= largo;
@@ -152,12 +157,38 @@ export function ponerCursor(el: HTMLElement, offset: number): void {
     for (const hijo of Array.from(nodo.childNodes)) recorrer(hijo);
   };
   recorrer(el);
+  return encontrado;
+}
+
+/**
+ * Restaura una selección por offsets de texto visible.
+ *
+ * Restaura el TRAMO, no sólo el punto: colapsar a `start` borraría la
+ * selección del usuario justo cuando la necesita, que es al tocar «B».
+ */
+export function ponerSeleccion(el: HTMLElement, start: number, end: number): void {
+  const sel = window.getSelection();
+  if (!sel) return;
+  const rango = document.createRange();
+  const a = puntoEn(el, start);
+  const b = end === start ? a : puntoEn(el, end);
 
   // Un bloque vacío no tiene nodo de texto donde apoyar el cursor.
-  if (!colocado) rango.selectNodeContents(el);
-  rango.collapse(true);
+  if (!a) {
+    rango.selectNodeContents(el);
+    rango.collapse(true);
+  } else {
+    rango.setStart(a.nodo, a.pos);
+    if (b) rango.setEnd(b.nodo, b.pos);
+    else rango.collapse(true);
+  }
   sel.removeAllRanges();
   sel.addRange(rango);
+}
+
+/** Coloca el cursor (selección colapsada) en un offset de texto visible. */
+export function ponerCursor(el: HTMLElement, offset: number): void {
+  ponerSeleccion(el, offset, offset);
 }
 
 function pintar(content: Inline[]): ReactNode {
@@ -192,6 +223,7 @@ export default function EditableLine({
   onSelect,
   autoFocus,
   caret,
+  caretEnd,
   caretSeq = 0,
   readOnly,
   placeholder,
@@ -199,27 +231,39 @@ export default function EditableLine({
 }: EditableLineProps) {
   const ref = useRef<HTMLDivElement | null>(null);
 
-  // El único momento en que React escribe en este nodo: cuando el MODELO pide
-  // un cursor nuevo (una marca aplicada, un deshacer, un Enter). Se reconoce
-  // porque `caretSeq` sube.
+  // Tras CADA repintado de React hay que reponer el cursor, porque la
+  // reconciliación de los hijos lo destruye. La posición viene del modelo, y
+  // el modelo la recibió leyéndola del DOM en `onInput`: por eso es correcta.
   //
-  // Escribir NO sube `caretSeq`, así que este efecto no corre y el DOM se
-  // queda como lo dejó el navegador. Cuando dependía de `[caret, content]`
-  // corría en cada tecla y devolvía el cursor al inicio: la nota se escribía
-  // al revés. El caret se lee de una ref para que cambiarlo no dispare nada.
-  const caretRef = useRef<number | null | undefined>(caret);
-  caretRef.current = caret;
-  const ultimoSeq = useRef<number | null>(null);
+  // Las dos versiones anteriores fallaron aquí, y conviene que quede escrito:
+  // reponerlo con un offset adivinado escribía al revés; NO reponerlo dejaba
+  // el campo sin cursor y no se podía escribir. El offset tiene que ser real.
+  //
+  // Durante una composición (dictado, teclado predictivo, acentos) NO se toca
+  // nada: mover el cursor a media composición la cancela.
+  const componiendo = useRef(false);
 
   useEffect(() => {
     const el = ref.current;
-    const pos = caretRef.current;
-    if (!el || pos === null || pos === undefined) return;
+    if (!el || caret === null || caret === undefined) return;
+    if (componiendo.current) return;
+    if (document.activeElement !== el) return;
+    ponerSeleccion(el, caret, caretEnd ?? caret);
+  }, [caret, caretEnd, caretSeq, content]);
+
+  // Cuando el modelo mueve el cursor a OTRA línea (Enter, Backspace, deshacer),
+  // esta línea puede no tener el foco todavía: hay que pedirlo.
+  const ultimoSeq = useRef<number | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || caret === null || caret === undefined) return;
     if (ultimoSeq.current === caretSeq) return;
     ultimoSeq.current = caretSeq;
-    if (document.activeElement !== el) el.focus();
-    ponerCursor(el, pos);
-  }, [caretSeq]);
+    if (document.activeElement !== el) {
+      el.focus();
+      ponerSeleccion(el, caret, caretEnd ?? caret);
+    }
+  }, [caret, caretEnd, caretSeq]);
 
   useEffect(() => {
     if (autoFocus) ref.current?.focus();
@@ -241,7 +285,23 @@ export default function EditableLine({
       autoCapitalize="sentences"
       autoCorrect="on"
       spellCheck
-      onInput={(e) => onChange(leerDom(e.currentTarget))}
+      onCompositionStart={() => {
+        componiendo.current = true;
+      }}
+      onCompositionEnd={(e) => {
+        // El modelo se entera al TERMINAR la composición, no durante: avisar a
+        // media palabra dictada la interrumpe.
+        componiendo.current = false;
+        const el = e.currentTarget;
+        onChange(leerDom(el), offsetDelCursor(el).start);
+      }}
+      onInput={(e) => {
+        if (componiendo.current) return;
+        const el = e.currentTarget;
+        // El offset se lee AQUÍ, del DOM, antes de que React repinte. Es el
+        // único momento en que se sabe de verdad dónde está el cursor.
+        onChange(leerDom(el), offsetDelCursor(el).start);
+      }}
       onKeyDown={onKey}
       onSelect={(e) => {
         const { start, end } = offsetDelCursor(e.currentTarget);

@@ -1004,6 +1004,26 @@ Otros tres, otra vez ninguno detectable sin abrir la app:
    El umbral de iOS son 16px exactos, y este repo ya lo documentaba en otros dos
    sitios. Ahora `.nb-line` los fija.
 
+#### Tercera tanda: el arreglo 5 estaba mal (6-sep-2026)
+
+Corregir «escribe al revés» condicionando la reposición del cursor a `seq` dejó
+el cuerpo **sin poder escribir en absoluto**. La premisa del comentario —«React
+pinta el nodo al montarlo y no vuelve a tocarlo»— nunca fue cierta: `content` es
+una prop, y React reconcilia los hijos del `contenteditable` en cada cambio,
+destruyendo el cursor. Antes eso quedaba tapado porque el efecto lo reponía en
+cada tecla (en la posición 0 — de ahí el texto al revés).
+
+La causa raíz no era CUÁNDO se repone el cursor, sino que **el offset repuesto
+era inventado**. Ahora `onInput` lee el offset real del DOM y lo manda junto al
+contenido; el efecto restaura el TRAMO (no sólo el punto, o se perdería la
+selección al tocar «B»); y durante una composición —dictado, teclado predictivo,
+acentos— no se toca nada.
+
+**Aviso honesto:** es el SEGUNDO intento sobre este mismo síntoma y no se ha
+podido verificar en un navegador. Si vuelve a fallar, el problema no es el
+arreglo sino la arquitectura: dejar que React reconcilie los hijos de un
+`contenteditable` pelea de raíz con que el navegador sea dueño del cursor.
+
 **Las 16 filas originales siguen sin ejecutarse salvo las anotadas.** El editor compila, pasa las
 pruebas de dominio y construye, pero **nadie lo ha abierto en un teléfono**.
 Hasta que esta tabla se rellene con resultados reales, no se puede afirmar que
