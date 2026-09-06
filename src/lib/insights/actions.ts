@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/data/session";
-import { todayLocal } from "@/lib/data/dates";
-import { getUserTimeZone } from "@/lib/data/profile";
+
+import { todayForUser } from "@/lib/data/profile";
 import { loadFacts } from "./facts-loader";
 import { allowedDomains, buildAliasMap, buildContext, restore, type Scope } from "./context";
 import { recommend } from "@/lib/ai/recommend";
@@ -58,7 +58,7 @@ export async function analyze(scope: Scope): Promise<AnalyzeResult> {
   const user = await getSessionUser();
   if (!user) return { ok: false, created: 0, reason: "No autenticado" };
 
-  const today = todayLocal(await getUserTimeZone());
+  const today = await todayForUser();
 
   const [{ data: profile }, { data: accounts }, { data: members }, { data: rejected }, { data: memory }] = await Promise.all([
     supabase
@@ -283,7 +283,6 @@ export async function editRecommendationText(id: string, text: string): Promise<
 }
 
 // --- Memoria (§6) -----------------------------------------------------------
-
 
 /**
  * Alta y edición de una nota de memoria, y el ÚNICO sitio que escribe en

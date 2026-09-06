@@ -5,8 +5,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionUser, requireUser } from "@/lib/data/session";
-import { todayLocal } from "@/lib/data/dates";
-import { getUserTimeZone } from "@/lib/data/profile";
+
+import { todayForUser } from "@/lib/data/profile";
 import { toggleHabitEffect, routineRunComplete, routineRunNeedsWrite } from "@/lib/domain/development/routines.ts";
 import { matchHabitForStep } from "@/lib/domain/development/templates.ts";
 // El catálogo se lee de `template_catalog` (0044) y no de un array del módulo:
@@ -177,7 +177,7 @@ export async function upsertHabit(routineId: string, id: string | null, formData
 
   // La rutina acaba de cambiar de tamaño: el hábito nuevo la descierra, y el
   // editado puede haber sido el que faltaba.
-  await sincronizarCierreDeRutina(supabase, routineId, todayLocal(await getUserTimeZone()), { arranca: false });
+  await sincronizarCierreDeRutina(supabase, routineId, await todayForUser(), { arranca: false });
 
   revalidatePath("/development/routines");
   revalidatePath("/development");
@@ -196,7 +196,7 @@ export async function deleteHabit(id: string) {
   if (error) throw new Error(error.message);
 
   if (habit?.routine_id) {
-    await sincronizarCierreDeRutina(supabase, habit.routine_id, todayLocal(await getUserTimeZone()), { arranca: false });
+    await sincronizarCierreDeRutina(supabase, habit.routine_id, await todayForUser(), { arranca: false });
   }
 
   revalidatePath("/development/routines");
@@ -216,7 +216,7 @@ export async function deleteHabit(id: string) {
 export async function toggleHabitToday(routineId: string, habitId: string) {
   const { supabase, user } = await requireUser();
 
-  const today = todayLocal(await getUserTimeZone());
+  const today = await todayForUser();
 
   const { data: log } = await supabase
     .from("habit_logs")

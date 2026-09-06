@@ -4,8 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/data/session";
 import { evaluateTransition } from "@/lib/domain/task-state.ts";
 import { presetDate, type ReminderPreset } from "@/lib/domain/execution/reminders.ts";
-import { todayLocal } from "@/lib/data/dates";
-import { getUserTimeZone } from "@/lib/data/profile";
+
+import { todayForUser } from "@/lib/data/profile";
 import {
   decide,
   type AutomationEvent,
@@ -115,7 +115,7 @@ async function ejecutar(
     case "create_reminder": {
       const subjectId = event.taskId ?? event.commentId;
       if (!subjectId) return { ok: false, detail: "El evento no tiene sujeto al que apuntar." };
-      const today = todayLocal(await getUserTimeZone());
+      const today = await todayForUser();
       const { error } = await supabase.from("reminders").insert({
         user_id: userId,
         subject_type: event.taskId ? "task" : "comment",

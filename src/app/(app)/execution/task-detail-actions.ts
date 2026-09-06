@@ -11,8 +11,8 @@ import { dispatchAutomations } from "@/lib/automations/dispatch";
 import { requireUser } from "@/lib/data/session";
 import { recordActivity } from "@/lib/data/activity";
 import { notifyAssignments, notifyMentions } from "@/lib/push/triggers";
-import { todayLocal } from "@/lib/data/dates";
-import { getUserTimeZone } from "@/lib/data/profile";
+
+import { todayForUser } from "@/lib/data/profile";
 import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
 
 export interface TaskDetailTask {
@@ -323,7 +323,7 @@ export async function setTaskAssignees(taskId: string, userNames: string[]) {
       actorId: user.id,
       actorName: propio?.name ?? "Alguien",
       nuevosUserIds,
-      todayISO: todayLocal(await getUserTimeZone())
+      todayISO: await todayForUser()
     });
   }
 

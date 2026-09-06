@@ -22,8 +22,8 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionUser, requireUser } from "@/lib/data/session";
 import { actionFailed, actionOk, type ActionResult } from "@/lib/supabase/errors";
-import { todayLocal } from "@/lib/data/dates";
-import { getUserTimeZone } from "@/lib/data/profile";
+
+import { todayForUser } from "@/lib/data/profile";
 
 const windowSchema = z.object({
   start: z.string().regex(/^\d{2}:\d{2}$/),
@@ -156,7 +156,7 @@ export async function assignTaskToDate(taskId: string, date: string) {
 
   const { supabase, user } = await requireUser();
 
-  const isToday = parsedDate === todayLocal(await getUserTimeZone());
+  const isToday = parsedDate === await todayForUser();
   const { error } = await supabase
     .from("tasks")
     .update(isToday ? { impact: true, due: parsedDate } : { due: parsedDate })
@@ -170,7 +170,7 @@ export async function assignTaskToDate(taskId: string, date: string) {
 
 /** Wrapper de compatibilidad: asigna al día de HOY (mismo contrato que antes de esta actualización). */
 export async function assignTaskToSlot(taskId: string) {
-  return assignTaskToDate(taskId, todayLocal(await getUserTimeZone()));
+  return assignTaskToDate(taskId, await todayForUser());
 }
 
 /**

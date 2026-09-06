@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/data/session";
-import { todayLocal } from "@/lib/data/dates";
-import { getUserTimeZone } from "@/lib/data/profile";
+
+import { todayForUser } from "@/lib/data/profile";
 import { scalePer100g } from "@/lib/domain/development/nutrition.ts";
 import { plausibleMacros } from "@/lib/domain/development/nutrition-lookup.ts";
 
@@ -106,7 +106,7 @@ export async function upsertWeight(formData: FormData): Promise<{ ok: boolean; r
   const user = await getSessionUser();
   if (!user) return { ok: false, reason: "No autenticado" };
 
-  const hoy = todayLocal(await getUserTimeZone());
+  const hoy = await todayForUser();
 
   const { error } = await supabase.from("body_measurements").upsert(
     {
@@ -187,7 +187,7 @@ export async function logFoodEntry(localDate: string, formData: FormData): Promi
   const user = await getSessionUser();
   if (!user) return { ok: false, reason: "No autenticado" };
 
-  const dia = /^\d{4}-\d{2}-\d{2}$/.test(localDate) ? localDate : todayLocal(await getUserTimeZone());
+  const dia = /^\d{4}-\d{2}-\d{2}$/.test(localDate) ? localDate : await todayForUser();
 
   // La posición se toma del final de esa comida en ese día: el orden en que se
   // registró es el orden en que se comió, y es el que la pantalla enseña.
@@ -243,7 +243,7 @@ export async function logMealFromRoutine(
   const user = await getSessionUser();
   if (!user) return { ok: false, reason: "No autenticado" };
 
-  const hoy = todayLocal(await getUserTimeZone());
+  const hoy = await todayForUser();
 
   // La comida primero: si no se puede registrar, el hábito no se marca. Al
   // revés dejaría un hábito «cumplido» sin nada detrás.

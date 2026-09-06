@@ -7,8 +7,7 @@ import { budgetQuincenaRow } from "@/lib/domain/budget.ts";
 import { quincenaFor } from "@/lib/domain/quincena.ts";
 import { loadMyTasks } from "./tasks";
 import { dueReminders, type ReminderLike } from "@/lib/domain/execution/reminders.ts";
-import { todayLocal } from "./dates";
-import { getUserTimeZone } from "./profile";
+import { todayForUser } from "./profile";
 import { loadReadingFocus } from "./development";
 
 /**
@@ -36,7 +35,7 @@ export async function getHomeData(userId: string) {
   const supabase = await createClient();
   // "Hoy" en la zona del perfil, no la del servidor: el plan diario se busca
   // por local_date y con UTC se pedía el del día siguiente cada tarde.
-  const t0 = todayLocal(await getUserTimeZone());
+  const t0 = await todayForUser();
   // D-076: el dinero de Home se mide por QUINCENA (Q1 = 1-15, Q2 = 16-fin de
   // mes), que es el periodo en el que el usuario cobra y presupuesta, no por una
   // ventana rodante de 15 días que nunca se reinicia el día de pago.

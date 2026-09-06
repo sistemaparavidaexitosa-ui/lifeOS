@@ -12,8 +12,8 @@ import { getSessionUser } from "@/lib/data/session";
 import { evaluateTransition } from "@/lib/domain/task-state.ts";
 import { DONE_EMOJI } from "@/lib/domain/execution/reactions.ts";
 import { presetDate, type ReminderPreset } from "@/lib/domain/execution/reminders.ts";
-import { todayLocal } from "@/lib/data/dates";
-import { getUserTimeZone } from "@/lib/data/profile";
+
+import { todayForUser } from "@/lib/data/profile";
 import type { TaskStatus } from "@/lib/domain/types.ts";
 
 export interface ThreadActionResult {
@@ -194,7 +194,7 @@ export async function createReminder(
 
   // El día se decide en la zona del perfil, no en la del servidor: con UTC, un
   // «mañana» pedido esta tarde en México caería pasado mañana.
-  const today = todayLocal(await getUserTimeZone());
+  const today = await todayForUser();
 
   const { error } = await supabase.from("reminders").insert({
     user_id: user.id,

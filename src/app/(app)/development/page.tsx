@@ -2,8 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Card, Chip, EmptyState, Progress, Stat } from "@/components/ui";
-import { todayLocal } from "@/lib/data/dates";
-import { getUserTimeZone } from "@/lib/data/profile";
+
+import { todayForUser } from "@/lib/data/profile";
 import { loadSourceSnapshot, loadReadingFocus } from "@/lib/data/development";
 import { keyResultProgress, goalProgress, goalAtRisk } from "@/lib/domain/development/goals.ts";
 import { routineDueToday, routineProgress, type Frequency } from "@/lib/domain/development/routines.ts";
@@ -22,7 +22,7 @@ export default async function DevelopmentPage() {
   const user = await getSessionUser();
   if (!user) redirect("/login");
 
-  const today = todayLocal(await getUserTimeZone());
+  const today = await todayForUser();
   const sources = await loadSourceSnapshot();
   // Ya viene resuelto de la capa de datos —quién es el foco, por qué, y a qué
   // ritmo tendría que ir— para no repetir aquí aritmética que vive en el

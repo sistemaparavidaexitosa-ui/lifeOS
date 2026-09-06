@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Card, Chip, EmptyState, Progress } from "@/components/ui";
-import { todayLocal } from "@/lib/data/dates";
-import { getUserTimeZone } from "@/lib/data/profile";
+
+import { todayForUser } from "@/lib/data/profile";
 import { loadSourceSnapshot } from "@/lib/data/development";
 import { getPersonalWorkspaceIds } from "@/lib/data/workspaces";
 import { keyResultProgress, goalProgress, goalAtRisk, type KeyResultSourceKind } from "@/lib/domain/development/goals.ts";
@@ -43,7 +43,7 @@ export default async function PersonalGoalsPage() {
       supabase.from("nutrition_profiles").select("user_id").maybeSingle()
     ]);
 
-  const today = todayLocal(await getUserTimeZone());
+  const today = await todayForUser();
   const sources = await loadSourceSnapshot();
 
   const sourceOptions: SourceOptions = {

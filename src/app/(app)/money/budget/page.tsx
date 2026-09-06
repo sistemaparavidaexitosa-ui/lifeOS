@@ -12,8 +12,8 @@ import {
 } from "@/lib/domain/budget.ts";
 import { quincenaFor, quincenaFromKey, shiftQuincena, monthRangeOf } from "@/lib/domain/quincena.ts";
 import { accountBalance } from "@/lib/domain/money.ts";
-import { todayLocal } from "@/lib/data/dates";
-import { getUserTimeZone } from "@/lib/data/profile";
+
+import { todayForUser } from "@/lib/data/profile";
 import BudgetLineForm from "./BudgetLineForm";
 import QuincenalIncomeForm from "./QuincenalIncomeForm";
 import CreateBudgetButton from "./CreateBudgetButton";
@@ -37,7 +37,7 @@ export default async function BudgetTabPage({ searchParams }: { searchParams: Pr
   if (!user) redirect("/login");
 
   const { q: requestedQuincena } = await searchParams;
-  const today = todayLocal(await getUserTimeZone());
+  const today = await todayForUser();
   const currentQuincena = quincenaFor(today);
   // Una clave manipulada en la URL no debe tumbar la página: se cae a la vigente.
   const quincena = (requestedQuincena ? quincenaFromKey(requestedQuincena) : null) ?? currentQuincena;
