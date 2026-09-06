@@ -8,8 +8,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { bordeInferiorVisual, ANCLAJE_MINIMO_TECLADO } from "../../src/lib/dom/anclaje-teclado.ts";
 
-test("sin teclado y sin scroll, el borde es el fondo de la pantalla", () => {
-  assert.strictEqual(bordeInferiorVisual({ innerHeight: 800, vvHeight: 800, vvOffsetTop: 0 }), 800);
+test("sin teclado no hay posición que calcular: manda el CSS", () => {
+  // Contrato NUEVO. Antes devolvía `innerHeight`, y como en iOS ese valor
+  // crece al encogerse la barra de direcciones, la barra se movía al hacer
+  // scroll. Devolver null deja el `bottom: 0` del CSS, que no se inmuta.
+  assert.strictEqual(bordeInferiorVisual({ innerHeight: 800, vvHeight: 800, vvOffsetTop: 0 }), null);
 });
 
 test("con el teclado abierto, el borde sube justo por encima del teclado", () => {
@@ -26,7 +29,8 @@ test("EL FALLO DEL SCROLL: al desplazarse, el borde acompaña al viewport visual
 
 test("un teclado más alto que la pantalla no manda la barra fuera", () => {
   const y = bordeInferiorVisual({ innerHeight: 800, vvHeight: 0, vvOffsetTop: 0 });
-  assert.ok(y >= 0 && y <= 800, `borde fuera de la pantalla: ${y}`);
+  assert.notStrictEqual(y, null, "con teclado sí debe calcularse una posición");
+  assert.ok(y !== null && y >= 0 && y <= 800, `borde fuera de la pantalla: ${y}`);
 });
 
 test("una diferencia de pocos píxeles NO se trata como teclado", () => {
@@ -37,7 +41,7 @@ test("una diferencia de pocos píxeles NO se trata como teclado", () => {
     vvHeight: 800 - (ANCLAJE_MINIMO_TECLADO - 1),
     vvOffsetTop: 0
   });
-  assert.strictEqual(sinTeclado, 800, "por debajo del umbral debe comportarse como si no hubiera teclado");
+  assert.strictEqual(sinTeclado, null, "por debajo del umbral debe comportarse como si no hubiera teclado");
 
   const conTeclado = bordeInferiorVisual({
     innerHeight: 800,
@@ -45,4 +49,13 @@ test("una diferencia de pocos píxeles NO se trata como teclado", () => {
     vvOffsetTop: 0
   });
   assert.strictEqual(conTeclado, 800 - (ANCLAJE_MINIMO_TECLADO + 1));
+});
+
+test("EL FALLO DEL SCROLL SIN TECLADO: sin teclado no se calcula posición", () => {
+  // En iOS `window.innerHeight` crece cuando la barra de direcciones se
+  // encoge al hacer scroll. Devolverlo como posición hacía que la barra
+  // siguiera ese cambio y «se moviera al hacer scroll». Con null, el
+  // componente usa el `bottom: 0` del CSS y no se inmuta.
+  assert.strictEqual(bordeInferiorVisual({ innerHeight: 800, vvHeight: 800, vvOffsetTop: 0 }), null);
+  assert.strictEqual(bordeInferiorVisual({ innerHeight: 860, vvHeight: 860, vvOffsetTop: 0 }), null);
 });

@@ -16,8 +16,6 @@ export interface FormatBarProps {
   marcasActivas: MarcaInline[];
   onEstilo: (estilo: BlockStyle) => void;
   onMarca: (marca: MarcaInline) => void;
-  onEnlace: () => void;
-  onTabla: () => void;
   onDeshacer: () => void;
   onRehacer: () => void;
   puedeDeshacer: boolean;
@@ -113,8 +111,6 @@ export default function FormatBar({
   marcasActivas,
   onEstilo,
   onMarca,
-  onEnlace,
-  onTabla,
   onDeshacer,
   onRehacer,
   puedeDeshacer,
@@ -122,6 +118,11 @@ export default function FormatBar({
 }: FormatBarProps) {
   const [abierto, setAbierto] = useState(false);
   const { borde, medidas } = useBordeVisual();
+  // Las listas son un eje aparte del estilo de párrafo: dentro de una lista, el
+  // menú «Aa» no marcaba NADA porque "bullets" no está entre sus opciones. Se
+  // enseña «Cuerpo», que es el estilo de párrafo que la lista lleva debajo.
+  const estiloDelMenu: BlockStyle =
+    estilo === "bullets" || estilo === "ordered" || estilo === "todo" ? "body" : estilo;
   // Diagnóstico TEMPORAL de la barra: se activa añadiendo `?bar=1` a la URL.
   const [diagnostico, setDiagnostico] = useState(false);
   useEffect(() => {
@@ -157,7 +158,7 @@ export default function FormatBar({
             <button
               key={e.valor}
               type="button"
-              className={`nb-fb-estilo${estilo === e.valor ? " activo" : ""}`}
+              className={`nb-fb-estilo${estiloDelMenu === e.valor ? " activo" : ""}`}
               onMouseDown={sinRobarFoco}
               onClick={() => {
                 onEstilo(e.valor);
@@ -207,12 +208,6 @@ export default function FormatBar({
             {l.etiqueta}
           </button>
         ))}
-        <button type="button" className="nb-fb" title="Tabla" onMouseDown={sinRobarFoco} onClick={onTabla}>
-          ⊞
-        </button>
-        <button type="button" className="nb-fb" title="Enlace" onMouseDown={sinRobarFoco} onClick={onEnlace}>
-          🔗
-        </button>
         <span className="nb-fb-spacer" />
         <button
           type="button"

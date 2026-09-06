@@ -1072,6 +1072,27 @@ incluido el caso del scroll que se había quitado y el umbral que evita que la
 barra de direcciones de Safari haga saltar la barra. Sin `visualViewport`, cae a
 un `bottom: 0` normal.
 
+#### Cuarta tanda del uso real (6-sep-2026)
+
+- **La barra se movía al hacer scroll, sin teclado.** En iOS `window.innerHeight`
+  NO es constante: crece cuando la barra de direcciones de Safari se encoge al
+  desplazarse. La rama «sin teclado» devolvia justamente `innerHeight` como
+  posición, así que la barra seguía ese cambio. Ahora devuelve `null` y manda el
+  `bottom: 0` del CSS, anclado al viewport de layout, que no se inmuta con el
+  scroll. El transform sólo entra cuando hay teclado de verdad.
+- **Se perdía el cursor en una casilla.** La línea editable es un elemento flex
+  dentro del `<li>`; sin `flex: 1`, una línea vacía mide 0 de ancho y el cursor
+  no tiene dónde dibujarse.
+- **Botones que no reflejaban su estado.** Dos causas distintas: dentro de una
+  lista, el menú «Aa» no marcaba NADA porque `bullets` no está entre sus
+  opciones (ahora enseña «Cuerpo», el estilo de párrafo que la lista lleva
+  debajo); y las marcas sólo se encendían con una selección viva, cuando lo
+  esperado es que «B» se encienda con el cursor suelto DENTRO de una negrita
+  (`marcasEn`, probado).
+- **Fuera los botones de tabla y enlace**, a petición del uso real. El dialecto
+  sigue entendiendo ambos: una tabla escrita a mano o una URL pegada se siguen
+  parseando y pintando. Sólo desaparecen de la barra.
+
 **Las 16 filas originales siguen sin ejecutarse salvo las anotadas.** El editor compila, pasa las
 pruebas de dominio y construye, pero **nadie lo ha abierto en un teléfono**.
 Hasta que esta tabla se rellene con resultados reales, no se puede afirmar que

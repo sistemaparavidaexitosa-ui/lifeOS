@@ -36,16 +36,23 @@ export interface MedidasViewport {
  *
  * Se usa como `transform: translateY(calc(Ypx - 100%))` sobre un elemento
  * anclado a `top: 0`: su borde inferior cae exactamente ahí.
+ *
+ * Devuelve `null` cuando no hay teclado: entonces no hay nada que compensar y
+ * un `bottom: 0` normal es más estable que cualquier cálculo.
  */
 export function bordeInferiorVisual({
   innerHeight,
   vvHeight,
   vvOffsetTop
-}: MedidasViewport): number {
+}: MedidasViewport): number | null {
   const teclado = innerHeight - vvHeight;
-  // Sin teclado de verdad, el borde es el fondo de la pantalla: así la barra
-  // descansa abajo sin depender del scroll.
-  if (teclado <= ANCLAJE_MINIMO_TECLADO) return innerHeight;
+  // SIN TECLADO NO SE CALCULA NADA, y esto es lo que arregla el «se mueve al
+  // hacer scroll»: en iOS `window.innerHeight` NO es constante — crece cuando
+  // la barra de direcciones de Safari se encoge al desplazarse. Devolverlo
+  // como posición hacía que la barra siguiera ese cambio. Con `null`, el
+  // componente se queda con el `bottom: 0` del CSS, que va anclado al viewport
+  // de layout y no se inmuta con el scroll.
+  if (teclado <= ANCLAJE_MINIMO_TECLADO) return null;
 
   const borde = vvOffsetTop + vvHeight;
   // Nunca fuera de la pantalla, pase lo que pase con las medidas.

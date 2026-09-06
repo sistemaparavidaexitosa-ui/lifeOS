@@ -423,3 +423,27 @@ export function estiloAlternado(actual: BlockStyle, pedido: BlockStyle): BlockSt
   if (pedido === "table") return "table";
   return "body";
 }
+
+/**
+ * Marcas que afectan a la posición del cursor cuando NO hay selección.
+ *
+ * Con el cursor suelto dentro de una negrita, el botón «B» tiene que salir
+ * encendido: es lo que hace el iPhone y lo que se esperaba al reportar que
+ * «algunos elementos no muestran que estén seleccionados». Sin esto, la barra
+ * sólo se encendía con una selección viva.
+ *
+ * Se mira el carácter ANTERIOR al cursor, que es el criterio de todo editor:
+ * escribir al final de una palabra en negrita continúa en negrita.
+ */
+export function marcasEn(content: Inline[], pos: number): MarcaInline[] {
+  if (pos <= 0) {
+    const primera = content.find((p) => p.text.length > 0);
+    return primera && primera.kind !== "text" && primera.kind !== "link"
+      ? [primera.kind]
+      : [];
+  }
+  const tramo = sliceInlines(content, pos - 1, pos);
+  const parte = tramo[0];
+  if (!parte || parte.kind === "text" || parte.kind === "link") return [];
+  return [parte.kind];
+}

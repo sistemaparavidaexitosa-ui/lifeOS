@@ -12,7 +12,8 @@ import {
   splitBlock,
   mergeBlocks,
   bloquesEditables,
-  estiloAlternado
+  estiloAlternado,
+  marcasEn
 } from "../../src/lib/domain/notes/edit.ts";
 import { parseNote, serializeNote, type Block, type Inline } from "../../src/lib/domain/notes/markup.ts";
 
@@ -311,4 +312,25 @@ test("estiloAlternado: una tabla NO se alterna sola", () => {
   // Convertir una tabla en párrafo por un toque repetido destruiría la rejilla
   // sin que nadie lo haya pedido.
   assert.strictEqual(estiloAlternado("table", "table"), "table");
+});
+
+test("marcasEn: el cursor dentro de una negrita enciende el botón", () => {
+  const contenido: Inline[] = [
+    { kind: "text", text: "hola " },
+    { kind: "bold", text: "mundo" }
+  ];
+  assert.deepStrictEqual(marcasEn(contenido, 8), ["bold"]);
+  assert.deepStrictEqual(marcasEn(contenido, 3), []);
+});
+
+test("marcasEn: al final de una palabra en negrita sigue encendido", () => {
+  // Se mira el carácter ANTERIOR: escribir al final de una negrita continúa
+  // en negrita, que es lo que hace cualquier editor.
+  const contenido: Inline[] = [{ kind: "bold", text: "abc" }];
+  assert.deepStrictEqual(marcasEn(contenido, 3), ["bold"]);
+});
+
+test("marcasEn: un enlace no cuenta como marca de la barra", () => {
+  const contenido: Inline[] = [{ kind: "link", text: "aquí", href: "https://a.b" }];
+  assert.deepStrictEqual(marcasEn(contenido, 2), []);
 });

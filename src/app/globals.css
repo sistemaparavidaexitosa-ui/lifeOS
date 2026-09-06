@@ -3494,3 +3494,11 @@ textarea:focus {
   white-space: nowrap;
   overflow-x: auto;
 }
+
+/* La línea editable de una casilla es un elemento flex: sin `flex: 1` una línea
+   vacía mide 0 de ancho y el cursor no tiene dónde dibujarse — se reportó como
+   «se pierde la marca en el puntero de texto cuando hay checkbox». */
+.nb-prose .nb-todo li > .nb-line {
+  flex: 1 1 auto;
+  min-width: 0;
+}
