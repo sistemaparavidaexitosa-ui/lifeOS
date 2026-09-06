@@ -3414,6 +3414,11 @@ textarea:focus {
   position: fixed;
   left: 0;
   right: 0;
+  /* Reserva: si el navegador no expone visualViewport, esto es lo que queda.
+     Con medidas, el componente pasa a `top: 0` + translateY, porque en iOS el
+     teclado no encoge el viewport de layout y `bottom` deja la barra debajo
+     del teclado. */
+  bottom: 0;
   /* 40 a pelo era `--z-bulkbar`: un número inventado que chocaba con una capa
      que ya existía y perdía contra .ai-fab (48). */
   z-index: var(--z-formatbar);

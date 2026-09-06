@@ -1050,6 +1050,28 @@ Lo que se hizo, en este orden y a propósito:
 
 `pnpm test:unit` pasa a cubrir `tests/dom/` además de `tests/domain/`: 764 verdes.
 
+#### El ribbon: era un error de coordenadas (6-sep-2026)
+
+Reportado: «se sigue moviendo al hacer scroll, y se queda abajo del teclado y no
+se ve». Los dos síntomas son el MISMO fallo.
+
+En Safari de iOS el teclado **no encoge el viewport de layout**: sólo desplaza
+el visual por encima. `position: fixed; bottom: …` se mide contra el de LAYOUT,
+así que la barra quedaba anclada por debajo del teclado —invisible— y, al hacer
+scroll, el visual se deslizaba sobre el de layout y la barra parecía derivar.
+
+El intento anterior quitó `visualViewport.offsetTop` de la fórmula «porque
+cambiaba al hacer scroll». Cambiar al hacer scroll es exactamente lo que tiene
+que hacer: es el término que mantiene la barra pegada al viewport visual. Lo que
+estaba mal era anclar por `bottom`.
+
+Ahora la barra se ancla a `top: 0` y se desplaza con `transform` hasta el borde
+inferior del viewport visual — un solo sistema de coordenadas. La aritmética
+vive en `src/lib/dom/anclaje-teclado.ts` y **está probada** (`tests/dom/`),
+incluido el caso del scroll que se había quitado y el umbral que evita que la
+barra de direcciones de Safari haga saltar la barra. Sin `visualViewport`, cae a
+un `bottom: 0` normal.
+
 **Las 16 filas originales siguen sin ejecutarse salvo las anotadas.** El editor compila, pasa las
 pruebas de dominio y construye, pero **nadie lo ha abierto en un teléfono**.
 Hasta que esta tabla se rellene con resultados reales, no se puede afirmar que
