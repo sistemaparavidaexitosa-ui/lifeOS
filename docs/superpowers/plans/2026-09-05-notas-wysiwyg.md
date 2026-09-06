@@ -474,6 +474,16 @@ test("parseNote: una casilla no se mezcla con las viñetas de al lado", () => {
   );
 });
 
+test("parseNote: una casilla VACÍA sigue siendo una casilla", () => {
+  // El editor crea una en cada Enter; si volviera como viñeta «[ ]», pulsar
+  // Enter en una lista de pendientes la destruiría.
+  const bloques = parseNote("- [x] hecho\n- [ ]");
+  const bloque = bloques[0] as Extract<Block, { kind: "todo" }>;
+  assert.strictEqual(bloque.kind, "todo");
+  assert.strictEqual(bloque.items.length, 2);
+  assert.deepStrictEqual(bloque.items[1]?.content, [{ kind: "text", text: "" }]);
+});
+
 test("parseNote: la X mayúscula también marca", () => {
   const bloques = parseNote("- [X] hecho");
   assert.strictEqual((bloques[0] as Extract<Block, { kind: "todo" }>).items[0]?.done, true);
@@ -498,6 +508,7 @@ Y al `CORPUS_ROUND_TRIP`:
 
 ```ts
   "- [ ] sin hacer\n- [x] hecha",
+  "- [x] hecha\n- [ ]",
   "- viñeta normal\n\n- [ ] casilla",
 ```
 
@@ -517,7 +528,12 @@ En `markup.ts`:
 ```ts
 // TODO va ANTES que BULLET al probarse: «- [ ] x» encaja en las dos, y la
 // casilla es la lectura más específica.
-const TODO = /^[-*]\s+\[([ xX])\]\s+(.*)$/;
+//
+// El texto es OPCIONAL a propósito. El editor crea un ítem vacío en cada
+// Enter, y al serializarlo sale «- [ ] » cuyo espacio final se pierde en el
+// trimEnd() de parseNote: exigiendo texto, ese ítem volvería como una viñeta
+// que dice «[ ]». Rompería el ida y vuelta en la interacción más común.
+const TODO = /^[-*]\s+\[([ xX])\](?:\s+(.*))?$/;
 ```
 
 - [ ] **Step 4: Acumular el bloque en `parseNote`**
@@ -770,6 +786,21 @@ En `noteExcerpt`, dentro del `flatMap`:
       if (block.kind === "mono") return [block.text];
 ```
 
+Y añade a `noteDisplayTitle` la rama que la Task 3 dejó pendiente, con su
+prueba — sin esto, una nota sin título que empiece por una valla se titularía
+con el nombre de reserva en vez de con su primera línea:
+
+```ts
+        : primero.kind === "mono"
+          ? [[{ kind: "text" as const, text: primero.text }]]
+```
+
+```ts
+test("noteDisplayTitle: una nota que empieza por bloque monoespaciado usa su primera línea", () => {
+  assert.strictEqual(noteDisplayTitle("", "```\npnpm verify\n```"), "pnpm verify");
+});
+```
+
 - [ ] **Step 4: Pintarlo en lectura**
 
 En `NoteBody.tsx`:
@@ -1002,6 +1033,15 @@ En `noteExcerpt`, dentro del `flatMap`:
       if (block.kind === "table") {
         return [...block.head, ...block.rows.flat()].map(inlineText);
       }
+```
+
+Y la última rama pendiente de `noteDisplayTitle` (su prueba ya está en el
+Step 1 de esta tarea). Con ésta, la función queda como el bloque completo que
+muestra la Task 3:
+
+```ts
+        : primero.kind === "table"
+          ? primero.head
 ```
 
 - [ ] **Step 5: Pintarla en lectura**
@@ -2262,14 +2302,19 @@ function BloqueEditable({ bloque, indice, cursor, readOnly, onEscribir, onPulsar
           ))}
         </ul>
       );
+    case "table":
+      // La edición de tablas entra en la Task 11. Hasta entonces NO puede caer
+      // en el `default`: ese pinta `bloque.content`, propiedad que el bloque
+      // `table` no tiene, y TypeScript falla al compilar esta tarea.
+      return null;
     default:
       return <p>{linea(bloque.content, 0, "", indice === 0 ? "Escribe aquí…" : undefined)}</p>;
   }
 }
 ```
 
-> `table` aún no se pinta aquí: entra en la Task 11. Hasta entonces, cae en
-> el `default` y se ve como párrafo. Es un estado intermedio conocido.
+> Una tabla no se ve entre esta tarea y la 11. Es un estado intermedio
+> declarado, no un olvido: la Task 11 sustituye ese `return null`.
 
 - [ ] **Step 3: Verificar que compila**
 
@@ -2630,10 +2675,13 @@ En `NoteEditor` (Task 12), `onTabla` de `FormatBar` llama a
 - [ ] **Step 5: Estilos de edición**
 
 ```css
-.nb-table-edit td,
-.nb-table-edit th { padding: 0; }
-.nb-table-edit .nb-celda { padding: 6px 10px; min-width: 96px; }
-.nb-table-ctl { border: 0 !important; width: 34px; text-align: center; }
+/* Cualificados con .nb-prose para EMPATAR la especificidad de las reglas de
+   la Task 5 (.nb-prose .nb-table th). Sin eso el `padding: 0` pierde y las
+   celdas quedan con doble relleno: el de la celda y el del contenteditable. */
+.nb-prose .nb-table-edit td,
+.nb-prose .nb-table-edit th { padding: 0; }
+.nb-prose .nb-table-edit .nb-celda { padding: 6px 10px; min-width: 96px; }
+.nb-prose .nb-table-edit .nb-table-ctl { border: 0; width: 34px; text-align: center; }
 .nb-table-ctl button {
   border: 0; background: transparent; color: var(--muted);
   width: 30px; height: 30px; border-radius: 6px; font-size: 14px;
@@ -2941,7 +2989,10 @@ const apuntar = useCallback((anteriores: Block[], anteriorCursor: Cursor) => {
 - [ ] **Step 2: Apuntar en cada cambio**
 
 Toda mutación de `blocks` pasa por un único sitio, para que no se olvide
-ninguna. Sustituye los `setBlocks(...)` sueltos de la Task 12 por:
+ninguna. Eso incluye **el `onChange` de `NoteDoc`**, que es la vía por la que
+entra lo que se escribe: si esa no apunta en la pila, deshacer no deshace
+nada — el caso principal. Sustituye por `cambiar` los `setBlocks(...)` de
+`onChange`, `aplicarMarca`, `aplicarEstilo` y `ponerEnlace`:
 
 ```tsx
 const cambiar = useCallback(
