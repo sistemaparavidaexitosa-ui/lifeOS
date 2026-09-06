@@ -282,9 +282,13 @@ function serializeBlock(block: Block): string {
  * `*` y `-` sólo son peligrosos si BULLET los reconocería como tales, es
  * decir seguidos de espacio: sin el lookahead, un párrafo que EMPIEZA con
  * negrita («**negrita**...») escapaba el primer asterisco de más y el
- * ida-y-vuelta lo convertía en cursiva rota.
+ * ida-y-vuelta lo convertía en cursiva rota. Lo mismo le pasaba a `#`: sin su
+ * propio lookahead, un hashtag («#YOLO») se escapaba de más aunque HEADING
+ * exige espacio tras la almohadilla para leerse como título. `>` y `|` no
+ * necesitan lookahead: QUOTE acepta el espacio opcional (cualquier `>` inicial
+ * es un título de cita), y `|` sí revierte su escape en parseInline.
  */
-const INICIO_DE_BLOQUE = /^(\s*)([#>|]|[*-](?=\s)|\d+[.)]|```)/;
+const INICIO_DE_BLOQUE = /^(\s*)(#(?=\s)|[>|]|[*-](?=\s)|\d+[.)]|```)/;
 
 function escaparInicioDeLinea(linea: string): string {
   return linea.replace(INICIO_DE_BLOQUE, (_, sangria: string, marca: string) => {

@@ -206,8 +206,19 @@ export const CORPUS_ROUND_TRIP = [
   "\\# no es un título",
   "\\- no es una viñeta",
   "párrafo con | barra vertical",
-  "línea uno\nlínea dos del mismo párrafo"
+  "línea uno\nlínea dos del mismo párrafo",
+  "#YOLO sin espacio",
+  "##dos sin espacio"
 ];
+
+test("serializeNote: un hashtag al inicio de línea no es un título y no se escapa", () => {
+  // HEADING exige espacio tras la almohadilla; sin él, «#YOLO» ya es un
+  // párrafo normal y escaparlo de más lo dejaría con una barra invertida
+  // literal la próxima vez que se abriera la nota.
+  const bloques = parseNote("#YOLO sin espacio");
+  assert.strictEqual(serializeNote(bloques), "#YOLO sin espacio");
+  assert.deepStrictEqual(parseNote(serializeNote(bloques)), bloques);
+});
 
 test("round-trip: el árbol es un punto fijo para todo el corpus", () => {
   for (const cuerpo of CORPUS_ROUND_TRIP) {
