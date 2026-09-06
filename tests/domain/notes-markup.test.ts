@@ -235,8 +235,62 @@ export const CORPUS_ROUND_TRIP = [
   "#YOLO sin espacio",
   "##dos sin espacio",
   "++subrayado++ y ~~tachado~~ juntos",
-  "un más + suelto y una tilde ~ suelta"
+  "un más + suelto y una tilde ~ suelta",
+  "- [ ] sin hacer\n- [x] hecha",
+  "- [x] hecha\n- [ ]",
+  "- viñeta normal\n\n- [ ] casilla"
 ];
+
+test("parseNote: las casillas son su propio bloque", () => {
+  const bloques = parseNote("- [ ] pendiente\n- [x] hecho");
+  assert.strictEqual(bloques.length, 1);
+  const bloque = bloques[0] as Extract<Block, { kind: "todo" }>;
+  assert.strictEqual(bloque.kind, "todo");
+  assert.deepStrictEqual(
+    bloque.items.map((i) => i.done),
+    [false, true]
+  );
+  assert.deepStrictEqual(bloque.items[1]?.content, [{ kind: "text", text: "hecho" }]);
+});
+
+test("parseNote: una casilla no se mezcla con las viñetas de al lado", () => {
+  // «- [ ] x» empieza igual que una viñeta; si el orden de las expresiones
+  // está mal, la casilla acaba siendo un ítem de lista con corchetes.
+  const bloques = parseNote("- viñeta\n- [ ] casilla");
+  assert.deepStrictEqual(
+    bloques.map((b) => b.kind),
+    ["bullets", "todo"]
+  );
+});
+
+test("parseNote: una casilla VACÍA sigue siendo una casilla", () => {
+  // El editor crea una en cada Enter; si volviera como viñeta «[ ]», pulsar
+  // Enter en una lista de pendientes la destruiría.
+  const bloques = parseNote("- [x] hecho\n- [ ]");
+  const bloque = bloques[0] as Extract<Block, { kind: "todo" }>;
+  assert.strictEqual(bloque.kind, "todo");
+  assert.strictEqual(bloque.items.length, 2);
+  assert.deepStrictEqual(bloque.items[1]?.content, [{ kind: "text", text: "" }]);
+});
+
+test("parseNote: la X mayúscula también marca", () => {
+  const bloques = parseNote("- [X] hecho");
+  assert.strictEqual((bloques[0] as Extract<Block, { kind: "todo" }>).items[0]?.done, true);
+});
+
+test("noteExcerpt: el resumen incluye el texto de las casillas", () => {
+  assert.strictEqual(noteExcerpt("- [x] comprar café\n- [ ] pagar luz"), "comprar café · pagar luz");
+});
+
+test("noteDisplayTitle: una nota sin título que empieza por casilla no muestra los corchetes", () => {
+  // La lista de cuadernos enseña este texto. «[ ] pagar luz» como nombre de
+  // una nota es basura visible en la primera pantalla del módulo.
+  assert.strictEqual(noteDisplayTitle("", "- [ ] pagar luz\nmás cosas"), "pagar luz");
+});
+
+test("noteDisplayTitle: también sirve para una cita", () => {
+  assert.strictEqual(noteDisplayTitle("", "> una cita"), "una cita");
+});
 
 test("serializeNote: un hashtag al inicio de línea no es un título y no se escapa", () => {
   // HEADING exige espacio tras la almohadilla; sin él, «#YOLO» ya es un

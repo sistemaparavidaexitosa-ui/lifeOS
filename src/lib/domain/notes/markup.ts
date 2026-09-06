@@ -32,7 +32,8 @@ export type Block =
   | { kind: "paragraph"; content: Inline[] }
   | { kind: "bullets"; items: Inline[][] }
   | { kind: "ordered"; items: Inline[][] }
-  | { kind: "quote"; content: Inline[] };
+  | { kind: "quote"; content: Inline[] }
+  | { kind: "todo"; items: { done: boolean; content: Inline[] }[] };
 
 /**
  * Un solo recorrido para todo lo que va dentro de una línea. El ORDEN de las
@@ -110,6 +111,14 @@ function fusionarTexto(partes: Inline[]): Inline[] {
 }
 
 const HEADING = /^(#{1,3})\s+(.*)$/;
+// TODO va ANTES que BULLET al probarse: «- [ ] x» encaja en las dos, y la
+// casilla es la lectura más específica.
+//
+// El texto es OPCIONAL a propósito. El editor crea un ítem vacío en cada
+// Enter, y al serializarlo sale «- [ ] » cuyo espacio final se pierde en el
+// trimEnd() de parseNote: exigiendo texto, ese ítem volvería como una viñeta
+// que dice «[ ]». Rompería el ida y vuelta en la interacción más común.
+const TODO = /^[-*]\s+\[([ xX])\](?:\s+(.*))?$/;
 const BULLET = /^[-*]\s+(.*)$/;
 const ORDERED = /^\d+[.)]\s+(.*)$/;
 const QUOTE = /^>\s?(.*)$/;
@@ -130,6 +139,7 @@ export function parseNote(body: string): Block[] {
   let bullets: string[] = [];
   let ordered: string[] = [];
   let quote: string[] = [];
+  let todos: { done: boolean; text: string }[] = [];
 
   function flush() {
     if (paragraph.length) {
@@ -147,6 +157,13 @@ export function parseNote(body: string): Block[] {
     if (quote.length) {
       blocks.push({ kind: "quote", content: parseInline(quote.join("\n")) });
       quote = [];
+    }
+    if (todos.length) {
+      blocks.push({
+        kind: "todo",
+        items: todos.map((t) => ({ done: t.done, content: parseInline(t.text) }))
+      });
+      todos = [];
     }
   }
 
@@ -178,28 +195,35 @@ export function parseNote(body: string): Block[] {
       continue;
     }
 
+    const casilla = TODO.exec(line);
+    if (casilla) {
+      if (paragraph.length || bullets.length || ordered.length || quote.length) flush();
+      todos.push({ done: (casilla[1] ?? " ").toLowerCase() === "x", text: casilla[2] ?? "" });
+      continue;
+    }
+
     const bullet = BULLET.exec(line);
     if (bullet) {
-      if (paragraph.length || ordered.length || quote.length) flush();
+      if (paragraph.length || ordered.length || quote.length || todos.length) flush();
       bullets.push(bullet[1] ?? "");
       continue;
     }
 
     const numbered = ORDERED.exec(line);
     if (numbered) {
-      if (paragraph.length || bullets.length || quote.length) flush();
+      if (paragraph.length || bullets.length || quote.length || todos.length) flush();
       ordered.push(numbered[1] ?? "");
       continue;
     }
 
     const quoted = QUOTE.exec(line);
     if (quoted) {
-      if (paragraph.length || bullets.length || ordered.length) flush();
+      if (paragraph.length || bullets.length || ordered.length || todos.length) flush();
       quote.push(quoted[1] ?? "");
       continue;
     }
 
-    if (bullets.length || ordered.length || quote.length) flush();
+    if (bullets.length || ordered.length || quote.length || todos.length) flush();
     paragraph.push(line);
   }
 
@@ -216,6 +240,7 @@ export function noteExcerpt(body: string, max = 140): string {
   const plain = parseNote(body)
     .flatMap((block) => {
       if (block.kind === "bullets" || block.kind === "ordered") return block.items.map(inlineText);
+      if (block.kind === "todo") return block.items.map((item) => inlineText(item.content));
       return [inlineText(block.content)];
     })
     .join(" · ")
@@ -241,14 +266,21 @@ export function noteDisplayTitle(title: string, body: string): string {
   const trimmed = title.trim();
   if (trimmed) return trimmed;
 
-  const firstLine = body
-    .split("\n")
-    .map((l) => l.trim())
-    .find((l) => l.length > 0);
-  if (!firstLine) return NOTA_SIN_TITULO;
+  // Reusar el parser en vez de quitar el marcado a mano: así cada bloque
+  // nuevo del dialecto queda cubierto sin tocar esta función otra vez.
+  const [primero] = parseNote(body);
+  if (!primero) return NOTA_SIN_TITULO;
 
-  const clean = inlineText(parseInline(firstLine.replace(HEADING, "$2").replace(BULLET, "$1")));
-  return clean.length > 60 ? `${clean.slice(0, 59).trimEnd()}…` : clean || NOTA_SIN_TITULO;
+  const lineas =
+    primero.kind === "bullets" || primero.kind === "ordered"
+      ? primero.items
+      : primero.kind === "todo"
+        ? primero.items.map((item) => item.content)
+        : [primero.content];
+
+  const clean = (inlineText(lineas[0] ?? []).split("\n")[0] ?? "").trim();
+  if (!clean) return NOTA_SIN_TITULO;
+  return clean.length > 60 ? `${clean.slice(0, 59).trimEnd()}…` : clean;
 }
 
 /**
@@ -266,6 +298,10 @@ function serializeBlock(block: Block): string {
       return `${"#".repeat(block.level)} ${serializeInline(block.content)}`;
     case "bullets":
       return block.items.map((item) => `- ${serializeInline(item)}`).join("\n");
+    case "todo":
+      return block.items
+        .map((item) => `- [${item.done ? "x" : " "}] ${serializeInline(item.content)}`)
+        .join("\n");
     case "ordered":
       return block.items.map((item, i) => `${i + 1}. ${serializeInline(item)}`).join("\n");
     case "quote":

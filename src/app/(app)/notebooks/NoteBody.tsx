@@ -47,6 +47,17 @@ export default function NoteBody({ body }: { body: string }) {
             );
           case "quote":
             return <blockquote key={i}>{renderInline(block.content)}</blockquote>;
+          case "todo":
+            return (
+              <ul key={i} className="nb-todo">
+                {block.items.map((item, j) => (
+                  <li key={j} className={item.done ? "hecha" : undefined}>
+                    <input type="checkbox" checked={item.done} disabled readOnly />
+                    <span>{renderInline(item.content)}</span>
+                  </li>
+                ))}
+              </ul>
+            );
           default:
             return <p key={i}>{renderInline(block.content)}</p>;
         }

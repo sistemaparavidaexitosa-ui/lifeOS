@@ -2862,6 +2862,23 @@ textarea:focus {
 .nb-prose ol {
   list-style: decimal;
 }
+.nb-prose .nb-todo {
+  list-style: none;
+  margin-left: 0;
+}
+.nb-prose .nb-todo li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.nb-prose .nb-todo li.hecha span {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+.nb-prose .nb-todo input {
+  margin-top: 3px;
+  flex: none;
+}
 .nb-prose blockquote {
   margin: 10px 0;
   padding: 8px 12px;
