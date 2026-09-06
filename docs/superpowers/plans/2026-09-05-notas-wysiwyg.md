@@ -112,6 +112,8 @@ export const CORPUS_ROUND_TRIP = [
   "**negrita** *cursiva* `código` [x](https://a.b) https://suelto.com",
   "\\# no es un título",
   "\\- no es una viñeta",
+  "#YOLO sin espacio",
+  "##dos sin espacio",
   "párrafo con | barra vertical",
   "línea uno\nlínea dos del mismo párrafo"
 ];
@@ -235,8 +237,16 @@ function serializeBlock(block: Block): string {
   }
 }
 
-/** Caracteres que, al inicio de una línea, la convertirían en otro bloque. */
-const INICIO_DE_BLOQUE = /^(\s*)([#>|*-]|\d+[.)]|```)/;
+/** Caracteres que, al inicio de una línea, la convertirían en otro bloque.
+ *
+ *  El lookahead de espacio en `#` y en `*`/`-` NO es cosmético: espeja lo que
+ *  exigen HEADING y BULLET. Sin él se escapa de más, y como `#` y `-` no están
+ *  en ESCAPABLES, parseInline no deshace ese escape: un hashtag («#YOLO») o un
+ *  guion pegado volverían con una barra invertida LITERAL delante, rompiendo
+ *  el punto fijo. `>` y `|` no lo llevan a propósito: QUOTE acepta el espacio
+ *  opcional (así que escapar `>` siempre hace falta) y `|` sí es escapable
+ *  inline, así que su escape revierte solo. */
+const INICIO_DE_BLOQUE = /^(\s*)(#(?=\s)|[>|]|[*-](?=\s)|\d+[.)]|```)/;
 
 function escaparInicioDeLinea(linea: string): string {
   return linea.replace(INICIO_DE_BLOQUE, (_, sangria: string, marca: string) => {
