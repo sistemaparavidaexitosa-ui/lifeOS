@@ -1,11 +1,20 @@
 // Subconjunto propio de Markdown para el cuerpo de una nota.
 //
 // POR QUÉ NO UNA LIBRERÍA
-// D-008 fija cero dependencias de runtime nuevas, y aquí no hay motivo para
-// romperlo: un cuaderno de equipo necesita títulos, listas, negrita y enlaces,
-// no tablas ni notas al pie. Eso cabe en un archivo, se prueba entero, y evita
-// arrastrar un parser de Markdown completo (y su superficie de seguridad) al
-// bundle del cliente.
+// D-008 fija cero dependencias de runtime nuevas, y el dialecto que hace falta
+// —títulos, listas, casillas, tablas, marcas y enlaces— cabe en este archivo,
+// se prueba entero, y evita arrastrar un parser de Markdown completo (y su
+// superficie de seguridad) al bundle del cliente. Las tablas entraron al
+// volverse el editor WYSIWYG (D-111): dejaron de ser sintaxis que alguien
+// teclea y pasaron a ser una rejilla que se toca.
+//
+// POR QUÉ ADEMÁS SERIALIZA
+// El editor trabaja sobre el ÁRBOL, no sobre el texto, así que necesita la
+// inversa. La propiedad que lo sostiene todo:
+//     parse(serialize(parse(x))) ≡ parse(x)
+// No devuelve el texto byte a byte —normaliza— sino un texto que vuelve al
+// mismo árbol. Sin eso, abrir una nota y guardarla la deformaría mientras se
+// escribe, que es el fallo más desconcertante que puede tener un editor.
 //
 // POR QUÉ DEVUELVE DATOS Y NO HTML
 // El cuerpo lo escribe un colaborador. Si esto produjera una cadena de HTML,

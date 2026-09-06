@@ -926,3 +926,38 @@ Entorno: máquina del owner, pila local de Supabase en Docker (`supabase_db_life
   Con Vault cargado no se ha probado.
 - **`pnpm verify` completo.** Se corrieron sus pasos por separado, por el mismo
   motivo de siempre: termina en `supabase db reset`, que borra la base local.
+
+### Verificación: editor de notas con formato en vivo (D-111 a D-116)
+
+Las pruebas de `tests/domain/notes-markup.test.ts` y `tests/domain/notes-edit.test.ts`
+cubren el dialecto y las operaciones de edición: **753 pruebas, 0 fallos**, con
+la propiedad `parse(serialize(parse(x))) ≡ parse(x)` sobre un corpus que toca
+los ocho tipos de bloque. `pnpm typecheck`, `pnpm lint` y `pnpm build` limpios.
+
+Lo de abajo **NO se puede probar sin navegador**: `node:test` no tiene DOM y se
+decidió no añadir `jsdom`. Se comprueba a mano en Safari de iOS y se marca con
+el resultado real, nunca con el previsto.
+
+| # | Qué | Resultado |
+|---|-----|-----------|
+| 1 | El texto con formato se ve formateado, sin sintaxis a la vista | NO EJECUTADO |
+| 2 | Escribir no hace saltar el cursor | NO EJECUTADO |
+| 3 | El dictado por voz escribe donde está el cursor | NO EJECUTADO |
+| 4 | `# ` y `- ` al inicio convierten el bloque al vuelo | NO EJECUTADO |
+| 5 | Enter en un ítem vacío sale de la lista | NO EJECUTADO |
+| 6 | Backspace al inicio funde con el bloque anterior sin perder ítems | NO EJECUTADO |
+| 7 | Seleccionar y tocar B pone negrita sin perder la selección | NO EJECUTADO |
+| 8 | Marcar una casilla no hace saltar el teclado | NO EJECUTADO |
+| 9 | La barra de formato queda ENCIMA del teclado | NO EJECUTADO |
+| 10 | Tab recorre las celdas de una tabla; en la última crea fila | NO EJECUTADO |
+| 11 | Una tabla ancha scrollea sola, sin mover la nota de lado | NO EJECUTADO |
+| 12 | Pegar desde una web deja el texto y pierde el estilo | NO EJECUTADO |
+| 13 | ↩︎ deshace por palabras, no por letras | NO EJECUTADO |
+| 14 | Bloquear el móvil a media palabra NO pierde lo último escrito (D-115) | NO EJECUTADO |
+| 15 | Una nota escrita con el dialecto anterior se ve igual que antes | NO EJECUTADO |
+| 16 | Con rol Viewer no aparece ningún `contenteditable` | NO EJECUTADO |
+
+**Ninguna de estas 16 filas se ha ejecutado.** El editor compila, pasa las
+pruebas de dominio y construye, pero **nadie lo ha abierto en un teléfono**.
+Hasta que esta tabla se rellene con resultados reales, no se puede afirmar que
+el editor funcione en el sitio donde se van a escribir las notas.
