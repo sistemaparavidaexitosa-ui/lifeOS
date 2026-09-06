@@ -3,8 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { isValidTimeZone } from "@/lib/domain/datetime.ts";
-import { createClient } from "@/lib/supabase/server";
-import { getSessionUser } from "@/lib/data/session";
+import { requireUser } from "@/lib/data/session";
 
 const profileSchema = z.object({
   name: z.string().min(1),
@@ -25,9 +24,7 @@ export async function updateProfile(formData: FormData) {
     locale: formData.get("locale"),
     cycle: formData.get("cycle")
   });
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
   const { error } = await supabase.from("profiles").update(parsed).eq("user_id", user.id);
   if (error) throw new Error(error.message);
   await supabase.from("audit_log").insert({ user_id: user.id, action: "profile.update" });
@@ -42,9 +39,7 @@ export async function updateProfile(formData: FormData) {
 // src/app/(app)/money/budget/actions.ts), que las crea automáticamente.
 
 export async function toggleTheme(theme: "light" | "dark") {
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
   await supabase.from("profiles").update({ theme }).eq("user_id", user.id);
   revalidatePath("/settings");
 }

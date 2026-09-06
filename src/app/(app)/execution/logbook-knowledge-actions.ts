@@ -19,8 +19,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
-import { getSessionUser } from "@/lib/data/session";
+import { requireUser } from "@/lib/data/session";
 
 export interface LogEntry {
   id: string;
@@ -48,9 +47,7 @@ export interface KnowledgeItem {
 export async function getProjectLogAndKnowledge(
   projectId: string
 ): Promise<{ logbook: LogEntry[]; knowledge: KnowledgeItem[] }> {
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase } = await requireUser();
 
   const [{ data: logRows }, { data: knowledgeRows }] = await Promise.all([
     supabase
@@ -81,9 +78,7 @@ const logSchema = z.object({
 export async function addLogEntry(projectId: string, type: string, text: string) {
   const parsed = logSchema.parse({ projectId, type, text });
 
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { error } = await supabase.from("logbook").insert({
     user_id: user.id,
@@ -98,9 +93,7 @@ export async function addLogEntry(projectId: string, type: string, text: string)
 }
 
 export async function deleteLogEntry(id: string) {
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { error } = await supabase.from("logbook").delete().eq("id", id);
   if (error) throw new Error(error.message);
@@ -121,9 +114,7 @@ const knowledgeSchema = z.object({
 export async function addKnowledgeItem(projectId: string, title: string, type: string, url: string, note: string) {
   const parsed = knowledgeSchema.parse({ projectId, title, type, url, note });
 
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { error } = await supabase.from("knowledge_items").insert({
     user_id: user.id,
@@ -142,9 +133,7 @@ export async function addKnowledgeItem(projectId: string, title: string, type: s
 
 /** FR-EXE-008: versión — cada edición incrementa `version` en vez de sobrescribir silenciosamente. */
 export async function updateKnowledgeItem(id: string, title: string, url: string, note: string) {
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: item } = await supabase.from("knowledge_items").select("version").eq("id", id).single();
   if (!item) throw new Error("Ítem no encontrado");
@@ -160,9 +149,7 @@ export async function updateKnowledgeItem(id: string, title: string, url: string
 }
 
 export async function deleteKnowledgeItem(id: string) {
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { error } = await supabase.from("knowledge_items").delete().eq("id", id);
   if (error) throw new Error(error.message);

@@ -1,16 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
-import { getSessionUser } from "@/lib/data/session";
+import { requireUser } from "@/lib/data/session";
 import { changeQuadrant } from "@/lib/domain/eisenhower.ts";
 import type { EisenhowerQuadrant, TaskStatus } from "@/lib/domain/types.ts";
 
 /** FR-VIEW-008, BR-023: mover una burbuja actualiza urgent/priority y audita como un cambio de estado. */
 export async function changeTaskQuadrant(taskId: string, targetQuadrant: EisenhowerQuadrant) {
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: task, error: taskErr } = await supabase.from("tasks").select("*").eq("id", taskId).single();
   if (taskErr || !task) throw new Error("Tarea no encontrada");

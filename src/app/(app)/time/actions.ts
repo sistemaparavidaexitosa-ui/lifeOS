@@ -20,7 +20,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { getSessionUser } from "@/lib/data/session";
+import { getSessionUser, requireUser } from "@/lib/data/session";
 import { actionFailed, actionOk, type ActionResult } from "@/lib/supabase/errors";
 import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
@@ -35,9 +35,7 @@ export async function updateActivityWindow(formData: FormData) {
   const parsed = windowSchema.parse({ start: formData.get("start"), end: formData.get("end") });
   if (parsed.end <= parsed.start) throw new Error("El fin debe ser posterior al inicio (BR-017).");
 
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { error } = await supabase
     .from("profiles")
@@ -156,9 +154,7 @@ const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 export async function assignTaskToDate(taskId: string, date: string) {
   const parsedDate = isoDate.parse(date);
 
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const isToday = parsedDate === todayLocal(await getUserTimeZone());
   const { error } = await supabase
@@ -183,9 +179,7 @@ export async function assignTaskToSlot(taskId: string) {
  * vista semanal. Limpia due e impact; no cambia el status de la tarea.
  */
 export async function unassignTaskDue(taskId: string) {
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { error } = await supabase.from("tasks").update({ due: null, impact: false }).eq("id", taskId);
   if (error) throw new Error(error.message);

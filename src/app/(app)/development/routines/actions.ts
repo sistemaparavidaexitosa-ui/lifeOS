@@ -4,7 +4,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { getSessionUser } from "@/lib/data/session";
+import { getSessionUser, requireUser } from "@/lib/data/session";
 import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
 import { toggleHabitEffect, routineRunComplete, routineRunNeedsWrite } from "@/lib/domain/development/routines.ts";
@@ -33,9 +33,7 @@ export async function upsertRoutine(id: string | null, formData: FormData) {
     active: formData.get("active") === "on" || formData.get("active") === "true"
   });
 
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const payload = {
     name: parsed.name,
@@ -155,9 +153,7 @@ export async function upsertHabit(routineId: string, id: string | null, formData
     meal: formData.get("meal") ?? ""
   });
 
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const payload = {
     name: parsed.name,
@@ -218,9 +214,7 @@ export async function deleteHabit(id: string) {
  * rutina, y quién decide si está cerrada es `routineRunComplete`.
  */
 export async function toggleHabitToday(routineId: string, habitId: string) {
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const today = todayLocal(await getUserTimeZone());
 

@@ -4,7 +4,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { getSessionUser } from "@/lib/data/session";
+import { requireUser } from "@/lib/data/session";
 
 const goalSchema = z.object({
   title: z.string().min(1),
@@ -23,9 +23,7 @@ export async function upsertPersonalGoal(id: string | null, formData: FormData) 
     status: formData.get("status") ?? "Activa"
   });
 
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const payload = {
     title: parsed.title,
@@ -81,9 +79,7 @@ export async function upsertKeyResult(goalId: string, id: string | null, formDat
     unit: formData.get("unit") ?? ""
   });
 
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase } = await requireUser();
 
   const sourceId = parsed.sourceKind === "manual" ? null : parsed.sourceId || null;
   if (parsed.sourceKind !== "manual" && !sourceId) throw new Error("Elige la fuente que va a medir este resultado clave.");

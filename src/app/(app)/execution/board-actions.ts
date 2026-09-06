@@ -12,21 +12,13 @@
 //     tarea y devuelve los rechazos en vez de forzarlos.
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
-import { getSessionUser } from "@/lib/data/session";
+import { requireUser } from "@/lib/data/session";
 import { recordActivity } from "@/lib/data/activity";
 import { evaluateTransition } from "@/lib/domain/task-state.ts";
 import { STATUS_META } from "./status-meta";
 import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
 
 const idListSchema = z.array(z.string().uuid()).min(1).max(500);
-
-async function requireUser() {
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
-  return { supabase, user };
-}
 
 // ---------------------------------------------------------------------------
 // Orden manual (migración 0021: tasks.position)

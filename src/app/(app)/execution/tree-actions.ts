@@ -13,8 +13,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
-import { getSessionUser } from "@/lib/data/session";
+import { requireUser } from "@/lib/data/session";
 import { recordActivity } from "@/lib/data/activity";
 
 const setParentSchema = z.object({
@@ -35,9 +34,7 @@ export async function setTaskParent(taskId: string, parentTaskId: string | null)
     throw new Error("Una tarea no puede ser su propio padre");
   }
 
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: task } = await supabase.from("tasks").select("version, project_id").eq("id", parsed.taskId).single();
   if (!task) throw new Error("Tarea no encontrada");
@@ -78,9 +75,7 @@ const setGroupSchema = z.object({
 export async function setTaskGroup(taskId: string, groupId: string) {
   const parsed = setGroupSchema.parse({ taskId, groupId });
 
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: task } = await supabase.from("tasks").select("version").eq("id", parsed.taskId).single();
   if (!task) throw new Error("Tarea no encontrada");
@@ -104,9 +99,7 @@ const createGroupSchema = z.object({
 export async function createTaskGroup(input: { projectId: string; name: string; color?: string }) {
   const parsed = createGroupSchema.parse(input);
 
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { count } = await supabase
     .from("task_groups")
@@ -134,9 +127,7 @@ const renameGroupSchema = z.object({
 export async function renameTaskGroup(groupId: string, name: string) {
   const parsed = renameGroupSchema.parse({ groupId, name });
 
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   // El nombre anterior y el proyecto se leen antes del update: «renombró el
   // grupo a X» sin decir cuál era obliga a adivinar qué cambió.
@@ -173,9 +164,7 @@ export async function deleteTaskGroup(groupId: string, fallbackGroupId: string) 
     throw new Error("El grupo de destino debe ser diferente al que se elimina");
   }
 
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: doomed } = await supabase.from("task_groups").select("name, project_id").eq("id", parsed.groupId).single();
 

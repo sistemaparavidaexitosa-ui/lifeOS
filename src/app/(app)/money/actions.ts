@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { getSessionUser } from "@/lib/data/session";
+import { requireUser } from "@/lib/data/session";
 import { round2 } from "@/lib/domain/budget.ts";
 
 const accountSchema = z.object({
@@ -21,9 +21,7 @@ export async function createAccount(formData: FormData) {
     opening: formData.get("opening") ?? 0
   });
 
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { error } = await supabase.from("accounts").insert({
     user_id: user.id,
@@ -68,9 +66,7 @@ export async function postTransaction(formData: FormData) {
     debtId: formData.get("debtId") ?? ""
   });
 
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const effectiveAt = parsed.effectiveAt ?? new Date().toISOString().slice(0, 10);
   const amountMinor = round2(parsed.amount);
@@ -143,9 +139,7 @@ export async function reconcileEntry(entryId: string) {
 
 /** BR: un movimiento publicado no se elimina, se reversa con un asiento inverso. */
 export async function reverseEntry(entryId: string) {
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: entry } = await supabase.from("journal_entries").select("*, journal_lines(*)").eq("id", entryId).single();
   if (!entry) throw new Error("Movimiento no encontrado");

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { getSessionUser } from "@/lib/data/session";
+import { requireUser } from "@/lib/data/session";
 
 const debtSchema = z.object({
   name: z.string().min(1),
@@ -22,9 +22,7 @@ export async function upsertDebt(id: string | null, formData: FormData) {
     dueDay: formData.get("dueDay")
   });
 
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const payload = { name: parsed.name, balance: parsed.balance, rate: parsed.rate, min_payment: parsed.minPayment, due_day: parsed.dueDay };
 
@@ -47,18 +45,14 @@ export async function deleteDebt(id: string) {
 
 /** FR-DEB-008: guarda el escenario editado (deuda, meses, monto) para consulta posterior. No ejecuta pagos (NG-003). */
 export async function saveDebtScenario(debtId: string, monthlyAmount: number) {
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "debt.simulate.save", object: debtId, meta: { monthlyAmount } });
 }
 
 /** FR-DEB-005: registra la aceptación auditada de un plan "IA Optimizada" sin ejecutar pagos. */
 export async function acceptAiDebtPlan(chosen: string, extra: number) {
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "debt.ai.plan", meta: { chosen, extra } });
 }

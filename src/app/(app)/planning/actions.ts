@@ -2,8 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
-import { getSessionUser } from "@/lib/data/session";
+import { requireUser } from "@/lib/data/session";
 import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
 
@@ -21,9 +20,7 @@ export async function approveDailyPlan(formData: FormData) {
     impactTaskIds: formData.getAll("impactTaskIds")
   });
 
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: oneTask, error: oneTaskErr } = await supabase.from("tasks").select("id, title").eq("id", parsed.oneThingTaskId).single();
   if (oneTaskErr || !oneTask) throw new Error("Selecciona una tarea válida para tu Única Cosa");
@@ -72,9 +69,7 @@ export async function closeoutTask(formData: FormData) {
     status: formData.get("status")
   });
 
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: task } = await supabase.from("tasks").select("status, version").eq("id", parsed.taskId).single();
   if (!task) throw new Error("Tarea no encontrada");
@@ -99,9 +94,7 @@ export async function closeoutTask(formData: FormData) {
 /** FR-PLN-004: guarda el aprendizaje del cierre diario en la bitácora, sin acoplarlo al estado de ninguna tarea específica. */
 export async function saveDailyLearning(text: string) {
   if (!text.trim()) return;
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   await supabase.from("logbook").insert({ user_id: user.id, type: "learning", text: text.trim() });
   await supabase.from("audit_log").insert({ user_id: user.id, action: "day.closeout.learning" });
@@ -110,9 +103,7 @@ export async function saveDailyLearning(text: string) {
 
 /** FR-PLN-005, BR-004: la revisión semanal produce un snapshot APROBADO E INMUTABLE. */
 export async function approveWeeklyReview() {
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: tasks } = await supabase.from("tasks").select("id, status, project_id");
   const { data: projects } = await supabase.from("projects").select("id").eq("status", "Active");

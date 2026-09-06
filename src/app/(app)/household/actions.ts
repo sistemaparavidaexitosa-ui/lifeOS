@@ -2,8 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
-import { getSessionUser } from "@/lib/data/session";
+import { requireUser } from "@/lib/data/session";
 
 const memberSchema = z.object({
   name: z.string().min(1),
@@ -19,9 +18,7 @@ export async function upsertFamilyMember(id: string | null, formData: FormData) 
     memberType: formData.get("memberType")
   });
 
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const payload = { name: parsed.name, relationship: parsed.relationship, member_type: parsed.memberType };
 
@@ -42,9 +39,7 @@ export async function upsertFamilyMember(id: string | null, formData: FormData) 
  * sin atribuir (ON DELETE SET NULL en las FK), consistente con BR-021.
  */
 export async function deleteFamilyMember(id: string) {
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { error } = await supabase.from("family_members").delete().eq("id", id);
   if (error) throw new Error(error.message);

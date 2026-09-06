@@ -21,8 +21,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
-import { getSessionUser } from "@/lib/data/session";
+import { requireUser } from "@/lib/data/session";
 import { recordActivity } from "@/lib/data/activity";
 import { notifyMentions } from "@/lib/push/triggers";
 import { parseMentions, type RosterMember } from "@/lib/domain/execution/mentions.ts";
@@ -49,9 +48,7 @@ export interface ProjectThreadResult {
 export async function getProjectThread(projectId: string): Promise<ProjectThreadResult> {
   const id = z.string().uuid().parse(projectId);
 
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: project, error: projectErr } = await supabase
     .from("projects")
@@ -118,9 +115,7 @@ export async function addProjectComment(projectId: string, body: string) {
   const trimmed = body.trim();
   if (!trimmed) return;
 
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: project } = await supabase.from("projects").select("id, title, workspace_id").eq("id", id).single();
   if (!project) throw new Error("Proyecto no encontrado");

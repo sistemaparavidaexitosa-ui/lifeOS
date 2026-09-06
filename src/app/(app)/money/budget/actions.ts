@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { getSessionUser } from "@/lib/data/session";
+import { requireUser } from "@/lib/data/session";
 import { round2, carryoverOffered } from "@/lib/domain/budget.ts";
 import { quincenaFromKey, shiftQuincena } from "@/lib/domain/quincena.ts";
 
@@ -39,9 +39,7 @@ const createLineSchema = editLineSchema.extend({
  * categories(user_id, name), ver 0005_money_ledger_budget.sql).
  */
 export async function upsertBudgetLine(id: string | null, formData: FormData) {
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   // ---------------------------------------------------------------------------
   // EDICIÓN: no requiere category (no se cambia). Fix del PUNTO 5.
@@ -199,9 +197,7 @@ const carryoverSchema = z.object({
 export async function applyCarryover(budgetId: string, periodKey: string) {
   const parsed = carryoverSchema.parse({ budgetId, periodKey });
 
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const amount = await computeCarryoverAmount(supabase, parsed.budgetId, parsed.periodKey);
 
@@ -226,9 +222,7 @@ export async function applyCarryover(budgetId: string, periodKey: string) {
 export async function removeCarryover(budgetId: string, periodKey: string) {
   const parsed = carryoverSchema.parse({ budgetId, periodKey });
 
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { error } = await supabase
     .from("budget_carryovers")
@@ -261,9 +255,7 @@ const incomeSchema = z.object({
 export async function updateQuincenalIncome(formData: FormData) {
   const parsed = incomeSchema.parse({ quincenalIncome: formData.get("quincenalIncome") });
 
-  const supabase = await createClient();
-  const user = await getSessionUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { error } = await supabase
     .from("profiles")
