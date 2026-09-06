@@ -56,6 +56,31 @@ test("parseInline: un esquema que no es http(s) NO produce un enlace", () => {
   assert.deepStrictEqual(parts, [{ kind: "text", text: "[pulsa aquí](javascript:alert(1))" }]);
 });
 
+test("parseInline: subrayado y tachado", () => {
+  assert.deepStrictEqual(parseInline("esto va ++subrayado++ y esto ~~fuera~~"), [
+    { kind: "text", text: "esto va " },
+    { kind: "underline", text: "subrayado" },
+    { kind: "text", text: " y esto " },
+    { kind: "strike", text: "fuera" }
+  ]);
+});
+
+test("parseInline: dos guiones bajos NO son subrayado", () => {
+  // En CommonMark `__x__` es negrita. Si aquí fuese subrayado, quien pegue
+  // Markdown de fuera vería subrayado donde escribió negrita.
+  assert.deepStrictEqual(parseInline("__esto__"), [{ kind: "text", text: "__esto__" }]);
+});
+
+test("serializeInline: subrayado y tachado vuelven a su sintaxis", () => {
+  assert.strictEqual(
+    serializeInline([
+      { kind: "underline", text: "a" },
+      { kind: "strike", text: "b" }
+    ]),
+    "++a++~~b~~"
+  );
+});
+
 test("parseInline: una línea vacía sigue devolviendo un fragmento", () => {
   // Devolver [] haría desaparecer el párrafo entero al pintarlo.
   assert.deepStrictEqual(parseInline(""), [{ kind: "text", text: "" }]);
@@ -208,7 +233,9 @@ export const CORPUS_ROUND_TRIP = [
   "párrafo con | barra vertical",
   "línea uno\nlínea dos del mismo párrafo",
   "#YOLO sin espacio",
-  "##dos sin espacio"
+  "##dos sin espacio",
+  "++subrayado++ y ~~tachado~~ juntos",
+  "un más + suelto y una tilde ~ suelta"
 ];
 
 test("serializeNote: un hashtag al inicio de línea no es un título y no se escapa", () => {

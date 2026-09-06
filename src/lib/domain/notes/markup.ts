@@ -23,6 +23,8 @@ export type Inline =
   | { kind: "bold"; text: string }
   | { kind: "italic"; text: string }
   | { kind: "code"; text: string }
+  | { kind: "underline"; text: string }
+  | { kind: "strike"; text: string }
   | { kind: "link"; text: string; href: string };
 
 export type Block =
@@ -49,7 +51,7 @@ export type Block =
 const ESCAPABLES = "\\`*~+[|";
 
 const INLINE_PATTERN =
-  /\\([\\`*~+[|])|`([^`\n]+)`|\*\*([^*\n]+)\*\*|\*([^*\n]+)\*|\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<]+)/g;
+  /\\([\\`*~+[|])|`([^`\n]+)`|\*\*([^*\n]+)\*\*|\+\+([^+\n]+)\+\+|~~([^~\n]+)~~|\*([^*\n]+)\*|\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<]+)/g;
 
 export function parseInline(line: string): Inline[] {
   const out: Inline[] = [];
@@ -64,13 +66,15 @@ export function parseInline(line: string): Inline[] {
     if (match.index > last) {
       out.push({ kind: "text", text: line.slice(last, match.index) });
     }
-    const [, escapado, code, bold, italic, linkText, linkHref, bareUrl] = match;
+    const [, escapado, code, bold, underline, strike, italic, linkText, linkHref, bareUrl] = match;
 
     // Un carácter escapado es texto y nada más: se emite tal cual y la
     // fusión posterior lo pega al tramo que lo rodea.
     if (escapado !== undefined) out.push({ kind: "text", text: escapado });
     else if (code !== undefined) out.push({ kind: "code", text: code });
     else if (bold !== undefined) out.push({ kind: "bold", text: bold });
+    else if (underline !== undefined) out.push({ kind: "underline", text: underline });
+    else if (strike !== undefined) out.push({ kind: "strike", text: strike });
     else if (italic !== undefined) out.push({ kind: "italic", text: italic });
     else if (linkText !== undefined && linkHref !== undefined) {
       out.push({ kind: "link", text: linkText, href: linkHref });
@@ -313,6 +317,10 @@ export function serializeInline(content: Inline[], opts?: { pipe?: boolean }): s
       switch (parte.kind) {
         case "bold":
           return `**${escapeInlineText(parte.text, opts)}**`;
+        case "underline":
+          return `++${escapeInlineText(parte.text, opts)}++`;
+        case "strike":
+          return `~~${escapeInlineText(parte.text, opts)}~~`;
         case "italic":
           return `*${escapeInlineText(parte.text, opts)}*`;
         case "code":
