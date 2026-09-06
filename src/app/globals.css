@@ -3365,6 +3365,11 @@ textarea:focus {
 
 /* ── Editor de notas: la línea editable ───────────────────────────────── */
 .nb-line {
+  /* 16px EXACTOS. Por debajo, Safari de iOS hace zoom al enfocar el campo y
+     descoloca la página entera mientras se escribe — el mismo umbral que ya
+     documentan .nb-body-input y los campos del formulario. `.nb-prose` es
+     15px, así que heredar no vale aquí. */
+  font-size: 16px;
   outline: none;
   min-height: 1.65em;
   white-space: pre-wrap;

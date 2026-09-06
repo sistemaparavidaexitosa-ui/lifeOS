@@ -88,7 +88,7 @@ export default function NoteEditor({
   const router = useRouter();
   const [title, setTitle] = useState(note.title);
   const [blocks, setBlocks] = useState<Block[]>(() => bloquesEditables(note.body));
-  const [cursor, setCursor] = useState<Cursor>({ block: 0, item: 0, start: 0, end: 0 });
+  const [cursor, setCursor] = useState<Cursor>({ block: 0, item: 0, start: 0, end: 0, seq: 0 });
   const [estado, setEstado] = useState<Estado>("limpio");
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [firma, setFirma] = useState({ name: note.updatedByName, at: note.updatedAt });
@@ -102,6 +102,11 @@ export default function NoteEditor({
   const guardadoRef = useRef({ title: note.title, body: note.body });
   const temporizadorRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bloqueadoRef = useRef(false);
+  // Sin esta guarda, `onBlur` y el temporizador pendiente disparaban DOS
+  // guardados solapados con el mismo `versionRef`: el segundo recibía cero
+  // filas y la nota entraba en conflicto CONSIGO MISMA — «Fulano guardó esta
+  // nota mientras escribías», siendo Fulano tú.
+  const guardandoRef = useRef(false);
   const docRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -150,7 +155,13 @@ export default function NoteEditor({
   const guardar = useCallback(async () => {
     // Un conflicto bloquea: seguir mandando reintentos sólo repetiría el aviso
     // y podría acabar pisando el texto de la otra persona.
-    if (!canWrite || bloqueadoRef.current) return;
+    if (!canWrite || bloqueadoRef.current || guardandoRef.current) return;
+    // El temporizador pendiente se cancela AQUÍ: si no, se solapa con este
+    // guardado y manda una versión ya caducada.
+    if (temporizadorRef.current) {
+      clearTimeout(temporizadorRef.current);
+      temporizadorRef.current = null;
+    }
 
     const frescos = volcarBloqueEnfocado(blocksRef.current);
     if (frescos !== blocksRef.current) {
@@ -165,7 +176,13 @@ export default function NoteEditor({
     }
 
     setEstado("guardando");
-    const result = await saveNote(note.id, tituloActual, body, versionRef.current);
+    guardandoRef.current = true;
+    let result;
+    try {
+      result = await saveNote(note.id, tituloActual, body, versionRef.current);
+    } finally {
+      guardandoRef.current = false;
+    }
 
     if (result.ok && result.version) {
       versionRef.current = result.version;
@@ -176,6 +193,11 @@ export default function NoteEditor({
       });
       setEstado("guardado");
       setMensaje(null);
+      // Lo que se escribió MIENTRAS se guardaba no cabía en esta petición: se
+      // programa otra en vez de perderlo.
+      if (serializeNote(blocksRef.current) !== body || tituloRef.current !== tituloActual) {
+        programarRef.current?.();
+      }
       return;
     }
 
@@ -188,12 +210,18 @@ export default function NoteEditor({
     setMensaje(result.reason ?? "No se pudo guardar.");
   }, [canWrite, note.id, volcarBloqueEnfocado]);
 
+  const programarRef = useRef<(() => void) | null>(null);
+
   const programar = useCallback(() => {
     if (!canWrite || bloqueadoRef.current) return;
     setEstado("sucio");
     if (temporizadorRef.current) clearTimeout(temporizadorRef.current);
     temporizadorRef.current = setTimeout(() => void guardar(), RETARDO_MS);
   }, [canWrite, guardar]);
+
+  useEffect(() => {
+    programarRef.current = programar;
+  }, [programar]);
 
   // El anzuelo que evita perder lo escrito en iOS: al ocultarse la pestaña
   // (bloquear el teléfono, cambiar de app, cerrar) se guarda ya, sin esperar al
@@ -236,10 +264,11 @@ export default function NoteEditor({
     if (!previa) return;
     pasado.current = pasado.current.slice(0, -1);
     futuro.current = [{ blocks: blocksRef.current, cursor: cursorRef.current }, ...futuro.current];
+    const destino = { ...previa.cursor, seq: cursorRef.current.seq + 1 };
     blocksRef.current = previa.blocks;
-    cursorRef.current = previa.cursor;
+    cursorRef.current = destino;
     setBlocks(previa.blocks);
-    setCursor(previa.cursor);
+    setCursor(destino);
     setProfundidad({ atras: pasado.current.length, adelante: futuro.current.length });
     programar();
   }, [programar]);
@@ -249,10 +278,11 @@ export default function NoteEditor({
     if (!siguiente) return;
     futuro.current = futuro.current.slice(1);
     pasado.current = [...pasado.current, { blocks: blocksRef.current, cursor: cursorRef.current }];
+    const destino = { ...siguiente.cursor, seq: cursorRef.current.seq + 1 };
     blocksRef.current = siguiente.blocks;
-    cursorRef.current = siguiente.cursor;
+    cursorRef.current = destino;
     setBlocks(siguiente.blocks);
-    setCursor(siguiente.cursor);
+    setCursor(destino);
     setProfundidad({ atras: pasado.current.length, adelante: futuro.current.length });
     programar();
   }, [programar]);
@@ -283,7 +313,7 @@ export default function NoteEditor({
     const marcada = applyMark(linea, cursor.start, cursor.end, marca);
     cambiar(
       blocks.map((b, i) => (i === cursor.block ? conLinea(b, cursor.item, marcada) : b)),
-      cursor
+      { ...cursor, seq: cursor.seq + 1 }
     );
   }
 
@@ -291,7 +321,7 @@ export default function NoteEditor({
     if (!bloqueActual) return;
     cambiar(
       blocks.map((b, i) => (i === cursor.block ? setBlockStyle(bloqueActual, estiloNuevo) : b)),
-      { block: cursor.block, item: 0, start: 0, end: 0 }
+      { block: cursor.block, item: 0, start: 0, end: 0, seq: cursor.seq + 1 }
     );
   }
 
@@ -312,7 +342,7 @@ export default function NoteEditor({
     ];
     cambiar(
       blocks.map((b, i) => (i === cursor.block ? conLinea(b, cursor.item, nueva) : b)),
-      cursor
+      { ...cursor, seq: cursor.seq + 1 }
     );
   }
 

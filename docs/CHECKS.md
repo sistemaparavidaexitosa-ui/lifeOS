@@ -941,7 +941,7 @@ el resultado real, nunca con el previsto.
 | # | Qué | Resultado |
 |---|-----|-----------|
 | 1 | El texto con formato se ve formateado, sin sintaxis a la vista | NO EJECUTADO |
-| 2 | Escribir no hace saltar el cursor | NO EJECUTADO |
+| 2 | Escribir no hace saltar el cursor | **FALLÓ** (escribía al revés) → corregido, sin reverificar |
 | 3 | El dictado por voz escribe donde está el cursor | NO EJECUTADO |
 | 4 | `# ` y `- ` al inicio convierten el bloque al vuelo | NO EJECUTADO |
 | 5 | Enter en un ítem vacío sale de la lista | NO EJECUTADO |
@@ -980,6 +980,29 @@ Tres fallos, ninguno detectable sin abrir la app:
    teclado: mide el desplazamiento del viewport visual, y en Safari de iOS cambia
    con cada scroll y con el rebote elástico. Ahora sólo `innerHeight - height`,
    y sólo en `resize`.
+
+| 19 | Escribir el título de una nota nueva no la pone en conflicto | **FALLÓ** → corregido, sin reverificar |
+| 20 | Enfocar el cuerpo NO hace zoom en iOS | **FALLÓ** → corregido, sin reverificar |
+
+#### Segunda tanda del uso real (6-sep-2026)
+
+Otros tres, otra vez ninguno detectable sin abrir la app:
+
+4. **Escribir el título ponía la nota en conflicto consigo misma** («Luis Vargas
+   guardó esta nota mientras escribías», siendo Luis el que escribe). `guardar()`
+   no tenía guarda de reentrada y `onBlur` lo llamaba sin cancelar el
+   temporizador pendiente: dos guardados solapados mandaban el mismo
+   `versionRef`, y el segundo recibía cero filas. Ahora hay guarda, el
+   temporizador se cancela dentro de `guardar()`, y lo escrito durante la
+   petición se reprograma en vez de perderse.
+5. **El cuerpo se escribía al revés.** `caret` nunca era `null` en la línea
+   enfocada y el efecto dependía de `[caret, content]`, así que cada tecla
+   ejecutaba `ponerCursor(el, 0)`. Destruía el diseño entero de «el DOM manda
+   mientras escribes». `Cursor` gana `seq`, que sólo sube cuando el MODELO
+   mueve el cursor; teclear no lo sube.
+6. **Enfocar el cuerpo hacía zoom.** `.nb-prose` es 15px y `.nb-line` heredaba.
+   El umbral de iOS son 16px exactos, y este repo ya lo documentaba en otros dos
+   sitios. Ahora `.nb-line` los fija.
 
 **Las 16 filas originales siguen sin ejecutarse salvo las anotadas.** El editor compila, pasa las
 pruebas de dominio y construye, pero **nadie lo ha abierto en un teléfono**.
