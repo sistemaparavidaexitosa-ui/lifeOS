@@ -406,3 +406,20 @@ export function bloquesEditables(body: string): Block[] {
   const bloques = parseNote(body);
   return bloques.length ? bloques : [{ kind: "paragraph", content: [{ kind: "text", text: "" }] }];
 }
+
+/**
+ * Qué estilo aplicar cuando se toca un botón de la barra.
+ *
+ * Tocar el estilo que ya está activo lo QUITA, que es lo que hace el iPhone:
+ * el segundo toque en «viñetas» sale de la lista. Sin esto el botón se queda
+ * encendido y no hay forma de deshacer el cambio desde la barra — se reportó
+ * como «algunos botones no se deseleccionan».
+ *
+ * La tabla es la excepción: convertirla en párrafo por un toque repetido
+ * destruiría la rejilla sin que nadie lo haya pedido.
+ */
+export function estiloAlternado(actual: BlockStyle, pedido: BlockStyle): BlockStyle {
+  if (actual !== pedido) return pedido;
+  if (pedido === "table") return "table";
+  return "body";
+}

@@ -32,6 +32,7 @@ import { noteDisplayTitle, serializeNote, type Block } from "@/lib/domain/notes/
 import {
   applyMark,
   bloquesEditables,
+  estiloAlternado,
   hasMark,
   plainLength,
   setBlockStyle,
@@ -319,8 +320,10 @@ export default function NoteEditor({
 
   function aplicarEstilo(estiloNuevo: BlockStyle) {
     if (!bloqueActual) return;
+    // Tocar el estilo ya activo lo quita, como en el iPhone.
+    const destino = estiloAlternado(styleOf(bloqueActual), estiloNuevo);
     cambiar(
-      blocks.map((b, i) => (i === cursor.block ? setBlockStyle(bloqueActual, estiloNuevo) : b)),
+      blocks.map((b, i) => (i === cursor.block ? setBlockStyle(bloqueActual, destino) : b)),
       { block: cursor.block, item: 0, start: 0, end: 0, seq: cursor.seq + 1 }
     );
   }

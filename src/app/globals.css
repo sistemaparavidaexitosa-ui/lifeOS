@@ -3482,3 +3482,15 @@ textarea:focus {
 .nb-doc {
   padding-bottom: 96px;
 }
+
+/* Diagnóstico TEMPORAL de la barra de formato (`?bar=1`). Se quita cuando el
+   anclaje al viewport visual quede confirmado en un teléfono. */
+.nb-formatbar-diag {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  padding: 4px 8px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  overflow-x: auto;
+}

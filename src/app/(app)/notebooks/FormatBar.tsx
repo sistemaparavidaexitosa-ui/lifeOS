@@ -37,8 +37,9 @@ export interface FormatBarProps {
  * Se ancla a `top: 0` y se desplaza con `transform`, todo en coordenadas de
  * layout. La aritmética vive en `anclaje-teclado.ts`, probada aparte.
  */
-function useBordeVisual(): number | null {
+function useBordeVisual(): { borde: number | null; medidas: Medidas | null } {
   const [borde, setBorde] = useState<number | null>(null);
+  const [medidas, setMedidas] = useState<Medidas | null>(null);
 
   useEffect(() => {
     const vv = window.visualViewport;
@@ -46,6 +47,13 @@ function useBordeVisual(): number | null {
 
     function medir() {
       if (!vv) return;
+      const m = {
+        iH: Math.round(window.innerHeight),
+        vvH: Math.round(vv.height),
+        oT: Math.round(vv.offsetTop),
+        sY: Math.round(window.scrollY)
+      };
+      setMedidas(m);
       setBorde(
         bordeInferiorVisual({
           innerHeight: window.innerHeight,
@@ -66,7 +74,15 @@ function useBordeVisual(): number | null {
     };
   }, []);
 
-  return borde;
+  return { borde, medidas };
+}
+
+/** Lectura en crudo del viewport, sólo para diagnosticar. TEMPORAL. */
+interface Medidas {
+  iH: number;
+  vvH: number;
+  oT: number;
+  sY: number;
 }
 
 const ESTILOS: { valor: BlockStyle; etiqueta: string }[] = [
@@ -105,7 +121,12 @@ export default function FormatBar({
   puedeRehacer
 }: FormatBarProps) {
   const [abierto, setAbierto] = useState(false);
-  const borde = useBordeVisual();
+  const { borde, medidas } = useBordeVisual();
+  // Diagnóstico TEMPORAL de la barra: se activa añadiendo `?bar=1` a la URL.
+  const [diagnostico, setDiagnostico] = useState(false);
+  useEffect(() => {
+    setDiagnostico(new URLSearchParams(window.location.search).get("bar") === "1");
+  }, []);
 
   // Nunca robar el foco al contenteditable: sin esto, la selección se deshace
   // al tocar el botón y no queda nada a lo que aplicar la marca.
@@ -124,6 +145,12 @@ export default function FormatBar({
       role="toolbar"
       aria-label="Formato"
     >
+      {diagnostico && (
+        <div className="nb-formatbar-diag">
+          iH {medidas?.iH ?? "—"} · vvH {medidas?.vvH ?? "—"} · oT {medidas?.oT ?? "—"} · sY{" "}
+          {medidas?.sY ?? "—"} · borde {borde ?? "—"}
+        </div>
+      )}
       {abierto && (
         <div className="nb-formatbar-menu">
           {ESTILOS.map((e) => (
