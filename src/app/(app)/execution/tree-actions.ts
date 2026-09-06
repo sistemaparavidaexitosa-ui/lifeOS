@@ -15,6 +15,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireUser } from "@/lib/data/session";
 import { recordActivity } from "@/lib/data/activity";
+import { describeDbError } from "@/lib/supabase/errors";
 
 const setParentSchema = z.object({
   taskId: z.string().uuid(),
@@ -55,7 +56,7 @@ export async function setTaskParent(taskId: string, parentTaskId: string | null)
       version: task.version + 1
     })
     .eq("id", parsed.taskId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({
     user_id: user.id,
@@ -84,7 +85,7 @@ export async function setTaskGroup(taskId: string, groupId: string) {
     .from("tasks")
     .update({ group_id: parsed.groupId, version: task.version + 1 })
     .eq("id", parsed.taskId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "task.group.move", object: parsed.taskId, meta: { groupId: parsed.groupId } });
   revalidatePath("/execution");
@@ -111,7 +112,7 @@ export async function createTaskGroup(input: { projectId: string; name: string; 
     .insert({ project_id: parsed.projectId, name: parsed.name.trim(), color: parsed.color, position: count ?? 0 })
     .select("id, name, color, position")
     .single();
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "group.create", object: data.id, meta: { name: parsed.name } });
   await recordActivity({ projectId: parsed.projectId, type: "group.create", text: `creó el grupo "${data.name}"` });
@@ -134,7 +135,7 @@ export async function renameTaskGroup(groupId: string, name: string) {
   const { data: antes } = await supabase.from("task_groups").select("name, project_id").eq("id", parsed.groupId).single();
 
   const { error } = await supabase.from("task_groups").update({ name: parsed.name.trim() }).eq("id", parsed.groupId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "group.rename", object: parsed.groupId });
   if (antes) {

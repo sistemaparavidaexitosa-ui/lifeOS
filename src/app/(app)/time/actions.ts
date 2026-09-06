@@ -21,7 +21,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionUser, requireUser } from "@/lib/data/session";
-import { actionFailed, actionOk, type ActionResult } from "@/lib/supabase/errors";
+import { describeDbError, actionFailed, actionOk, type ActionResult } from "@/lib/supabase/errors";
 
 import { todayForUser } from "@/lib/data/profile";
 
@@ -41,7 +41,7 @@ export async function updateActivityWindow(formData: FormData) {
     .from("profiles")
     .update({ activity_window_start: parsed.start, activity_window_end: parsed.end })
     .eq("user_id", user.id);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "time.window.update" });
   revalidatePath("/time");
@@ -161,7 +161,7 @@ export async function assignTaskToDate(taskId: string, date: string) {
     .from("tasks")
     .update(isToday ? { impact: true, due: parsedDate } : { due: parsedDate })
     .eq("id", taskId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "time.slot.assign", object: taskId, meta: { date: parsedDate } });
   revalidatePath("/time");
@@ -182,7 +182,7 @@ export async function unassignTaskDue(taskId: string) {
   const { supabase, user } = await requireUser();
 
   const { error } = await supabase.from("tasks").update({ due: null, impact: false }).eq("id", taskId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "time.slot.unassign", object: taskId });
   revalidatePath("/time");

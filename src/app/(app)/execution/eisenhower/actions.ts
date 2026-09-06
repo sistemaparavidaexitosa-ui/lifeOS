@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/data/session";
 import { changeQuadrant } from "@/lib/domain/eisenhower.ts";
 import type { EisenhowerQuadrant, TaskStatus } from "@/lib/domain/types.ts";
+import { describeDbError } from "@/lib/supabase/errors";
 
 /** FR-VIEW-008, BR-023: mover una burbuja actualiza urgent/priority y audita como un cambio de estado. */
 export async function changeTaskQuadrant(taskId: string, targetQuadrant: EisenhowerQuadrant) {
@@ -20,7 +21,7 @@ export async function changeTaskQuadrant(taskId: string, targetQuadrant: Eisenho
     .from("tasks")
     .update({ urgent: result.urgent, priority: result.priority, version: task.version + 1 })
     .eq("id", taskId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("task_history").insert({ task_id: taskId, from_state: `quadrant:${beforeQuadrant}`, to_state: `quadrant:${targetQuadrant}` });
   await supabase.from("audit_log").insert({ user_id: user.id, action: "task.quadrant", object: taskId, meta: { to: targetQuadrant } });

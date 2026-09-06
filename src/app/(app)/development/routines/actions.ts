@@ -45,10 +45,10 @@ export async function upsertRoutine(id: string | null, formData: FormData) {
 
   if (id) {
     const { error } = await supabase.from("routines").update(payload).eq("id", id);
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(describeDbError(error));
   } else {
     const { error } = await supabase.from("routines").insert({ ...payload, user_id: user.id });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(describeDbError(error));
   }
   revalidatePath("/development/routines");
   revalidatePath("/development");
@@ -57,7 +57,7 @@ export async function upsertRoutine(id: string | null, formData: FormData) {
 export async function deleteRoutine(id: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("routines").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
   revalidatePath("/development/routines");
   revalidatePath("/development");
 }
@@ -113,7 +113,7 @@ async function sincronizarCierreDeRutina(
       { routine_id: routineId, local_date: today, completed_at: cerrada ? new Date().toISOString() : null },
       { onConflict: "routine_id,local_date" }
     );
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 }
 
 const habitSchema = z.object({
@@ -169,10 +169,10 @@ export async function upsertHabit(routineId: string, id: string | null, formData
 
   if (id) {
     const { error } = await supabase.from("habits").update(payload).eq("id", id);
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(describeDbError(error));
   } else {
     const { error } = await supabase.from("habits").insert({ ...payload, user_id: user.id });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(describeDbError(error));
   }
 
   // La rutina acaba de cambiar de tamaño: el hábito nuevo la descierra, y el
@@ -193,7 +193,7 @@ export async function deleteHabit(id: string) {
   const { data: habit } = await supabase.from("habits").select("routine_id").eq("id", id).maybeSingle();
 
   const { error } = await supabase.from("habits").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   if (habit?.routine_id) {
     await sincronizarCierreDeRutina(supabase, habit.routine_id, await todayForUser(), { arranca: false });
@@ -227,11 +227,11 @@ export async function toggleHabitToday(routineId: string, habitId: string) {
 
   if (toggleHabitEffect(Boolean(log)) === "delete") {
     const { error } = await supabase.from("habit_logs").delete().eq("id", log!.id);
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(describeDbError(error));
     await supabase.from("audit_log").insert({ user_id: user.id, action: "habit.uncomplete", object: habitId });
   } else {
     const { error } = await supabase.from("habit_logs").insert({ habit_id: habitId, log_date: today });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(describeDbError(error));
     await supabase.from("audit_log").insert({ user_id: user.id, action: "habit.complete", object: habitId });
   }
 

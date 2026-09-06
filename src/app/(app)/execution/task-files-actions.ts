@@ -11,6 +11,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireUser } from "@/lib/data/session";
+import { describeDbError } from "@/lib/supabase/errors";
 
 const recordSchema = z.object({
   taskId: z.string().uuid(),
@@ -44,7 +45,7 @@ export async function recordTaskFileUpload(input: {
     content_type: parsed.contentType,
     uploaded_by: user.id
   });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({
     user_id: user.id,
@@ -70,7 +71,7 @@ export async function deleteTaskFile(fileId: string, storagePath: string) {
   if (storageErr) throw new Error(storageErr.message);
 
   const { error } = await supabase.from("task_files").delete().eq("id", parsed.fileId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "task.file.delete", object: parsed.fileId });
   revalidatePath("/execution");

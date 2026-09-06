@@ -20,6 +20,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireUser } from "@/lib/data/session";
+import { describeDbError } from "@/lib/supabase/errors";
 
 export interface LogEntry {
   id: string;
@@ -86,7 +87,7 @@ export async function addLogEntry(projectId: string, type: string, text: string)
     type: parsed.type,
     text: parsed.text.trim()
   });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "logbook.add", object: parsed.projectId, meta: { type: parsed.type } });
   revalidatePath("/execution");
@@ -96,7 +97,7 @@ export async function deleteLogEntry(id: string) {
   const { supabase, user } = await requireUser();
 
   const { error } = await supabase.from("logbook").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "logbook.delete", object: id });
   revalidatePath("/execution");
@@ -125,7 +126,7 @@ export async function addKnowledgeItem(projectId: string, title: string, type: s
     note: parsed.note.trim(),
     version: 1
   });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "knowledge.add", object: parsed.projectId, meta: { type: parsed.type } });
   revalidatePath("/execution");
@@ -142,7 +143,7 @@ export async function updateKnowledgeItem(id: string, title: string, url: string
     .from("knowledge_items")
     .update({ title: title.trim(), url: url.trim(), note: note.trim(), version: item.version + 1 })
     .eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "knowledge.update", object: id });
   revalidatePath("/execution");
@@ -152,7 +153,7 @@ export async function deleteKnowledgeItem(id: string) {
   const { supabase, user } = await requireUser();
 
   const { error } = await supabase.from("knowledge_items").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "knowledge.delete", object: id });
   revalidatePath("/execution");

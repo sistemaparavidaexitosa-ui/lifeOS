@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/data/session";
+import { describeDbError } from "@/lib/supabase/errors";
 
 const goalSchema = z.object({
   title: z.string().min(1),
@@ -36,10 +37,10 @@ export async function upsertPersonalGoal(id: string | null, formData: FormData) 
 
   if (id) {
     const { error } = await supabase.from("personal_goals").update(payload).eq("id", id);
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(describeDbError(error));
   } else {
     const { error } = await supabase.from("personal_goals").insert({ ...payload, user_id: user.id });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(describeDbError(error));
   }
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "personal_goal.upsert", object: id ?? "" });
@@ -50,7 +51,7 @@ export async function upsertPersonalGoal(id: string | null, formData: FormData) 
 export async function deletePersonalGoal(id: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("personal_goals").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
   revalidatePath("/development/goals");
   revalidatePath("/development");
 }
@@ -118,10 +119,10 @@ export async function upsertKeyResult(goalId: string, id: string | null, formDat
 
   if (id) {
     const { error } = await supabase.from("key_results").update(payload).eq("id", id);
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(describeDbError(error));
   } else {
     const { error } = await supabase.from("key_results").insert({ ...payload, goal_id: goalId });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(describeDbError(error));
   }
   revalidatePath("/development/goals");
   revalidatePath("/development");
@@ -130,7 +131,7 @@ export async function upsertKeyResult(goalId: string, id: string | null, formDat
 export async function deleteKeyResult(id: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("key_results").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
   revalidatePath("/development/goals");
   revalidatePath("/development");
 }

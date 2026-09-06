@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/data/session";
 
 import { todayForUser } from "@/lib/data/profile";
+import { describeDbError } from "@/lib/supabase/errors";
 
 const planSchema = z.object({
   projectId: z.string().uuid().optional().or(z.literal("")),
@@ -82,7 +83,7 @@ export async function closeoutTask(formData: FormData) {
       version: task.version + 1
     })
     .eq("id", parsed.taskId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("task_history").insert({ task_id: parsed.taskId, from_state: task.status, to_state: parsed.status });
 
@@ -121,7 +122,7 @@ export async function approveWeeklyReview() {
     progress_pct: progress,
     blocked_count: blocked
   });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "weekly.review" });
   revalidatePath("/planning");

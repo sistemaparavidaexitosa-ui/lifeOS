@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/data/session";
+import { describeDbError } from "@/lib/supabase/errors";
 
 const debtSchema = z.object({
   name: z.string().min(1),
@@ -28,10 +29,10 @@ export async function upsertDebt(id: string | null, formData: FormData) {
 
   if (id) {
     const { error } = await supabase.from("debts").update(payload).eq("id", id);
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(describeDbError(error));
   } else {
     const { error } = await supabase.from("debts").insert({ ...payload, user_id: user.id });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(describeDbError(error));
   }
   revalidatePath("/debt");
 }
@@ -39,7 +40,7 @@ export async function upsertDebt(id: string | null, formData: FormData) {
 export async function deleteDebt(id: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("debts").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
   revalidatePath("/debt");
 }
 

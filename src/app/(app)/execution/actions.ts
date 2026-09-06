@@ -13,6 +13,7 @@ import { templateFromPayload } from "@/lib/domain/execution/ai-plan.ts";
 import { writeTemplate } from "./template-actions";
 import { suggestProjectSequence } from "@/lib/domain/project-sequence.ts";
 import type { TaskStatus } from "@/lib/domain/types.ts";
+import { describeDbError } from "@/lib/supabase/errors";
 
 const projectSchema = z.object({
   title: z.string().min(1),
@@ -87,7 +88,7 @@ export async function createProject(formData: FormData) {
     })
     .select("id")
     .single();
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   // El proyecto nace CON algo dentro. Sin esto el tablero recién creado salía
   // vacío del todo: "+ Agregar tarea" vive dentro de un grupo, así que no había
@@ -169,7 +170,7 @@ export async function deleteProject(projectId: string) {
   await supabase.from("comments").delete().eq("subject_type", "project").eq("subject_id", id);
 
   const { error } = await supabase.from("projects").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "project.delete", object: id });
   // Sin `projectId`: la fila que enlazaría ya no existe y la clave foránea la
@@ -301,7 +302,7 @@ export async function createTask(formData: FormData): Promise<CreatedTaskRow> {
     })
     .select()
     .single();
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("task_history").insert({ task_id: task.id, from_state: null, to_state: "Pending" });
   await supabase
@@ -341,7 +342,7 @@ export async function renameTask(taskId: string, title: string) {
   if (!task) throw new Error("Tarea no encontrada");
 
   const { error } = await supabase.from("tasks").update({ title: trimmed, version: task.version + 1 }).eq("id", taskId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "task.rename", object: taskId });
   revalidatePath("/execution");
@@ -355,7 +356,7 @@ export async function updateTaskDates(taskId: string, startDate: string | null, 
   if (!task) throw new Error("Tarea no encontrada");
 
   const { error } = await supabase.from("tasks").update({ start_date: startDate, due, version: task.version + 1 }).eq("id", taskId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "task.dates", object: taskId, meta: { startDate, due } });
   revalidatePath("/execution");
@@ -382,7 +383,7 @@ export async function setTaskStatus(taskId: string, to: TaskStatus) {
     .from("tasks")
     .update({ status: to, completed_at: to === "Completed" ? new Date().toISOString() : null, version: task.version + 1 })
     .eq("id", taskId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("task_history").insert({ task_id: taskId, from_state: task.status, to_state: to });
   await supabase.from("audit_log").insert({ user_id: user.id, action: "task.status", object: taskId, meta: { to } });
@@ -431,7 +432,7 @@ export async function deleteTask(taskId: string) {
   const { data: doomed } = await supabase.from("tasks").select("title, project_id").eq("id", taskId).single();
 
   const { error } = await supabase.from("tasks").delete().eq("id", taskId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "task.delete", object: taskId });
   if (doomed) {
@@ -488,7 +489,7 @@ export async function patchProject(projectId: string, patch: ProjectPatch) {
   if (parsed.targetDate !== undefined) update.target_date = parsed.targetDate;
 
   const { error } = await supabase.from("projects").update(update).eq("id", parsed.projectId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "project.update", object: parsed.projectId });
   // Solo lo que de verdad viajó: aquí llega un campo suelto desde una fila de
@@ -539,7 +540,7 @@ export async function updateProject(formData: FormData) {
       version: project.version + 1
     })
     .eq("id", parsed.projectId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "project.update", object: parsed.projectId });
   // El formulario reenvía los cinco campos siempre, así que «editó» a secas

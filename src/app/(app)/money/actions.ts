@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/data/session";
 import { round2 } from "@/lib/domain/budget.ts";
+import { describeDbError } from "@/lib/supabase/errors";
 
 const accountSchema = z.object({
   name: z.string().min(1),
@@ -30,7 +31,7 @@ export async function createAccount(formData: FormData) {
     currency: parsed.currency,
     opening_balance: round2(parsed.opening)
   });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "account.create" });
   revalidatePath("/money");
@@ -132,7 +133,7 @@ export async function postTransaction(formData: FormData) {
 export async function reconcileEntry(entryId: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("journal_entries").update({ status: "Reconciled", reconciled: true }).eq("id", entryId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
   revalidatePath("/money");
   revalidatePath("/money/budget");
 }

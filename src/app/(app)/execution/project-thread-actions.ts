@@ -26,6 +26,7 @@ import { recordActivity } from "@/lib/data/activity";
 import { notifyMentions } from "@/lib/push/triggers";
 import { parseMentions, type RosterMember } from "@/lib/domain/execution/mentions.ts";
 import type { ThreadCommentLike } from "@/lib/domain/execution/thread.ts";
+import { describeDbError } from "@/lib/supabase/errors";
 
 export interface ProjectThreadComment extends ThreadCommentLike {
   mentions: string[];
@@ -147,7 +148,7 @@ export async function addProjectComment(projectId: string, body: string) {
     })
     .select("id")
     .single();
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "comment.add", object: id, meta: { mentions } });
 

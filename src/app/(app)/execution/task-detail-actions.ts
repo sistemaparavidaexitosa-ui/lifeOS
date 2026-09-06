@@ -14,6 +14,7 @@ import { notifyAssignments, notifyMentions } from "@/lib/push/triggers";
 
 import { todayForUser } from "@/lib/data/profile";
 import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
+import { describeDbError } from "@/lib/supabase/errors";
 
 export interface TaskDetailTask {
   id: string;
@@ -213,7 +214,7 @@ export async function updateTaskDetails(formData: FormData) {
       version: task.version + 1
     })
     .eq("id", parsed.taskId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "task.update", object: parsed.taskId });
   revalidatePath("/execution");
@@ -243,7 +244,7 @@ export async function updateTaskDescription(taskId: string, description: string)
     .from("tasks")
     .update({ description: parsed.description, version: task.version + 1 })
     .eq("id", parsed.taskId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "task.description.update", object: parsed.taskId });
   revalidatePath("/execution");
@@ -338,7 +339,7 @@ export async function setTaskDeps(taskId: string, depIds: string[]) {
 
   const cleanDeps = Array.from(new Set(depIds.filter((id) => id !== taskId)));
   const { error } = await supabase.from("tasks").update({ deps: cleanDeps, version: task.version + 1 }).eq("id", taskId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "task.deps", object: taskId, meta: { deps: cleanDeps } });
   revalidatePath("/execution");
@@ -386,7 +387,7 @@ export async function addTaskComment(taskId: string, body: string) {
     // (`mention:<comment_id>`): sin él, un reintento sonaría dos veces.
     .select("id")
     .single();
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "comment.add", object: taskId, meta: { mentions } });
 

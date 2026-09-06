@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { isValidTimeZone } from "@/lib/domain/datetime.ts";
 import { requireUser } from "@/lib/data/session";
+import { describeDbError } from "@/lib/supabase/errors";
 
 const profileSchema = z.object({
   name: z.string().min(1),
@@ -26,7 +27,7 @@ export async function updateProfile(formData: FormData) {
   });
   const { supabase, user } = await requireUser();
   const { error } = await supabase.from("profiles").update(parsed).eq("user_id", user.id);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
   await supabase.from("audit_log").insert({ user_id: user.id, action: "profile.update" });
   revalidatePath("/settings");
   revalidatePath("/home");
