@@ -11,7 +11,9 @@ import {
   toggleTodo,
   splitBlock,
   mergeBlocks,
-  bloquesEditables
+  bloquesEditables,
+  estiloAlternado,
+  marcasEn
 } from "../../src/lib/domain/notes/edit.ts";
 import { parseNote, serializeNote, type Block, type Inline } from "../../src/lib/domain/notes/markup.ts";
 
@@ -276,4 +278,59 @@ test("bloquesEditables: borrar todo el cuerpo deja un párrafo, no la nada", () 
   // Al vaciar la nota escribiendo, el modelo pasa por [] y el editor se
   // quedaría sin sitio donde seguir tecleando.
   assert.strictEqual(bloquesEditables(serializeNote([])).length, 1);
+});
+
+test("estiloAlternado: volver a tocar una lista activa la QUITA", () => {
+  // En las notas del iPhone el segundo toque apaga la lista. Sin esto el botón
+  // se queda encendido y no hay forma de salir de la lista con la barra.
+  assert.strictEqual(estiloAlternado("bullets", "bullets"), "body");
+  assert.strictEqual(estiloAlternado("ordered", "ordered"), "body");
+  assert.strictEqual(estiloAlternado("todo", "todo"), "body");
+  assert.strictEqual(estiloAlternado("quote", "quote"), "body");
+  assert.strictEqual(estiloAlternado("mono", "mono"), "body");
+});
+
+test("estiloAlternado: tocar un estilo distinto lo aplica, sin alternar", () => {
+  assert.strictEqual(estiloAlternado("bullets", "ordered"), "ordered");
+  assert.strictEqual(estiloAlternado("body", "bullets"), "bullets");
+  assert.strictEqual(estiloAlternado("title", "bullets"), "bullets");
+});
+
+test("estiloAlternado: los encabezados vuelven a Cuerpo al repetirse", () => {
+  // «Título» dos veces significa «ya no quiero título».
+  assert.strictEqual(estiloAlternado("title", "title"), "body");
+  assert.strictEqual(estiloAlternado("heading", "heading"), "body");
+  assert.strictEqual(estiloAlternado("subheading", "subheading"), "body");
+});
+
+test("estiloAlternado: Cuerpo sobre Cuerpo se queda en Cuerpo", () => {
+  // No hay nada por debajo a lo que caer.
+  assert.strictEqual(estiloAlternado("body", "body"), "body");
+});
+
+test("estiloAlternado: una tabla NO se alterna sola", () => {
+  // Convertir una tabla en párrafo por un toque repetido destruiría la rejilla
+  // sin que nadie lo haya pedido.
+  assert.strictEqual(estiloAlternado("table", "table"), "table");
+});
+
+test("marcasEn: el cursor dentro de una negrita enciende el botón", () => {
+  const contenido: Inline[] = [
+    { kind: "text", text: "hola " },
+    { kind: "bold", text: "mundo" }
+  ];
+  assert.deepStrictEqual(marcasEn(contenido, 8), ["bold"]);
+  assert.deepStrictEqual(marcasEn(contenido, 3), []);
+});
+
+test("marcasEn: al final de una palabra en negrita sigue encendido", () => {
+  // Se mira el carácter ANTERIOR: escribir al final de una negrita continúa
+  // en negrita, que es lo que hace cualquier editor.
+  const contenido: Inline[] = [{ kind: "bold", text: "abc" }];
+  assert.deepStrictEqual(marcasEn(contenido, 3), ["bold"]);
+});
+
+test("marcasEn: un enlace no cuenta como marca de la barra", () => {
+  const contenido: Inline[] = [{ kind: "link", text: "aquí", href: "https://a.b" }];
+  assert.deepStrictEqual(marcasEn(contenido, 2), []);
 });

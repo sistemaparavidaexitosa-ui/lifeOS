@@ -1004,6 +1004,95 @@ Otros tres, otra vez ninguno detectable sin abrir la app:
    El umbral de iOS son 16px exactos, y este repo ya lo documentaba en otros dos
    sitios. Ahora `.nb-line` los fija.
 
+#### Tercera tanda: el arreglo 5 estaba mal (6-sep-2026)
+
+Corregir «escribe al revés» condicionando la reposición del cursor a `seq` dejó
+el cuerpo **sin poder escribir en absoluto**. La premisa del comentario —«React
+pinta el nodo al montarlo y no vuelve a tocarlo»— nunca fue cierta: `content` es
+una prop, y React reconcilia los hijos del `contenteditable` en cada cambio,
+destruyendo el cursor. Antes eso quedaba tapado porque el efecto lo reponía en
+cada tecla (en la posición 0 — de ahí el texto al revés).
+
+La causa raíz no era CUÁNDO se repone el cursor, sino que **el offset repuesto
+era inventado**. Ahora `onInput` lee el offset real del DOM y lo manda junto al
+contenido; el efecto restaura el TRAMO (no sólo el punto, o se perdería la
+selección al tocar «B»); y durante una composición —dictado, teclado predictivo,
+acentos— no se toca nada.
+
+**Aviso honesto:** es el SEGUNDO intento sobre este mismo síntoma y no se ha
+podido verificar en un navegador. Si vuelve a fallar, el problema no es el
+arreglo sino la arquitectura: dejar que React reconcilie los hijos de un
+`contenteditable` pelea de raíz con que el navegador sea dueño del cursor.
+
+#### La reescritura: React deja de renderizar el contenteditable (6-sep-2026)
+
+Tres intentos fallidos sobre el mismo síntoma dejaron de ser un fallo y pasaron
+a ser la arquitectura. La premisa del diseño —«mientras se escribe, el DOM
+manda; React no toca el nodo»— **nunca se implementó**: `content` era una prop y
+React reconciliaba los hijos en cada tecla, destruyendo el cursor.
+
+Lo que se hizo, en este orden y a propósito:
+
+1. **Primero la red.** `jsdom` entra como devDependency. **No toca D-008**, que
+   habla de dependencias de RUNTIME y las enumera; el repo ya tenía diez
+   devDependencies. La decisión anterior de no meterlo fue una preferencia, y
+   es la razón por la que seis fallos pasaron 756 pruebas verdes.
+2. **Pruebas que reproducen los fallos**, en rojo antes de tocar nada:
+   `tests/dom/linea-dom.test.ts`, incluidas las dos que dan nombre al problema
+   («teclear no debe repintar» y «un cambio del modelo sí repinta y repone la
+   selección»).
+3. **La lógica de DOM sale del .tsx** a `src/lib/dom/linea-dom.ts`, porque
+   `node --test` no procesa JSX y dentro de un .tsx nada tiene pruebas.
+4. **`EditableLine` ya no da hijos a React.** El nodo se pinta a mano y sólo
+   cuando el modelo trae algo distinto de lo que el propio nodo reportó. Al
+   teclear, el modelo devuelve lo emitido, no se repinta, y el cursor se queda
+   donde el navegador lo puso.
+
+`pnpm test:unit` pasa a cubrir `tests/dom/` además de `tests/domain/`: 764 verdes.
+
+#### El ribbon: era un error de coordenadas (6-sep-2026)
+
+Reportado: «se sigue moviendo al hacer scroll, y se queda abajo del teclado y no
+se ve». Los dos síntomas son el MISMO fallo.
+
+En Safari de iOS el teclado **no encoge el viewport de layout**: sólo desplaza
+el visual por encima. `position: fixed; bottom: …` se mide contra el de LAYOUT,
+así que la barra quedaba anclada por debajo del teclado —invisible— y, al hacer
+scroll, el visual se deslizaba sobre el de layout y la barra parecía derivar.
+
+El intento anterior quitó `visualViewport.offsetTop` de la fórmula «porque
+cambiaba al hacer scroll». Cambiar al hacer scroll es exactamente lo que tiene
+que hacer: es el término que mantiene la barra pegada al viewport visual. Lo que
+estaba mal era anclar por `bottom`.
+
+Ahora la barra se ancla a `top: 0` y se desplaza con `transform` hasta el borde
+inferior del viewport visual — un solo sistema de coordenadas. La aritmética
+vive en `src/lib/dom/anclaje-teclado.ts` y **está probada** (`tests/dom/`),
+incluido el caso del scroll que se había quitado y el umbral que evita que la
+barra de direcciones de Safari haga saltar la barra. Sin `visualViewport`, cae a
+un `bottom: 0` normal.
+
+#### Cuarta tanda del uso real (6-sep-2026)
+
+- **La barra se movía al hacer scroll, sin teclado.** En iOS `window.innerHeight`
+  NO es constante: crece cuando la barra de direcciones de Safari se encoge al
+  desplazarse. La rama «sin teclado» devolvia justamente `innerHeight` como
+  posición, así que la barra seguía ese cambio. Ahora devuelve `null` y manda el
+  `bottom: 0` del CSS, anclado al viewport de layout, que no se inmuta con el
+  scroll. El transform sólo entra cuando hay teclado de verdad.
+- **Se perdía el cursor en una casilla.** La línea editable es un elemento flex
+  dentro del `<li>`; sin `flex: 1`, una línea vacía mide 0 de ancho y el cursor
+  no tiene dónde dibujarse.
+- **Botones que no reflejaban su estado.** Dos causas distintas: dentro de una
+  lista, el menú «Aa» no marcaba NADA porque `bullets` no está entre sus
+  opciones (ahora enseña «Cuerpo», el estilo de párrafo que la lista lleva
+  debajo); y las marcas sólo se encendían con una selección viva, cuando lo
+  esperado es que «B» se encienda con el cursor suelto DENTRO de una negrita
+  (`marcasEn`, probado).
+- **Fuera los botones de tabla y enlace**, a petición del uso real. El dialecto
+  sigue entendiendo ambos: una tabla escrita a mano o una URL pegada se siguen
+  parseando y pintando. Sólo desaparecen de la barra.
+
 **Las 16 filas originales siguen sin ejecutarse salvo las anotadas.** El editor compila, pasa las
 pruebas de dominio y construye, pero **nadie lo ha abierto en un teléfono**.
 Hasta que esta tabla se rellene con resultados reales, no se puede afirmar que

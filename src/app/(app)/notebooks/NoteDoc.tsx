@@ -128,7 +128,7 @@ export default function NoteDoc({ blocks, onChange, cursor, onCursor, readOnly }
     onChange([...blocks.slice(0, indice), ...nuevos, ...blocks.slice(indice + 1)], cur);
   }
 
-  function alEscribir(bi: number, ii: number, content: Inline[]) {
+  function alEscribir(bi: number, ii: number, content: Inline[], caret: number) {
     const bloque = blocks[bi];
     if (!bloque) return;
 
@@ -149,7 +149,17 @@ export default function NoteDoc({ blocks, onChange, cursor, onCursor, readOnly }
       }
     }
 
-    reemplazar(bi, [conLinea(bloque, ii, content)], { ...cursor, block: bi, item: ii });
+    // El offset viene leído del DOM, no adivinado — lo necesita la barra de
+    // formato para saber sobre qué actuar. Pero `seq` NO sube: teclear no
+    // mueve el cursor, ya está donde el navegador lo puso, y subirlo haría
+    // repintar y reponer en cada tecla, que es de donde salían los fallos.
+    reemplazar(bi, [conLinea(bloque, ii, content)], {
+      ...cursor,
+      block: bi,
+      item: ii,
+      start: caret,
+      end: caret
+    });
   }
 
   function alPulsar(e: KeyboardEvent<HTMLDivElement>, bi: number, ii: number) {
@@ -308,7 +318,7 @@ function BloqueEditable({
   indice: number;
   cursor: Cursor;
   readOnly?: boolean;
-  onEscribir: (bi: number, ii: number, content: Inline[]) => void;
+  onEscribir: (bi: number, ii: number, content: Inline[], caret: number) => void;
   onPulsar: (e: KeyboardEvent<HTMLDivElement>, bi: number, ii: number) => void;
   onSelect: (ii: number, start: number, end: number) => void;
   onToggle: (ii: number) => void;
@@ -325,8 +335,9 @@ function BloqueEditable({
       placeholder={placeholder}
       autoFocus={enfocado(ii)}
       caret={enfocado(ii) ? cursor.start : null}
+      caretEnd={enfocado(ii) ? cursor.end : null}
       caretSeq={cursor.seq}
-      onChange={(c) => onEscribir(indice, ii, c)}
+      onChange={(c, caretNuevo) => onEscribir(indice, ii, c, caretNuevo)}
       onKey={(e) => onPulsar(e, indice, ii)}
       onSelect={(start, end) => onSelect(ii, start, end)}
     />

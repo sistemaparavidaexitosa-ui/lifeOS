@@ -9,14 +9,13 @@
 // derogación de D-040.
 import { useEffect, useState, type MouseEvent } from "react";
 import type { BlockStyle, MarcaInline } from "@/lib/domain/notes/edit.ts";
+import { bordeInferiorVisual } from "@/lib/dom/anclaje-teclado.ts";
 
 export interface FormatBarProps {
   estilo: BlockStyle;
   marcasActivas: MarcaInline[];
   onEstilo: (estilo: BlockStyle) => void;
   onMarca: (marca: MarcaInline) => void;
-  onEnlace: () => void;
-  onTabla: () => void;
   onDeshacer: () => void;
   onRehacer: () => void;
   puedeDeshacer: boolean;
@@ -24,23 +23,21 @@ export interface FormatBarProps {
 }
 
 /**
- * Cuántos píxeles del viewport se está comiendo el teclado.
+ * Coordenada Y donde debe quedar el borde inferior de la barra, o `null` si el
+ * navegador no expone `visualViewport` (entonces vale un `bottom: 0` normal).
  *
- * En Safari de iOS el teclado NO reduce el viewport de layout, así que una
- * barra fija abajo se queda DEBAJO del teclado, invisible justo cuando se
- * necesita. `visualViewport` es la única fuente que sabe dónde está el borde
- * de verdad. Sin soporte devuelve 0 y la barra se queda estática.
+ * POR QUÉ NO SE USA `bottom`
+ * En Safari de iOS el teclado NO encoge el viewport de layout, y `bottom` se
+ * mide contra ése: la barra quedaba anclada por DEBAJO del teclado, invisible.
+ * Y al hacer scroll el viewport visual se desliza sobre el de layout, así que
+ * además parecía derivar. Los dos síntomas eran el mismo error de coordenadas.
  *
- * POR QUÉ NO ENTRA `offsetTop` NI SE ESCUCHA `scroll`
- * La primera versión calculaba `innerHeight - (height + offsetTop)` y se
- * suscribía a `visualViewport.scroll`. `offsetTop` no mide el teclado: mide
- * cuánto se ha desplazado el viewport visual dentro del de layout, y en Safari
- * de iOS cambia continuamente al hacer scroll y con el rebote elástico. El
- * resultado era que `bottom` se recalculaba en cada evento y la barra derivaba
- * por la pantalla. Lo reportó el uso real en un teléfono.
+ * Se ancla a `top: 0` y se desplaza con `transform`, todo en coordenadas de
+ * layout. La aritmética vive en `anclaje-teclado.ts`, probada aparte.
  */
-export function useAlturaTeclado(): number {
-  const [alto, setAlto] = useState(0);
+function useBordeVisual(): { borde: number | null; medidas: Medidas | null } {
+  const [borde, setBorde] = useState<number | null>(null);
+  const [medidas, setMedidas] = useState<Medidas | null>(null);
 
   useEffect(() => {
     const vv = window.visualViewport;
@@ -48,22 +45,42 @@ export function useAlturaTeclado(): number {
 
     function medir() {
       if (!vv) return;
-      // Sólo la diferencia de ALTURAS. Nada que dependa del scroll.
-      const teclado = window.innerHeight - vv.height;
-      // Por debajo de 60px es ruido de la barra de direcciones, no un teclado.
-      setAlto(teclado > 60 ? Math.round(teclado) : 0);
+      const m = {
+        iH: Math.round(window.innerHeight),
+        vvH: Math.round(vv.height),
+        oT: Math.round(vv.offsetTop),
+        sY: Math.round(window.scrollY)
+      };
+      setMedidas(m);
+      setBorde(
+        bordeInferiorVisual({
+          innerHeight: window.innerHeight,
+          vvHeight: vv.height,
+          vvOffsetTop: vv.offsetTop
+        })
+      );
     }
 
     medir();
-    // Sin `scroll`: el teclado aparece y desaparece con `resize`, y suscribirse
-    // al scroll era justo lo que hacía derivar la barra.
+    // `scroll` SÍ hace falta: es lo que mantiene la barra pegada al viewport
+    // visual mientras la página se desplaza. Quitarlo fue el error anterior.
     vv.addEventListener("resize", medir);
+    vv.addEventListener("scroll", medir);
     return () => {
       vv.removeEventListener("resize", medir);
+      vv.removeEventListener("scroll", medir);
     };
   }, []);
 
-  return alto;
+  return { borde, medidas };
+}
+
+/** Lectura en crudo del viewport, sólo para diagnosticar. TEMPORAL. */
+interface Medidas {
+  iH: number;
+  vvH: number;
+  oT: number;
+  sY: number;
 }
 
 const ESTILOS: { valor: BlockStyle; etiqueta: string }[] = [
@@ -94,15 +111,23 @@ export default function FormatBar({
   marcasActivas,
   onEstilo,
   onMarca,
-  onEnlace,
-  onTabla,
   onDeshacer,
   onRehacer,
   puedeDeshacer,
   puedeRehacer
 }: FormatBarProps) {
   const [abierto, setAbierto] = useState(false);
-  const alturaTeclado = useAlturaTeclado();
+  const { borde, medidas } = useBordeVisual();
+  // Las listas son un eje aparte del estilo de párrafo: dentro de una lista, el
+  // menú «Aa» no marcaba NADA porque "bullets" no está entre sus opciones. Se
+  // enseña «Cuerpo», que es el estilo de párrafo que la lista lleva debajo.
+  const estiloDelMenu: BlockStyle =
+    estilo === "bullets" || estilo === "ordered" || estilo === "todo" ? "body" : estilo;
+  // Diagnóstico TEMPORAL de la barra: se activa añadiendo `?bar=1` a la URL.
+  const [diagnostico, setDiagnostico] = useState(false);
+  useEffect(() => {
+    setDiagnostico(new URLSearchParams(window.location.search).get("bar") === "1");
+  }, []);
 
   // Nunca robar el foco al contenteditable: sin esto, la selección se deshace
   // al tocar el botón y no queda nada a lo que aplicar la marca.
@@ -111,17 +136,29 @@ export default function FormatBar({
   return (
     <div
       className="nb-formatbar"
-      style={{ bottom: alturaTeclado }}
+      // Con medidas: anclada arriba y bajada hasta el borde del viewport
+      // visual. Sin ellas: el `bottom: 0` del CSS.
+      style={
+        borde === null
+          ? undefined
+          : { top: 0, bottom: "auto", transform: `translateY(calc(${borde}px - 100%))` }
+      }
       role="toolbar"
       aria-label="Formato"
     >
+      {diagnostico && (
+        <div className="nb-formatbar-diag">
+          iH {medidas?.iH ?? "—"} · vvH {medidas?.vvH ?? "—"} · oT {medidas?.oT ?? "—"} · sY{" "}
+          {medidas?.sY ?? "—"} · borde {borde ?? "—"}
+        </div>
+      )}
       {abierto && (
         <div className="nb-formatbar-menu">
           {ESTILOS.map((e) => (
             <button
               key={e.valor}
               type="button"
-              className={`nb-fb-estilo${estilo === e.valor ? " activo" : ""}`}
+              className={`nb-fb-estilo${estiloDelMenu === e.valor ? " activo" : ""}`}
               onMouseDown={sinRobarFoco}
               onClick={() => {
                 onEstilo(e.valor);
@@ -171,12 +208,6 @@ export default function FormatBar({
             {l.etiqueta}
           </button>
         ))}
-        <button type="button" className="nb-fb" title="Tabla" onMouseDown={sinRobarFoco} onClick={onTabla}>
-          ⊞
-        </button>
-        <button type="button" className="nb-fb" title="Enlace" onMouseDown={sinRobarFoco} onClick={onEnlace}>
-          🔗
-        </button>
         <span className="nb-fb-spacer" />
         <button
           type="button"

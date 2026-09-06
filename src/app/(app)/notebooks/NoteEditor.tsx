@@ -32,17 +32,17 @@ import { noteDisplayTitle, serializeNote, type Block } from "@/lib/domain/notes/
 import {
   applyMark,
   bloquesEditables,
+  estiloAlternado,
   hasMark,
-  plainLength,
+  marcasEn,
   setBlockStyle,
-  sliceInlines,
   styleOf,
   textoDeBloque,
   type BlockStyle,
   type MarcaInline
 } from "@/lib/domain/notes/edit.ts";
 import NoteDoc, { conLinea, type Cursor } from "./NoteDoc";
-import { leerDom } from "./EditableLine";
+import { leerDom } from "@/lib/dom/linea-dom.ts";
 import NoteBody from "./NoteBody";
 import FormatBar from "./FormatBar";
 import { fdatetime } from "@/lib/format";
@@ -302,8 +302,12 @@ export default function NoteEditor({
   const bloqueActual = blocks[cursor.block];
 
   const marcasActivas = useMemo<MarcaInline[]>(() => {
-    if (!bloqueActual || cursor.start === cursor.end) return [];
+    if (!bloqueActual) return [];
     const linea = textoDeBloque(bloqueActual)[cursor.item] ?? [];
+    // Sin selección se mira la marca EN el cursor: dentro de una negrita, «B»
+    // sale encendido, como en el iPhone. Antes la barra sólo se encendía con
+    // una selección viva y parecía que los botones no reflejaban nada.
+    if (cursor.start === cursor.end) return marcasEn(linea, cursor.start);
     return MARCAS_POSIBLES.filter((m) => hasMark(linea, cursor.start, cursor.end, m));
   }, [bloqueActual, cursor]);
 
@@ -319,32 +323,14 @@ export default function NoteEditor({
 
   function aplicarEstilo(estiloNuevo: BlockStyle) {
     if (!bloqueActual) return;
+    // Tocar el estilo ya activo lo quita, como en el iPhone.
+    const destino = estiloAlternado(styleOf(bloqueActual), estiloNuevo);
     cambiar(
-      blocks.map((b, i) => (i === cursor.block ? setBlockStyle(bloqueActual, estiloNuevo) : b)),
+      blocks.map((b, i) => (i === cursor.block ? setBlockStyle(bloqueActual, destino) : b)),
       { block: cursor.block, item: 0, start: 0, end: 0, seq: cursor.seq + 1 }
     );
   }
 
-  function ponerEnlace() {
-    if (!bloqueActual || cursor.start === cursor.end) return;
-    const destino = window.prompt("Dirección del enlace (https://…)");
-    // El esquema se valida aquí y en el parser: un `javascript:` no se
-    // construye ni por accidente ni a propósito.
-    if (!destino || !/^https?:\/\//i.test(destino)) return;
-    const linea = textoDeBloque(bloqueActual)[cursor.item] ?? [];
-    const texto = sliceInlines(linea, cursor.start, cursor.end)
-      .map((p) => p.text)
-      .join("");
-    const nueva = [
-      ...sliceInlines(linea, 0, cursor.start),
-      { kind: "link" as const, text: texto, href: destino },
-      ...sliceInlines(linea, cursor.end, plainLength(linea))
-    ];
-    cambiar(
-      blocks.map((b, i) => (i === cursor.block ? conLinea(b, cursor.item, nueva) : b)),
-      { ...cursor, seq: cursor.seq + 1 }
-    );
-  }
 
   const cuerpo = serializeNote(blocks);
   const encabezado = noteDisplayTitle(title, cuerpo);
@@ -422,8 +408,6 @@ export default function NoteEditor({
                 marcasActivas={marcasActivas}
                 onEstilo={aplicarEstilo}
                 onMarca={aplicarMarca}
-                onEnlace={ponerEnlace}
-                onTabla={() => aplicarEstilo("table")}
                 onDeshacer={deshacer}
                 onRehacer={rehacer}
                 puedeDeshacer={profundidad.atras > 0}

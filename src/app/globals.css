@@ -3414,6 +3414,11 @@ textarea:focus {
   position: fixed;
   left: 0;
   right: 0;
+  /* Reserva: si el navegador no expone visualViewport, esto es lo que queda.
+     Con medidas, el componente pasa a `top: 0` + translateY, porque en iOS el
+     teclado no encoge el viewport de layout y `bottom` deja la barra debajo
+     del teclado. */
+  bottom: 0;
   /* 40 a pelo era `--z-bulkbar`: un número inventado que chocaba con una capa
      que ya existía y perdía contra .ai-fab (48). */
   z-index: var(--z-formatbar);
@@ -3476,4 +3481,24 @@ textarea:focus {
    debajo y no se puede escribir en él. */
 .nb-doc {
   padding-bottom: 96px;
+}
+
+/* Diagnóstico TEMPORAL de la barra de formato (`?bar=1`). Se quita cuando el
+   anclaje al viewport visual quede confirmado en un teléfono. */
+.nb-formatbar-diag {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  padding: 4px 8px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  overflow-x: auto;
+}
+
+/* La línea editable de una casilla es un elemento flex: sin `flex: 1` una línea
+   vacía mide 0 de ancho y el cursor no tiene dónde dibujarse — se reportó como
+   «se pierde la marca en el puntero de texto cuando hay checkbox». */
+.nb-prose .nb-todo li > .nb-line {
+  flex: 1 1 auto;
+  min-width: 0;
 }
