@@ -154,11 +154,21 @@ export function requireVapidKeys(): { privateJwk: JsonWebKey; publicKey: string;
     : jwkFromPrivateKey(limpio, publicKey);
 
   /**
-   * `sub` identifica a quien envía, y Apple RECHAZA el push si no es un
-   * `mailto:` o un `https:` válido. El default apunta a la propia app porque
-   * una URL siempre existe; un correo real es mejor si lo hay.
+   * `sub` identifica a quien envía. Apple lo VALIDA: si no es un `mailto:` o un
+   * `https:`, responde 403 `BadJwtToken` — el mismo error que da una firma
+   * inválida, así que sin esta comprobación se confunden dos causas muy
+   * distintas.
+   *
+   * Se valida aquí y no se deja pasar porque el default es una trampa: cae a
+   * `NEXT_PUBLIC_APP_URL`, que en local (y en un despliegue mal configurado) es
+   * `http://localhost:3000` — sintácticamente una URL, y rechazada por Apple.
    */
   const subject = process.env.VAPID_SUBJECT || publicEnv.NEXT_PUBLIC_APP_URL;
+  if (!/^(mailto:.+@.+|https:\/\/.+)$/.test(subject)) {
+    throw new Error(
+      `VAPID_SUBJECT no es válido para Apple («${subject}»). Tiene que ser un mailto: con dirección real o una URL https:. Un http:// —el valor por defecto en local— hace que APNs responda BadJwtToken.`
+    );
+  }
 
   return { privateJwk, publicKey, subject };
 }
