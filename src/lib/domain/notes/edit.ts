@@ -20,7 +20,7 @@
 // Las operaciones de BLOQUE (setBlockStyle, splitBlock, mergeBlocks,
 // toggleTodo, textoDeBloque) se añaden a este mismo archivo y reutilizan
 // `sliceInlines` y `plainLength` de aquí abajo.
-import type { Block, Inline } from "./markup.ts";
+import { parseNote, type Block, type Inline } from "./markup.ts";
 
 export type MarcaInline = "bold" | "italic" | "underline" | "strike" | "code";
 
@@ -386,4 +386,23 @@ function sobranteDe(b: Block): Block | null {
   }
   // "heading", "paragraph" y "quote" sólo tienen una línea: nunca sobra nada.
   return null;
+}
+
+/**
+ * Los bloques con los que arranca el editor para un cuerpo dado.
+ *
+ * POR QUÉ NO ES `parseNote` A SECAS
+ * `parseNote("")` devuelve `[]` — correcto para el dialecto: un cuerpo vacío no
+ * TIENE bloques. Pero el editor pinta un componente editable por bloque, así
+ * que con cero bloques una nota nueva se queda sin un solo contenteditable en
+ * el cuerpo: se puede escribir el título y nada más. Lo reportó el uso real en
+ * un teléfono.
+ *
+ * El documento vacío es un párrafo vacío, no la nada. La distinción vive aquí y
+ * no en `markup.ts` a propósito: el dialecto describe lo que HAY escrito, y el
+ * editor necesita además un sitio donde escribir.
+ */
+export function bloquesEditables(body: string): Block[] {
+  const bloques = parseNote(body);
+  return bloques.length ? bloques : [{ kind: "paragraph", content: [{ kind: "text", text: "" }] }];
 }

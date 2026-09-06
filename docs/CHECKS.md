@@ -941,14 +941,14 @@ el resultado real, nunca con el previsto.
 | # | Qué | Resultado |
 |---|-----|-----------|
 | 1 | El texto con formato se ve formateado, sin sintaxis a la vista | NO EJECUTADO |
-| 2 | Escribir no hace saltar el cursor | NO EJECUTADO |
+| 2 | Escribir no hace saltar el cursor | **FALLÓ** (escribía al revés) → corregido, sin reverificar |
 | 3 | El dictado por voz escribe donde está el cursor | NO EJECUTADO |
 | 4 | `# ` y `- ` al inicio convierten el bloque al vuelo | NO EJECUTADO |
 | 5 | Enter en un ítem vacío sale de la lista | NO EJECUTADO |
 | 6 | Backspace al inicio funde con el bloque anterior sin perder ítems | NO EJECUTADO |
 | 7 | Seleccionar y tocar B pone negrita sin perder la selección | NO EJECUTADO |
 | 8 | Marcar una casilla no hace saltar el teclado | NO EJECUTADO |
-| 9 | La barra de formato queda ENCIMA del teclado | NO EJECUTADO |
+| 9 | La barra de formato queda ENCIMA del teclado | **FALLÓ** → corregido, sin reverificar |
 | 10 | Tab recorre las celdas de una tabla; en la última crea fila | NO EJECUTADO |
 | 11 | Una tabla ancha scrollea sola, sin mover la nota de lado | NO EJECUTADO |
 | 12 | Pegar desde una web deja el texto y pierde el estilo | NO EJECUTADO |
@@ -957,7 +957,54 @@ el resultado real, nunca con el previsto.
 | 15 | Una nota escrita con el dialecto anterior se ve igual que antes | NO EJECUTADO |
 | 16 | Con rol Viewer no aparece ningún `contenteditable` | NO EJECUTADO |
 
-**Ninguna de estas 16 filas se ha ejecutado.** El editor compila, pasa las
+| 17 | En una nota NUEVA se puede escribir el cuerpo, no sólo el título | **FALLÓ** → corregido, con prueba |
+| 18 | La barra de formato no se tapa con el botón flotante de la IA | **FALLÓ** → corregido, sin reverificar |
+
+#### Lo que encontró el primer uso real en un teléfono (6-sep-2026)
+
+Tres fallos, ninguno detectable sin abrir la app:
+
+1. **Una nota nueva no dejaba escribir el cuerpo.** `parseNote("")` devuelve `[]`
+   —correcto para el dialecto: un cuerpo vacío no TIENE bloques— pero el editor
+   pinta un componente editable por bloque, así que no había ni un solo
+   `contenteditable`. El título funcionaba por ser un `<input>` aparte. Corregido
+   en `bloquesEditables()`, con prueba: el documento vacío es un párrafo vacío,
+   no la nada.
+2. **La barra de formato quedaba tapada.** `.ai-fab` es `--z-drawer - 2` (48) y
+   vive en la misma esquina; la barra tenía un `40` inventado a pelo, que además
+   chocaba con `--z-bulkbar`. Ahora usa `--z-formatbar` (49), dentro de la
+   escala del proyecto. **Consecuencia aceptada:** mientras se edita una nota, el
+   botón de la IA queda detrás de la barra y no se puede tocar.
+3. **La barra derivaba por la pantalla.** La fórmula incluía
+   `visualViewport.offsetTop` y se suscribía a `scroll`. `offsetTop` no mide el
+   teclado: mide el desplazamiento del viewport visual, y en Safari de iOS cambia
+   con cada scroll y con el rebote elástico. Ahora sólo `innerHeight - height`,
+   y sólo en `resize`.
+
+| 19 | Escribir el título de una nota nueva no la pone en conflicto | **FALLÓ** → corregido, sin reverificar |
+| 20 | Enfocar el cuerpo NO hace zoom en iOS | **FALLÓ** → corregido, sin reverificar |
+
+#### Segunda tanda del uso real (6-sep-2026)
+
+Otros tres, otra vez ninguno detectable sin abrir la app:
+
+4. **Escribir el título ponía la nota en conflicto consigo misma** («Luis Vargas
+   guardó esta nota mientras escribías», siendo Luis el que escribe). `guardar()`
+   no tenía guarda de reentrada y `onBlur` lo llamaba sin cancelar el
+   temporizador pendiente: dos guardados solapados mandaban el mismo
+   `versionRef`, y el segundo recibía cero filas. Ahora hay guarda, el
+   temporizador se cancela dentro de `guardar()`, y lo escrito durante la
+   petición se reprograma en vez de perderse.
+5. **El cuerpo se escribía al revés.** `caret` nunca era `null` en la línea
+   enfocada y el efecto dependía de `[caret, content]`, así que cada tecla
+   ejecutaba `ponerCursor(el, 0)`. Destruía el diseño entero de «el DOM manda
+   mientras escribes». `Cursor` gana `seq`, que sólo sube cuando el MODELO
+   mueve el cursor; teclear no lo sube.
+6. **Enfocar el cuerpo hacía zoom.** `.nb-prose` es 15px y `.nb-line` heredaba.
+   El umbral de iOS son 16px exactos, y este repo ya lo documentaba en otros dos
+   sitios. Ahora `.nb-line` los fija.
+
+**Las 16 filas originales siguen sin ejecutarse salvo las anotadas.** El editor compila, pasa las
 pruebas de dominio y construye, pero **nadie lo ha abierto en un teléfono**.
 Hasta que esta tabla se rellene con resultados reales, no se puede afirmar que
 el editor funcione en el sitio donde se van a escribir las notas.

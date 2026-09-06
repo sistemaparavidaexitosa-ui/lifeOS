@@ -70,6 +70,11 @@
   --z-drawer: 50;        /* panel de detalle */
   --z-popover: 60;       /* menús anclados: por encima del drawer */
   --z-nav: 70;           /* menú lateral en móvil: toma la pantalla entera */
+  /* Barra de formato del editor de notas. Tiene que ganarle a .ai-fab, que es
+     `--z-drawer - 2` (48) y vive en la MISMA esquina inferior: con un z-index
+     por debajo, el botón flotante se pintaba encima de ↩︎ ↪︎ y se comía los
+     toques. Queda por debajo del drawer y de los menús anclados. */
+  --z-formatbar: 49;
 }
 
 html[data-theme="dark"] {
@@ -3360,6 +3365,11 @@ textarea:focus {
 
 /* ── Editor de notas: la línea editable ───────────────────────────────── */
 .nb-line {
+  /* 16px EXACTOS. Por debajo, Safari de iOS hace zoom al enfocar el campo y
+     descoloca la página entera mientras se escribe — el mismo umbral que ya
+     documentan .nb-body-input y los campos del formulario. `.nb-prose` es
+     15px, así que heredar no vale aquí. */
+  font-size: 16px;
   outline: none;
   min-height: 1.65em;
   white-space: pre-wrap;
@@ -3404,7 +3414,9 @@ textarea:focus {
   position: fixed;
   left: 0;
   right: 0;
-  z-index: 40;
+  /* 40 a pelo era `--z-bulkbar`: un número inventado que chocaba con una capa
+     que ya existía y perdía contra .ai-fab (48). */
+  z-index: var(--z-formatbar);
   background: var(--surface);
   border-top: 1px solid var(--border);
   /* Sin teclado, la barra descansa sobre la zona de gestos del iPhone. */

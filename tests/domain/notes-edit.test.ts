@@ -10,9 +10,10 @@ import {
   setBlockStyle,
   toggleTodo,
   splitBlock,
-  mergeBlocks
+  mergeBlocks,
+  bloquesEditables
 } from "../../src/lib/domain/notes/edit.ts";
-import type { Block, Inline } from "../../src/lib/domain/notes/markup.ts";
+import { parseNote, serializeNote, type Block, type Inline } from "../../src/lib/domain/notes/markup.ts";
 
 const texto = (t: string): Inline[] => [{ kind: "text", text: t }];
 
@@ -253,4 +254,26 @@ test("mergeBlocks: el ítem que sobra de una lista de casillas conserva su `done
     parrafo("hola uno"),
     { kind: "todo", items: [{ done: true, content: texto("dos") }] }
   ]);
+});
+
+test("bloquesEditables: una nota vacía SIEMPRE tiene dónde escribir", () => {
+  // parseNote("") devuelve [], y el editor pinta un componente por bloque: con
+  // cero bloques la nota nueva no tiene ni un contenteditable en el cuerpo y
+  // sólo se puede escribir el título. Es el fallo que reportó el uso real.
+  assert.deepStrictEqual(bloquesEditables(""), [
+    { kind: "paragraph", content: [{ kind: "text", text: "" }] }
+  ]);
+  assert.deepStrictEqual(bloquesEditables("\n\n   \n"), [
+    { kind: "paragraph", content: [{ kind: "text", text: "" }] }
+  ]);
+});
+
+test("bloquesEditables: una nota con contenido se parsea tal cual", () => {
+  assert.deepStrictEqual(bloquesEditables("# Acta"), parseNote("# Acta"));
+});
+
+test("bloquesEditables: borrar todo el cuerpo deja un párrafo, no la nada", () => {
+  // Al vaciar la nota escribiendo, el modelo pasa por [] y el editor se
+  // quedaría sin sitio donde seguir tecleando.
+  assert.strictEqual(bloquesEditables(serializeNote([])).length, 1);
 });

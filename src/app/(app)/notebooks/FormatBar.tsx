@@ -30,6 +30,14 @@ export interface FormatBarProps {
  * barra fija abajo se queda DEBAJO del teclado, invisible justo cuando se
  * necesita. `visualViewport` es la única fuente que sabe dónde está el borde
  * de verdad. Sin soporte devuelve 0 y la barra se queda estática.
+ *
+ * POR QUÉ NO ENTRA `offsetTop` NI SE ESCUCHA `scroll`
+ * La primera versión calculaba `innerHeight - (height + offsetTop)` y se
+ * suscribía a `visualViewport.scroll`. `offsetTop` no mide el teclado: mide
+ * cuánto se ha desplazado el viewport visual dentro del de layout, y en Safari
+ * de iOS cambia continuamente al hacer scroll y con el rebote elástico. El
+ * resultado era que `bottom` se recalculaba en cada evento y la barra derivaba
+ * por la pantalla. Lo reportó el uso real en un teléfono.
  */
 export function useAlturaTeclado(): number {
   const [alto, setAlto] = useState(0);
@@ -40,17 +48,18 @@ export function useAlturaTeclado(): number {
 
     function medir() {
       if (!vv) return;
-      const teclado = window.innerHeight - (vv.height + vv.offsetTop);
+      // Sólo la diferencia de ALTURAS. Nada que dependa del scroll.
+      const teclado = window.innerHeight - vv.height;
       // Por debajo de 60px es ruido de la barra de direcciones, no un teclado.
-      setAlto(teclado > 60 ? teclado : 0);
+      setAlto(teclado > 60 ? Math.round(teclado) : 0);
     }
 
     medir();
+    // Sin `scroll`: el teclado aparece y desaparece con `resize`, y suscribirse
+    // al scroll era justo lo que hacía derivar la barra.
     vv.addEventListener("resize", medir);
-    vv.addEventListener("scroll", medir);
     return () => {
       vv.removeEventListener("resize", medir);
-      vv.removeEventListener("scroll", medir);
     };
   }, []);
 

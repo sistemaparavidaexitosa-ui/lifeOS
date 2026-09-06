@@ -27,8 +27,13 @@ export interface EditableLineProps {
   onKey: (e: KeyboardEvent<HTMLDivElement>) => void;
   onSelect: (start: number, end: number) => void;
   autoFocus?: boolean;
-  /** Pedir un cursor concreto al repintar. `null` = no tocar el DOM. */
+  /** Dónde poner el cursor cuando el MODELO lo pide. `null` = no tocar el DOM. */
   caret?: number | null;
+  /** Sube cada vez que el modelo pide un cursor nuevo. Es lo que distingue
+   *  «el modelo movió el cursor» de «el usuario está tecleando»: sin este
+   *  contador, el efecto se disparaba en CADA tecla y devolvía el cursor al
+   *  inicio, así que la nota se escribía al revés. */
+  caretSeq?: number;
   readOnly?: boolean;
   placeholder?: string;
   className?: string;
@@ -187,21 +192,34 @@ export default function EditableLine({
   onSelect,
   autoFocus,
   caret,
+  caretSeq = 0,
   readOnly,
   placeholder,
   className
 }: EditableLineProps) {
   const ref = useRef<HTMLDivElement | null>(null);
 
-  // El único momento en que React escribe en este nodo: cuando le piden un
-  // cursor concreto (una marca aplicada, un deshacer). Mientras se escribe,
-  // `caret` es null y este efecto no hace nada.
+  // El único momento en que React escribe en este nodo: cuando el MODELO pide
+  // un cursor nuevo (una marca aplicada, un deshacer, un Enter). Se reconoce
+  // porque `caretSeq` sube.
+  //
+  // Escribir NO sube `caretSeq`, así que este efecto no corre y el DOM se
+  // queda como lo dejó el navegador. Cuando dependía de `[caret, content]`
+  // corría en cada tecla y devolvía el cursor al inicio: la nota se escribía
+  // al revés. El caret se lee de una ref para que cambiarlo no dispare nada.
+  const caretRef = useRef<number | null | undefined>(caret);
+  caretRef.current = caret;
+  const ultimoSeq = useRef<number | null>(null);
+
   useEffect(() => {
     const el = ref.current;
-    if (!el || caret === null || caret === undefined) return;
+    const pos = caretRef.current;
+    if (!el || pos === null || pos === undefined) return;
+    if (ultimoSeq.current === caretSeq) return;
+    ultimoSeq.current = caretSeq;
     if (document.activeElement !== el) el.focus();
-    ponerCursor(el, caret);
-  }, [caret, content]);
+    ponerCursor(el, pos);
+  }, [caretSeq]);
 
   useEffect(() => {
     if (autoFocus) ref.current?.focus();

@@ -19,12 +19,19 @@ import {
   type BlockStyle
 } from "@/lib/domain/notes/edit.ts";
 
-/** Dónde está el cursor: qué bloque, qué línea dentro de él, y qué tramo. */
+/** Dónde está el cursor: qué bloque, qué línea dentro de él, y qué tramo.
+ *
+ *  `seq` sube cada vez que el MODELO decide mover el cursor (Enter, Backspace,
+ *  una marca, un deshacer). Escribir NO lo sube. Es lo único que le permite a
+ *  EditableLine distinguir «colócate aquí» de «el usuario está tecleando»:
+ *  sin esa distinción devolvía el cursor al inicio en cada tecla y la nota se
+ *  escribía al revés. */
 export interface Cursor {
   block: number;
   item: number;
   start: number;
   end: number;
+  seq: number;
 }
 
 export interface NoteDocProps {
@@ -114,6 +121,9 @@ function quitarFila(t: Extract<Block, { kind: "table" }>, indice: number): Block
 }
 
 export default function NoteDoc({ blocks, onChange, cursor, onCursor, readOnly }: NoteDocProps) {
+  /** Cursor que el MODELO impone: sube `seq` para que EditableLine lo aplique. */
+  const mover = (c: Omit<Cursor, "seq">): Cursor => ({ ...c, seq: cursor.seq + 1 });
+
   function reemplazar(indice: number, nuevos: Block[], cur: Cursor) {
     onChange([...blocks.slice(0, indice), ...nuevos, ...blocks.slice(indice + 1)], cur);
   }
@@ -129,12 +139,12 @@ export default function NoteDoc({ blocks, onChange, cursor, onCursor, readOnly }
       const llano = content.map((p) => p.text).join("");
       const atajo = ATAJOS.find((a) => a.patron.test(llano));
       if (atajo) {
-        reemplazar(bi, [setBlockStyle(PARRAFO_VACIO(), atajo.estilo)], {
+        reemplazar(bi, [setBlockStyle(PARRAFO_VACIO(), atajo.estilo)], mover({
           block: bi,
           item: 0,
           start: 0,
           end: 0
-        });
+        }));
         return;
       }
     }
@@ -157,11 +167,11 @@ export default function NoteDoc({ blocks, onChange, cursor, onCursor, readOnly }
       const total = lineas.length;
       const siguiente = e.shiftKey ? ii - 1 : ii + 1;
       if (siguiente >= total) {
-        reemplazar(bi, [anadirFila(bloque)], { block: bi, item: total, start: 0, end: 0 });
+        reemplazar(bi, [anadirFila(bloque)], mover({ block: bi, item: total, start: 0, end: 0 }));
         return;
       }
       if (siguiente < 0) return;
-      onCursor({ block: bi, item: siguiente, start: 0, end: 0 });
+      onCursor(mover({ block: bi, item: siguiente, start: 0, end: 0 }));
       return;
     }
 
@@ -176,22 +186,22 @@ export default function NoteDoc({ blocks, onChange, cursor, onCursor, readOnly }
       if (enLista && largo === 0 && lineas.length > 1) {
         const sinItem = quitarLinea(bloque, ii);
         const nuevos = sinItem ? [sinItem, PARRAFO_VACIO()] : [PARRAFO_VACIO()];
-        reemplazar(bi, nuevos, {
+        reemplazar(bi, nuevos, mover({
           block: bi + (sinItem ? 1 : 0),
           item: 0,
           start: 0,
           end: 0
-        });
+        }));
         return;
       }
 
       const [a, b] = splitBlock(bloque, ii, cursor.start);
-      reemplazar(bi, [a, b], {
+      reemplazar(bi, [a, b], mover({
         block: enLista ? bi : bi + 1,
         item: enLista ? textoDeBloque(a).length : 0,
         start: 0,
         end: 0
-      });
+      }));
       return;
     }
 
@@ -203,12 +213,12 @@ export default function NoteDoc({ blocks, onChange, cursor, onCursor, readOnly }
         const fundida = [...anterior, ...linea];
         const sinLinea = quitarLinea(bloque, ii);
         if (sinLinea) {
-          reemplazar(bi, [conLinea(sinLinea, ii - 1, fundida)], {
+          reemplazar(bi, [conLinea(sinLinea, ii - 1, fundida)], mover({
             block: bi,
             item: ii - 1,
             start: plainLength(anterior),
             end: plainLength(anterior)
-          });
+          }));
         }
         return;
       }
@@ -218,12 +228,12 @@ export default function NoteDoc({ blocks, onChange, cursor, onCursor, readOnly }
       e.preventDefault();
       const lineasPrevias = textoDeBloque(previo);
       const ultima = lineasPrevias[lineasPrevias.length - 1] ?? [];
-      const destino: Cursor = {
+      const destino: Cursor = mover({
         block: bi - 1,
         item: lineasPrevias.length - 1,
         start: plainLength(ultima),
         end: plainLength(ultima)
-      };
+      });
       // mergeBlocks devuelve un ARRAY: el bloque fundido primero y, si a la
       // lista le sobraban ítems, esos detrás como bloque propio.
       const fundido = mergeBlocks(previo, bloque);
@@ -240,25 +250,25 @@ export default function NoteDoc({ blocks, onChange, cursor, onCursor, readOnly }
     if (e.key === "ArrowUp" && cursor.start === 0) {
       if (ii > 0) {
         e.preventDefault();
-        onCursor({ block: bi, item: ii - 1, start: 0, end: 0 });
+        onCursor(mover({ block: bi, item: ii - 1, start: 0, end: 0 }));
         return;
       }
       const previo = blocks[bi - 1];
       if (!previo) return;
       e.preventDefault();
-      onCursor({ block: bi - 1, item: textoDeBloque(previo).length - 1, start: 0, end: 0 });
+      onCursor(mover({ block: bi - 1, item: textoDeBloque(previo).length - 1, start: 0, end: 0 }));
       return;
     }
 
     if (e.key === "ArrowDown" && cursor.start === largo) {
       if (ii < lineas.length - 1) {
         e.preventDefault();
-        onCursor({ block: bi, item: ii + 1, start: 0, end: 0 });
+        onCursor(mover({ block: bi, item: ii + 1, start: 0, end: 0 }));
         return;
       }
       if (bi < blocks.length - 1) {
         e.preventDefault();
-        onCursor({ block: bi + 1, item: 0, start: 0, end: 0 });
+        onCursor(mover({ block: bi + 1, item: 0, start: 0, end: 0 }));
       }
     }
   }
@@ -274,7 +284,7 @@ export default function NoteDoc({ blocks, onChange, cursor, onCursor, readOnly }
           readOnly={readOnly}
           onEscribir={alEscribir}
           onPulsar={alPulsar}
-          onSelect={(ii, start, end) => onCursor({ block: bi, item: ii, start, end })}
+          onSelect={(ii, start, end) => onCursor({ ...cursor, block: bi, item: ii, start, end })}
           onToggle={(ii) => reemplazar(bi, [toggleTodo(bloque, ii)], cursor)}
           onTabla={(nuevo) => reemplazar(bi, [nuevo], cursor)}
         />
@@ -315,6 +325,7 @@ function BloqueEditable({
       placeholder={placeholder}
       autoFocus={enfocado(ii)}
       caret={enfocado(ii) ? cursor.start : null}
+      caretSeq={cursor.seq}
       onChange={(c) => onEscribir(indice, ii, c)}
       onKey={(e) => onPulsar(e, indice, ii)}
       onSelect={(start, end) => onSelect(ii, start, end)}
