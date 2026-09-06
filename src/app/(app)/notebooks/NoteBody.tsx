@@ -47,6 +47,12 @@ export default function NoteBody({ body }: { body: string }) {
             );
           case "quote":
             return <blockquote key={i}>{renderInline(block.content)}</blockquote>;
+          case "mono":
+            return (
+              <pre key={i} className="nb-mono">
+                <code>{block.text}</code>
+              </pre>
+            );
           case "todo":
             return (
               <ul key={i} className="nb-todo">

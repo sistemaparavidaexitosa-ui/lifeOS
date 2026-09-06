@@ -238,7 +238,9 @@ export const CORPUS_ROUND_TRIP = [
   "un más + suelto y una tilde ~ suelta",
   "- [ ] sin hacer\n- [x] hecha",
   "- [x] hecha\n- [ ]",
-  "- viñeta normal\n\n- [ ] casilla"
+  "- viñeta normal\n\n- [ ] casilla",
+  "```\npnpm verify\n```",
+  "antes\n\n```\ncódigo\n```\n\ndespués"
 ];
 
 test("parseNote: las casillas son su propio bloque", () => {
@@ -290,6 +292,48 @@ test("noteDisplayTitle: una nota sin título que empieza por casilla no muestra 
 
 test("noteDisplayTitle: también sirve para una cita", () => {
   assert.strictEqual(noteDisplayTitle("", "> una cita"), "una cita");
+});
+
+test("parseNote: el bloque monoespaciado conserva su texto tal cual", () => {
+  const bloques = parseNote("```\npnpm verify\n  sangrado\n```");
+  assert.strictEqual(bloques.length, 1);
+  const bloque = bloques[0] as Extract<Block, { kind: "mono" }>;
+  assert.strictEqual(bloque.kind, "mono");
+  // Nada se interpreta dentro: ni el marcado ni el escape.
+  assert.strictEqual(bloque.text, "pnpm verify\n  sangrado");
+});
+
+test("parseNote: dentro del bloque monoespaciado el marcado NO se interpreta", () => {
+  const bloque = parseNote("```\n**no es negrita**\n```")[0] as Extract<Block, { kind: "mono" }>;
+  assert.strictEqual(bloque.text, "**no es negrita**");
+});
+
+test("parseNote: una valla sin cerrar termina con el cuerpo, no se come la nota", () => {
+  const bloques = parseNote("texto\n\n```\nsin cerrar");
+  assert.deepStrictEqual(
+    bloques.map((b) => b.kind),
+    ["paragraph", "mono"]
+  );
+});
+
+test("parseNote: la etiqueta de lenguaje se ignora", () => {
+  // El iPhone tampoco resalta sintaxis; aceptar la etiqueta obligaría a
+  // decidir qué hacer con un lenguaje desconocido.
+  const bloque = parseNote("```ts\nconst a = 1\n```")[0] as Extract<Block, { kind: "mono" }>;
+  assert.strictEqual(bloque.text, "const a = 1");
+});
+
+test("noteDisplayTitle: una nota que empieza por bloque monoespaciado usa su primera línea", () => {
+  assert.strictEqual(noteDisplayTitle("", "```\npnpm verify\n```"), "pnpm verify");
+});
+
+test("noteDisplayTitle: sin título propio, un título largo se recorta a 60 caracteres", () => {
+  // Igual que noteExcerpt, pero para el título: la revisión de la Task 3 lo
+  // comprobó a mano y no quedó ninguna prueba que detecte una regresión aquí.
+  const largo = "palabra ".repeat(20).trim();
+  const titulo = noteDisplayTitle("", largo);
+  assert.strictEqual(titulo.length, 60);
+  assert.ok(titulo.endsWith("…"));
 });
 
 test("serializeNote: un hashtag al inicio de línea no es un título y no se escapa", () => {

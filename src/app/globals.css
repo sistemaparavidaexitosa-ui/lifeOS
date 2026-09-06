@@ -2893,6 +2893,24 @@ textarea:focus {
   border-radius: 6px;
   font-size: 13px;
 }
+.nb-prose .nb-mono {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--surface-2, rgba(127, 127, 127, 0.1));
+  overflow-x: auto;
+  font-size: 13.5px;
+  line-height: 1.5;
+  white-space: pre;
+}
+/* El código dentro de la valla no repite el fondo del código en línea: ya
+   tiene el suyo propio, el del bloque. */
+.nb-prose .nb-mono code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+}
 .nb-prose a {
   color: var(--info);
   overflow-wrap: anywhere;

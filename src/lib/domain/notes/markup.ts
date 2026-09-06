@@ -33,7 +33,8 @@ export type Block =
   | { kind: "bullets"; items: Inline[][] }
   | { kind: "ordered"; items: Inline[][] }
   | { kind: "quote"; content: Inline[] }
-  | { kind: "todo"; items: { done: boolean; content: Inline[] }[] };
+  | { kind: "todo"; items: { done: boolean; content: Inline[] }[] }
+  | { kind: "mono"; text: string };
 
 /**
  * Un solo recorrido para todo lo que va dentro de una línea. El ORDEN de las
@@ -140,6 +141,7 @@ export function parseNote(body: string): Block[] {
   let ordered: string[] = [];
   let quote: string[] = [];
   let todos: { done: boolean; text: string }[] = [];
+  let mono: string[] | null = null;
 
   function flush() {
     if (paragraph.length) {
@@ -169,6 +171,24 @@ export function parseNote(body: string): Block[] {
 
   for (const raw of lines) {
     const line = raw.trimEnd();
+
+    // Dentro de una valla no se interpreta NADA: ni bloques, ni escapes, ni
+    // marcado. Sólo se busca el cierre.
+    if (mono !== null) {
+      if (/^```/.test(line)) {
+        blocks.push({ kind: "mono", text: mono.join("\n") });
+        mono = null;
+      } else {
+        mono.push(raw);
+      }
+      continue;
+    }
+
+    if (/^```/.test(line)) {
+      flush();
+      mono = [];
+      continue;
+    }
 
     if (!line.trim()) {
       flush();
@@ -227,6 +247,10 @@ export function parseNote(body: string): Block[] {
     paragraph.push(line);
   }
 
+  // Una valla sin cerrar termina donde termina el cuerpo. Tragarse el resto
+  // de la nota sería peor que cerrarla sola.
+  if (mono !== null) blocks.push({ kind: "mono", text: mono.join("\n") });
+
   flush();
   return blocks;
 }
@@ -241,6 +265,7 @@ export function noteExcerpt(body: string, max = 140): string {
     .flatMap((block) => {
       if (block.kind === "bullets" || block.kind === "ordered") return block.items.map(inlineText);
       if (block.kind === "todo") return block.items.map((item) => inlineText(item.content));
+      if (block.kind === "mono") return [block.text];
       return [inlineText(block.content)];
     })
     .join(" · ")
@@ -276,7 +301,9 @@ export function noteDisplayTitle(title: string, body: string): string {
       ? primero.items
       : primero.kind === "todo"
         ? primero.items.map((item) => item.content)
-        : [primero.content];
+        : primero.kind === "mono"
+          ? [[{ kind: "text" as const, text: primero.text }]]
+          : [primero.content];
 
   const clean = (inlineText(lineas[0] ?? []).split("\n")[0] ?? "").trim();
   if (!clean) return NOTA_SIN_TITULO;
@@ -309,6 +336,8 @@ function serializeBlock(block: Block): string {
         .split("\n")
         .map((linea) => `> ${linea}`)
         .join("\n");
+    case "mono":
+      return `\`\`\`\n${block.text}\n\`\`\``;
     default:
       // Un párrafo conserva sus saltos internos (ver parseNote), y cada línea
       // se protege por separado: basta con que UNA empiece por «#» para que al
