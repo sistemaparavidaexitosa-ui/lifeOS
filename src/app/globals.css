@@ -2915,6 +2915,27 @@ textarea:focus {
   color: var(--info);
   overflow-wrap: anywhere;
 }
+.nb-prose .nb-table-wrap {
+  margin: 12px 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.nb-prose .nb-table {
+  border-collapse: collapse;
+  min-width: 100%;
+}
+.nb-prose .nb-table th,
+.nb-prose .nb-table td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+  min-width: 96px;
+}
+.nb-prose .nb-table th {
+  font-weight: 700;
+  background: var(--surface-2, rgba(127, 127, 127, 0.08));
+}
 
 /* --- Búsqueda ------------------------------------------------------------ */
 .nb-search {

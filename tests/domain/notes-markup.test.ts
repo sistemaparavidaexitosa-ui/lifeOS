@@ -217,6 +217,63 @@ test("serializeNote: ida y vuelta sobre el dialecto de hoy", () => {
   assert.deepStrictEqual(parseNote(serializeNote(parseNote(cuerpo))), parseNote(cuerpo));
 });
 
+test("parseNote: una tabla con encabezado y filas", () => {
+  const bloques = parseNote("| Área | Entrega |\n|---|---|\n| Diseño | 12/9 |\n| Dev | 20/9 |");
+  assert.strictEqual(bloques.length, 1);
+  const tabla = bloques[0] as Extract<Block, { kind: "table" }>;
+  assert.strictEqual(tabla.kind, "table");
+  assert.deepStrictEqual(tabla.head, [
+    [{ kind: "text", text: "Área" }],
+    [{ kind: "text", text: "Entrega" }]
+  ]);
+  assert.strictEqual(tabla.rows.length, 2);
+});
+
+test("parseNote: una fila corta o larga se normaliza al ancho del encabezado", () => {
+  // Sin esto, una fila desalineada rompería la rejilla del editor.
+  const tabla = parseNote("| a | b |\n|---|---|\n| sola |\n| 1 | 2 | 3 |")[0] as Extract<
+    Block,
+    { kind: "table" }
+  >;
+  assert.deepStrictEqual(
+    tabla.rows.map((fila) => fila.length),
+    [2, 2]
+  );
+});
+
+test("parseNote: la alineación se acepta pero no se guarda", () => {
+  // Alinear columnas no está en el menú del iPhone; sostener un dato que
+  // nadie puede cambiar es cómo se acumulan los formatos muertos.
+  const tabla = parseNote("| a | b |\n|:---:|---:|\n| 1 | 2 |")[0] as Extract<
+    Block,
+    { kind: "table" }
+  >;
+  assert.strictEqual(tabla.kind, "table");
+  assert.ok(!("align" in tabla));
+});
+
+test("parseNote: sin fila separadora NO es una tabla", () => {
+  // Un párrafo con barras verticales es más común que una tabla a medias.
+  const bloques = parseNote("| esto | es texto |");
+  assert.deepStrictEqual(
+    bloques.map((b) => b.kind),
+    ["paragraph"]
+  );
+});
+
+test("noteDisplayTitle: una nota que empieza por tabla se titula con su primera celda", () => {
+  assert.strictEqual(noteDisplayTitle("", "| Área | Due |\n|---|---|\n| a | b |"), "Área");
+});
+
+test("serializeNote: la barra vertical dentro de una celda se escapa", () => {
+  const tabla = parseNote("| a \\| b | c |\n|---|---|\n| 1 | 2 |")[0] as Extract<
+    Block,
+    { kind: "table" }
+  >;
+  assert.deepStrictEqual(tabla.head[0], [{ kind: "text", text: "a | b" }]);
+  assert.ok(serializeNote([tabla]).includes("a \\| b"));
+});
+
 // El corpus vive aquí y CRECE con cada bloque nuevo (tareas 2 a 5). Es la red
 // que detecta que un bloque nuevo rompió el ida y vuelta de otro.
 export const CORPUS_ROUND_TRIP = [
@@ -240,7 +297,10 @@ export const CORPUS_ROUND_TRIP = [
   "- [x] hecha\n- [ ]",
   "- viñeta normal\n\n- [ ] casilla",
   "```\npnpm verify\n```",
-  "antes\n\n```\ncódigo\n```\n\ndespués"
+  "antes\n\n```\ncódigo\n```\n\ndespués",
+  "| Área | Entrega |\n|---|---|\n| Diseño | 12/9 |",
+  "| a \\| b | c |\n|---|---|\n| 1 | 2 |",
+  "texto\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\nmás texto"
 ];
 
 test("parseNote: las casillas son su propio bloque", () => {

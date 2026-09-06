@@ -34,7 +34,8 @@ export type Block =
   | { kind: "ordered"; items: Inline[][] }
   | { kind: "quote"; content: Inline[] }
   | { kind: "todo"; items: { done: boolean; content: Inline[] }[] }
-  | { kind: "mono"; text: string };
+  | { kind: "mono"; text: string }
+  | { kind: "table"; head: Inline[][]; rows: Inline[][][] };
 
 /**
  * Un solo recorrido para todo lo que va dentro de una línea. El ORDEN de las
@@ -124,6 +125,46 @@ const BULLET = /^[-*]\s+(.*)$/;
 const ORDERED = /^\d+[.)]\s+(.*)$/;
 const QUOTE = /^>\s?(.*)$/;
 
+const FILA_TABLA = /^\s*\|.*\|\s*$/;
+// La separadora acepta `:` de alineación para no romper con Markdown pegado
+// de fuera, pero la alineación se descarta al construir el bloque.
+const SEPARADORA_TABLA = /^\s*\|(\s*:?-{3,}:?\s*\|)+\s*$/;
+
+function esFilaDeTabla(linea: string): boolean {
+  return FILA_TABLA.test(linea) && !SEPARADORA_TABLA.test(linea);
+}
+
+function esSeparadoraDeTabla(linea: string): boolean {
+  return SEPARADORA_TABLA.test(linea.trimEnd());
+}
+
+/**
+ * Parte una fila en celdas por las barras verticales NO escapadas. El
+ * `split` normal no vale: se llevaría por delante el `\|` de una celda que
+ * contiene una barra a propósito.
+ */
+function celdasDeFila(linea: string): Inline[][] {
+  const cuerpo = linea.trim().replace(/^\|/, "").replace(/\|$/, "");
+  const celdas: string[] = [];
+  let actual = "";
+  for (let k = 0; k < cuerpo.length; k++) {
+    const c = cuerpo[k];
+    if (c === "\\" && cuerpo[k + 1] === "|") {
+      actual += "\\|";
+      k++;
+      continue;
+    }
+    if (c === "|") {
+      celdas.push(actual);
+      actual = "";
+      continue;
+    }
+    actual += c;
+  }
+  celdas.push(actual);
+  return celdas.map((celda) => parseInline(celda.trim()));
+}
+
 /**
  * Divide el cuerpo en bloques.
  *
@@ -169,7 +210,8 @@ export function parseNote(body: string): Block[] {
     }
   }
 
-  for (const raw of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i] ?? "";
     const line = raw.trimEnd();
 
     // Dentro de una valla no se interpreta NADA: ni bloques, ni escapes, ni
@@ -236,6 +278,27 @@ export function parseNote(body: string): Block[] {
       continue;
     }
 
+    // Una tabla exige DOS líneas: la de encabezado y la separadora. Sin la
+    // segunda, un párrafo con barras verticales se leería como tabla.
+    if (esFilaDeTabla(line) && esSeparadoraDeTabla(lines[i + 1] ?? "")) {
+      flush();
+      const head = celdasDeFila(line);
+      const rows: Inline[][][] = [];
+      let j = i + 2;
+      while (j < lines.length && esFilaDeTabla(lines[j] ?? "")) {
+        const celdas = celdasDeFila(lines[j] ?? "");
+        // Ancho fijo = ancho del encabezado. Recorta lo que sobra y rellena
+        // con celdas vacías lo que falta.
+        rows.push(
+          Array.from({ length: head.length }, (_, c) => celdas[c] ?? [{ kind: "text" as const, text: "" }])
+        );
+        j++;
+      }
+      blocks.push({ kind: "table", head, rows });
+      i = j - 1;
+      continue;
+    }
+
     const quoted = QUOTE.exec(line);
     if (quoted) {
       if (paragraph.length || bullets.length || ordered.length || todos.length) flush();
@@ -266,6 +329,7 @@ export function noteExcerpt(body: string, max = 140): string {
       if (block.kind === "bullets" || block.kind === "ordered") return block.items.map(inlineText);
       if (block.kind === "todo") return block.items.map((item) => inlineText(item.content));
       if (block.kind === "mono") return [block.text];
+      if (block.kind === "table") return [...block.head, ...block.rows.flat()].map(inlineText);
       return [inlineText(block.content)];
     })
     .join(" · ")
@@ -303,7 +367,9 @@ export function noteDisplayTitle(title: string, body: string): string {
         ? primero.items.map((item) => item.content)
         : primero.kind === "mono"
           ? [[{ kind: "text" as const, text: primero.text }]]
-          : [primero.content];
+          : primero.kind === "table"
+            ? primero.head
+            : [primero.content];
 
   const clean = (inlineText(lineas[0] ?? []).split("\n")[0] ?? "").trim();
   if (!clean) return NOTA_SIN_TITULO;
@@ -338,6 +404,13 @@ function serializeBlock(block: Block): string {
         .join("\n");
     case "mono":
       return `\`\`\`\n${block.text}\n\`\`\``;
+    case "table": {
+      const fila = (celdas: Inline[][]) =>
+        `| ${celdas.map((c) => serializeInline(c, { pipe: true })).join(" | ")} |`;
+      // La separadora se escribe siempre igual: sin alineación que sostener.
+      const separadora = `|${block.head.map(() => "---").join("|")}|`;
+      return [fila(block.head), separadora, ...block.rows.map(fila)].join("\n");
+    }
     default:
       // Un párrafo conserva sus saltos internos (ver parseNote), y cada línea
       // se protege por separado: basta con que UNA empiece por «#» para que al

@@ -64,6 +64,29 @@ export default function NoteBody({ body }: { body: string }) {
                 ))}
               </ul>
             );
+          case "table":
+            return (
+              <div key={i} className="nb-table-wrap">
+                <table className="nb-table">
+                  <thead>
+                    <tr>
+                      {block.head.map((celda, j) => (
+                        <th key={j}>{renderInline(celda)}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {block.rows.map((fila, j) => (
+                      <tr key={j}>
+                        {fila.map((celda, k) => (
+                          <td key={k}>{renderInline(celda)}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
           default:
             return <p key={i}>{renderInline(block.content)}</p>;
         }
