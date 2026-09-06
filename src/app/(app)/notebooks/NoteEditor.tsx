@@ -28,14 +28,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { deleteNote, saveNote } from "./actions";
-import {
-  noteDisplayTitle,
-  parseNote,
-  serializeNote,
-  type Block
-} from "@/lib/domain/notes/markup.ts";
+import { noteDisplayTitle, serializeNote, type Block } from "@/lib/domain/notes/markup.ts";
 import {
   applyMark,
+  bloquesEditables,
   hasMark,
   plainLength,
   setBlockStyle,
@@ -91,7 +87,7 @@ export default function NoteEditor({
 }) {
   const router = useRouter();
   const [title, setTitle] = useState(note.title);
-  const [blocks, setBlocks] = useState<Block[]>(() => parseNote(note.body));
+  const [blocks, setBlocks] = useState<Block[]>(() => bloquesEditables(note.body));
   const [cursor, setCursor] = useState<Cursor>({ block: 0, item: 0, start: 0, end: 0 });
   const [estado, setEstado] = useState<Estado>("limpio");
   const [mensaje, setMensaje] = useState<string | null>(null);
