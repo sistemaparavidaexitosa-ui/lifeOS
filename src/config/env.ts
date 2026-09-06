@@ -8,7 +8,7 @@
 // la acción invocada no los use.
 
 import { z } from "zod";
-import { jwkFromPrivateKey } from "@/lib/domain/push/vapid.ts";
+import { jwkFromPrivateKey, normalizeVapidSubject } from "@/lib/domain/push/vapid.ts";
 
 const publicSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().url().default("http://localhost:54321"),
@@ -163,12 +163,11 @@ export function requireVapidKeys(): { privateJwk: JsonWebKey; publicKey: string;
    * `NEXT_PUBLIC_APP_URL`, que en local (y en un despliegue mal configurado) es
    * `http://localhost:3000` — sintácticamente una URL, y rechazada por Apple.
    */
-  const subject = process.env.VAPID_SUBJECT || publicEnv.NEXT_PUBLIC_APP_URL;
-  if (!/^(mailto:.+@.+|https:\/\/.+)$/.test(subject)) {
-    throw new Error(
-      `VAPID_SUBJECT no es válido para Apple («${subject}»). Tiene que ser un mailto: con dirección real o una URL https:. Un http:// —el valor por defecto en local— hace que APNs responda BadJwtToken.`
-    );
-  }
+  // La normalización vive en el dominio y está probada allí: admite el correo
+  // suelto (le pone `mailto:`), quita comillas, y rechaza con un mensaje
+  // concreto lo que Apple rechazaría — incluidos los huecos de documentación
+  // sin rellenar, que se han pegado tal cual más de una vez.
+  const subject = normalizeVapidSubject(process.env.VAPID_SUBJECT || publicEnv.NEXT_PUBLIC_APP_URL);
 
   return { privateJwk, publicKey, subject };
 }

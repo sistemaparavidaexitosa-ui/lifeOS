@@ -99,6 +99,79 @@ export async function isVapidPair(privateJwk: JsonWebKey, publicKeyBase64Url: st
   }
 }
 
+/**
+ * Normaliza y valida el `sub` del JWT: quién envía.
+ *
+ * RFC 8292 pide una URI `mailto:` o `https:`. Apple lo aplica al pie de la
+ * letra y contesta 403 `BadJwtToken` a cualquier otra cosa — el MISMO error
+ * que da una firma inválida, así que un `sub` mal escrito se acaba
+ * diagnosticando como un problema de criptografía. Por eso se comprueba aquí,
+ * antes de enviar, en vez de dejar que lo diga APNs.
+ *
+ * SE ADMITE EL CORREO SUELTO, y no es indulgencia: `mailto:` es el esquema de
+ * la URI, no un adorno, pero nadie lo teclea de memoria. Escribir la dirección
+ * a secas es lo que hace todo el mundo, y costaba una ronda entera de
+ * redespliegue descubrir que faltaban ocho caracteres.
+ *
+ * Un solo valor válido sirve para Apple y para Google, que es lo que se pide:
+ * que funcione en cualquier teléfono.
+ */
+export function normalizeVapidSubject(valor: string): string {
+  // Las mismas comillas del .env que ya mordieron al JWK.
+  const limpio = valor.trim().replace(/^(['"])([\s\S]*)\1$/, "$2").trim();
+
+  if (!limpio) throw new Error("VAPID_SUBJECT está vacío. Pon tu correo (se le añade `mailto:` solo) o la URL https de tu app.");
+
+  const conEsquema = /^mailto:/i.test(limpio)
+    ? `mailto:${limpio.slice("mailto:".length).trim()}`
+    : /^https?:\/\//i.test(limpio)
+      ? limpio
+      : // Sin esquema: si parece un correo, se le pone el suyo.
+        /^[^\s@]+@[^\s@]+$/.test(limpio)
+        ? `mailto:${limpio}`
+        : limpio;
+
+  if (/^http:\/\//i.test(conEsquema)) {
+    throw new Error(
+      `VAPID_SUBJECT no puede ser http:// («${conEsquema}»). Apple solo acepta https: o mailto:. Este es el valor por defecto en local; en producción pon tu correo o el dominio real de la app.`
+    );
+  }
+
+  if (/^mailto:/i.test(conEsquema)) {
+    const direccion = conEsquema.slice("mailto:".length);
+    // `.+@.+` no basta: `mailto:...` lo pasaría si tuviera una arroba, y los
+    // huecos de la documentación se han pegado tal cual más de una vez.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(direccion)) {
+      throw new Error(
+        `VAPID_SUBJECT no es un correo válido («${conEsquema}»). Escribe una dirección real, por ejemplo tu-nombre@gmail.com — o la URL https de tu app.`
+      );
+    }
+    return `mailto:${direccion}`;
+  }
+
+  if (/^https:\/\//i.test(conEsquema)) {
+    let host: string;
+    try {
+      host = new URL(conEsquema).hostname;
+    } catch {
+      throw new Error(`VAPID_SUBJECT no es una URL válida («${conEsquema}»).`);
+    }
+    // Un dominio sin punto es el hueco de la documentación sin rellenar
+    // («tu-dominio-de-produccion») o un `localhost`: ni uno ni otro identifican
+    // a nadie ante Apple.
+    if (!host.includes(".") || host === "localhost") {
+      throw new Error(
+        `VAPID_SUBJECT apunta a «${host}», que no es un dominio real. Pon el dominio de tu app entero, con su punto, o tu correo.`
+      );
+    }
+    return conEsquema;
+  }
+
+  throw new Error(
+    `VAPID_SUBJECT («${limpio}») no vale: tiene que ser tu correo (se le añade \`mailto:\` solo) o una URL https de tu app.`
+  );
+}
+
 export interface VapidCredentials {
   /** JWK completo de la clave privada P-256 (ver `requireVapidKeys`). */
   privateJwk: JsonWebKey;

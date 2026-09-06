@@ -190,3 +190,36 @@ test("isVapidPair distingue un par correcto de dos mitades que no casan", async 
   const mezclado = jwkFromPrivateKey(uno.jwk.d as string, otro.publica);
   assert.equal(await isVapidPair(mezclado, otro.publica), false, "dos mitades de pares distintos NO son pareja");
 });
+
+// ─── El `sub`, que tiene que valer para Apple Y para Google ─────────────────
+//
+// RFC 8292 pide una URI `mailto:` o `https:`. Apple lo aplica al pie de la
+// letra y responde 403 `BadJwtToken` a cualquier otra cosa —el MISMO error que
+// da una firma inválida—, así que un `sub` mal escrito se diagnostica como un
+// problema de criptografía. FCM es más tolerante, pero una sola forma válida
+// sirve para los dos, y es la que se normaliza aquí.
+//
+// Se admite el correo suelto porque es lo que la gente escribe: `mailto:` no es
+// decoración, es el esquema, pero nadie lo teclea de memoria.
+
+test("normalizeVapidSubject acepta las formas que la gente escribe de verdad", async () => {
+  const { normalizeVapidSubject } = await import("../../src/lib/domain/push/vapid.ts");
+
+  assert.equal(normalizeVapidSubject("mailto:ana@ejemplo.com"), "mailto:ana@ejemplo.com");
+  assert.equal(normalizeVapidSubject("ana@ejemplo.com"), "mailto:ana@ejemplo.com", "un correo suelto se prefija");
+  assert.equal(normalizeVapidSubject("  ana@ejemplo.com  "), "mailto:ana@ejemplo.com");
+  assert.equal(normalizeVapidSubject("'ana@ejemplo.com'"), "mailto:ana@ejemplo.com", "comillas del .env pegadas");
+  assert.equal(normalizeVapidSubject("MAILTO:ana@ejemplo.com"), "mailto:ana@ejemplo.com", "el esquema no distingue mayúsculas");
+  assert.equal(normalizeVapidSubject("https://mi-app.vercel.app"), "https://mi-app.vercel.app");
+});
+
+test("normalizeVapidSubject rechaza lo que Apple rechazaría, y lo dice", async () => {
+  const { normalizeVapidSubject } = await import("../../src/lib/domain/push/vapid.ts");
+
+  // El default en local. Es una URL válida y aun así APNs la rechaza.
+  assert.throws(() => normalizeVapidSubject("http://localhost:3000"), /https/i);
+  // Los huecos de la documentación pegados tal cual: han pasado los dos.
+  assert.throws(() => normalizeVapidSubject("mailto:..."), /correo|https/i);
+  assert.throws(() => normalizeVapidSubject("https://tu-dominio-de-produccion"), /dominio|punto/i);
+  assert.throws(() => normalizeVapidSubject(""), /VAPID_SUBJECT/);
+});
