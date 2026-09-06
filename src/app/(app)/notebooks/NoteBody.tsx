@@ -60,6 +60,8 @@ function renderInline(content: Inline[]) {
     switch (part.kind) {
       case "bold":
         return <b key={i}>{part.text}</b>;
+      case "italic":
+        return <i key={i}>{part.text}</i>;
       case "underline":
         return <u key={i}>{part.text}</u>;
       case "strike":
