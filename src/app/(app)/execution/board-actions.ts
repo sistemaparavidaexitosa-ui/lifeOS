@@ -12,22 +12,14 @@
 //     tarea y devuelve los rechazos en vez de forzarlos.
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/data/session";
 import { recordActivity } from "@/lib/data/activity";
 import { evaluateTransition } from "@/lib/domain/task-state.ts";
 import { STATUS_META } from "./status-meta";
 import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
+import { describeDbError } from "@/lib/supabase/errors";
 
 const idListSchema = z.array(z.string().uuid()).min(1).max(500);
-
-async function requireUser() {
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
-  return { supabase, user };
-}
 
 // ---------------------------------------------------------------------------
 // Orden manual (migración 0021: tasks.position)
@@ -94,7 +86,7 @@ export async function moveTaskToGroup(input: { taskId: string; groupId: string; 
     .from("tasks")
     .update({ group_id: parsed.groupId, parent_task_id: null, version: task.version + 1 })
     .eq("id", parsed.taskId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   const results = await Promise.all(
     parsed.orderedIds.map((id, index) =>
@@ -145,7 +137,7 @@ export async function setGroupColor(groupId: string, color: string) {
   const { supabase, user } = await requireUser();
 
   const { error } = await supabase.from("task_groups").update({ color: parsed.color }).eq("id", parsed.groupId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "group.color", object: parsed.groupId, meta: { color: parsed.color } });
   revalidatePath("/execution");
@@ -177,7 +169,7 @@ export async function setTaskPriority(taskId: string, priority: Priority, urgent
     .from("tasks")
     .update({ priority: parsed.priority, urgent: parsed.urgent, version: task.version + 1 })
     .eq("id", parsed.taskId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({
     user_id: user.id,
@@ -290,7 +282,7 @@ export async function bulkMoveToGroup(ids: string[], groupId: string) {
     .from("tasks")
     .update({ group_id: parsed.groupId, parent_task_id: null })
     .in("id", parsed.ids);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({
     user_id: user.id,
@@ -310,7 +302,7 @@ export async function bulkDeleteTasks(ids: string[]) {
   const { data: doomed } = await supabase.from("tasks").select("project_id").in("id", parsed);
 
   const { error } = await supabase.from("tasks").delete().in("id", parsed);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({
     user_id: user.id,

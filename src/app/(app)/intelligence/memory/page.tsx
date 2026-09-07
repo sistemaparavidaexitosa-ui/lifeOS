@@ -2,8 +2,8 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Card, Chip, EmptyState } from "@/components/ui";
-import { todayLocal } from "@/lib/data/dates";
-import { getUserTimeZone } from "@/lib/data/profile";
+
+import { todayForUser } from "@/lib/data/profile";
 import { isExpired, type MemoryItemLike, type MemoryScope } from "@/lib/domain/insights/memory.ts";
 import MemoryForm from "./MemoryForm";
 import { getSessionUser } from "@/lib/data/session";
@@ -29,7 +29,7 @@ export default async function MemoryPage() {
   const user = await getSessionUser();
   if (!user) redirect("/login");
 
-  const today = todayLocal(await getUserTimeZone());
+  const today = await todayForUser();
   const { data: items } = await supabase.from("memory_items").select("*").order("created_at", { ascending: false });
 
   const rows: MemoryItemLike[] = (items ?? []).map((m) => ({

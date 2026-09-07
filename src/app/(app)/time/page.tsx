@@ -3,8 +3,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Card, Chip, Stat, EmptyState } from "@/components/ui";
 import { availableSlots, saturationStatus, occupationAppliesOn, daysLabel } from "@/lib/domain/time.ts";
-import { todayLocal } from "@/lib/data/dates";
-import { getUserTimeZone } from "@/lib/data/profile";
+
+import { todayForUser } from "@/lib/data/profile";
 import Timeline from "./Timeline";
 import ActivityWindowForm from "./ActivityWindowForm";
 import OccupationForm from "./OccupationForm";
@@ -34,7 +34,7 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
   const user = await getSessionUser();
   if (!user) redirect("/login");
 
-  const todayISO = todayLocal(await getUserTimeZone());
+  const todayISO = await todayForUser();
 
   const [{ data: profile }, { data: occupations }, { data: tasks }] = await Promise.all([
     supabase.from("profiles").select("activity_window_start, activity_window_end").eq("user_id", user.id).single(),

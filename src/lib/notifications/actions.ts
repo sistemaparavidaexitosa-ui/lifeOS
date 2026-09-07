@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 
 /**
  * Marcar avisos como leídos.
@@ -19,9 +20,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export async function markNotificationRead(id: string, commentId: string | null): Promise<void> {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return;
 
   await supabase.from("notifications").update({ read_at: new Date().toISOString() }).eq("id", id);
@@ -35,9 +34,7 @@ export async function markNotificationRead(id: string, commentId: string | null)
 export async function markAllNotificationsRead(ids: string[], commentIds: string[]): Promise<void> {
   if (!ids.length) return;
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return;
 
   await supabase.from("notifications").update({ read_at: new Date().toISOString() }).in("id", ids);

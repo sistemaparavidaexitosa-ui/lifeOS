@@ -2,8 +2,10 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/data/session";
 import { round2, carryoverOffered } from "@/lib/domain/budget.ts";
 import { quincenaFromKey, shiftQuincena } from "@/lib/domain/quincena.ts";
+import { describeDbError } from "@/lib/supabase/errors";
 
 // PUNTO 5 (fix del error "An error occurred in the Server Components render"
 // al EDITAR un ítem de presupuesto):
@@ -38,11 +40,7 @@ const createLineSchema = editLineSchema.extend({
  * categories(user_id, name), ver 0005_money_ledger_budget.sql).
  */
 export async function upsertBudgetLine(id: string | null, formData: FormData) {
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   // ---------------------------------------------------------------------------
   // EDICIÓN: no requiere category (no se cambia). Fix del PUNTO 5.
@@ -66,7 +64,7 @@ export async function upsertBudgetLine(id: string | null, formData: FormData) {
       })
       .eq("id", id)
       .eq("user_id", user.id);
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(describeDbError(error));
 
     await supabase.from("audit_log").insert({ user_id: user.id, action: "budget.update", object: id });
     revalidatePath("/money/budget");
@@ -114,7 +112,7 @@ export async function upsertBudgetLine(id: string | null, formData: FormData) {
     amount: round2(parsed.monthlyCost / 2),
     cycle: "Quincenal"
   });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "budget.create", object: category });
   revalidatePath("/money/budget");
@@ -125,7 +123,7 @@ export async function upsertBudgetLine(id: string | null, formData: FormData) {
 export async function deleteBudgetLine(id: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("budgets").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
   revalidatePath("/money/budget");
   revalidatePath("/money");
 }
@@ -200,11 +198,7 @@ const carryoverSchema = z.object({
 export async function applyCarryover(budgetId: string, periodKey: string) {
   const parsed = carryoverSchema.parse({ budgetId, periodKey });
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const amount = await computeCarryoverAmount(supabase, parsed.budgetId, parsed.periodKey);
 
@@ -212,7 +206,7 @@ export async function applyCarryover(budgetId: string, periodKey: string) {
     { user_id: user.id, budget_id: parsed.budgetId, period_key: parsed.periodKey, amount: round2(amount) },
     { onConflict: "user_id,budget_id,period_key" }
   );
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({
     user_id: user.id,
@@ -229,11 +223,7 @@ export async function applyCarryover(budgetId: string, periodKey: string) {
 export async function removeCarryover(budgetId: string, periodKey: string) {
   const parsed = carryoverSchema.parse({ budgetId, periodKey });
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { error } = await supabase
     .from("budget_carryovers")
@@ -241,7 +231,7 @@ export async function removeCarryover(budgetId: string, periodKey: string) {
     .eq("user_id", user.id)
     .eq("budget_id", parsed.budgetId)
     .eq("period_key", parsed.periodKey);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({
     user_id: user.id,
@@ -266,17 +256,13 @@ const incomeSchema = z.object({
 export async function updateQuincenalIncome(formData: FormData) {
   const parsed = incomeSchema.parse({ quincenalIncome: formData.get("quincenalIncome") });
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { error } = await supabase
     .from("profiles")
     .update({ quincenal_income: round2(parsed.quincenalIncome) })
     .eq("user_id", user.id);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "budget.income.update", meta: { quincenalIncome: parsed.quincenalIncome } });
   revalidatePath("/money/budget");

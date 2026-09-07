@@ -2,9 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
-import { todayLocal } from "@/lib/data/dates";
-import { getUserTimeZone } from "@/lib/data/profile";
+import { requireUser } from "@/lib/data/session";
+
+import { todayForUser } from "@/lib/data/profile";
+import { describeDbError } from "@/lib/supabase/errors";
 
 const planSchema = z.object({
   projectId: z.string().uuid().optional().or(z.literal("")),
@@ -20,17 +21,13 @@ export async function approveDailyPlan(formData: FormData) {
     impactTaskIds: formData.getAll("impactTaskIds")
   });
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: oneTask, error: oneTaskErr } = await supabase.from("tasks").select("id, title").eq("id", parsed.oneThingTaskId).single();
   if (oneTaskErr || !oneTask) throw new Error("Selecciona una tarea válida para tu Única Cosa");
 
   const ids = Array.from(new Set([oneTask.id, ...parsed.impactTaskIds])).slice(0, 3);
-  const t0 = todayLocal(await getUserTimeZone());
+  const t0 = await todayForUser();
 
   const { error: upsertErr } = await supabase.from("daily_plans").upsert(
     {
@@ -73,11 +70,7 @@ export async function closeoutTask(formData: FormData) {
     status: formData.get("status")
   });
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: task } = await supabase.from("tasks").select("status, version").eq("id", parsed.taskId).single();
   if (!task) throw new Error("Tarea no encontrada");
@@ -90,7 +83,7 @@ export async function closeoutTask(formData: FormData) {
       version: task.version + 1
     })
     .eq("id", parsed.taskId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("task_history").insert({ task_id: parsed.taskId, from_state: task.status, to_state: parsed.status });
 
@@ -102,11 +95,7 @@ export async function closeoutTask(formData: FormData) {
 /** FR-PLN-004: guarda el aprendizaje del cierre diario en la bitácora, sin acoplarlo al estado de ninguna tarea específica. */
 export async function saveDailyLearning(text: string) {
   if (!text.trim()) return;
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   await supabase.from("logbook").insert({ user_id: user.id, type: "learning", text: text.trim() });
   await supabase.from("audit_log").insert({ user_id: user.id, action: "day.closeout.learning" });
@@ -115,11 +104,7 @@ export async function saveDailyLearning(text: string) {
 
 /** FR-PLN-005, BR-004: la revisión semanal produce un snapshot APROBADO E INMUTABLE. */
 export async function approveWeeklyReview() {
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: tasks } = await supabase.from("tasks").select("id, status, project_id");
   const { data: projects } = await supabase.from("projects").select("id").eq("status", "Active");
@@ -137,7 +122,7 @@ export async function approveWeeklyReview() {
     progress_pct: progress,
     blocked_count: blocked
   });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "weekly.review" });
   revalidatePath("/planning");

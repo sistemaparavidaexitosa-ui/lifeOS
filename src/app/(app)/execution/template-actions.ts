@@ -14,6 +14,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 import { recordActivity } from "@/lib/data/activity";
 import { plannedRows, type ProjectTemplate } from "@/lib/domain/execution/project-templates.ts";
 import { getTemplate } from "@/lib/data/templates";
@@ -38,9 +39,7 @@ export async function applyProjectTemplate(projectId: string, templateId: string
   if (!template) return { ok: false, reason: "Esa plantilla ya no existe." };
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "Tu sesión expiró. Vuelve a iniciar sesión." };
 
   const result = await writeTemplate(supabase, parsed.data.projectId, template, user.id);

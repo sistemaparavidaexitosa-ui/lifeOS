@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireVapidKeys } from "@/config/env";
 import { encryptPushPayload } from "@/lib/domain/push/encrypt.ts";
 import { isVapidPair, vapidAuthorization } from "@/lib/domain/push/vapid.ts";
+import { describeDbError } from "@/lib/supabase/errors";
 
 /**
  * Entrega de notificaciones push a los dispositivos de una persona.
@@ -66,7 +67,7 @@ export async function sendPush(userId: string, payload: PushPayload): Promise<Pu
       .select("id, endpoint, p256dh, auth, failure_count")
       .eq("user_id", userId);
 
-    if (error) return { sent: 0, failed: 0, reason: error.message };
+    if (error) return { sent: 0, failed: 0, reason: describeDbError(error) };
     if (!suscripciones?.length) return { sent: 0, failed: 0, reason: "Sin dispositivos suscritos" };
 
     // Antes de gastar una petición por dispositivo: si las llaves no casan

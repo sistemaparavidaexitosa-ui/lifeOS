@@ -14,6 +14,7 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
 import { loadFacts, type Db } from "@/lib/insights/facts-loader";
@@ -25,6 +26,7 @@ import { quickAddTask } from "@/lib/search/quick-add";
 import { upsertMemoryItem } from "@/lib/insights/actions";
 import type { Domain } from "@/lib/domain/insights/types.ts";
 import type { MemoryItemLike, MemoryScope } from "@/lib/domain/insights/memory.ts";
+import type { ActionResult } from "@/lib/supabase/errors";
 
 /**
  * Cuántos turnos se PINTAN. Más que los que viajan al modelo (MAX_TURNOS):
@@ -84,9 +86,7 @@ async function readHistory(supabase: Db): Promise<ChatMessage[]> {
 
 export async function loadChatHistory(): Promise<ChatMessage[]> {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return [];
   return readHistory(supabase);
 }
@@ -105,9 +105,7 @@ export async function sendChatMessage(text: string): Promise<SendResult> {
   if (!message.success) return { ok: false, reason: "Escribe algo primero." };
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "No autenticado" };
 
   // TODO LO QUE NO DEPENDE DE NADA, A LA VEZ — incluido guardar la pregunta.
@@ -288,7 +286,7 @@ export async function createTaskFromChat(workspaceId: string, title: string) {
  * el único sitio que escribe en `memory_items`, con `origin: "ai"` para que en
  * `/intelligence/memory` se vea de dónde salió el texto.
  */
-export async function createMemoryFromChat(text: string, scope: string): Promise<{ ok: boolean; reason?: string }> {
+export async function createMemoryFromChat(text: string, scope: string): Promise<ActionResult> {
   // Se vuelve a sanear en el servidor: lo que llega del cliente es lo que el
   // navegador quiera mandar, no necesariamente lo que el modelo propuso.
   const limpia = sanitizeProposedMemory({ text, scope });
@@ -306,9 +304,7 @@ export async function createMemoryFromChat(text: string, scope: string): Promise
  */
 export async function clearChat(): Promise<void> {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return;
 
   await supabase.from("ai_chat_messages").delete().eq("user_id", user.id);

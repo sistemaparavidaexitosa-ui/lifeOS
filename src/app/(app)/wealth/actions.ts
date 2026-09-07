@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/data/session";
 import { round2 } from "@/lib/domain/budget.ts";
 import { accountBalance, netWorth } from "@/lib/domain/money.ts";
+import { describeDbError } from "@/lib/supabase/errors";
 
 const assetSchema = z.object({
   name: z.string().min(1),
@@ -23,19 +25,15 @@ export async function upsertAsset(id: string | null, formData: FormData) {
     source: formData.get("source")
   });
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const payload = { name: parsed.name, kind: parsed.kind, value: round2(parsed.value), as_of: parsed.asOf, source: parsed.source };
   if (id) {
     const { error } = await supabase.from("assets").update(payload).eq("id", id);
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(describeDbError(error));
   } else {
     const { error } = await supabase.from("assets").insert({ ...payload, user_id: user.id, currency: "MXN" });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(describeDbError(error));
   }
   revalidatePath("/wealth");
 }
@@ -43,17 +41,13 @@ export async function upsertAsset(id: string | null, formData: FormData) {
 export async function deleteAsset(id: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("assets").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
   revalidatePath("/wealth");
 }
 
 /** FR-WLT-002, BR-004: snapshot inmutable — nunca se edita destructivamente, se genera uno nuevo. */
 export async function createNetWorthSnapshot() {
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const [{ data: accounts }, { data: entries }, { data: investments }, { data: assets }, { data: debts }, { data: liabilities }] = await Promise.all([
     supabase.from("accounts").select("id, opening_balance"),
@@ -83,7 +77,7 @@ export async function createNetWorthSnapshot() {
     liabilities: round2(totalLiabilities),
     net
   });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "networth.snapshot" });
   revalidatePath("/wealth");

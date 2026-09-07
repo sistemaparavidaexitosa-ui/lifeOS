@@ -20,9 +20,10 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { actionFailed, actionOk, type ActionResult } from "@/lib/supabase/errors";
-import { todayLocal } from "@/lib/data/dates";
-import { getUserTimeZone } from "@/lib/data/profile";
+import { getSessionUser, requireUser } from "@/lib/data/session";
+import { describeDbError, actionFailed, actionOk, type ActionResult } from "@/lib/supabase/errors";
+
+import { todayForUser } from "@/lib/data/profile";
 
 const windowSchema = z.object({
   start: z.string().regex(/^\d{2}:\d{2}$/),
@@ -34,17 +35,13 @@ export async function updateActivityWindow(formData: FormData) {
   const parsed = windowSchema.parse({ start: formData.get("start"), end: formData.get("end") });
   if (parsed.end <= parsed.start) throw new Error("El fin debe ser posterior al inicio (BR-017).");
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { error } = await supabase
     .from("profiles")
     .update({ activity_window_start: parsed.start, activity_window_end: parsed.end })
     .eq("user_id", user.id);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "time.window.update" });
   revalidatePath("/time");
@@ -99,9 +96,7 @@ export async function upsertOccupation(id: string | null, formData: FormData): P
   if (parsed.end <= parsed.start) return { ok: false, reason: "El fin debe ser posterior al inicio." };
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "No autenticado." };
 
   const payload = {
@@ -132,9 +127,7 @@ export async function upsertOccupation(id: string | null, formData: FormData): P
 /** FR-HAB-006, BR-026: eliminar la ocupación NO borra los hábitos ligados (la FK ya usa ON DELETE SET NULL). */
 export async function deleteOccupation(id: string): Promise<ActionResult> {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "No autenticado." };
 
   const { error } = await supabase.from("occupations").delete().eq("id", id);
@@ -161,18 +154,14 @@ const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 export async function assignTaskToDate(taskId: string, date: string) {
   const parsedDate = isoDate.parse(date);
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
-  const isToday = parsedDate === todayLocal(await getUserTimeZone());
+  const isToday = parsedDate === await todayForUser();
   const { error } = await supabase
     .from("tasks")
     .update(isToday ? { impact: true, due: parsedDate } : { due: parsedDate })
     .eq("id", taskId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "time.slot.assign", object: taskId, meta: { date: parsedDate } });
   revalidatePath("/time");
@@ -181,7 +170,7 @@ export async function assignTaskToDate(taskId: string, date: string) {
 
 /** Wrapper de compatibilidad: asigna al día de HOY (mismo contrato que antes de esta actualización). */
 export async function assignTaskToSlot(taskId: string) {
-  return assignTaskToDate(taskId, todayLocal(await getUserTimeZone()));
+  return assignTaskToDate(taskId, await todayForUser());
 }
 
 /**
@@ -190,14 +179,10 @@ export async function assignTaskToSlot(taskId: string) {
  * vista semanal. Limpia due e impact; no cambia el status de la tarea.
  */
 export async function unassignTaskDue(taskId: string) {
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { error } = await supabase.from("tasks").update({ due: null, impact: false }).eq("id", taskId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "time.slot.unassign", object: taskId });
   revalidatePath("/time");

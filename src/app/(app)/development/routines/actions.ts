@@ -4,8 +4,9 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { todayLocal } from "@/lib/data/dates";
-import { getUserTimeZone } from "@/lib/data/profile";
+import { getSessionUser, requireUser } from "@/lib/data/session";
+
+import { todayForUser } from "@/lib/data/profile";
 import { toggleHabitEffect, routineRunComplete, routineRunNeedsWrite } from "@/lib/domain/development/routines.ts";
 import { matchHabitForStep } from "@/lib/domain/development/templates.ts";
 // El catálogo se lee de `template_catalog` (0044) y no de un array del módulo:
@@ -32,11 +33,7 @@ export async function upsertRoutine(id: string | null, formData: FormData) {
     active: formData.get("active") === "on" || formData.get("active") === "true"
   });
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const payload = {
     name: parsed.name,
@@ -48,10 +45,10 @@ export async function upsertRoutine(id: string | null, formData: FormData) {
 
   if (id) {
     const { error } = await supabase.from("routines").update(payload).eq("id", id);
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(describeDbError(error));
   } else {
     const { error } = await supabase.from("routines").insert({ ...payload, user_id: user.id });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(describeDbError(error));
   }
   revalidatePath("/development/routines");
   revalidatePath("/development");
@@ -60,7 +57,7 @@ export async function upsertRoutine(id: string | null, formData: FormData) {
 export async function deleteRoutine(id: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("routines").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
   revalidatePath("/development/routines");
   revalidatePath("/development");
 }
@@ -116,7 +113,7 @@ async function sincronizarCierreDeRutina(
       { routine_id: routineId, local_date: today, completed_at: cerrada ? new Date().toISOString() : null },
       { onConflict: "routine_id,local_date" }
     );
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 }
 
 const habitSchema = z.object({
@@ -156,11 +153,7 @@ export async function upsertHabit(routineId: string, id: string | null, formData
     meal: formData.get("meal") ?? ""
   });
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const payload = {
     name: parsed.name,
@@ -176,15 +169,15 @@ export async function upsertHabit(routineId: string, id: string | null, formData
 
   if (id) {
     const { error } = await supabase.from("habits").update(payload).eq("id", id);
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(describeDbError(error));
   } else {
     const { error } = await supabase.from("habits").insert({ ...payload, user_id: user.id });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(describeDbError(error));
   }
 
   // La rutina acaba de cambiar de tamaño: el hábito nuevo la descierra, y el
   // editado puede haber sido el que faltaba.
-  await sincronizarCierreDeRutina(supabase, routineId, todayLocal(await getUserTimeZone()), { arranca: false });
+  await sincronizarCierreDeRutina(supabase, routineId, await todayForUser(), { arranca: false });
 
   revalidatePath("/development/routines");
   revalidatePath("/development");
@@ -200,10 +193,10 @@ export async function deleteHabit(id: string) {
   const { data: habit } = await supabase.from("habits").select("routine_id").eq("id", id).maybeSingle();
 
   const { error } = await supabase.from("habits").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   if (habit?.routine_id) {
-    await sincronizarCierreDeRutina(supabase, habit.routine_id, todayLocal(await getUserTimeZone()), { arranca: false });
+    await sincronizarCierreDeRutina(supabase, habit.routine_id, await todayForUser(), { arranca: false });
   }
 
   revalidatePath("/development/routines");
@@ -221,13 +214,9 @@ export async function deleteHabit(id: string) {
  * rutina, y quién decide si está cerrada es `routineRunComplete`.
  */
 export async function toggleHabitToday(routineId: string, habitId: string) {
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
-  const today = todayLocal(await getUserTimeZone());
+  const today = await todayForUser();
 
   const { data: log } = await supabase
     .from("habit_logs")
@@ -238,11 +227,11 @@ export async function toggleHabitToday(routineId: string, habitId: string) {
 
   if (toggleHabitEffect(Boolean(log)) === "delete") {
     const { error } = await supabase.from("habit_logs").delete().eq("id", log!.id);
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(describeDbError(error));
     await supabase.from("audit_log").insert({ user_id: user.id, action: "habit.uncomplete", object: habitId });
   } else {
     const { error } = await supabase.from("habit_logs").insert({ habit_id: habitId, log_date: today });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(describeDbError(error));
     await supabase.from("audit_log").insert({ user_id: user.id, action: "habit.complete", object: habitId });
   }
 
@@ -298,9 +287,7 @@ export async function createRoutineFromTemplate(
   if (!template) return { ok: false, reason: "Esa plantilla ya no existe." };
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "Tu sesión expiró. Vuelve a iniciar sesión." };
 
   const { data: routine, error } = await supabase

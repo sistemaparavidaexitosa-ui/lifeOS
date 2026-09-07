@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { isValidTimeZone } from "@/lib/domain/datetime.ts";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 
 const onboardingSchema = z.object({
   name: z.string().min(1, "El nombre es requerido"),
@@ -54,9 +55,7 @@ export async function completeOnboarding(_prev: OnboardingState, formData: FormD
   }
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) redirect("/login");
 
   const { error } = await supabase

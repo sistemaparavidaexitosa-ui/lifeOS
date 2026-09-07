@@ -5,6 +5,10 @@
 // horaria del proceso (UTC en Vercel) y corría el día del usuario. Ahora todo
 // call-site debe pasar la zona del perfil — la obtienes con getUserTimeZone()
 // de src/lib/data/profile.ts.
+//
+// Si lo único que quieres es «hoy» para quien mira la pantalla, no compongas
+// las dos a mano: usa `todayForUser()` de src/lib/data/profile.ts, que es
+// exactamente eso y deja un solo sitio donde D-016 puede romperse.
 export {
   DEFAULT_TIMEZONE,
   addDaysISO,

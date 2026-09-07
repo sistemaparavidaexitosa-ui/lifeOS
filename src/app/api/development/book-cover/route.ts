@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 import { isAllowedCoverUrl } from "@/lib/domain/development/book-lookup.ts";
 
 export const dynamic = "force-dynamic";
@@ -42,10 +42,7 @@ const MAX_BYTES = 5 * 1024 * 1024;
  * `if`, esto sería un proxy de imágenes abierto corriendo con nuestra IP.
  */
 export async function GET(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) {
     return NextResponse.json({ ok: false, reason: "No autenticado" }, { status: 401 });
   }

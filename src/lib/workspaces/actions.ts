@@ -16,6 +16,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 import { recordActivity } from "@/lib/data/activity";
 import { sendEmail, appUrl } from "@/lib/email/send";
 import { invitationEmail } from "@/lib/email/templates";
@@ -26,9 +27,7 @@ import { describeDbError, type ActionResult } from "@/lib/supabase/errors";
 export async function createWorkspace(name: string): Promise<ActionResult & { id?: string }> {
   if (!name.trim()) return { ok: false, reason: "Ponle un nombre al espacio." };
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "Tu sesión expiró. Vuelve a iniciar sesión." };
 
   const { data: profile } = await supabase.from("profiles").select("name").eq("user_id", user.id).single();
@@ -108,9 +107,7 @@ export async function inviteMember(formData: FormData): Promise<InviteResult> {
   const email = parsed.data.email.trim().toLowerCase();
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "Tu sesión expiró. Vuelve a iniciar sesión." };
 
   const { data: workspace, error: wsError } = await supabase.from("workspaces").select("name").eq("id", workspaceId).single();
@@ -184,9 +181,7 @@ export async function inviteMember(formData: FormData): Promise<InviteResult> {
 /** Cancela una invitación pendiente: el enlace deja de servir de inmediato. */
 export async function revokeInvitation(invitationId: string): Promise<ActionResult> {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "Tu sesión expiró. Vuelve a iniciar sesión." };
 
   // RLS (invitations_all_admin) ya limita esto a Owner/Admin del workspace.
@@ -200,9 +195,7 @@ export async function revokeInvitation(invitationId: string): Promise<ActionResu
 
 export async function removeMember(membershipId: string): Promise<ActionResult> {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "Tu sesión expiró. Vuelve a iniciar sesión." };
 
   const { error } = await supabase.from("memberships").delete().eq("id", membershipId);
@@ -228,9 +221,7 @@ export async function removeMember(membershipId: string): Promise<ActionResult> 
  */
 export async function deleteWorkspace(workspaceId: string): Promise<ActionResult> {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "Tu sesión expiró. Vuelve a iniciar sesión." };
 
   const { data: workspace, error: wsError } = await supabase
@@ -279,9 +270,7 @@ export async function moveProject(projectId: string, workspaceId: string): Promi
   if (!parsed.success) return { ok: false, reason: "Proyecto o espacio inválido." };
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "Tu sesión expiró. Vuelve a iniciar sesión." };
 
   const { error } = await supabase
@@ -327,9 +316,7 @@ export async function shareProjectWithGuest(formData: FormData): Promise<ActionR
   if (!parsed.success) return { ok: false, reason: "Proyecto o nivel de acceso inválido." };
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "Tu sesión expiró. Vuelve a iniciar sesión." };
 
   const { data: project, error: projectError } = await supabase
@@ -364,9 +351,7 @@ export async function unshareProjectFromGuests(projectId: string): Promise<Actio
   if (!parsed.success) return { ok: false, reason: "Proyecto inválido." };
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "Tu sesión expiró. Vuelve a iniciar sesión." };
 
   const { error } = await supabase.from("project_shares").delete().eq("project_id", parsed.data);

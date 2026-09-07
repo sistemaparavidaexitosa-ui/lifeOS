@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 import type { Json } from "@/types/database.types";
 import { isImpactAction, type ActionType, type TriggerType } from "@/lib/domain/automations/rules.ts";
+import { actionFailed } from "@/lib/supabase/errors";
 
 /**
  * Alta y baja de reglas. La ejecución vive en dispatch.ts; aquí solo se
@@ -46,9 +48,7 @@ export async function upsertAutomation(formData: FormData): Promise<AutomationRe
   if (!parsed.success) return { ok: false, reason: "Faltan datos o no son válidos." };
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "No autenticado" };
 
   const d = parsed.data;
@@ -82,7 +82,7 @@ export async function upsertAutomation(formData: FormData): Promise<AutomationRe
     authorized: isImpactAction(d.actionType as ActionType) ? d.authorized : true,
     enabled: true
   });
-  if (error) return { ok: false, reason: error.message };
+  if (error) return actionFailed(error);
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "automation.create", object: d.name });
   revalidatePath("/settings");
@@ -91,9 +91,7 @@ export async function upsertAutomation(formData: FormData): Promise<AutomationRe
 
 export async function toggleAutomation(id: string, enabled: boolean): Promise<void> {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return;
   await supabase.from("automations").update({ enabled }).eq("id", id).eq("user_id", user.id);
   revalidatePath("/settings");
@@ -101,9 +99,7 @@ export async function toggleAutomation(id: string, enabled: boolean): Promise<vo
 
 export async function deleteAutomation(id: string): Promise<void> {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return;
   await supabase.from("automations").delete().eq("id", id).eq("user_id", user.id);
   revalidatePath("/settings");

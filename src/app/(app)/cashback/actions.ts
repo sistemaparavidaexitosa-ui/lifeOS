@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/data/session";
 import { round2 } from "@/lib/domain/budget.ts";
+import { describeDbError } from "@/lib/supabase/errors";
 
 const cardSchema = z.object({
   name: z.string().min(1),
@@ -23,11 +25,7 @@ export async function upsertCashbackCard(id: string | null, formData: FormData) 
     eligibleCategories: formData.getAll("eligibleCategories")
   });
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const payload = {
     name: parsed.name,
@@ -39,11 +37,11 @@ export async function upsertCashbackCard(id: string | null, formData: FormData) 
 
   if (id) {
     const { error } = await supabase.from("cashback_cards").update(payload).eq("id", id);
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(describeDbError(error));
     await supabase.from("audit_log").insert({ user_id: user.id, action: "cashback.update", object: id });
   } else {
     const { error } = await supabase.from("cashback_cards").insert({ ...payload, user_id: user.id });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(describeDbError(error));
     await supabase.from("audit_log").insert({ user_id: user.id, action: "cashback.create" });
   }
   revalidatePath("/cashback");
@@ -52,21 +50,17 @@ export async function upsertCashbackCard(id: string | null, formData: FormData) 
 export async function deleteCashbackCard(id: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("cashback_cards").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
   revalidatePath("/cashback");
 }
 
 /** BR-025: redención manual, nunca automática. */
 export async function redeemCashback(cardId: string, amount: number) {
   if (amount <= 0) return;
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { error } = await supabase.from("cashback_redemptions").insert({ card_id: cardId, amount: round2(amount) });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "cashback.redeem", object: cardId, meta: { amount } });
   revalidatePath("/cashback");

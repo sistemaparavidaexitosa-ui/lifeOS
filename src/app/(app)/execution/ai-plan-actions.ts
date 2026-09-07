@@ -17,6 +17,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
 import { recordActivity } from "@/lib/data/activity";
 import { planProject } from "@/lib/ai/plan-project";
 import { selectionToTemplate, type AiPlanDraft } from "@/lib/domain/execution/ai-plan.ts";
@@ -57,9 +58,7 @@ export async function requestAiPlan(input: {
   }
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "Tu sesión expiró. Vuelve a iniciar sesión." };
 
   const existingOutline = parsed.data.projectId ? await readOutline(supabase, parsed.data.projectId) : undefined;
@@ -128,9 +127,7 @@ export async function applyAiPlan(
   if (!template) return { ok: false, reason: "No queda nada marcado que añadir al proyecto." };
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "Tu sesión expiró. Vuelve a iniciar sesión." };
 
   const result = await writeTemplate(supabase, id.data, template, user.id);

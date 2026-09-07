@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Card, Chip, EmptyState, Progress, Stat } from "@/components/ui";
-import { todayLocal, addDaysISO } from "@/lib/data/dates";
-import { getUserTimeZone } from "@/lib/data/profile";
+import { addDaysISO } from "@/lib/data/dates";
+import { todayForUser } from "@/lib/data/profile";
 import {
   dailyTargets,
   latestWeight,
@@ -40,7 +40,7 @@ export default async function NutritionPage({ searchParams }: { searchParams: Pr
   const user = await getSessionUser();
   if (!user) redirect("/login");
 
-  const hoy = todayLocal(await getUserTimeZone());
+  const hoy = await todayForUser();
   const { dia: diaPedido } = await searchParams;
   // El día se valida contra el calendario del usuario y no se confía en la URL:
   // una fecha futura o de hace diez años solo produce una pantalla vacía que

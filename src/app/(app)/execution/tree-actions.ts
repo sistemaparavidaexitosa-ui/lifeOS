@@ -13,8 +13,9 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/data/session";
 import { recordActivity } from "@/lib/data/activity";
+import { describeDbError } from "@/lib/supabase/errors";
 
 const setParentSchema = z.object({
   taskId: z.string().uuid(),
@@ -34,11 +35,7 @@ export async function setTaskParent(taskId: string, parentTaskId: string | null)
     throw new Error("Una tarea no puede ser su propio padre");
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: task } = await supabase.from("tasks").select("version, project_id").eq("id", parsed.taskId).single();
   if (!task) throw new Error("Tarea no encontrada");
@@ -59,7 +56,7 @@ export async function setTaskParent(taskId: string, parentTaskId: string | null)
       version: task.version + 1
     })
     .eq("id", parsed.taskId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({
     user_id: user.id,
@@ -79,11 +76,7 @@ const setGroupSchema = z.object({
 export async function setTaskGroup(taskId: string, groupId: string) {
   const parsed = setGroupSchema.parse({ taskId, groupId });
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: task } = await supabase.from("tasks").select("version").eq("id", parsed.taskId).single();
   if (!task) throw new Error("Tarea no encontrada");
@@ -92,7 +85,7 @@ export async function setTaskGroup(taskId: string, groupId: string) {
     .from("tasks")
     .update({ group_id: parsed.groupId, version: task.version + 1 })
     .eq("id", parsed.taskId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "task.group.move", object: parsed.taskId, meta: { groupId: parsed.groupId } });
   revalidatePath("/execution");
@@ -107,11 +100,7 @@ const createGroupSchema = z.object({
 export async function createTaskGroup(input: { projectId: string; name: string; color?: string }) {
   const parsed = createGroupSchema.parse(input);
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { count } = await supabase
     .from("task_groups")
@@ -123,7 +112,7 @@ export async function createTaskGroup(input: { projectId: string; name: string; 
     .insert({ project_id: parsed.projectId, name: parsed.name.trim(), color: parsed.color, position: count ?? 0 })
     .select("id, name, color, position")
     .single();
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "group.create", object: data.id, meta: { name: parsed.name } });
   await recordActivity({ projectId: parsed.projectId, type: "group.create", text: `creó el grupo "${data.name}"` });
@@ -139,18 +128,14 @@ const renameGroupSchema = z.object({
 export async function renameTaskGroup(groupId: string, name: string) {
   const parsed = renameGroupSchema.parse({ groupId, name });
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   // El nombre anterior y el proyecto se leen antes del update: «renombró el
   // grupo a X» sin decir cuál era obliga a adivinar qué cambió.
   const { data: antes } = await supabase.from("task_groups").select("name, project_id").eq("id", parsed.groupId).single();
 
   const { error } = await supabase.from("task_groups").update({ name: parsed.name.trim() }).eq("id", parsed.groupId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "group.rename", object: parsed.groupId });
   if (antes) {
@@ -180,11 +165,7 @@ export async function deleteTaskGroup(groupId: string, fallbackGroupId: string) 
     throw new Error("El grupo de destino debe ser diferente al que se elimina");
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: doomed } = await supabase.from("task_groups").select("name, project_id").eq("id", parsed.groupId).single();
 

@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/data/session";
 import { round2 } from "@/lib/domain/budget.ts";
+import { describeDbError } from "@/lib/supabase/errors";
 
 const investmentSchema = z.object({
   kind: z.enum(["fija", "variable"]),
@@ -31,11 +33,7 @@ export async function upsertInvestment(id: string | null, formData: FormData) {
     familyMemberId: formData.get("familyMemberId") ?? ""
   });
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const payload = {
     kind: parsed.kind,
@@ -52,10 +50,10 @@ export async function upsertInvestment(id: string | null, formData: FormData) {
 
   if (id) {
     const { error } = await supabase.from("investments").update(payload).eq("id", id);
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(describeDbError(error));
   } else {
     const { error } = await supabase.from("investments").insert({ ...payload, user_id: user.id, currency: "MXN" });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(describeDbError(error));
   }
   revalidatePath("/investments");
 }
@@ -63,6 +61,6 @@ export async function upsertInvestment(id: string | null, formData: FormData) {
 export async function deleteInvestment(id: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("investments").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
   revalidatePath("/investments");
 }

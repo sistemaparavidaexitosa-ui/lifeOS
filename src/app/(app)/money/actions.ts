@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/data/session";
 import { round2 } from "@/lib/domain/budget.ts";
+import { describeDbError } from "@/lib/supabase/errors";
 
 const accountSchema = z.object({
   name: z.string().min(1),
@@ -20,11 +22,7 @@ export async function createAccount(formData: FormData) {
     opening: formData.get("opening") ?? 0
   });
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { error } = await supabase.from("accounts").insert({
     user_id: user.id,
@@ -33,7 +31,7 @@ export async function createAccount(formData: FormData) {
     currency: parsed.currency,
     opening_balance: round2(parsed.opening)
   });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "account.create" });
   revalidatePath("/money");
@@ -69,11 +67,7 @@ export async function postTransaction(formData: FormData) {
     debtId: formData.get("debtId") ?? ""
   });
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const effectiveAt = parsed.effectiveAt ?? new Date().toISOString().slice(0, 10);
   const amountMinor = round2(parsed.amount);
@@ -139,18 +133,14 @@ export async function postTransaction(formData: FormData) {
 export async function reconcileEntry(entryId: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("journal_entries").update({ status: "Reconciled", reconciled: true }).eq("id", entryId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
   revalidatePath("/money");
   revalidatePath("/money/budget");
 }
 
 /** BR: un movimiento publicado no se elimina, se reversa con un asiento inverso. */
 export async function reverseEntry(entryId: string) {
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: entry } = await supabase.from("journal_entries").select("*, journal_lines(*)").eq("id", entryId).single();
   if (!entry) throw new Error("Movimiento no encontrado");

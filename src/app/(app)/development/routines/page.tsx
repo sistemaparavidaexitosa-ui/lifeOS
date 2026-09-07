@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Card, Chip, EmptyState, Progress } from "@/components/ui";
-import { todayLocal, addDaysISO } from "@/lib/data/dates";
-import { getUserTimeZone } from "@/lib/data/profile";
+import { addDaysISO } from "@/lib/data/dates";
+import { todayForUser } from "@/lib/data/profile";
 import {
   routineDueToday,
   routineProgress,
@@ -26,7 +26,7 @@ export default async function RoutinesPage() {
   if (!user) redirect("/login");
 
   // "Hoy" se calcula ANTES de consultar: la ventana de adherencia depende de él.
-  const today = todayLocal(await getUserTimeZone());
+  const today = await todayForUser();
   const from = addDaysISO(today, -29);
   // Los registros se piden por ventana y no enteros: `max_rows = 1000` en
   // config.toml trunca cualquier consulta más larga SIN avisar y en un orden

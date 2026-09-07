@@ -36,3 +36,25 @@ export const getSessionUser = cache(async (): Promise<User | null> => {
     return null;
   }
 });
+
+/**
+ * El cliente y el usuario, para las Actions que EXIGEN sesión.
+ *
+ * Vivía como función local en execution/board-actions.ts y se había copiado
+ * como tres líneas sueltas en 66 sitios más. Es la misma pareja de siempre —
+ * un cliente que respeta RLS y el usuario ya deduplicado por `getSessionUser`.
+ *
+ * LANZA a propósito, y por eso NO lo usan todas las Actions. Conviven dos
+ * contratos en el código y la diferencia es real: las Actions que devuelven
+ * `{ ok: false, reason }` pintan el motivo en pantalla (es el contrato que
+ * defiende `lib/supabase/errors.ts`), mientras que estas otras tratan la
+ * ausencia de sesión como lo que es —el middleware ya debería haber redirigido,
+ * llegar aquí sin usuario es un imposible— y no tienen dónde pintar nada.
+ * Unificarlos sería una decisión de producto, no un refactor.
+ */
+export async function requireUser() {
+  const supabase = await createClient();
+  const user = await getSessionUser();
+  if (!user) throw new Error("No autenticado");
+  return { supabase, user };
+}

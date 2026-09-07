@@ -2,8 +2,8 @@
 import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
-import { todayLocal, addDaysISO } from "@/lib/data/dates";
-import { getUserTimeZone } from "@/lib/data/profile";
+import { addDaysISO } from "@/lib/data/dates";
+import { todayForUser } from "@/lib/data/profile";
 import { getPersonalWorkspaceIds } from "@/lib/data/workspaces";
 import type { SourceSnapshot } from "@/lib/domain/development/goals.ts";
 import {
@@ -56,7 +56,7 @@ export const loadSourceSnapshot = cache(async (): Promise<SourceSnapshot> => {
       bodyWeightKg: {}
     };
 
-  const today = todayLocal(await getUserTimeZone());
+  const today = await todayForUser();
   const from = addDaysISO(today, -29); // ventana de 30 días para hábitos
 
   const [
@@ -210,7 +210,7 @@ export const loadReadingFocus = cache(async (): Promise<ReadingFocus | null> => 
   const user = await getSessionUser();
   if (!user) return null;
 
-  const today = todayLocal(await getUserTimeZone());
+  const today = await todayForUser();
 
   // Los terminados no se consultan: no pueden ser el foco y solo engordarían
   // una respuesta que se pide en cada carga de Home.

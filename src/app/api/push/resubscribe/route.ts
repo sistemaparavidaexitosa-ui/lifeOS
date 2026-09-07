@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/data/session";
+import { describeDbError } from "@/lib/supabase/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -13,9 +15,7 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(request: Request) {
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return NextResponse.json({ ok: false, reason: "No autenticado" }, { status: 401 });
 
   let cuerpo: { anterior?: string; nueva?: { endpoint?: string; keys?: { p256dh?: string; auth?: string } } };
@@ -48,6 +48,6 @@ export async function POST(request: Request) {
     { onConflict: "endpoint" }
   );
 
-  if (error) return NextResponse.json({ ok: false, reason: error.message }, { status: 500 });
+  if (error) return NextResponse.json({ ok: false, reason: describeDbError(error) }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

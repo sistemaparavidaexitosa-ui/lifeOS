@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/data/session";
 import { round2 } from "@/lib/domain/budget.ts";
+import { describeDbError } from "@/lib/supabase/errors";
 
 const goalSchema = z.object({
   name: z.string().min(1),
@@ -27,11 +29,7 @@ export async function upsertFinancialGoal(id: string | null, formData: FormData)
     familyMemberId: formData.get("familyMemberId") ?? ""
   });
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const payload = {
     name: parsed.name,
@@ -45,10 +43,10 @@ export async function upsertFinancialGoal(id: string | null, formData: FormData)
 
   if (id) {
     const { error } = await supabase.from("financial_goals").update(payload).eq("id", id);
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(describeDbError(error));
   } else {
     const { error } = await supabase.from("financial_goals").insert({ ...payload, user_id: user.id });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(describeDbError(error));
   }
   revalidatePath("/goals");
 }
@@ -56,6 +54,6 @@ export async function upsertFinancialGoal(id: string | null, formData: FormData)
 export async function deleteFinancialGoal(id: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("financial_goals").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
   revalidatePath("/goals");
 }

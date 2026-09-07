@@ -19,7 +19,8 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/data/session";
+import { describeDbError } from "@/lib/supabase/errors";
 
 export interface LogEntry {
   id: string;
@@ -47,11 +48,7 @@ export interface KnowledgeItem {
 export async function getProjectLogAndKnowledge(
   projectId: string
 ): Promise<{ logbook: LogEntry[]; knowledge: KnowledgeItem[] }> {
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase } = await requireUser();
 
   const [{ data: logRows }, { data: knowledgeRows }] = await Promise.all([
     supabase
@@ -82,11 +79,7 @@ const logSchema = z.object({
 export async function addLogEntry(projectId: string, type: string, text: string) {
   const parsed = logSchema.parse({ projectId, type, text });
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { error } = await supabase.from("logbook").insert({
     user_id: user.id,
@@ -94,21 +87,17 @@ export async function addLogEntry(projectId: string, type: string, text: string)
     type: parsed.type,
     text: parsed.text.trim()
   });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "logbook.add", object: parsed.projectId, meta: { type: parsed.type } });
   revalidatePath("/execution");
 }
 
 export async function deleteLogEntry(id: string) {
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { error } = await supabase.from("logbook").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "logbook.delete", object: id });
   revalidatePath("/execution");
@@ -126,11 +115,7 @@ const knowledgeSchema = z.object({
 export async function addKnowledgeItem(projectId: string, title: string, type: string, url: string, note: string) {
   const parsed = knowledgeSchema.parse({ projectId, title, type, url, note });
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { error } = await supabase.from("knowledge_items").insert({
     user_id: user.id,
@@ -141,7 +126,7 @@ export async function addKnowledgeItem(projectId: string, title: string, type: s
     note: parsed.note.trim(),
     version: 1
   });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "knowledge.add", object: parsed.projectId, meta: { type: parsed.type } });
   revalidatePath("/execution");
@@ -149,11 +134,7 @@ export async function addKnowledgeItem(projectId: string, title: string, type: s
 
 /** FR-EXE-008: versión — cada edición incrementa `version` en vez de sobrescribir silenciosamente. */
 export async function updateKnowledgeItem(id: string, title: string, url: string, note: string) {
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: item } = await supabase.from("knowledge_items").select("version").eq("id", id).single();
   if (!item) throw new Error("Ítem no encontrado");
@@ -162,21 +143,17 @@ export async function updateKnowledgeItem(id: string, title: string, url: string
     .from("knowledge_items")
     .update({ title: title.trim(), url: url.trim(), note: note.trim(), version: item.version + 1 })
     .eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "knowledge.update", object: id });
   revalidatePath("/execution");
 }
 
 export async function deleteKnowledgeItem(id: string) {
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { error } = await supabase.from("knowledge_items").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "knowledge.delete", object: id });
   revalidatePath("/execution");

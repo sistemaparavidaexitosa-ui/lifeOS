@@ -6,8 +6,8 @@ import { money, money0, fdate } from "@/lib/format";
 import { accountBalance, periodStats } from "@/lib/domain/money.ts";
 import { budgetQuincenaRow } from "@/lib/domain/budget.ts";
 import { quincenaFor } from "@/lib/domain/quincena.ts";
-import { todayLocal } from "@/lib/data/dates";
-import { getUserTimeZone } from "@/lib/data/profile";
+
+import { getUserTimeZone, todayForUser } from "@/lib/data/profile";
 import { todayInTimeZone } from "@/lib/domain/datetime.ts";
 import NewTransactionForm from "./NewTransactionForm";
 import NewAccountForm from "./NewAccountForm";
@@ -20,7 +20,7 @@ export default async function MoneyPage() {
   const user = await getSessionUser();
   if (!user) redirect("/login");
 
-  const t0 = todayLocal(await getUserTimeZone());
+  const t0 = await todayForUser();
   // D-076: el periodo de Money OS es la QUINCENA en curso (Q1 = 1-15, Q2 = 16-fin
   // de mes), no una ventana rodante de 15 días. Antes esta página y /money/budget
   // medían periodos distintos y no cuadraban entre sí.

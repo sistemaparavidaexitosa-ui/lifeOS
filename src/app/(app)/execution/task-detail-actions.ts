@@ -8,12 +8,13 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { parseMentions, type RosterMember } from "@/lib/domain/execution/mentions.ts";
 import { dispatchAutomations } from "@/lib/automations/dispatch";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/data/session";
 import { recordActivity } from "@/lib/data/activity";
 import { notifyAssignments, notifyMentions } from "@/lib/push/triggers";
-import { todayLocal } from "@/lib/data/dates";
-import { getUserTimeZone } from "@/lib/data/profile";
+
+import { todayForUser } from "@/lib/data/profile";
 import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
+import { describeDbError } from "@/lib/supabase/errors";
 
 export interface TaskDetailTask {
   id: string;
@@ -85,11 +86,7 @@ export interface TaskDetailResult {
 }
 
 export async function getTaskDetail(taskId: string): Promise<TaskDetailResult> {
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: task, error: taskErr } = await supabase.from("tasks").select("*").eq("id", taskId).single();
   if (taskErr || !task) throw new Error("Tarea no encontrada");
@@ -200,11 +197,7 @@ export async function updateTaskDetails(formData: FormData) {
     urgent: formData.get("urgent") === "on"
   });
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: task, error: taskErr } = await supabase.from("tasks").select("version").eq("id", parsed.taskId).single();
   if (taskErr || !task) throw new Error("Tarea no encontrada");
@@ -221,7 +214,7 @@ export async function updateTaskDetails(formData: FormData) {
       version: task.version + 1
     })
     .eq("id", parsed.taskId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "task.update", object: parsed.taskId });
   revalidatePath("/execution");
@@ -242,11 +235,7 @@ const updateDescriptionSchema = z.object({
 export async function updateTaskDescription(taskId: string, description: string) {
   const parsed = updateDescriptionSchema.parse({ taskId, description });
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: task } = await supabase.from("tasks").select("version").eq("id", parsed.taskId).single();
   if (!task) throw new Error("Tarea no encontrada");
@@ -255,18 +244,14 @@ export async function updateTaskDescription(taskId: string, description: string)
     .from("tasks")
     .update({ description: parsed.description, version: task.version + 1 })
     .eq("id", parsed.taskId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "task.description.update", object: parsed.taskId });
   revalidatePath("/execution");
 }
 
 export async function setTaskAssignees(taskId: string, userNames: string[]) {
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: task } = await supabase.from("tasks").select("id, project_id, title").eq("id", taskId).single();
   if (!task) throw new Error("Tarea no encontrada");
@@ -339,7 +324,7 @@ export async function setTaskAssignees(taskId: string, userNames: string[]) {
       actorId: user.id,
       actorName: propio?.name ?? "Alguien",
       nuevosUserIds,
-      todayISO: todayLocal(await getUserTimeZone())
+      todayISO: await todayForUser()
     });
   }
 
@@ -347,18 +332,14 @@ export async function setTaskAssignees(taskId: string, userNames: string[]) {
 }
 
 export async function setTaskDeps(taskId: string, depIds: string[]) {
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: task } = await supabase.from("tasks").select("version").eq("id", taskId).single();
   if (!task) throw new Error("Tarea no encontrada");
 
   const cleanDeps = Array.from(new Set(depIds.filter((id) => id !== taskId)));
   const { error } = await supabase.from("tasks").update({ deps: cleanDeps, version: task.version + 1 }).eq("id", taskId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "task.deps", object: taskId, meta: { deps: cleanDeps } });
   revalidatePath("/execution");
@@ -368,11 +349,7 @@ export async function addTaskComment(taskId: string, body: string) {
   const trimmed = body.trim();
   if (!trimmed) return;
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: task } = await supabase.from("tasks").select("project_id, title").eq("id", taskId).single();
   if (!task) throw new Error("Tarea no encontrada");
@@ -410,7 +387,7 @@ export async function addTaskComment(taskId: string, body: string) {
     // (`mention:<comment_id>`): sin él, un reintento sonaría dos veces.
     .select("id")
     .single();
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "comment.add", object: taskId, meta: { mentions } });
 

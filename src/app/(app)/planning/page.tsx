@@ -2,8 +2,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Card, Chip, Progress, EmptyState } from "@/components/ui";
 import { fdate } from "@/lib/format";
-import { todayLocal } from "@/lib/data/dates";
-import { getUserTimeZone } from "@/lib/data/profile";
+
+import { todayForUser } from "@/lib/data/profile";
 import DailyPlanForm from "./DailyPlanForm";
 import CloseoutPanel from "./CloseoutPanel";
 import WeeklyReviewPanel from "./WeeklyReviewPanel";
@@ -14,7 +14,7 @@ export default async function PlanningPage() {
   const user = await getSessionUser();
   if (!user) redirect("/login");
 
-  const t0 = todayLocal(await getUserTimeZone());
+  const t0 = await todayForUser();
   const [{ data: plan }, { data: projects }, { data: tasks }, { data: reviews }] = await Promise.all([
     supabase.from("daily_plans").select("*").eq("user_id", user.id).eq("local_date", t0).maybeSingle(),
     supabase.from("projects").select("id, title").eq("status", "Active"),

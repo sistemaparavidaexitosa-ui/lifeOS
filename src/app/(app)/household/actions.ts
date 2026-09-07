@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/data/session";
+import { describeDbError } from "@/lib/supabase/errors";
 
 const memberSchema = z.object({
   name: z.string().min(1),
@@ -18,21 +19,17 @@ export async function upsertFamilyMember(id: string | null, formData: FormData) 
     memberType: formData.get("memberType")
   });
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const payload = { name: parsed.name, relationship: parsed.relationship, member_type: parsed.memberType };
 
   if (id) {
     const { error } = await supabase.from("family_members").update(payload).eq("id", id);
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(describeDbError(error));
     await supabase.from("audit_log").insert({ user_id: user.id, action: "household.member.update", object: id });
   } else {
     const { error } = await supabase.from("family_members").insert({ ...payload, user_id: user.id });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(describeDbError(error));
     await supabase.from("audit_log").insert({ user_id: user.id, action: "household.member.create" });
   }
   revalidatePath("/household");
@@ -43,14 +40,10 @@ export async function upsertFamilyMember(id: string | null, formData: FormData) 
  * sin atribuir (ON DELETE SET NULL en las FK), consistente con BR-021.
  */
 export async function deleteFamilyMember(id: string) {
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { error } = await supabase.from("family_members").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "household.member.delete", object: id });
   revalidatePath("/household");

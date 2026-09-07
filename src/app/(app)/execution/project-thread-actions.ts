@@ -21,11 +21,12 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/data/session";
 import { recordActivity } from "@/lib/data/activity";
 import { notifyMentions } from "@/lib/push/triggers";
 import { parseMentions, type RosterMember } from "@/lib/domain/execution/mentions.ts";
 import type { ThreadCommentLike } from "@/lib/domain/execution/thread.ts";
+import { describeDbError } from "@/lib/supabase/errors";
 
 export interface ProjectThreadComment extends ThreadCommentLike {
   mentions: string[];
@@ -48,11 +49,7 @@ export interface ProjectThreadResult {
 export async function getProjectThread(projectId: string): Promise<ProjectThreadResult> {
   const id = z.string().uuid().parse(projectId);
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: project, error: projectErr } = await supabase
     .from("projects")
@@ -119,11 +116,7 @@ export async function addProjectComment(projectId: string, body: string) {
   const trimmed = body.trim();
   if (!trimmed) return;
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: project } = await supabase.from("projects").select("id, title, workspace_id").eq("id", id).single();
   if (!project) throw new Error("Proyecto no encontrado");
@@ -155,7 +148,7 @@ export async function addProjectComment(projectId: string, body: string) {
     })
     .select("id")
     .single();
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "comment.add", object: id, meta: { mentions } });
 

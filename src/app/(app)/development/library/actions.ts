@@ -3,8 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { todayLocal, weekStartISO } from "@/lib/data/dates";
-import { getUserTimeZone } from "@/lib/data/profile";
+import { getSessionUser } from "@/lib/data/session";
+import { weekStartISO } from "@/lib/data/dates";
+import { todayForUser } from "@/lib/data/profile";
 import { isAllowedCoverUrl, BOOK_CATEGORIES, type BookCategory } from "@/lib/domain/development/book-lookup.ts";
 import { planWeeks, MAX_PLAN_WEEKS } from "@/lib/domain/development/reading-plan.ts";
 import { actionFailed, actionOk, type ActionResult } from "@/lib/supabase/errors";
@@ -82,12 +83,10 @@ export async function upsertBook(id: string | null, formData: FormData): Promise
   }
 
   const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { ok: false, reason: "No autenticado." };
 
-  const t0 = todayLocal(await getUserTimeZone());
+  const t0 = await todayForUser();
   const book = parsed.data;
   const payload: BookUpsertPayload = {
     title: book.title,
@@ -175,7 +174,7 @@ export async function updateBookPage(bookId: string, page: number): Promise<Acti
     return { ok: false, reason: `Ese libro tiene ${libro.total_pages} páginas.` };
   }
 
-  const t0 = todayLocal(await getUserTimeZone());
+  const t0 = await todayForUser();
   const { error } = await supabase
     .from("books")
     .update({ current_page: page, updated_at: new Date().toISOString() })

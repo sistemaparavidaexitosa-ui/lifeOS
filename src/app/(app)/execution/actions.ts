@@ -2,6 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/data/session";
 import { getPersonalWorkspace } from "@/lib/data/workspaces";
 import { recordActivity } from "@/lib/data/activity";
 import { evaluateTransition } from "@/lib/domain/task-state.ts";
@@ -12,6 +13,7 @@ import { templateFromPayload } from "@/lib/domain/execution/ai-plan.ts";
 import { writeTemplate } from "./template-actions";
 import { suggestProjectSequence } from "@/lib/domain/project-sequence.ts";
 import type { TaskStatus } from "@/lib/domain/types.ts";
+import { describeDbError } from "@/lib/supabase/errors";
 
 const projectSchema = z.object({
   title: z.string().min(1),
@@ -62,11 +64,7 @@ export async function createProject(formData: FormData) {
     aiPlan: formData.get("aiPlan") || null
   });
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const workspaceId = parsed.workspaceId ?? (await getPersonalWorkspace())?.id;
   if (!workspaceId) {
@@ -90,7 +88,7 @@ export async function createProject(formData: FormData) {
     })
     .select("id")
     .single();
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   // El proyecto nace CON algo dentro. Sin esto el tablero recién creado salía
   // vacío del todo: "+ Agregar tarea" vive dentro de un grupo, así que no había
@@ -157,11 +155,7 @@ export async function createProject(formData: FormData) {
 export async function deleteProject(projectId: string) {
   const id = z.string().uuid().parse(projectId);
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   // El título y el espacio se leen ANTES de borrar: después no hay fila de la
   // que sacarlos, y «borró el proyecto» sin decir cuál no informa de nada.
@@ -176,7 +170,7 @@ export async function deleteProject(projectId: string) {
   await supabase.from("comments").delete().eq("subject_type", "project").eq("subject_id", id);
 
   const { error } = await supabase.from("projects").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "project.delete", object: id });
   // Sin `projectId`: la fila que enlazaría ya no existe y la clave foránea la
@@ -254,11 +248,7 @@ export async function createTask(formData: FormData): Promise<CreatedTaskRow> {
     groupId: formData.get("groupId") || null
   });
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   let resolvedGroupId: string | null = parsed.groupId ?? null;
 
@@ -312,7 +302,7 @@ export async function createTask(formData: FormData): Promise<CreatedTaskRow> {
     })
     .select()
     .single();
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("task_history").insert({ task_id: task.id, from_state: null, to_state: "Pending" });
   await supabase
@@ -346,17 +336,13 @@ export async function renameTask(taskId: string, title: string) {
   const trimmed = title.trim();
   if (!trimmed) return;
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: task } = await supabase.from("tasks").select("version").eq("id", taskId).single();
   if (!task) throw new Error("Tarea no encontrada");
 
   const { error } = await supabase.from("tasks").update({ title: trimmed, version: task.version + 1 }).eq("id", taskId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "task.rename", object: taskId });
   revalidatePath("/execution");
@@ -364,17 +350,13 @@ export async function renameTask(taskId: string, title: string) {
 
 /** Columna "Timeline" (migración 0018): actualiza el rango start_date/due de una tarea. */
 export async function updateTaskDates(taskId: string, startDate: string | null, due: string | null) {
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: task } = await supabase.from("tasks").select("version").eq("id", taskId).single();
   if (!task) throw new Error("Tarea no encontrada");
 
   const { error } = await supabase.from("tasks").update({ start_date: startDate, due, version: task.version + 1 }).eq("id", taskId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "task.dates", object: taskId, meta: { startDate, due } });
   revalidatePath("/execution");
@@ -383,11 +365,7 @@ export async function updateTaskDates(taskId: string, startDate: string | null, 
 
 /** FR-EXE-003/004/005: aplica la máquina de estados con validación real de dependencias. */
 export async function setTaskStatus(taskId: string, to: TaskStatus) {
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: task, error: taskErr } = await supabase.from("tasks").select("*").eq("id", taskId).single();
   if (taskErr || !task) throw new Error("Tarea no encontrada");
@@ -405,7 +383,7 @@ export async function setTaskStatus(taskId: string, to: TaskStatus) {
     .from("tasks")
     .update({ status: to, completed_at: to === "Completed" ? new Date().toISOString() : null, version: task.version + 1 })
     .eq("id", taskId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("task_history").insert({ task_id: taskId, from_state: task.status, to_state: to });
   await supabase.from("audit_log").insert({ user_id: user.id, action: "task.status", object: taskId, meta: { to } });
@@ -441,28 +419,20 @@ export async function requestProjectSequence(projectId: string) {
 
 /** BR-022, FR-INT-008: solo se llama tras la confirmación EXPLÍCITA del usuario. */
 export async function applyProjectSequence(projectId: string, order: string[]) {
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "project.sequence.apply", object: projectId, meta: { order } });
   revalidatePath("/execution");
 }
 export async function deleteTask(taskId: string) {
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   // Igual que en deleteProject: el título se lee antes, o el evento se queda
   // sin nombre y nadie sabe qué desapareció.
   const { data: doomed } = await supabase.from("tasks").select("title, project_id").eq("id", taskId).single();
 
   const { error } = await supabase.from("tasks").delete().eq("id", taskId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "task.delete", object: taskId });
   if (doomed) {
@@ -508,11 +478,7 @@ export type ProjectPatch = Omit<z.infer<typeof patchProjectSchema>, "projectId">
 export async function patchProject(projectId: string, patch: ProjectPatch) {
   const parsed = patchProjectSchema.parse({ projectId, ...patch });
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: project } = await supabase.from("projects").select("version, title").eq("id", parsed.projectId).single();
   if (!project) throw new Error("Proyecto no encontrado");
@@ -523,7 +489,7 @@ export async function patchProject(projectId: string, patch: ProjectPatch) {
   if (parsed.targetDate !== undefined) update.target_date = parsed.targetDate;
 
   const { error } = await supabase.from("projects").update(update).eq("id", parsed.projectId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "project.update", object: parsed.projectId });
   // Solo lo que de verdad viajó: aquí llega un campo suelto desde una fila de
@@ -554,11 +520,7 @@ export async function updateProject(formData: FormData) {
     targetDate: formData.get("targetDate") || null
   });
 
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
+  const { supabase, user } = await requireUser();
 
   const { data: project } = await supabase
     .from("projects")
@@ -578,7 +540,7 @@ export async function updateProject(formData: FormData) {
       version: project.version + 1
     })
     .eq("id", parsed.projectId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(describeDbError(error));
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "project.update", object: parsed.projectId });
   // El formulario reenvía los cinco campos siempre, así que «editó» a secas
