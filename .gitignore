@@ -42,3 +42,11 @@ coverage/
 # como submódulos sin URL y un clon del repositorio se queda con directorios
 # vacíos que no sabe de dónde sacar.
 .claude/
+
+# graphify
+# El grafo se reconstruye desde el código con `/graphify . --update`, así que
+# graph.json (3,4 MB) y graph.html (2,7 MB) son artefactos derivados: en el
+# historial pesarían de nuevo, enteros, en cada reconstrucción. Se versiona
+# solo el reporte, que es texto y sí se lee en una revisión.
+/graphify-out/*
+!/graphify-out/GRAPH_REPORT.md
