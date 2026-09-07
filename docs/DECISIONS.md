@@ -1982,6 +1982,64 @@ de lo que se planeó, no de lo que quedó._
   fila en NULL: es preferible que esa tarea no avise a que avise a la persona
   equivocada.
 
+- **D-109 La IA deja de seudonimizar, y la lista blanca crece de 11 tablas a 39**
+  (migración `0053`). Invierte D-027/§4.2. El argumento a favor de los alias
+  seguía siendo bueno para un motor que analiza dinero sin que nadie se lo pida;
+  dejó de serlo para un coach al que se le pregunta «¿cómo va mi meta de Salud?»
+  y contesta hablando de «Cuenta #2». El dueño del sistema pidió acceso total con
+  la consecuencia delante: nombres reales de cuentas, personas, metas y notas
+  viajan a Gemini. **Lo que NO cambia** es lo que hace auditable el resto: sigue
+  siendo lista BLANCA (`profiles`, `audit_log`, `consents`, `ai_chat_messages`,
+  `push_subscriptions`, `memberships` y `template_catalog` no están, y no hace
+  falta acordarse de excluirlas), sigue mandando `profiles.ai_domains`, y sigue
+  consultándose con la llave de SESIÓN y la RLS puesta. La excepción que se
+  mantiene es `facts/activity.ts`: los nombres de terceros no salen, porque esa
+  decisión fue sobre los datos del dueño y no sobre los de sus compañeros.
+
+- **D-110 `activity` entra en `allowedDomains('global')`**. La exclusión de 0027
+  («global es tu vida, aquello es la semana de tu equipo») era correcta para el
+  motor y equivocada para el chat: al preguntar «¿qué pasó esta semana?», lo que
+  alguien hizo con su equipo ES parte de su semana. No abre ninguna fila nueva
+  —la RLS decide igual—; deja de esconder las que ya podía leer.
+
+- **D-111 La búsqueda en internet es una llamada APARTE, no un tool más**. El
+  grounding de Google no se puede combinar con `responseMimeType: application/json`
+  + `responseSchema`, que es lo que manda toda petición de `gemini-provider.ts`.
+  Meterlo en el mismo `tools` habría tumbado la petición entera con un 400 de
+  forma. `generateGroundedText()` hace su propia llamada sin esquema, fijada a
+  `gemini-3.6-flash` porque el primero de la cadena no soporta grounding, y su
+  texto vuelve al bucle como resultado de `buscar_en_internet`. La consulta que
+  sale no lleva datos del usuario y se registra textualmente en `audit_log`.
+
+- **D-112 El coach corre sin sesión, y por eso NO tiene `consultar`**. El mensaje
+  diario lo dispara pg_cron contra `/api/push/dispatch`, con el cliente de
+  servicio y por tanto **sin RLS**. Todo lo que el resto del sistema da por hecho
+  («no hace falta filtrar, las políticas ya lo hacen») deja de ser cierto ahí:
+  una consulta sin `user_id` no devolvería cero filas, devolvería las de todo el
+  mundo. `src/lib/coach/facts.ts` filtra explícitamente y `loadFacts` acepta las
+  tres piezas que no puede resolver sin sesión (`myTasks`, `sources`,
+  `personalWorkspaceIds`) en vez de tener un segundo cargador de hechos
+  condenado a divergir. Y la herramienta que compone consultas a partir de lo que
+  el modelo pida se queda fuera del coach: ahí no se podría garantizar el filtro.
+  El chat, que sí tiene sesión, la conserva entera.
+
+- **D-113 El coach propone; el botón llama a la acción que ya existe**. Ningún
+  camino de escritura nuevo, mismo criterio que D-075 y `createTaskFromChat`:
+  `quickAddTask`, `upsertOccupation`, `upsertRoutine` y `upsertPersonalGoal`.
+  `estructura` es la única que no crea nada — lleva al proyecto, porque
+  `applyAiPlan` recibe una selección que la persona marca, y aplicarlo a ciegas
+  desde la barra lateral saltaría justo la revisión que ese flujo existe para
+  tener.
+
+- **D-114 `notification_prefs` gana la mitad que le faltaba**. Existía desde 0049
+  con esquema, RLS y un defecto sensato, y **nadie la escribía**: el único código
+  que la tocaba era el despachador, que la lee. Por eso «las configuraciones no
+  se guardan» era una observación correcta y no una impresión. 0053 añade la
+  Server Action (`upsert` con `onConflict: user_id`, porque un `update` sobre una
+  fila que no existe no falla: no hace nada) y su formulario, que contesta si
+  guardó. El rango de actividad pasa a editarse también desde /settings reusando
+  `updateActivityWindow`.
+
 ## Guardrails aplicados literalmente del prompt de build
 
 Cada guardrail marcado 🔴 en el prompt tiene un archivo/línea concreto que lo

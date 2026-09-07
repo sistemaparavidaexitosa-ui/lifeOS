@@ -47,6 +47,9 @@ const SCOPE_RELEVANCE: Record<string, MemoryScope[]> = {
   // La memoria relevante para nutrición es la de salud y las restricciones que
   // el usuario haya declarado: «es celíaco» cambia toda recomendación de comida.
   nutrition: ["health", "habit", "goal", "decision", "preference"],
+  // Desarrollo personal es donde viven las metas: su memoria propia es la de
+  // objetivos y decisiones de fondo, más las preferencias que las condicionan.
+  growth: ["goal", "decision", "preference", "project", "health"],
   global: ["goal", "project", "finance", "decision", "preference", "time", "habit", "health"]
 };
 

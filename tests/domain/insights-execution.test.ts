@@ -192,3 +192,88 @@ test("executionFacts: los hechos salen ordenados de más a menos anómalo", () =
     assert.ok((facts[i - 1]?.weight ?? 0) >= (facts[i]?.weight ?? 0));
   }
 });
+
+// --- Proyectos sin estructura (0053) -----------------------------------------
+// Lo que un coach diría en voz alta y el motor no sabía mirar: hasta aquí este
+// extractor solo detectaba atascos y exceso de trabajo en curso, nunca la
+// ausencia de un plan.
+
+test("executionFacts: un proyecto activo sin ni una tarea es un título, no un plan", () => {
+  const facts = executionFacts(
+    { projects: [{ id: "p1", title: "Lanzar el podcast", status: "Active" }], tasks: [] },
+    "2026-09-06"
+  );
+  const f = facts.find((x) => x.id === "execution.sin-estructura.p1");
+  assert.ok(f);
+  assert.match(f.label, /no tiene ni una sola tarea/);
+});
+
+test("executionFacts: un proyecto que NO está activo puede estar vacío sin que se avise", () => {
+  for (const status of ["Draft", "OnHold", "Completed", "Archived"] as const) {
+    const facts = executionFacts({ projects: [{ id: "p1", title: "X", status }], tasks: [] }, "2026-09-06");
+    assert.strictEqual(facts.find((x) => x.id.startsWith("execution.sin-")), undefined, status);
+  }
+});
+
+test("executionFacts: muchas tareas sin ninguna fase se reporta como lista plana", () => {
+  const tasks = Array.from({ length: 8 }, (_, i) => ({
+    id: `t${i}`,
+    title: `T${i}`,
+    projectId: "p1",
+    status: "Pending" as const,
+    due: null,
+    deps: [],
+    completedAtISO: null
+  }));
+  const facts = executionFacts(
+    { projects: [{ id: "p1", title: "Mudanza", status: "Active", groups: 0 }], tasks },
+    "2026-09-06"
+  );
+  const f = facts.find((x) => x.id === "execution.sin-fases.p1");
+  assert.ok(f);
+  assert.match(f.label, /8 tareas \(8 abiertas\) en una lista plana/);
+});
+
+test("executionFacts: pocas tareas sin fases NO se reporta — exigir fases a tres tareas es burocracia", () => {
+  const tasks = Array.from({ length: 3 }, (_, i) => ({
+    id: `t${i}`,
+    title: `T${i}`,
+    projectId: "p1",
+    status: "Pending" as const,
+    due: null,
+    deps: [],
+    completedAtISO: null
+  }));
+  const facts = executionFacts({ projects: [{ id: "p1", title: "X", status: "Active", groups: 0 }], tasks }, "2026-09-06");
+  assert.strictEqual(facts.find((x) => x.id === "execution.sin-fases.p1"), undefined);
+});
+
+test("executionFacts: sin saber cuántas fases hay, el hecho se calla en vez de acusar", () => {
+  // `groups` ausente significa «quien armó el snapshot no las contó». Inventar
+  // un cero acusaría de lista plana a todos los proyectos del sistema.
+  const tasks = Array.from({ length: 8 }, (_, i) => ({
+    id: `t${i}`,
+    title: `T${i}`,
+    projectId: "p1",
+    status: "Pending" as const,
+    due: null,
+    deps: [],
+    completedAtISO: null
+  }));
+  const facts = executionFacts({ projects: [{ id: "p1", title: "X", status: "Active" }], tasks }, "2026-09-06");
+  assert.strictEqual(facts.find((x) => x.id === "execution.sin-fases.p1"), undefined);
+});
+
+test("executionFacts: un proyecto CON fases no se reporta como lista plana", () => {
+  const tasks = Array.from({ length: 8 }, (_, i) => ({
+    id: `t${i}`,
+    title: `T${i}`,
+    projectId: "p1",
+    status: "Pending" as const,
+    due: null,
+    deps: [],
+    completedAtISO: null
+  }));
+  const facts = executionFacts({ projects: [{ id: "p1", title: "X", status: "Active", groups: 3 }], tasks }, "2026-09-06");
+  assert.strictEqual(facts.find((x) => x.id === "execution.sin-fases.p1"), undefined);
+});

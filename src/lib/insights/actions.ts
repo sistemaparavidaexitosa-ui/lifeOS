@@ -6,7 +6,7 @@ import { getSessionUser } from "@/lib/data/session";
 
 import { todayForUser } from "@/lib/data/profile";
 import { loadFacts } from "./facts-loader";
-import { allowedDomains, buildAliasMap, buildContext, restore, type Scope } from "./context";
+import { allowedDomains, buildContext, type Scope } from "./context";
 import { recommend } from "@/lib/ai/recommend";
 import { GEMINI_MODEL } from "@/lib/ai/gemini-provider";
 import { recommendationFingerprint } from "@/lib/domain/insights/fingerprint.ts";
@@ -51,6 +51,7 @@ const SCOPE_PATH: Record<Scope, string> = {
   execution: "/execution",
   activity: "/activity",
   nutrition: "/development/nutrition",
+  growth: "/development/goals",
   global: "/home"
 };
 
@@ -61,14 +62,12 @@ export async function analyze(scope: Scope): Promise<AnalyzeResult> {
 
   const today = await todayForUser();
 
-  const [{ data: profile }, { data: accounts }, { data: members }, { data: rejected }, { data: memory }] = await Promise.all([
+  const [{ data: profile }, { data: rejected }, { data: memory }] = await Promise.all([
     supabase
       .from("profiles")
       .select("quincenal_income, ai_domains, activity_window_start, activity_window_end")
       .eq("user_id", user.id)
       .single(),
-    supabase.from("accounts").select("name").order("created_at"),
-    supabase.from("family_members").select("name").order("created_at"),
     supabase
       .from("recommendations")
       .select("status, text")
@@ -107,18 +106,10 @@ export async function analyze(scope: Scope): Promise<AnalyzeResult> {
     }
   });
 
-  // Los nombres reales no salen del servidor (§4.2). El mapa se queda aquí y
-  // se usa para devolverlos al escribir la recomendación.
-  const aliases = buildAliasMap([
-    ...(accounts ?? []).map((a) => ({ kind: "account" as const, name: a.name })),
-    ...(members ?? []).map((m) => ({ kind: "member" as const, name: m.name }))
-  ]);
-
   const context = buildContext({
     scope,
     facts,
     previousRejections: (rejected ?? []).map((r) => ({ status: r.status, text: r.text })),
-    aliases,
     enabledDomains,
     todayISO: today,
     memory: (memory ?? []).map(
@@ -184,11 +175,11 @@ export async function analyze(scope: Scope): Promise<AnalyzeResult> {
     await supabase
       .from("recommendations")
       .update({
-        text: restore(r.text, aliases),
+        text: r.text,
         confidence: r.confidence,
         impact: r.impact,
         evidence: r.factIds,
-        assumptions: r.assumptions.map((a) => restore(a, aliases))
+        assumptions: r.assumptions
       })
       .eq("id", porHuella.get(r.fingerprint)!.id);
   }
@@ -196,12 +187,11 @@ export async function analyze(scope: Scope): Promise<AnalyzeResult> {
   const rows = nuevas.map((r) => ({
     user_id: user.id,
     type: r.type,
-    // Se devuelven los nombres reales: el alias fue solo para el viaje de ida.
-    text: restore(r.text, aliases),
+    text: r.text,
     confidence: r.confidence,
     domain: scope,
     evidence: r.factIds,
-    assumptions: r.assumptions.map((a) => restore(a, aliases)),
+    assumptions: r.assumptions,
     // Fase 1 es informativa: sin acciones aplicables todavía (§8 del spec).
     actions: [],
     requires_confirmation: false,
@@ -352,7 +342,8 @@ export async function setAiDomains(formData: FormData): Promise<void> {
 /**
  * §4.4: borrar TODO el historial de IA. Sin vuelta atrás.
  *
- * Incluye la conversación del chat (0045) y no solo las recomendaciones. El
+ * Incluye la conversación del chat (0045) —y con ella los mensajes del coach y
+ * sus propuestas, que cuelgan de esos turnos— y no solo las recomendaciones. El
  * botón promete «borrar el historial de IA», y una conversación que sobreviva
  * a ese botón convierte la promesa en media verdad — es, además, el sitio
  * donde el modelo escribió con más detalle sobre la vida del usuario.
@@ -363,6 +354,9 @@ export async function clearAiHistory(): Promise<void> {
   if (!user) return;
 
   await supabase.from("recommendations").delete().eq("user_id", user.id);
+  // Las propuestas del coach se van con esto SIN una sentencia más: cuelgan del
+  // turno que las explicaba con `on delete cascade` (0053). Se dice aquí porque
+  // desde este archivo no se ve, y alguien podría añadir el delete que sobra.
   await supabase.from("ai_chat_messages").delete().eq("user_id", user.id);
   await supabase.from("audit_log").insert({ user_id: user.id, action: "ai.clear.history", object: "" });
   revalidatePath("/intelligence");

@@ -6,7 +6,7 @@
 // conecta entre dominios y los redacta. Por eso no puede inventar una cifra —
 // no hay ninguna que inventar, solo que citar.
 
-export type Domain = "money" | "execution" | "time" | "habits" | "debt" | "activity" | "nutrition";
+export type Domain = "money" | "execution" | "time" | "habits" | "debt" | "activity" | "nutrition" | "growth";
 
 export interface Fact {
   /**
@@ -42,5 +42,10 @@ export const DOMAIN_LABEL: Record<Domain, string> = {
   time: "Tiempo",
   execution: "Proyectos y tareas",
   activity: "Actividad del equipo",
-  nutrition: "Nutrición"
+  nutrition: "Nutrición",
+  // Metas personales, resultados clave y lectura. Es el dominio que faltaba
+  // para que la IA pudiera contestar «¿cómo van mis metas?»: sus tablas
+  // existían desde 0024 y no estaban en ningún dominio, así que no había
+  // casilla que encender ni tabla que consultar.
+  growth: "Desarrollo personal"
 };

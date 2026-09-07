@@ -18,7 +18,7 @@ import { getSessionUser } from "@/lib/data/session";
 import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
 import { loadFacts, type Db } from "@/lib/insights/facts-loader";
-import { allowedDomains, buildAliasMap, buildContext, restore } from "@/lib/insights/context";
+import { allowedDomains, buildContext } from "@/lib/insights/context";
 import { chatReply } from "@/lib/ai/chat";
 import { crearCajaDeHerramientas } from "@/lib/ai/tools";
 import { recortarHistorial, sanitizeProposedMemory, type ChatMessageLike } from "@/lib/domain/ai/chat.ts";
@@ -123,7 +123,9 @@ export async function sendChatMessage(text: string): Promise<SendResult> {
     .select("id")
     .single();
 
-  const [zonaHoraria, { data: profile }, { data: accounts }, { data: members }, { data: memory }, historial] =
+  // Ya no se leen `accounts` ni `family_members`: solo servían para construir
+  // el mapa de alias, que 0053 retiró. Dos viajes de red menos por turno.
+  const [zonaHoraria, { data: profile }, { data: memory }, historial] =
     await Promise.all([
       getUserTimeZone(),
       supabase
@@ -131,8 +133,6 @@ export async function sendChatMessage(text: string): Promise<SendResult> {
         .select("quincenal_income, ai_domains, activity_window_start, activity_window_end")
         .eq("user_id", user.id)
         .single(),
-      supabase.from("accounts").select("name").order("created_at"),
-      supabase.from("family_members").select("name").order("created_at"),
       supabase.from("memory_items").select("*").order("created_at", { ascending: false }),
       // `readHistory` y no `loadChatHistory`: esta función ya comprobó la
       // sesión, y volver a preguntársela a Auth era otro viaje de red de más.
@@ -158,18 +158,10 @@ export async function sendChatMessage(text: string): Promise<SendResult> {
       })
     : [];
 
-  // Los nombres reales no salen del servidor (§4.2). El mapa se queda aquí y
-  // se usa para devolverlos al pintar la respuesta.
-  const aliases = buildAliasMap([
-    ...(accounts ?? []).map((a) => ({ kind: "account" as const, name: a.name })),
-    ...(members ?? []).map((m) => ({ kind: "member" as const, name: m.name }))
-  ]);
-
   const context = buildContext({
     scope: "global",
     facts,
     previousRejections: [],
-    aliases,
     enabledDomains,
     todayISO: today,
     memory: (memory ?? []).map(
@@ -202,8 +194,7 @@ export async function sendChatMessage(text: string): Promise<SendResult> {
             start: (profile?.activity_window_start ?? "08:00").slice(0, 5),
             end: (profile?.activity_window_end ?? "18:00").slice(0, 5)
           }
-        },
-        aliases
+        }
       })
     : undefined;
 
@@ -236,17 +227,18 @@ export async function sendChatMessage(text: string): Promise<SendResult> {
         facts: context.facts.length,
         ok: result.ok,
         toolRounds: result.toolRounds ?? 0,
-        toolsDisabled: result.toolsDisabled ?? false
+        toolsDisabled: result.toolsDisabled ?? false,
+        // QUÉ se buscó, no solo que se buscó. Es lo único que sale hacia un
+        // tercero distinto del proveedor del modelo, y sin el texto no hay
+        // forma de comprobar después que no viajaron datos del usuario.
+        busquedas: herramientas?.busquedas() ?? []
       }
     });
   });
 
   if (!result.ok) return { ok: false, reason: result.reason };
 
-  // Los alias vuelven a ser nombres justo antes de guardarse: lo que se lee en
-  // pantalla —y lo que quedará en el historial— dice «Cuenta Nómina», no
-  // «Cuenta #2». El mapa nunca sale de este proceso.
-  const texto = restore(result.text, aliases);
+  const texto = result.text;
 
   const { data: saved, error: replyErr } = await supabase
     .from("ai_chat_messages")
@@ -258,10 +250,8 @@ export async function sendChatMessage(text: string): Promise<SendResult> {
   return {
     ok: true,
     reply: toMessage(saved),
-    proposedTask: result.proposedTask ? restore(result.proposedTask, aliases) : undefined,
-    proposedMemory: result.proposedMemory
-      ? { ...result.proposedMemory, text: restore(result.proposedMemory.text, aliases) }
-      : undefined,
+    proposedTask: result.proposedTask ?? undefined,
+    proposedMemory: result.proposedMemory ?? undefined,
     nota: result.toolsDisabled
       ? "Respondí sin poder consultar tus datos: el modelo rechazó las herramientas en esta petición."
       : undefined

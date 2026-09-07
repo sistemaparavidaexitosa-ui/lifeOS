@@ -25,6 +25,12 @@ import {
   createMemoryFromChat,
   type ChatMessage
 } from "@/lib/ai-chat/actions";
+import {
+  loadPendingProposals,
+  acceptProposal,
+  dismissProposal,
+  type CoachProposalRow
+} from "@/lib/coach/actions";
 import { IconSparkles, IconClose, IconChevronRight } from "./icons";
 
 /**
@@ -55,6 +61,15 @@ export default function AiChatRail({
   const [memoria, setMemoria] = useState<{ text: string; scope: string } | null>(null);
   const [nota, setNota] = useState<string | null>(null);
   const [recordado, setRecordado] = useState(false);
+  /**
+   * Lo que el coach dejó propuesto mientras nadie miraba.
+   *
+   * Van aparte de `proposal` —la tarea que propone el chat en el turno actual—
+   * porque tienen otra vida: aquella vive lo que dura la respuesta y se pierde
+   * al recargar; estas están en la base desde las siete de la mañana y siguen
+   * ahí hasta que se pulsa algo.
+   */
+  const [propuestas, setPropuestas] = useState<CoachProposalRow[]>([]);
   const [pending, startTransition] = useTransition();
 
   const [collapsed, setCollapsed] = useState(initialCollapsed);
@@ -66,6 +81,24 @@ export default function AiChatRail({
     loadChatHistory()
       .then(setMessages)
       .catch(() => setError("No se pudo cargar la conversación."));
+    // Si esto falla no se dice nada: son botones de más sobre una conversación
+    // que se lee igual sin ellos. Un error rojo por no poder pintar un botón
+    // opcional es peor que el botón que falta.
+    loadPendingProposals()
+      .then(setPropuestas)
+      .catch(() => undefined);
+
+    // `?chat=1` es a donde lleva el aviso del coach. Sin esto, tocar la
+    // notificación en el teléfono abre Home con el rail plegado y el mensaje
+    // que acaba de sonar no se ve por ninguna parte.
+    try {
+      if (new URLSearchParams(window.location.search).get("chat") === "1") {
+        setCollapsed(false);
+        setSheetOpen(true);
+      }
+    } catch {
+      // Un parámetro ilegible no es motivo para no cargar el chat.
+    }
   }, []);
 
   // El último mensaje es el que uno viene a ver.
@@ -135,6 +168,27 @@ export default function AiChatRail({
     });
   }
 
+  function aceptarPropuesta(p: CoachProposalRow) {
+    startTransition(async () => {
+      const result = await acceptProposal(p.id, workspaceId);
+      if (!result.ok) {
+        setError(result.reason ?? "No se pudo crear.");
+        return;
+      }
+      setPropuestas((prev) => prev.filter((x) => x.id !== p.id));
+      // `estructura` no crea nada: lleva al proyecto, donde el plan se revisa
+      // antes de aplicarse. Ver `ejecutar()` en lib/coach/actions.ts.
+      if (result.href) window.location.href = result.href;
+    });
+  }
+
+  function descartarPropuesta(p: CoachProposalRow) {
+    startTransition(async () => {
+      await dismissProposal(p.id);
+      setPropuestas((prev) => prev.filter((x) => x.id !== p.id));
+    });
+  }
+
   function recordar() {
     if (!memoria) return;
     startTransition(async () => {
@@ -153,8 +207,9 @@ export default function AiChatRail({
       <div className="ai-rail-body" ref={bodyRef}>
         {!messages.length && !pending && (
           <div className="text-xs" style={{ color: "var(--muted)" }}>
-            Pregúntame sobre tu semana, tu dinero, tu tablero o lo que has comido. Veo todos tus
-            módulos; si quieres dejar alguno fuera, se apaga en Configuración → IA.
+            Pregúntame sobre tu semana, tus metas, tu dinero, tu agenda, tu tablero o lo que has comido. Veo todos tus
+            módulos y también puedo buscar en internet. Dos veces al día te escribo yo, sin que preguntes; eso y qué
+            módulos ve se ajustan en Configuración.
           </div>
         )}
 
@@ -174,6 +229,50 @@ export default function AiChatRail({
             Pensando…
           </div>
         )}
+
+        {propuestas.map((p) => (
+          <div
+            key={p.id}
+            style={{
+              border: "1px solid var(--line)",
+              borderRadius: 12,
+              padding: "9px 11px",
+              background: "var(--surface2)"
+            }}
+          >
+            <div className="text-xs" style={{ color: "var(--muted)" }}>
+              {p.tipo === "bloque"
+                ? "Propongo agendar esto"
+                : p.tipo === "rutina"
+                  ? "Propongo esta rutina"
+                  : p.tipo === "meta"
+                    ? "Propongo esta meta"
+                    : p.tipo === "estructura"
+                      ? "Este proyecto necesita estructura"
+                      : "Propongo esta tarea"}
+            </div>
+            <div className="text-sm" style={{ fontWeight: 700, margin: "3px 0 2px" }}>
+              {p.titulo}
+            </div>
+            {p.detalle && (
+              <div className="text-xs" style={{ color: "var(--muted)", marginBottom: 7 }}>
+                {p.detalle}
+              </div>
+            )}
+            <div className="flex gap-1.5 flex-wrap" style={{ marginTop: 7 }}>
+              <button
+                className="btn-primary btn-sm"
+                disabled={pending || (p.tipo === "tarea" && !workspaceId)}
+                onClick={() => aceptarPropuesta(p)}
+              >
+                {p.tipo === "estructura" ? "Ir al proyecto" : "Crear"}
+              </button>
+              <button className="btn-ghost btn-sm" disabled={pending} onClick={() => descartarPropuesta(p)}>
+                Descartar
+              </button>
+            </div>
+          </div>
+        ))}
 
         {proposal && (
           <div

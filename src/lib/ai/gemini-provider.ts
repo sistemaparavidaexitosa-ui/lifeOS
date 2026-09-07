@@ -94,6 +94,21 @@ export const RECOMMEND_BUDGET: Budget = { maxOutputTokens: 12000, thinkingBudget
 export const CHAT_BUDGET: Budget = { maxOutputTokens: 3000, thinkingBudget: 128 };
 
 /**
+ * El mensaje diario del coach.
+ *
+ * Más pensamiento que el chat y por un motivo concreto: aquí no hay pregunta.
+ * El chat recibe «¿cuánto gasté?» y el trabajo está hecho a medias; el coach
+ * recibe ciento veinte hechos de ocho dominios y tiene que DECIDIR cuáles tres
+ * merecen decirse esta mañana. Esa elección es el producto entero, y con 128
+ * tokens de razonamiento salía lo primero de la lista.
+ *
+ * La salida, en cambio, sigue siendo corta a propósito: el mensaje son cuatro
+ * o cinco frases. Los 4000 son para que quepan las propuestas, no para que se
+ * extienda.
+ */
+export const COACH_BUDGET: Budget = { maxOutputTokens: 4000, thinkingBudget: 2048 };
+
+/**
  * Ni un modelo lento puede dejar un botón girando para siempre. Mismo criterio
  * que `AUTH_DEADLINE_MS` en el middleware.
  */
@@ -250,12 +265,155 @@ interface Intento<T> {
 /**
  * Cuántas veces se le deja pedir datos antes de exigirle una respuesta.
  *
- * Dos, y no «las que haga falta»: cada ronda es una llamada entera contra la
- * cuota y varios segundos de espera con el «Pensando…» puesto. Un modelo que
- * no ha reunido lo que necesita en dos rondas normalmente está dando vueltas,
- * no investigando.
+ * Eran dos, y no «las que haga falta»: cada ronda es una llamada entera contra
+ * la cuota y varios segundos de espera con el «Pensando…» puesto. Suben a
+ * cuatro en 0053 por un motivo concreto y no por generosidad: la lista blanca
+ * pasó de once tablas a cuarenta y cuatro, y ahora hay preguntas legítimas —«¿mis
+ * metas van al ritmo de mi agenda?»— que necesitan mirar metas, resultados
+ * clave y ocupaciones antes de poder contestarse. Con dos rondas se quedaba a
+ * medias y contestaba lo que hubiera reunido. Sigue siendo un tope, no una
+ * licencia: un modelo que no ha reunido lo que necesita en cuatro está dando
+ * vueltas.
  */
-const MAX_RONDAS_HERRAMIENTAS = 2;
+const MAX_RONDAS_HERRAMIENTAS = 4;
+
+/**
+ * EL MODELO QUE BUSCA EN INTERNET.
+ *
+ * Se fija a mano en vez de recorrer `GEMINI_MODELS`, y no es una preferencia:
+ * el grounding con Google Search no está disponible en toda la familia, y el
+ * primero de la cadena —`gemini-3.1-flash-lite`— no lo soporta. Recorrer la
+ * cadena aquí significaría fallar en el primer intento siempre.
+ */
+const MODELO_BUSQUEDA = "gemini-3.6-flash";
+
+/** Una fuente citable. El `id` es lo que el modelo pone en `factIds`. */
+export interface FuenteWeb {
+  id: string;
+  titulo: string;
+  url: string;
+}
+
+export interface GroundedResult {
+  ok: boolean;
+  texto: string;
+  fuentes: FuenteWeb[];
+  reason?: string;
+}
+
+/**
+ * Metadatos de grounding: de aquí salen las fuentes. Se declara suelto porque
+ * `GeminiResponse` describe lo que interesa de una respuesta normal, y esto
+ * solo aparece cuando se pidió `google_search`.
+ */
+interface GroundingChunk {
+  web?: { uri?: string; title?: string };
+}
+
+/** La respuesta de una llamada con grounding: lo de siempre más las fuentes. */
+interface GroundedResponse extends GeminiResponse {
+  candidates?: {
+    content?: GeminiContent;
+    finishReason?: string;
+    groundingMetadata?: { groundingChunks?: GroundingChunk[] };
+  }[];
+}
+
+/**
+ * UNA BÚSQUEDA EN INTERNET, EN SU PROPIA LLAMADA.
+ *
+ * POR QUÉ NO ES UNA HERRAMIENTA MÁS DENTRO DE LA MISMA PETICIÓN
+ * El grounding de Google **no se puede combinar con salida estructurada**:
+ * toda petición de este archivo manda `responseMimeType: "application/json"` +
+ * `responseSchema`, y esa combinación con `google_search` no está soportada.
+ * Meterlo en el mismo `tools` no habría dado un error claro: habría tumbado la
+ * petición entera —chat incluido— con un 400 de forma, que es la peor manera de
+ * enterarse.
+ *
+ * Así que la búsqueda es una llamada aparte, SIN esquema, cuyo texto vuelve al
+ * bucle principal como resultado de la herramienta `buscar_en_internet`. El
+ * contrato JSON del chat no se toca.
+ *
+ * NUNCA LANZA, como todo lo que rodea al modelo (D-021): sin llave, sin red o
+ * con la cuota agotada devuelve `ok: false` y una razón que se le puede leer al
+ * modelo tal cual.
+ */
+export async function generateGroundedText(input: { consulta: string }): Promise<GroundedResult> {
+  let apiKey: string;
+  try {
+    apiKey = requireGeminiApiKey();
+  } catch {
+    return { ok: false, texto: "", fuentes: [], reason: "La búsqueda en internet no está configurada." };
+  }
+
+  const cuerpo = {
+    contents: [{ role: "user", parts: [{ text: input.consulta }] }],
+    tools: [{ google_search: {} }],
+    // Sin `responseSchema` ni `responseMimeType`: es exactamente lo que no se
+    // puede pedir junto al grounding. Y sin `thinkingConfig`: aquí no hay nada
+    // que razonar, hay que buscar y resumir.
+    generationConfig: { maxOutputTokens: 2000 },
+    systemInstruction: {
+      parts: [
+        {
+          text:
+            "Busca en internet y responde en español, en un párrafo corto y factual. " +
+            "Di lo que encontraste, no lo que opinas. Si las fuentes se contradicen, dilo en una frase. " +
+            "No inventes cifras ni fechas que no estén en los resultados."
+        }
+      ]
+    }
+  };
+
+  let response: Response;
+  try {
+    response = await fetch(`${ENDPOINT}/${MODELO_BUSQUEDA}:generateContent`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      body: JSON.stringify(cuerpo)
+    });
+  } catch (error) {
+    const abortada = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+    return {
+      ok: false,
+      texto: "",
+      fuentes: [],
+      reason: abortada ? "La búsqueda tardó demasiado." : "No se pudo contactar con el buscador."
+    };
+  }
+
+  // El tipo se declara aparte y no inline: `as typeof body` sobre una unión con
+  // `null` se resuelve a `never` y deja de comprobar nada.
+  let body: GroundedResponse | null = null;
+  try {
+    body = (await response.json()) as GroundedResponse;
+  } catch {
+    body = null;
+  }
+
+  if (!response.ok) return { ok: false, texto: "", fuentes: [], reason: httpReason(response.status, body) };
+  if (!body) return { ok: false, texto: "", fuentes: [], reason: "El buscador devolvió una respuesta ilegible." };
+
+  const candidate = body.candidates?.[0];
+  const texto = (candidate?.content?.parts ?? [])
+    .map((p) => p.text ?? "")
+    .join("")
+    .trim();
+  if (!texto) return { ok: false, texto: "", fuentes: [], reason: "La búsqueda no devolvió nada." };
+
+  // Las fuentes se numeran aquí y no en quien llama: el número ES el id que el
+  // modelo va a citar, y dos numeraciones distintas convertirían la cita en un
+  // puntero a otra cosa.
+  const fuentes: FuenteWeb[] = [];
+  for (const chunk of candidate?.groundingMetadata?.groundingChunks ?? []) {
+    const url = chunk.web?.uri;
+    if (!url) continue;
+    fuentes.push({ id: `web:${fuentes.length + 1}`, titulo: chunk.web?.title ?? url, url });
+  }
+
+  return { ok: true, texto, fuentes };
+}
 
 async function intentarConModelo<T>(
   input: GenerateJsonInput<T>,

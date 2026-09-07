@@ -542,6 +542,53 @@ export type Database = {
         }
         Relationships: []
       }
+      coach_proposals: {
+        Row: {
+          created_at: string
+          detalle: string
+          id: string
+          message_id: string
+          payload: Json
+          resolved_at: string | null
+          status: string
+          tipo: string
+          titulo: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          detalle?: string
+          id?: string
+          message_id: string
+          payload?: Json
+          resolved_at?: string | null
+          status?: string
+          tipo: string
+          titulo: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          detalle?: string
+          id?: string
+          message_id?: string
+          payload?: Json
+          resolved_at?: string | null
+          status?: string
+          tipo?: string
+          titulo?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coach_proposals_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "ai_chat_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       comment_reactions: {
         Row: {
           comment_id: string
@@ -1626,6 +1673,9 @@ export type Database = {
       notification_prefs: {
         Row: {
           assignments: boolean
+          coach_enabled: boolean
+          coach_morning_hour: number
+          coach_night_hour: number
           created_at: string
           digest_hour: number
           due_digest: boolean
@@ -1635,6 +1685,9 @@ export type Database = {
         }
         Insert: {
           assignments?: boolean
+          coach_enabled?: boolean
+          coach_morning_hour?: number
+          coach_night_hour?: number
           created_at?: string
           digest_hour?: number
           due_digest?: boolean
@@ -1644,6 +1697,9 @@ export type Database = {
         }
         Update: {
           assignments?: boolean
+          coach_enabled?: boolean
+          coach_morning_hour?: number
+          coach_night_hour?: number
           created_at?: string
           digest_hour?: number
           due_digest?: boolean

@@ -64,14 +64,36 @@ Componente → Fuente de datos → Acción real.
 
 ## Privacidad (BR-012/019/020/027)
 
-Dos partes de la app hablan con el exterior, y ninguna más.
+Tres partes de la app hablan con el exterior, y ninguna más.
 
-**1. Intelligence OS**, y solo cuando pulsas «Analizar»: viajan hechos ya calculados, en texto, con los nombres
-de cuentas y personas sustituidos por alias, y únicamente de los dominios que
-hayas encendido en Configuración (todos apagados por defecto). Nunca filas
-crudas de la base. El filtro vive en `src/lib/insights/context.ts`.
+**1. La IA** — el motor de recomendaciones, el chat lateral y el coach de vida.
+Desde la migración 0053 la postura es **acceso total, dicho sin adornos**: viajan
+hacia Gemini los hechos calculados de tu vida y, cuando el chat lo necesita para
+contestar, **filas reales** de tus tablas —metas, agenda, gastos, rutinas,
+comidas, notas, patrimonio, actividad de tu equipo—, con los **nombres reales**
+de tus cuentas, personas y proyectos. Ya no hay alias: un coach que dice «Cuenta
+#2» no puede hablar de tu vida. Sigue habiendo tres límites, y son los que
+quedan: una **lista blanca** de tablas (lo que no está, no se consulta), el
+**interruptor por dominio** de Configuración → IA (todo encendido por defecto,
+se apaga uno a uno) y la **RLS de la base**, que decide qué filas existen para
+ti. El filtro vive entero en `src/lib/insights/context.ts`, en un solo archivo
+que se puede auditar de una sentada. Cada análisis, cada turno de chat y cada
+mensaje del coach dejan en `audit_log` qué dominios viajaron y qué se buscó en
+internet. El plan gratuito de Google admite usar los datos del free tier para
+mejorar sus productos: es una decisión tomada con esa información delante.
 
-**2. Las notificaciones push**, si las activas en un dispositivo. El aviso pasa
+Lo que **no** viaja aunque esté encendido: los nombres de tus compañeros de
+espacio. Los hechos de actividad cuentan y describen —cuántas menciones, qué
+proyecto concentra el movimiento— y nunca dicen quién
+(`src/lib/domain/insights/facts/activity.ts`). Esa decisión fue sobre tus datos,
+no sobre los de otras personas.
+
+**2. Las búsquedas del coach y del chat.** Cuando la respuesta depende de algo
+del mundo —un método, un precio de referencia—, la IA puede buscar en Google.
+La consulta que sale no lleva tus cifras ni tus nombres, es una regla dura del
+prompt, y queda registrada textualmente en `audit_log` para poder comprobarlo.
+
+**3. Las notificaciones push**, si las activas en un dispositivo. El aviso pasa
 por los servidores de Google (Android) o Apple (iPhone), que es el único camino
 que existe para hacer sonar un teléfono desde la web. **Su contenido va cifrado
 de extremo a extremo** (RFC 8291, `src/lib/domain/push/encrypt.ts`): ni Google

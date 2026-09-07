@@ -27,6 +27,9 @@ import { habitsFacts, type HabitFrequency } from "@/lib/domain/insights/facts/ha
 import { debtFacts } from "@/lib/domain/insights/facts/debt.ts";
 import { activityFacts, type UnreadMentionLike } from "@/lib/domain/insights/facts/activity.ts";
 import { nutritionFacts } from "@/lib/domain/insights/facts/nutrition.ts";
+import { growthFacts } from "@/lib/domain/insights/facts/growth.ts";
+import { goalProgress, keyResultProgress, type KeyResultSourceKind } from "@/lib/domain/development/goals.ts";
+import { loadSourceSnapshot } from "@/lib/data/development";
 import type {
   ActivityLevel as NutritionActivityLevel,
   NutritionGoal
@@ -34,6 +37,7 @@ import type {
 import { occupationAppliesOn } from "@/lib/domain/time.ts";
 import { addDaysISO } from "@/lib/domain/datetime.ts";
 import { loadMyTasks, type MyTaskRow } from "@/lib/data/tasks";
+import type { SourceSnapshot } from "@/lib/domain/development/goals.ts";
 import type { JournalEntryLike, ProjectStatus } from "@/lib/domain/types.ts";
 import type { Domain, Fact } from "@/lib/domain/insights/types.ts";
 
@@ -61,17 +65,55 @@ export type Db = Awaited<ReturnType<typeof createClient>>;
  * la forma que pide su extractor y delega. Toda la decisión de qué es anómalo
  * vive en domain/insights/facts/**, que se prueba sin base de datos.
  */
-export async function loadFacts(supabase: Db, userId: string, domains: Domain[], today: string, profile: ProfileBits): Promise<Fact[]> {
-  const partes = await Promise.all(domains.map((domain) => loadDomainFacts(supabase, userId, domain, today, profile)));
+/**
+ * LO QUE NO SE PUEDE RESOLVER SIN SESIÓN.
+ *
+ * Tres piezas de este archivo llaman a ayudantes que preguntan «¿quién eres?»
+ * al request en curso: `loadMyTasks`, `loadSourceSnapshot` y
+ * `getPersonalWorkspaceIds`. Eso vale para el chat y para /intelligence, que
+ * corren dentro de una petición del usuario, y NO vale para el mensaje diario
+ * del coach, que lo dispara un reloj y no tiene sesión ninguna.
+ *
+ * La alternativa era un segundo cargador de hechos para el coach, condenado a
+ * divergir de este al siguiente cambio —es exactamente el problema que este
+ * archivo se creó para evitar—. Así que se inyectan: quien tenga sesión no pasa
+ * nada y todo sigue igual; el coach pasa las tres, ya resueltas con filtros
+ * explícitos por `user_id`.
+ */
+export interface FactsOverrides {
+  myTasks?: MyTaskRow[];
+  sources?: SourceSnapshot;
+  personalWorkspaceIds?: string[];
+}
+
+export async function loadFacts(
+  supabase: Db,
+  userId: string,
+  domains: Domain[],
+  today: string,
+  profile: ProfileBits,
+  overrides: FactsOverrides = {}
+): Promise<Fact[]> {
+  const partes = await Promise.all(
+    domains.map((domain) => loadDomainFacts(supabase, userId, domain, today, profile, overrides))
+  );
   return partes.flat();
 }
 
-async function loadDomainFacts(supabase: Db, userId: string, domain: Domain, today: string, profile: ProfileBits): Promise<Fact[]> {
+async function loadDomainFacts(
+  supabase: Db,
+  userId: string,
+  domain: Domain,
+  today: string,
+  profile: ProfileBits,
+  overrides: FactsOverrides
+): Promise<Fact[]> {
+  const misTareas = () => overrides.myTasks ?? loadMyTasks(userId);
   switch (domain) {
     case "money": {
       const [{ data: budgets }, { data: entries }] = await Promise.all([
-        supabase.from("budgets").select("*").eq("period", "current"),
-        supabase.from("journal_entries").select("*, journal_lines(*)")
+        supabase.from("budgets").select("*").eq("period", "current").eq("user_id", userId),
+        supabase.from("journal_entries").select("*, journal_lines(*)").eq("user_id", userId)
       ]);
 
       const entriesForDomain: JournalEntryLike[] = (entries ?? []).map((e) => ({
@@ -100,7 +142,7 @@ async function loadDomainFacts(supabase: Db, userId: string, domain: Domain, tod
     case "time": {
       const [{ data: occupations }, tasks] = await Promise.all([
         supabase.from("occupations").select("*").eq("user_id", userId),
-        loadMyTasks(userId)
+        misTareas()
       ]);
 
       // Mismo filtro por día que /time y que Home: una ocupación no recurrente
@@ -117,9 +159,13 @@ async function loadDomainFacts(supabase: Db, userId: string, domain: Domain, tod
     }
 
     case "execution": {
-      const [tasks, { data: projects }] = await Promise.all([
-        loadMyTasks(userId),
-        supabase.from("projects").select("id, title, status")
+      const [tasks, { data: projects }, { data: grupos }] = await Promise.all([
+        misTareas(),
+        supabase.from("projects").select("id, title, status"),
+        // Las fases, solo para contarlas. `sinEstructuraFacts` distingue «no
+        // tiene fases» de «no sé si tiene fases», así que traerlas no es
+        // opcional: sin esta consulta el hecho se callaría siempre.
+        supabase.from("task_groups").select("id, project_id")
       ]);
 
       // Solo los proyectos donde tengo trabajo. Ser miembro de un espacio da
@@ -132,7 +178,12 @@ async function loadDomainFacts(supabase: Db, userId: string, domain: Domain, tod
         {
           projects: (projects ?? [])
             .filter((p) => mios.has(p.id))
-            .map((p) => ({ id: p.id, title: p.title, status: p.status as ProjectStatus })),
+            .map((p) => ({
+              id: p.id,
+              title: p.title,
+              status: p.status as ProjectStatus,
+              groups: (grupos ?? []).filter((g) => g.project_id === p.id).length
+            })),
           tasks: tasks.map((t) => ({
             id: t.id,
             title: t.title,
@@ -159,9 +210,9 @@ async function loadDomainFacts(supabase: Db, userId: string, domain: Domain, tod
       // pone la rutina de la que cuelga, que es el único sitio donde se dicen.
       const [{ data: habits }, { data: logs }, { data: routines }, { data: runs }] = await Promise.all([
         supabase.from("habits").select("id, name, routine_id, routines(frequency)").eq("user_id", userId),
-        supabase.from("habit_logs").select("habit_id, log_date").gte("log_date", desdeLogs).lte("log_date", today),
+        supabase.from("habit_logs").select("habit_id, log_date, habits!inner(user_id)").eq("habits.user_id", userId).gte("log_date", desdeLogs).lte("log_date", today),
         supabase.from("routines").select("id, name, occupation_id, habits(id)").eq("user_id", userId),
-        supabase.from("routine_runs").select("routine_id, local_date")
+        supabase.from("routine_runs").select("routine_id, local_date, routines!inner(user_id)").eq("routines.user_id", userId)
       ]);
 
       return habitsFacts(
@@ -263,7 +314,7 @@ async function loadDomainFacts(supabase: Db, userId: string, domain: Domain, tod
       // saber cuál. Se usa el personal —el que siempre existe desde 0030— por
       // el mismo motivo que la paleta: el ámbito del análisis no viaja en la
       // llamada, y adivinarlo sería peor que fijar el que todos tienen.
-      const personalIds = await getPersonalWorkspaceIds();
+      const personalIds = overrides.personalWorkspaceIds ?? (await getPersonalWorkspaceIds());
       const workspaceId = personalIds[0];
       if (!workspaceId) return [];
 
@@ -336,7 +387,7 @@ async function loadDomainFacts(supabase: Db, userId: string, domain: Domain, tod
         // Solo los gastos YA ligados a una deuda. Un gasto sin `debt_id` no es
         // un pago de deuda: es un gasto (ver money/actions.ts, que además baja
         // el saldo al registrarlo).
-        supabase.from("journal_entries").select("debt_id, entry_date").not("debt_id", "is", null)
+        supabase.from("journal_entries").select("debt_id, entry_date").eq("user_id", userId).not("debt_id", "is", null)
       ]);
 
       return debtFacts(
@@ -351,6 +402,70 @@ async function loadDomainFacts(supabase: Db, userId: string, domain: Domain, tod
           payments: (pagos ?? [])
             .filter((p): p is typeof p & { debt_id: string } => Boolean(p.debt_id))
             .map((p) => ({ debtId: p.debt_id, date: p.entry_date }))
+        },
+        today
+      );
+    }
+
+    case "growth": {
+      // El avance NO se recalcula aquí con una fórmula propia: `loadSourceSnapshot`
+      // y `keyResultProgress` son exactamente los que pinta /development/goals.
+      // Un motor que dijera «vas al 40 %» junto a una barra que dice 55 % sería
+      // peor que uno que no dijera nada.
+      const [{ data: metas }, { data: krs }, { data: libros }, { data: progresos }, sources] = await Promise.all([
+        supabase.from("personal_goals").select("id, title, area, status, horizon, created_at").eq("user_id", userId),
+        supabase
+          .from("key_results")
+          .select("id, goal_id, source_kind, source_id, source_metric, baseline, target, manual_current, personal_goals!inner(user_id)")
+          .eq("personal_goals.user_id", userId),
+        supabase.from("books").select("id, title, status, current_page, total_pages").eq("user_id", userId),
+        supabase.from("book_progress").select("book_id, local_date, books!inner(user_id)").eq("books.user_id", userId),
+        overrides.sources ?? loadSourceSnapshot()
+      ]);
+
+      const ultimoProgreso = new Map<string, string>();
+      for (const p of progresos ?? []) {
+        const previo = ultimoProgreso.get(p.book_id);
+        if (!previo || p.local_date > previo) ultimoProgreso.set(p.book_id, p.local_date);
+      }
+
+      return growthFacts(
+        {
+          goals: (metas ?? []).map((g) => {
+            const propios = (krs ?? []).filter((k) => k.goal_id === g.id);
+            const avances = propios.map((k) =>
+              keyResultProgress(
+                {
+                  id: k.id,
+                  sourceKind: k.source_kind as KeyResultSourceKind,
+                  sourceId: k.source_id,
+                  sourceMetric: k.source_metric as "adherencia" | "peso",
+                  baseline: k.baseline === null ? null : Number(k.baseline),
+                  target: Number(k.target),
+                  manualCurrent: Number(k.manual_current)
+                },
+                sources
+              )
+            );
+            return {
+              id: g.id,
+              title: g.title,
+              area: g.area,
+              status: g.status,
+              horizon: g.horizon,
+              createdAt: g.created_at.slice(0, 10),
+              keyResults: propios.length,
+              pct: propios.length ? goalProgress(avances) : null
+            };
+          }),
+          books: (libros ?? []).map((b) => ({
+            id: b.id,
+            title: b.title,
+            status: b.status,
+            currentPage: b.current_page,
+            totalPages: b.total_pages,
+            lastProgressISO: ultimoProgreso.get(b.id) ?? null
+          }))
         },
         today
       );

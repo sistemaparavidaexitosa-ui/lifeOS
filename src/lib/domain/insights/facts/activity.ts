@@ -5,11 +5,12 @@
 // LO QUE ESTE ARCHIVO NO DICE NUNCA: quién.
 //
 // Los otros cinco extractores hablan de los datos del propio usuario. Este habla
-// de lo que ha hecho su EQUIPO, y ahí la seudonimización del motor no alcanza:
-// `buildAliasMap` cubre cuentas y dependientes, no a los compañeros de espacio,
-// y `workspace_activity.actor` guarda un correo. Mandar correos o nombres de
-// terceros al modelo para que redacte «Ana lleva dos días sin contestarte» es
-// una línea que este módulo no cruza.
+// de lo que ha hecho su EQUIPO, y ahí este archivo es la única barrera que
+// queda: `workspace_activity.actor` guarda un correo. Mandar correos o nombres
+// de terceros al modelo para que redacte «Ana lleva dos días sin contestarte»
+// es una línea que este módulo no cruza — y desde 0053 importa MÁS, no menos:
+// el filtro de nombres general se retiró, y la decisión del dueño del sistema
+// fue sobre SUS datos, no sobre los de sus compañeros.
 //
 // Así que los hechos cuentan y describen —cuántas menciones, qué proyecto
 // concentra el movimiento, cuántos días de silencio— y el usuario abre el hilo
