@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui";
 import { updateProfile } from "./actions";
+import { updateActivityWindow } from "../time/actions";
+import NotificationPrefs, { type PrefsValues } from "./NotificationPrefs";
 import AiSettings from "./AiSettings";
 import Automations, { type AutomationRow } from "./Automations";
 import PushNotifications from "./PushNotifications";
@@ -15,15 +17,31 @@ export default async function SettingsPage() {
   const user = await getSessionUser();
   if (!user) redirect("/login");
 
-  const [{ data: profile }, { data: automationRows }] = await Promise.all([
+  const [{ data: profile }, { data: automationRows }, { data: prefs }] = await Promise.all([
     supabase.from("profiles").select("*").eq("user_id", user.id).single(),
     supabase
       .from("automations")
       .select("id, name, enabled, authorized, trigger_type, action_type")
       .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
+      .order("created_at", { ascending: false }),
+    // `maybeSingle`, no `single`: la AUSENCIA de fila es el estado normal
+    // —significa «todo encendido» (0049)— y tratarla como error dejaría la
+    // pantalla rota para todo el mundo que nunca tocó esto, que es todo el
+    // mundo, porque hasta 0053 no se podía tocar.
+    supabase.from("notification_prefs").select("*").eq("user_id", user.id).maybeSingle()
   ]);
   if (!profile) throw new Error("Perfil no encontrado.");
+
+  const prefsValues: PrefsValues = {
+    mentions: prefs?.mentions ?? true,
+    assignments: prefs?.assignments ?? true,
+    reminders: prefs?.reminders ?? true,
+    dueDigest: prefs?.due_digest ?? true,
+    digestHour: prefs?.digest_hour ?? 8,
+    coachEnabled: prefs?.coach_enabled ?? true,
+    coachMorningHour: prefs?.coach_morning_hour ?? 7,
+    coachNightHour: prefs?.coach_night_hour ?? 21
+  };
 
   // El acceso al panel de plantillas vive aquí, y solo para quien lo puede
   // usar: /admin devuelve 404 a los demás, así que enseñar el enlace a todo el
@@ -87,30 +105,38 @@ export default async function SettingsPage() {
       <Card>
         <h3 className="font-bold mb-2">Rango de actividad diario</h3>
         <p className="text-xs" style={{ color: "var(--muted)" }}>
-          Determina dónde se calculan tus espacios disponibles en Autogestión del Tiempo.
+          Determina dónde se calculan tus espacios disponibles en Autogestión del Tiempo, y es la franja dentro de la
+          que el coach busca tus huecos libres.
         </p>
-        <div className="grid grid-cols-2 gap-3 mt-2">
-          <div>
-            <span className="text-xs" style={{ color: "var(--muted)" }}>
-              Inicio
-            </span>
-            <b className="block">{profile.activity_window_start.slice(0, 5)}</b>
+        {/*
+          Se edita AQUÍ, no solo en /time. Antes esta tarjeta era de solo
+          lectura con un enlace, y una configuración que se muestra donde no se
+          puede cambiar se lee como una configuración que no se guarda.
+          `updateActivityWindow` es la misma acción de siempre: no hay un
+          segundo camino de escritura.
+        */}
+        <form action={updateActivityWindow} className="flex gap-2 items-end flex-wrap mt-2">
+          <div className="field">
+            <label className="block text-xs font-bold mb-1">Inicio</label>
+            <input type="time" name="start" defaultValue={profile.activity_window_start.slice(0, 5)} required />
           </div>
-          <div>
-            <span className="text-xs" style={{ color: "var(--muted)" }}>
-              Fin
-            </span>
-            <b className="block">{profile.activity_window_end.slice(0, 5)}</b>
+          <div className="field">
+            <label className="block text-xs font-bold mb-1">Fin</label>
+            <input type="time" name="end" defaultValue={profile.activity_window_end.slice(0, 5)} required />
           </div>
-        </div>
-        <a href="/time" className="btn-ghost btn-sm" style={{ marginTop: 10 }}>
-          Editar en Autogestión del Tiempo
-        </a>
+          <button type="submit" className="btn-primary btn-sm">
+            Guardar
+          </button>
+        </form>
       </Card>
 
       <Card>
-        <h3 className="font-bold mb-2">Notificaciones</h3>
-        <PushNotifications />
+        <h3 className="font-bold mb-2">Notificaciones y coach</h3>
+        <NotificationPrefs values={prefsValues} />
+        <div style={{ borderTop: "1px solid var(--line)", paddingTop: 10, marginTop: 12 }}>
+          <h4 className="font-bold text-sm mb-1">Este dispositivo</h4>
+          <PushNotifications />
+        </div>
       </Card>
 
       <Card>

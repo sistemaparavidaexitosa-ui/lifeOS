@@ -11,9 +11,30 @@ function snapshot(over: Partial<TimeSnapshot> = {}): TimeSnapshot {
 
 const occ = (id: string, title: string, start: string, end: string) => ({ id, title, start, end });
 
-test("timeFacts: un día holgado no produce ningún hecho", () => {
+test("timeFacts: un día holgado no produce ningún hecho de PROBLEMA", () => {
+  // Hasta 0053 esto esperaba una lista vacía. Ahora un día holgado sí produce
+  // un hecho —los huecos libres—, porque el coach los necesita para planear.
+  // Lo que sigue siendo cierto, y es lo que esta prueba protege, es que ninguno
+  // de los hechos de problema se dispara.
   const facts = timeFacts(snapshot({ todayOccupations: [occ("o1", "Junta", "09:00", "10:00")] }));
-  assert.deepStrictEqual(facts, []);
+  assert.deepStrictEqual(facts.map((f) => f.id), ["time.huecos"]);
+});
+
+test("timeFacts: los huecos libres se reportan solo si el día NO está saturado", () => {
+  // 480 min ocupados de 600 = 80 %: a partir de ahí, decirle a alguien que
+  // tiene un hueco es ignorar lo que se le acaba de decir.
+  const apretado = timeFacts(snapshot({ todayOccupations: [occ("o1", "Bloque", "08:00", "16:00")] }));
+  assert.ok(!apretado.some((f) => f.id === "time.huecos"));
+});
+
+test("timeFacts: un hueco de menos de una hora no cuenta como tiempo disponible", () => {
+  // 08:00-18:00 con dos bloques que dejan 30 min entre ellos y nada más.
+  const facts = timeFacts(
+    snapshot({
+      todayOccupations: [occ("o1", "Mañana", "08:00", "12:00"), occ("o2", "Tarde", "12:30", "18:00")]
+    })
+  );
+  assert.ok(!facts.some((f) => f.id === "time.huecos"), "30 min entre dos bloques no son tiempo disponible");
 });
 
 test("timeFacts: la saturación se reporta desde el 80 %, con el mismo umbral que la pantalla", () => {

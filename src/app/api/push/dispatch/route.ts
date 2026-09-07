@@ -11,6 +11,8 @@ import {
   type ReminderPendiente,
   type TareaConVencimiento
 } from "@/lib/domain/push/schedule.ts";
+import { claveDelCoach, momentoQueToca, PREFS_POR_DEFECTO } from "@/lib/domain/coach/schedule.ts";
+import { generarYGuardarMensajeDiario } from "@/lib/coach/daily";
 
 export const dynamic = "force-dynamic";
 /** Un minuto de techo: el trabajo va por lotes y no debe acercarse al límite. */
@@ -23,10 +25,11 @@ export const maxDuration = 60;
  * que lo único que lo protege es `PUSH_DISPATCH_SECRET`. Por eso el middleware
  * lo deja pasar explícitamente, junto a /api/health.
  *
- * Hace tres cosas, todas idempotentes gracias al UNIQUE de `dedupe_key`:
+ * Hace cuatro cosas, todas idempotentes gracias al UNIQUE de `dedupe_key`:
  *   1. recordatorios cuya hora ya pasó,
  *   2. el resumen diario de vencimientos, a la hora local de cada quien,
- *   3. reintentar los avisos que se quedaron sin salir.
+ *   3. los dos mensajes del coach de vida, también a su hora local (0053),
+ *   4. reintentar los avisos que se quedaron sin salir.
  *
  * Nunca lanza hacia fuera: devuelve el recuento de lo que hizo. Si un usuario
  * falla, los demás siguen — un perfil con la zona horaria rota no puede dejar
@@ -57,12 +60,18 @@ export async function POST(request: Request) {
 
   const recordatorios = await despacharRecordatorios(supabase, ahora);
   const vencimientos = await despacharVencimientos(supabase, ahora);
+  // El coach va ANTES de los reintentos y DESPUÉS del resto a propósito: es lo
+  // único de esta ruta que llama al modelo, así que es lo único que puede
+  // tardar decenas de segundos o quedarse sin cuota. Poniéndolo aquí, un coach
+  // lento no retrasa recordatorios ni vencimientos, y el reintento de lo que ya
+  // estaba en la bandeja sigue corriendo detrás con lo que quede de minuto.
+  const coach = await despacharCoach(supabase, ahora);
   const reintentos = await reintentarPendientes(supabase);
 
   // «creados» y «entregados» se cuentan aparte a propósito: sin ningún
   // dispositivo suscrito se crean avisos que no se entregan, y mezclarlo
   // haría parecer que el reloj no hizo nada.
-  return NextResponse.json({ ok: true, recordatorios, vencimientos, entregados: reintentos });
+  return NextResponse.json({ ok: true, recordatorios, vencimientos, coach, entregados: reintentos });
 }
 
 /**
@@ -222,6 +231,100 @@ async function despacharVencimientos(supabase: Admin, ahora: Date): Promise<numb
       dedupeKey: `due:${hoy}`
     });
     if (ok) enviados++;
+  }
+
+  return enviados;
+}
+
+/**
+ * EL COACH DE VIDA: dos mensajes al día, a la hora local de cada quien.
+ *
+ * POR QUÉ CUELGA DE ESTE RELOJ Y NO DE UNO NUEVO
+ * Aquí ya estaba resuelto todo lo difícil: pg_cron pasa cada cinco minutos
+ * (0051), la hora local de cada usuario se sabe resolver, y el UNIQUE de
+ * `dedupe_key` hace que repetir una pasada no repita un aviso. Un cron aparte
+ * habría tenido que reinventar las tres cosas.
+ *
+ * EL TOPE DE CINCO POR PASADA, que es la decisión que más se nota:
+ * generar un mensaje son varios segundos contra el modelo, y esta ruta tiene
+ * `maxDuration = 60`. Sin tope, doce usuarios a la misma hora dejarían la
+ * petición cortada a la mitad y —peor— se llevarían por delante los reintentos
+ * de la bandeja. Con doce pasadas por hora y una ventana de recuperación de
+ * tres horas (`VENTANA_HORAS`), a nadie se le pierde el mensaje: se le retrasa
+ * unos minutos.
+ *
+ * NUNCA LANZA. Un usuario cuyo mensaje falla —cuota agotada, zona horaria rota,
+ * el modelo devolviendo basura— no puede dejar al resto sin el suyo.
+ */
+const LOTE_COACH = 5;
+
+async function despacharCoach(supabase: Admin, ahora: Date): Promise<number> {
+  // Solo quien tiene perfil, que es todo el mundo. Se leen las dos tablas de
+  // golpe en vez de una consulta por usuario: son dos viajes, no doscientos.
+  const [{ data: perfiles }, { data: prefs }] = await Promise.all([
+    supabase.from("profiles").select("user_id, timezone").limit(1000),
+    supabase.from("notification_prefs").select("user_id, coach_enabled, coach_morning_hour, coach_night_hour")
+  ]);
+
+  if (!perfiles?.length) return 0;
+  const prefsPorUsuario = new Map((prefs ?? []).map((p) => [p.user_id, p]));
+
+  let enviados = 0;
+
+  for (const perfil of perfiles) {
+    if (enviados >= LOTE_COACH) break;
+
+    const zona = perfil.timezone && isValidTimeZone(perfil.timezone) ? perfil.timezone : DEFAULT_TIMEZONE;
+    const fila = prefsPorUsuario.get(perfil.user_id);
+    // Sin fila de preferencias = todo encendido (0049), igual que el resto.
+    const momento = momentoQueToca(timeInTimeZone(zona, ahora), {
+      enabled: fila?.coach_enabled ?? PREFS_POR_DEFECTO.enabled,
+      morningHour: fila?.coach_morning_hour ?? PREFS_POR_DEFECTO.morningHour,
+      nightHour: fila?.coach_night_hour ?? PREFS_POR_DEFECTO.nightHour
+    });
+    if (!momento) continue;
+
+    const hoy = todayInTimeZone(zona, ahora);
+    const dedupeKey = claveDelCoach(momento, hoy);
+
+    // Se comprueba ANTES de llamar al modelo, no después: la idempotencia de
+    // `notifySystem` evitaría el aviso duplicado, pero no la llamada —y esa es
+    // la que cuesta cuota y segundos. Doce pasadas por hora la harían doce
+    // veces para tirar once.
+    const { data: yaEstaba } = await supabase
+      .from("notifications")
+      .select("id")
+      .eq("user_id", perfil.user_id)
+      .eq("dedupe_key", dedupeKey)
+      .maybeSingle();
+    if (yaEstaba) continue;
+
+    try {
+      const mensaje = await generarYGuardarMensajeDiario({
+        supabase,
+        userId: perfil.user_id,
+        momento,
+        today: hoy
+      });
+      if (!mensaje.ok) continue;
+
+      await notifySystem({
+        userId: perfil.user_id,
+        kind: "coach",
+        title: momento === "morning" ? "Tu día, en corto" : "Cierre del día",
+        body: mensaje.resumen ?? "",
+        // Lleva al chat, que es donde está el mensaje entero y donde se le
+        // puede contestar. El aviso es el titular; la conversación es el sitio.
+        href: "/home?chat=1",
+        dedupeKey
+      });
+      enviados++;
+    } catch {
+      // Ni un perfil roto ni una cuota agotada pueden dejar al resto sin su
+      // mensaje. Se sigue con el siguiente, en silencio: el rastro de lo que sí
+      // salió está en `audit_log`.
+      continue;
+    }
   }
 
   return enviados;

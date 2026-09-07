@@ -19,13 +19,15 @@ insert into public.profiles (user_id, name) values
   ('bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb', 'Otro IA')
 on conflict (user_id) do nothing;
 
--- El opt-in nace ENCENDIDO desde 0048, invirtiendo lo que fijaba 0027. El chat
--- transversal tiene que servir sin configurar nada; el interruptor sigue en
--- /settings para apagar lo que se quiera. Si esta aserción se rompe, el chat
--- vuelve a nacer sin saber nada de quien pregunta.
+-- El opt-in nace ENCENDIDO desde 0048, invirtiendo lo que fijaba 0027, y 0053
+-- añade `growth` (metas y lectura). El chat transversal tiene que servir sin
+-- configurar nada; el interruptor sigue en /settings para apagar lo que se
+-- quiera. Si esta aserción se rompe, el chat vuelve a nacer sin saber nada de
+-- quien pregunta — y un dominio nuevo que no llegue a esta lista queda
+-- condenado a estar apagado para siempre sin que falle nada.
 select is(
   (select ai_domains from public.profiles where user_id = 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa'),
-  '{money,debt,habits,time,execution,nutrition,activity}'::text[],
+  '{money,debt,habits,time,execution,nutrition,activity,growth}'::text[],
   'ai_domains arranca con TODOS los dominios: no hay nada que configurar (0048)'
 );
 

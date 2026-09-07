@@ -133,8 +133,58 @@ function noSlotFacts(snapshot: TimeSnapshot): Fact[] {
 }
 
 /** Todos los hechos de tiempo, ordenados de más a menos anómalo. */
+/**
+ * HUECOS LIBRES QUE NADIE ESTÁ USANDO.
+ *
+ * Es el inverso exacto de `saturationFacts`, y hasta 0053 no existía: este
+ * módulo solo sabía detectar exceso de compromiso. Para un motor que avisa de
+ * problemas era coherente —un día vacío no es un problema—; para un coach que
+ * ayuda a planear el día es justo al revés, porque «tienes tres horas libres
+ * esta tarde» es la frase que convierte una observación en un plan.
+ *
+ * Dos decisiones que lo mantienen honesto:
+ *
+ *  - **Solo huecos de al menos una hora.** Los veinte minutos entre dos
+ *    reuniones no son tiempo disponible, son el hueco entre dos reuniones.
+ *  - **Solo cuando el día NO está saturado.** Si ya vas al 120 % de tu
+ *    capacidad, decirte que tienes un hueco a las cinco es una manera de
+ *    ignorar lo que acabas de leer dos líneas más arriba.
+ *
+ * Un solo hecho con todos los huecos, no uno por hueco: son la misma
+ * observación mirada por partes, y separarlos empujaría fuera del contexto a
+ * dominios enteros.
+ */
+const HUECO_MINIMO_MIN = 60;
+
+function huecoFacts(snapshot: TimeSnapshot): Fact[] {
+  const impactMinutes = snapshot.impactTasks.reduce((s, t) => s + t.est, 0);
+  const status = saturationStatus(snapshot.window, snapshot.todayOccupations, impactMinutes);
+  if (status.pct >= SATURATION_FLOOR_PCT) return [];
+
+  const huecos = availableSlots(snapshot.window, snapshot.todayOccupations).filter((h) => h.minutes >= HUECO_MINIMO_MIN);
+  if (!huecos.length) return [];
+
+  const total = huecos.reduce((s, h) => s + h.minutes, 0);
+  return [
+    {
+      id: "time.huecos",
+      domain: "time",
+      label:
+        `Hoy tienes ${total} min sin ocupar dentro de tu ventana de actividad, en ${huecos.length === 1 ? "un bloque" : `${huecos.length} bloques`}: ` +
+        huecos.map((h) => `${h.start}-${h.end} (${h.minutes} min)`).join(", "),
+      // Cuatro horas libres pesa 1. Un hueco grande dice más que varios chicos,
+      // pero lo que se pondera es el total: es el tiempo del que se dispone.
+      weight: clampWeight(total / 240),
+      refs: [{ table: "occupations", id: "hoy" }]
+    }
+  ];
+}
+
 export function timeFacts(snapshot: TimeSnapshot): Fact[] {
-  return [...saturationFacts(snapshot), ...overlapFacts(snapshot), ...noSlotFacts(snapshot)].sort(
-    (a, b) => b.weight - a.weight
-  );
+  return [
+    ...saturationFacts(snapshot),
+    ...huecoFacts(snapshot),
+    ...overlapFacts(snapshot),
+    ...noSlotFacts(snapshot)
+  ].sort((a, b) => b.weight - a.weight);
 }

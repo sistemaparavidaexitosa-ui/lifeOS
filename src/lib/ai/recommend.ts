@@ -8,7 +8,7 @@ import type { InsightContext } from "@/lib/insights/context";
  * Genera recomendaciones a partir de un contexto ya filtrado.
  *
  * Esta capa NUNCA ve una fila cruda de la base ni importa Supabase: recibe
- * hechos ya calculados y seudonimizados, y devuelve texto. No puede calcular
+ * hechos ya calculados, y devuelve texto. No puede calcular
  * —no tiene con qué— ni aplicar nada.
  *
  * `zod` a secas, como el resto del repo. Este archivo importó `zod/v4` durante
@@ -83,7 +83,7 @@ Reglas que no puedes romper:
 - No repitas recomendaciones que el usuario ya rechazó; se te entregan abajo si las hay.
 - Prefiere pocas recomendaciones buenas a muchas obvias. Si los hechos no dan para nada útil, devuelve una lista vacía: es una respuesta válida y preferible al relleno.
 - No inventes contexto sobre la vida del usuario que no esté en los hechos.
-- Los nombres de personas y cuentas vienen seudonimizados ('Dependiente #1', 'Cuenta #2'). Úsalos tal cual; no intentes adivinar quiénes son.`;
+- Escribe los nombres de cuentas, personas y proyectos tal como te llegan. Desde 0053 son los reales, no alias: úsalos, y no inventes ninguno que no venga en un hecho.`;
 
 export interface RecommendResult {
   ok: boolean;

@@ -29,6 +29,12 @@ export interface ExecutionProjectLike {
   id: string;
   title: string;
   status: ProjectStatus;
+  /**
+   * Cuántas fases (`task_groups`) tiene declaradas. Cero significa que el
+   * proyecto es una lista plana, no que le falte una columna: es exactamente
+   * lo que mira `sinEstructuraFacts`.
+   */
+  groups?: number;
 }
 
 export interface ExecutionSnapshot {
@@ -201,10 +207,69 @@ function blockedFacts(snapshot: ExecutionSnapshot): Fact[] {
 }
 
 /** Todos los hechos de ejecución, ordenados de más a menos anómalo. */
+/**
+ * UN PROYECTO SIN ESTRUCTURA.
+ *
+ * Dos formas distintas del mismo problema, y por eso van en el mismo hecho:
+ *
+ *  - **Sin ninguna tarea.** Un proyecto que solo tiene título no es un
+ *    proyecto, es una intención. Es lo primero que un coach diría en voz alta
+ *    y lo único de esta lista que se puede afirmar sin matices.
+ *  - **Muchas tareas y ninguna fase.** A partir de cierto tamaño una lista
+ *    plana deja de decir por dónde se empieza; las fases son lo que convierte
+ *    veinte tareas en un plan. El umbral está en `TAREAS_SIN_FASES` y no en 1
+ *    porque exigirle fases a un proyecto de tres tareas sería burocracia.
+ *
+ * Solo proyectos ACTIVOS: uno pausado o terminado sin estructura no es un
+ * problema, es un proyecto pausado o terminado.
+ *
+ * `groups` es opcional en el tipo para no obligar a todos los que arman un
+ * `ExecutionSnapshot` a contar fases. Cuando no viene, la segunda mitad de la
+ * comprobación se calla —no se inventa un cero, que sería acusar a todos los
+ * proyectos de no tener fases.
+ */
+const TAREAS_SIN_FASES = 5;
+
+function sinEstructuraFacts(snapshot: ExecutionSnapshot): Fact[] {
+  const facts: Fact[] = [];
+  for (const p of snapshot.projects) {
+    if (p.status !== "Active") continue;
+    const propias = snapshot.tasks.filter((t) => t.projectId === p.id);
+
+    if (!propias.length) {
+      facts.push({
+        id: `execution.sin-estructura.${p.id}`,
+        domain: "execution",
+        label: `El proyecto "${p.title}" está activo y no tiene ni una sola tarea: es un título, no un plan`,
+        weight: 0.9,
+        refs: [{ table: "projects", id: p.id }]
+      });
+      continue;
+    }
+
+    if (p.groups === undefined || p.groups > 0) continue;
+    const abiertas = propias.filter(isOpen).length;
+    if (propias.length < TAREAS_SIN_FASES) continue;
+
+    facts.push({
+      id: `execution.sin-fases.${p.id}`,
+      domain: "execution",
+      label:
+        `El proyecto "${p.title}" tiene ${propias.length} tareas (${abiertas} abiertas) en una lista plana, ` +
+        `sin ninguna fase que diga por dónde se empieza`,
+      // Veinte tareas sin fases pesa 1.
+      weight: clampWeight(propias.length / 20),
+      refs: [{ table: "projects", id: p.id }]
+    });
+  }
+  return facts;
+}
+
 export function executionFacts(snapshot: ExecutionSnapshot, todayISO: string): Fact[] {
   return [
     ...overdueFacts(snapshot, todayISO),
     ...stalledFacts(snapshot, todayISO),
+    ...sinEstructuraFacts(snapshot),
     ...unblockedFacts(snapshot),
     ...wipFacts(snapshot),
     ...blockedFacts(snapshot)

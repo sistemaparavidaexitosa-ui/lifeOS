@@ -17,7 +17,14 @@ import { sendPush } from "./send";
  * Por eso el `try` envuelve TODO, incluida la inserción en la bandeja.
  */
 
-export type NotificationKind = "mention" | "task.assigned" | "reminder" | "task.due";
+/**
+ * `coach` (0053) es el primero que NO lo provoca nadie: los otros cuatro salen
+ * de algo que alguien hizo —te mencionó, te asignó, apuntaste un recordatorio,
+ * vence una tarea—, y este sale de un reloj. Por eso es también el único que
+ * la persona puede apagar entero desde Configuración sin perderse nada que
+ * hubiera pedido.
+ */
+export type NotificationKind = "mention" | "task.assigned" | "reminder" | "task.due" | "coach";
 
 export interface NotifyInput {
   userId: string;

@@ -5,12 +5,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   allowedDomains,
-  buildAliasMap,
   buildContext,
-  pseudonymize,
-  restore,
   tablaConsultable,
   MAX_FACTS,
+  MAX_FACTS_COACH,
   TABLAS_CONSULTABLES
 } from "../../src/lib/insights/context.ts";
 import type { Domain, Fact } from "../../src/lib/domain/insights/types.ts";
@@ -24,6 +22,17 @@ test("allowedDomains: un scope privado solo ve lo suyo", () => {
   assert.deepStrictEqual(allowedDomains("debt"), ["debt"]);
   assert.deepStrictEqual(allowedDomains("habits"), ["habits"]);
   assert.deepStrictEqual(allowedDomains("time"), ["time"]);
+  assert.deepStrictEqual(allowedDomains("growth"), ["growth"]);
+});
+
+test("allowedDomains: global cubre los ocho dominios, activity incluida", () => {
+  // Invierte lo que este mismo archivo probaba antes de 0053. `activity` está
+  // dentro a propósito: lo que alguien hizo con su equipo es parte de su
+  // semana, y dejarlo fuera obligaba al chat a decir que no tenía acceso.
+  const globales = allowedDomains("global");
+  for (const d of ["money", "debt", "habits", "time", "execution", "nutrition", "growth", "activity"]) {
+    assert.ok(globales.includes(d as Domain), `${d} debe estar en global`);
+  }
 });
 
 test("allowedDomains: execution en proyecto personal suma time", () => {
@@ -65,55 +74,26 @@ test("buildContext: ordena por peso y recorta al tope, quedándose con los más 
   assert.strictEqual(ctx.facts[0].weight, muchos[muchos.length - 1].weight, "el más anómalo va primero");
 });
 
-test("buildAliasMap: alias estables y numerados por tipo", () => {
-  const map = buildAliasMap([
-    { kind: "account", name: "BBVA Nómina" },
-    { kind: "account", name: "Santander" },
-    { kind: "member", name: "Ana" }
-  ]);
-  assert.strictEqual(map.toAlias.get("BBVA Nómina"), "Cuenta #1");
-  assert.strictEqual(map.toAlias.get("Santander"), "Cuenta #2");
-  assert.strictEqual(map.toAlias.get("Ana"), "Dependiente #1");
-});
-
-test("buildAliasMap: ignora nombres de un solo carácter", () => {
-  // Sustituir la letra "a" en todo el texto no protege nada y lo destroza.
-  const map = buildAliasMap([{ kind: "account", name: "a" }]);
-  assert.strictEqual(map.toAlias.size, 0);
-});
-
-test("pseudonymize: sustituye el nombre largo antes que el corto", () => {
-  const map = buildAliasMap([
-    { kind: "member", name: "Ana" },
-    { kind: "member", name: "Ana María" }
-  ]);
-  const salida = pseudonymize("Ana María gastó más que Ana", map);
-  assert.ok(!salida.includes("Ana María"), "el nombre largo no debe quedar partido");
-  assert.ok(!salida.includes("Ana"), `ningún nombre real debe sobrevivir: ${salida}`);
-});
-
-test("pseudonymize + restore: ida y vuelta devuelve el texto original", () => {
-  const map = buildAliasMap([{ kind: "account", name: "BBVA Nómina" }]);
-  const original = "Transferiste 3000 desde BBVA Nómina";
-  assert.strictEqual(restore(pseudonymize(original, map), map), original);
-});
-
-test("buildContext: los nombres reales no salen en los hechos ni en los rechazos", () => {
-  const map = buildAliasMap([{ kind: "member", name: "Ana" }]);
+test("buildContext: el texto de los hechos pasa TAL CUAL, con nombres reales", () => {
+  // 0053 retiró la seudonimización. Esta prueba es lo que impide que vuelva a
+  // colarse sin decidirlo: si alguien reintroduce un filtro de nombres, aquí
+  // se entera.
   const ctx = buildContext({
     scope: "money",
-    facts: [fact("m1", "money", 1, "Ana gastó 4000 en Alimentos")],
-    previousRejections: [{ status: "Suppressed", text: "No sugerir recortar el gasto de Ana" }],
-    aliases: map
+    facts: [fact("m1", "money", 1, "Ana gastó 4000 desde BBVA Nómina")],
+    previousRejections: [{ status: "Suppressed", text: "No sugerir recortar el gasto de Ana" }]
   });
-  assert.strictEqual(ctx.facts[0].label, "Dependiente #1 gastó 4000 en Alimentos");
-  assert.deepStrictEqual(ctx.rejections, ["No sugerir recortar el gasto de Dependiente #1"]);
-  assert.ok(!JSON.stringify(ctx).includes("Ana"));
+  assert.strictEqual(ctx.facts[0].label, "Ana gastó 4000 desde BBVA Nómina");
+  assert.deepStrictEqual(ctx.rejections, ["No sugerir recortar el gasto de Ana"]);
 });
 
-test("buildContext: sin mapa de alias el texto pasa tal cual", () => {
-  const ctx = buildContext({ scope: "money", facts: [fact("m1", "money", 1, "Alimentos: 8400")] });
-  assert.strictEqual(ctx.facts[0].label, "Alimentos: 8400");
+test("buildContext: maxFacts sube el tope para el coach sin mover el de siempre", () => {
+  const muchos = Array.from({ length: MAX_FACTS_COACH + 5 }, (_, i) => fact(`f${i}`, "money", i / 1000));
+  assert.strictEqual(buildContext({ scope: "money", facts: muchos }).facts.length, MAX_FACTS);
+  assert.strictEqual(
+    buildContext({ scope: "money", facts: muchos, maxFacts: MAX_FACTS_COACH }).facts.length,
+    MAX_FACTS_COACH
+  );
 });
 
 // --- Fase 2: opt-in por dominio y memoria ----------------------------------
@@ -172,19 +152,6 @@ test("buildContext: la memoria vigente entra y la caducada no", () => {
   assert.deepStrictEqual(ctx.memory, ["Quiero liquidar la tarjeta antes de diciembre"]);
 });
 
-test("buildContext: la memoria también se seudonimiza antes de salir", () => {
-  const map = buildAliasMap([{ kind: "member", name: "Ana" }]);
-  const ctx = buildContext({
-    scope: "money",
-    facts: [fact("m1", "money", 1)],
-    aliases: map,
-    todayISO: "2026-08-24",
-    memory: [{ id: "a", scope: "finance", origin: "user", text: "No recortar el gasto de Ana", validUntil: null }]
-  });
-  assert.deepStrictEqual(ctx.memory, ["No recortar el gasto de Dependiente #1"]);
-  assert.ok(!JSON.stringify(ctx).includes("Ana"));
-});
-
 test("buildContext: sin memoria cargada el contexto la deja vacía, no undefined", () => {
   const ctx = buildContext({ scope: "money", facts: [fact("m1", "money", 1)] });
   assert.deepStrictEqual(ctx.memory, []);
@@ -222,5 +189,43 @@ test("TABLAS_CONSULTABLES: ninguna tabla escapa a un dominio que 'global' no cub
   const globales = allowedDomains("global");
   for (const [tabla, meta] of Object.entries(TABLAS_CONSULTABLES)) {
     assert.ok(globales.includes(meta.domain), `${tabla} apunta a ${meta.domain}, que no está en global`);
+  }
+});
+
+test("TABLAS_CONSULTABLES: sigue siendo una lista BLANCA — lo sensible no está", () => {
+  // La lista pasó de 11 tablas a 39 en 0053. Lo que hace que ese crecimiento
+  // sea defendible es que estas siguen fuera, y que estarlo no depende de que
+  // nadie se acuerde: no aparecen porque no se escribieron.
+  for (const prohibida of [
+    "profiles",
+    "audit_log",
+    "ai_chat_messages",
+    "consents",
+    "push_subscriptions",
+    "notification_prefs",
+    "memberships",
+    "invitations",
+    "template_catalog",
+    "coach_proposals"
+  ]) {
+    assert.ok(!(prohibida in TABLAS_CONSULTABLES), `${prohibida} no puede ser consultable`);
+  }
+});
+
+test("TABLAS_CONSULTABLES: solo los catálogos acotados pueden ir sin columna de fecha", () => {
+  // Una tabla sin ventana se trae hasta el tope de filas. Eso solo es aceptable
+  // donde el total cabe ahí; en cualquier otra la ventana es lo que impide que
+  // el corte se decida al azar.
+  const sinFecha = Object.entries(TABLAS_CONSULTABLES)
+    .filter(([, meta]) => meta.fecha === null)
+    .map(([tabla]) => tabla)
+    .sort();
+  assert.deepStrictEqual(sinFecha, ["categories", "folders", "nutrition_profiles", "task_groups"]);
+});
+
+test("TABLAS_CONSULTABLES: cada tabla declara columnas explícitas, nunca un '*'", () => {
+  for (const [tabla, meta] of Object.entries(TABLAS_CONSULTABLES)) {
+    assert.ok(meta.select.length > 0, `${tabla} sin select`);
+    assert.ok(!meta.select.includes("*"), `${tabla} usa '*' y crecería solo`);
   }
 });

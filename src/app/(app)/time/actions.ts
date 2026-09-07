@@ -46,6 +46,11 @@ export async function updateActivityWindow(formData: FormData) {
   await supabase.from("audit_log").insert({ user_id: user.id, action: "time.window.update" });
   revalidatePath("/time");
   revalidatePath("/home");
+  // Configuración también pinta esta ventana, y desde 0053 deja editarla ahí
+  // mismo. Sin esta línea, guardar desde /settings dejaba la propia pantalla
+  // mostrando los valores viejos — que se lee exactamente igual que «no se
+  // guardó».
+  revalidatePath("/settings");
 }
 
 const occupationSchema = z
