@@ -10,6 +10,22 @@ export const metadata: Metadata = {
     capable: true,
     statusBarStyle: "default",
     title: publicEnv.NEXT_PUBLIC_APP_NAME
+  },
+  // SIN ESTO EL IPHONE NO TIENE ICONO. Los archivos existían en
+  // public/icons/ desde el primer día, pero nadie los enlazaba: ni aquí ni por
+  // convención de Next (que solo mira src/app/icon.png y src/app/apple-icon.png,
+  // no public/). Sin <link rel="apple-touch-icon"> iOS no se inventa nada —
+  // guarda una miniatura de la propia página como icono del acceso directo.
+  // El manifest tampoco sirve para esto: Safari no saca de ahí el icono de la
+  // pantalla de inicio.
+  icons: {
+    icon: [
+      { url: "/icons/icon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }
+    ],
+    // 180 es la medida que pide iOS y la única que hace falta: el sistema
+    // reescala de ahí hacia abajo.
+    apple: [{ url: "/icons/apple-touch-icon-180.png", sizes: "180x180", type: "image/png" }]
   }
 };
 
