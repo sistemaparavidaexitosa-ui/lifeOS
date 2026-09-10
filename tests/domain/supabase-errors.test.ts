@@ -11,6 +11,25 @@ test("42703 (columna inexistente): nombra la columna y dice qué hacer", () => {
   assert.match(msg, /supabase db push/);
 });
 
+test("PGRST205 (la TABLA no existe): dice que falta una migración, no otra cosa", () => {
+  // Es el hermano de PGRST204 y faltaba. PGRST204 es «no encuentro la COLUMNA»;
+  // PGRST205 es «no encuentro la TABLA», que es lo que devuelve PostgREST
+  // cuando un módulo entero no está desplegado.
+  //
+  // El incidente que lo añade: el Mapa de dependencias (0054) contra una base
+  // sin esa migración. `graph_nodes` no existía, PostgREST devolvía 404 con
+  // este código, y la pantalla concluía «todavía no hay nada que dibujar» —
+  // que es exactamente la clase de mentira que este archivo existe para
+  // impedir: le decía al dueño del sistema que no tenía proyectos mientras los
+  // tenía delante en otra pestaña.
+  const mensaje = describeDbError({
+    code: "PGRST205",
+    message: "Could not find the table 'public.graph_nodes' in the schema cache"
+  });
+  assert.match(mensaje, /migración/);
+  assert.match(mensaje, /graph_nodes/);
+});
+
 test("PGRST204 (caché de esquema): también nombra la columna", () => {
   const msg = describeDbError({
     code: "PGRST204",

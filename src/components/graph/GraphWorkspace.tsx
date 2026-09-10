@@ -43,7 +43,10 @@ export default function GraphWorkspace({
   const [expandidos, setExpandidos] = useState<ReadonlySet<string>>(new Set());
   const [camara, setCamara] = useState<Viewport>({ x: 0, y: 0, scale: 1, width: 800, height: 600 });
   const [limites, setLimites] = useState<Rect | null>(null);
-  const [aviso, setAviso] = useState<string | null>(null);
+  // Si el recorrido falló —una RPC que falta porque la migración se aplicó a
+  // medias, por ejemplo— el motivo llega desde el servidor y se pinta. Un
+  // lienzo vacío sin explicación parece que no tienes nada.
+  const [aviso, setAviso] = useState<string | null>(initial.reason);
 
   // El minimapa necesita las posiciones, pero estas cambian sesenta veces por
   // segundo: viven en un ref y solo se sube a estado un CONTADOR cuando se

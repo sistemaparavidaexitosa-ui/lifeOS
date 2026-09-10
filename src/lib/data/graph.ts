@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { describeDbError } from "@/lib/supabase/errors";
 import { getSessionUser } from "@/lib/data/session";
 import type {
   GraphEdge, GraphEdgeOrigin, GraphNode, GraphNodeType, GraphRelType, GraphScope, Subgraph
@@ -21,6 +22,17 @@ import type { ImpactRow } from "@/lib/domain/graph/impact";
 // Igual que en `lib/data/notifications.ts`: la cerradura es la RLS, y repetirla
 // aquí daría a entender que la de verdad es esta.
 //
+// UN FALLO NO SE DEVUELVE COMO «NO HAY NADA», NUNCA
+// Estas funciones devolvían listas vacías ante cualquier error, y eso convirtió
+// «la migración 0054 no está aplicada en esta base» en «todavía no hay nada que
+// dibujar»: la pantalla le decía al dueño del sistema que no tenía proyectos
+// mientras los tenía delante en otra pestaña. Es exactamente el incidente que
+// documenta la cabecera de src/lib/supabase/errors.ts, repetido.
+//
+// Por eso cada lectura devuelve además un `reason`: null si todo fue bien, y el
+// texto de `describeDbError` si no. Vacío y roto son cosas distintas y la
+// pantalla tiene que poder decir cuál de las dos es.
+//
 // LAS FUNCIONES DE RECORRIDO LANZAN CUANDO NO HAY ACCESO
 // `graph_impact` y `graph_subgraph` levantan 42501 si la raíz no es tuya. Aquí
 // se traduce a lista vacía en vez de propagar: quien llama es un Server
@@ -32,6 +44,16 @@ export interface GraphRoot {
   nodeId: string;
   label: string;
   nodeType: GraphNodeType;
+}
+
+/**
+ * `root: null` y `reason: null` significa «no hay nada todavía», que es un
+ * estado legítimo. `reason` con texto significa que algo falló y hay que
+ * decirlo, no fingir que la base está vacía.
+ */
+export interface GraphRootResult {
+  root: GraphRoot | null;
+  reason: string | null;
 }
 
 function mapNode(row: {
@@ -80,7 +102,7 @@ export const loadSubgraph = cache(async (
 ): Promise<Subgraph> => {
   const supabase = await createClient();
   const user = await getSessionUser();
-  if (!user) return { nodes: [], edges: [], truncated: false };
+  if (!user) return { nodes: [], edges: [], truncated: false, reason: null };
 
   const { data, error } = await supabase.rpc("graph_subgraph", {
     p_root: rootId,
@@ -92,13 +114,22 @@ export const loadSubgraph = cache(async (
     p_max_depth: depth ?? view.depth,
     p_max_nodes: maxNodes
   });
-  if (error || data === null) return { nodes: [], edges: [], truncated: false };
+  // Un 42501 aquí no es un fallo que reportar: significa que la raíz dejó de
+  // ser tuya o ya no existe, que es un enlace viejo. Lo demás sí se cuenta.
+  if (error) {
+    const enlaceViejo = error.code === "42501";
+    return {
+      nodes: [], edges: [], truncated: false,
+      reason: enlaceViejo ? null : describeDbError(error)
+    };
+  }
+  if (data === null) return { nodes: [], edges: [], truncated: false, reason: null };
 
   const nodes = data.map(mapNode);
   // `truncated` viene repetido en todas las filas —es una propiedad del
   // recorrido, no del nodo—, así que basta con mirar la primera.
   const truncated = data.length > 0 && data[0]!.truncated === true;
-  if (nodes.length === 0) return { nodes: [], edges: [], truncated };
+  if (nodes.length === 0) return { nodes: [], edges: [], truncated, reason: null };
 
   const { data: aristas } = await supabase.rpc("graph_edges_of", {
     p_nodes: nodes.map((n) => n.id)
@@ -109,7 +140,7 @@ export const loadSubgraph = cache(async (
     .map(mapEdge)
     .filter((e) => permitidas === null || permitidas.has(e.relType));
 
-  return { nodes, edges, truncated };
+  return { nodes, edges, truncated, reason: null };
 });
 
 /** El análisis de impacto de un nodo, en las dos direcciones. */
@@ -155,10 +186,10 @@ export const loadImpact = cache(async (
  * de que no hay nada. Se lee de `graph_nodes` con RLS puesta: aquí no hay
  * recorrido que optimizar, así que no hace falta bajar a una RPC.
  */
-export const defaultRootFor = cache(async (view: GraphView): Promise<GraphRoot | null> => {
+export const defaultRootFor = cache(async (view: GraphView): Promise<GraphRootResult> => {
   const supabase = await createClient();
   const user = await getSessionUser();
-  if (!user) return null;
+  if (!user) return { root: null, reason: null };
 
   const preferidos: Record<string, GraphNodeType[]> = {
     project: ["project"],
@@ -171,7 +202,7 @@ export const defaultRootFor = cache(async (view: GraphView): Promise<GraphRoot |
   };
   const tipos = preferidos[view.id] ?? ["project"];
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("graph_nodes")
     .select("id, label, node_type")
     .eq("scope", view.scope)
@@ -180,33 +211,36 @@ export const defaultRootFor = cache(async (view: GraphView): Promise<GraphRoot |
     .order("updated_at", { ascending: false })
     .limit(1);
 
+  // AQUÍ es donde se veía el fallo: sin esta rama, una base sin la migración
+  // 0054 devuelve PGRST205, `data` llega como null, y la pantalla concluía que
+  // no tenías nada. describeDbError ya sabe traducir ese código desde este
+  // mismo incidente.
+  if (error) return { root: null, reason: describeDbError(error) };
+
   const fila = data?.[0];
-  if (fila === undefined) return null;
-  return { nodeId: fila.id, label: fila.label, nodeType: fila.node_type as GraphNodeType };
+  if (fila === undefined) return { root: null, reason: null };
+  return {
+    root: { nodeId: fila.id, label: fila.label, nodeType: fila.node_type as GraphNodeType },
+    reason: null
+  };
 });
 
 /** El nodo que proyecta una fila de dominio. Lo usa el enlace «ver en el grafo». */
-export const nodeForEntity = cache(async (entityId: string): Promise<GraphRoot | null> => {
+export const nodeForEntity = cache(async (entityId: string): Promise<GraphRootResult> => {
   const supabase = await createClient();
   const user = await getSessionUser();
-  if (!user) return null;
+  if (!user) return { root: null, reason: null };
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("graph_nodes")
     .select("id, label, node_type")
     .eq("entity_id", entityId)
     .maybeSingle();
 
-  if (data === null) return null;
-  return { nodeId: data.id, label: data.label, nodeType: data.node_type as GraphNodeType };
-});
-
-/** El catálogo de tipos, para pintar colores y leyendas sin quemarlos en el CSS. */
-export const loadGraphCatalog = cache(async () => {
-  const supabase = await createClient();
-  const [{ data: nodos }, { data: rels }] = await Promise.all([
-    supabase.from("graph_node_types").select("node_type, label, color, position").order("position"),
-    supabase.from("graph_rel_types").select("rel_type, label, is_dependency, reversed, is_symmetric, position").order("position")
-  ]);
-  return { nodeTypes: nodos ?? [], relTypes: rels ?? [] };
+  if (error) return { root: null, reason: describeDbError(error) };
+  if (data === null) return { root: null, reason: null };
+  return {
+    root: { nodeId: data.id, label: data.label, nodeType: data.node_type as GraphNodeType },
+    reason: null
+  };
 });

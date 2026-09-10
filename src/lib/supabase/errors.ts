@@ -26,13 +26,26 @@ export interface DbErrorLike {
   message?: string | null;
 }
 
-/** `column books.cover_url does not exist` → `books.cover_url` */
-function columnFromMessage(message: string): string | null {
+/**
+ * El objeto que falta, sacado del texto del error.
+ *
+ * Se llamaba `columnFromMessage` cuando solo sabía de columnas. Desde que
+ * entiende PGRST205 devuelve también TABLAS, y el nombre tenía que decirlo:
+ * una función que se llama «columna» y devuelve una tabla es una trampa para
+ * quien la lea dentro de un año.
+ *
+ * `column books.cover_url does not exist` → `books.cover_url`
+ * `Could not find the table 'public.graph_nodes' …` → `public.graph_nodes`
+ */
+function objetoQueFalta(message: string): string | null {
   const undefined_column = /column ([\w.]+) does not exist/i.exec(message);
   if (undefined_column) return undefined_column[1] ?? null;
   // PGRST204: Could not find the 'cover_url' column of 'books' in the schema cache
   const schema_cache = /find the '([\w]+)' column of '([\w]+)'/i.exec(message);
   if (schema_cache) return `${schema_cache[2]}.${schema_cache[1]}`;
+  // PGRST205: Could not find the table 'public.graph_nodes' in the schema cache
+  const tabla = /find the table '([\w.]+)'/i.exec(message);
+  if (tabla) return tabla[1] ?? null;
   return null;
 }
 
@@ -40,8 +53,14 @@ function columnFromMessage(message: string): string | null {
  * El caso que motivó este archivo. Se distingue del resto porque su causa no
  * es un dato mal capturado sino un despliegue incompleto, y la acción que lo
  * resuelve no la hace el usuario sino quien opera la base.
+ *
+ * `PGRST205` se añadió con el Mapa de dependencias (0054): es el hermano de
+ * PGRST204 —«no encuentro la TABLA» en vez de «no encuentro la COLUMNA»— y es
+ * lo que devuelve PostgREST cuando un módulo ENTERO no está desplegado. Sin él
+ * la pantalla del grafo decía «todavía no hay nada que dibujar» a alguien que
+ * tenía sus proyectos delante en otra pestaña.
  */
-const MIGRACION_PENDIENTE = new Set(["PGRST204", "42703", "42P01"]);
+const MIGRACION_PENDIENTE = new Set(["PGRST204", "PGRST205", "42703", "42P01"]);
 
 export function describeDbError(error: DbErrorLike | null | undefined): string {
   if (!error) return "Error desconocido.";
@@ -49,8 +68,8 @@ export function describeDbError(error: DbErrorLike | null | undefined): string {
   const message = error.message ?? "";
 
   if (MIGRACION_PENDIENTE.has(code)) {
-    const columna = columnFromMessage(message);
-    const que = columna ? `«${columna}»` : "una columna o tabla";
+    const objeto = objetoQueFalta(message);
+    const que = objeto ? `«${objeto}»` : "una columna o tabla";
     return `La base de datos no tiene ${que}: falta aplicar una migración (\`supabase db push\`) o recargar el caché de PostgREST (\`notify pgrst, 'reload schema';\`).`;
   }
 

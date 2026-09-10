@@ -68,6 +68,13 @@ export interface Subgraph {
    * vacío, porque parece completo.
    */
   truncated: boolean;
+  /**
+   * Por qué está vacío, si es que está vacío por un fallo y no porque no haya
+   * nada. `null` = todo fue bien. Vacío y roto son cosas distintas, y una
+   * pantalla que las confunde le dice a alguien que no tiene proyectos
+   * mientras los tiene delante.
+   */
+  reason: string | null;
 }
 
 export interface Rect {

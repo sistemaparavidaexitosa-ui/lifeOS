@@ -2214,3 +2214,18 @@ implementa:
   colocada. Un trabajador habría añadido un canal de mensajes y un modo de
   fallo nuevo a cambio de nada. Con `prefers-reduced-motion` se corre entera de
   golpe y se pinta el resultado.
+
+- **D-124 · Vacío y roto no son lo mismo, y la capa de lectura tiene que
+  distinguirlos.** `src/lib/data/graph.ts` devolvía listas vacías ante cualquier
+  error, siguiendo el patrón de los demás lectores de `lib/data/**`. Contra una
+  base sin la migración 0054, PostgREST responde `PGRST205` y la pantalla
+  concluía «todavía no hay nada que dibujar»: le decía al dueño del sistema que
+  no tenía proyectos mientras los tenía delante en otra pestaña. Es el mismo
+  incidente que documenta la cabecera de `lib/supabase/errors.ts` con
+  `books.cover_url` y la migración 0026, repetido.
+  Ahora cada lectura del grafo devuelve un `reason`: null si todo fue bien, el
+  texto de `describeDbError` si no, y la página pinta el motivo en vez del
+  estado vacío. Se añadió `PGRST205` —«no encuentro la TABLA», el hermano de
+  `PGRST204`— a `MIGRACION_PENDIENTE`, que es lo que hace que el mensaje diga
+  qué comando ejecutar. La regla que queda: un lector puede devolver vacío
+  cuando no hay datos, nunca cuando no pudo mirar.

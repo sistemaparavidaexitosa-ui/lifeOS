@@ -3761,6 +3761,30 @@ textarea:focus {
   font-size: 13px;
 }
 
+.gr-fallo {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: auto;
+  max-width: 560px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--surface);
+}
+.gr-fallo h2 { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; }
+/* El motivo viene de describeDbError y lleva rutas y comandos dentro: se pinta
+   en monoespaciada y con salto de línea para que se pueda copiar y ejecutar. */
+.gr-fallo p:nth-of-type(1) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  background: var(--surface2);
+  border-radius: 10px;
+  padding: 10px;
+  overflow-wrap: anywhere;
+}
+
 /* Quien prefiere no ver animaciones tampoco quiere ver un grafo recolocándose
    solo. El lienzo lo consulta para saltar directo al resultado. */
 @media (prefers-reduced-motion: reduce) {
