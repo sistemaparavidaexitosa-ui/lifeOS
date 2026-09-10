@@ -33,6 +33,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/reports", label: "Reportes", group: "Panel", icon: "reports", color: "var(--accent)" },
   { href: "/execution", label: "Proyectos y Tareas", group: "Execution OS", icon: "board", color: "var(--c-purple)" },
   { href: "/execution/eisenhower", label: "Matriz de Eisenhower", group: "Execution OS", icon: "eisenhower", color: "var(--c-purple)" },
+  { href: "/graph", label: "Mapa de dependencias", group: "Execution OS", icon: "graph", color: "var(--c-purple)" },
   { href: "/planning", label: "Planeación", group: "Execution OS", icon: "planning", color: "var(--c-purple)" },
   { href: "/time", label: "Autogestión del Tiempo", group: "Execution OS", icon: "time", color: "var(--c-purple)" },
   { href: "/notebooks", label: "Notebooks", group: "Execution OS", icon: "workspaces", color: "var(--c-purple)", hidden: true },

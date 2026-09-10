@@ -6,6 +6,8 @@
 |---|---|---|
 | Usuario A lee/escribe datos de Usuario B | Falta de RLS o RLS sin GRANT | RLS por `user_id = auth.uid()` en TODA tabla de negocio + GRANT explícito por migración (F9) + pruebas pgTAP positivas y negativas |
 | Colaborador de un Workspace ve Money OS/Hogar/Tiempo/Hábitos de otro miembro | Política RLS que use `has_project_access`/`workspace_role` sobre tablas equivocadas | Ninguna tabla de Money OS, Hogar, Time o Habits tiene `workspace_id`; sus políticas RLS son siempre `user_id = auth.uid()` puro (BR-012/019/020/027) |
+| **Colaborador de un Workspace ve datos privados a través del grafo** | `graph_nodes` es la primera tabla del sistema donde una fila de Money OS y una de un proyecto compartido conviven bajo la misma política, así que el control de la fila de arriba —«ninguna tabla mezcla los dos mundos»— deja de aplicarse | Tres capas, ninguna suficiente sola: (1) el CHECK `graph_nodes_tenant_shape` hace imposible una fila «anfibia»; (2) **dos** políticas de SELECT separadas por `scope`, no un `or`, para que un fallo en la de espacios no pueda alcanzar una fila privada; (3) el trigger `graph_edge_tenant` **rechaza** cualquier arista cuyos extremos no compartan dueño. Probado en `supabase/tests/0025_rls_grafo.sql` (migración 0054) |
+| **Fuga a través de una función que camina con la RLS apagada** | `graph_impact` y `graph_subgraph` son las primeras funciones `SECURITY DEFINER` con `row_security = off` que recorren filas: la RLS no las protege, las protege el código de dentro | El acceso a la raíz se comprueba antes de caminar y el permiso se filtra **en cada salto**, no al hidratar; el permiso se precalcula en **dos** conjuntos (espacios donde se es miembro no-Guest, y proyectos compartidos de un Guest) porque uno solo le habría dado a un Guest el espacio entero; las funciones son `stable` (no pueden escribir) y `revoke execute … from anon` deshace el default de `0010`. `supabase/tests/0025_rls_grafo.sql` incluye pruebas sobre `proconfig` y `provolatile` para detectar que alguien les quite los `set` |
 | Filtración de `service_role` al cliente | Import accidental de `admin.ts` en un Client Component | `import "server-only"` en `admin.ts` — falla en build time si se intenta bundlear para el navegador |
 | XSS vía scripts inline no autorizados | CSP ausente o mal configurada | `middleware.ts` aplica CSP con nonce por request + `strict-dynamic` (F5) |
 | Clickjacking | Falta de `X-Frame-Options`/`frame-ancestors` | `next.config.ts` (`X-Frame-Options: DENY`) + CSP `frame-ancestors 'none'` |
@@ -64,6 +66,31 @@ repartirlo. Cada guardado, publicación, retirada y borrado deja una fila en
 `anon` no llega a `template_catalog` ni siquiera a lo publicado: la migración
 **revoca** el `select` que `0002` le concede por defecto a toda tabla nueva del
 esquema.
+
+## El grafo y la frontera de privacidad (migración 0054)
+
+`graph_nodes` proyecta catorce entidades de dominio como nodos, y entre ellas
+hay tanto cosas de espacio compartido (proyectos, tareas, notas) como cosas
+estrictamente privadas (metas, hábitos, presupuestos, inversiones, activos,
+decisiones de la bitácora). Es la primera vez que ambos mundos comparten tabla.
+
+La invariante, dicha sin adornos: **un nodo privado nunca se conecta con un nodo
+de un espacio de trabajo, ni siquiera en tu espacio personal, ni siendo dueño de
+los dos**. El trigger `graph_edge_tenant` lanza si se intenta, con un mensaje en
+español que nombra los dos nodos.
+
+Las consecuencias visibles del producto, aceptadas a conciencia:
+
+- El Personal Graph y el Money Graph son **grafos separados** del Project Graph
+  y del Workspace Graph. No hay una sola línea entre ellos.
+- Una **Decisión** de la bitácora no se puede enlazar con el proyecto del que
+  salió: `logbook` es privada por `user_id`, aunque su fila apunte a un proyecto.
+- Un **resultado clave** cuya fuente sea un proyecto (`key_results.source_kind =
+  'project'`) no genera arista. Solo las fuentes privadas —hábito y libro— la
+  generan.
+
+Antes que un nodo que filtre el texto de tu bitácora a tus compañeros de
+espacio, un nodo que vive solo en tu grafo personal.
 
 ## Datos de menores de edad (Hogar)
 

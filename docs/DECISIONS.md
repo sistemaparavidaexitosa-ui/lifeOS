@@ -2123,3 +2123,109 @@ implementa:
   palabras: nadie escribe eso en una nota, y quien lo pega no quería hacerlo.
   El mensaje del esquema llega al usuario, porque «demasiado larga» se puede
   actuar y «datos no válidos» no.
+
+- **D-117 · El lienzo del Execution Graph se escribe a mano, sin librería.** La
+  petición pedía «las mejores librerías modernas» y la respuesta honesta es que
+  para este caso no hay ninguna que valga. React Flow —la opción por defecto—
+  renderiza cada nodo como DOM, y su techo real está entre mil y dos mil nodos:
+  para el objetivo de cien mil no servía ni rompiendo D-008. Las de WebGL
+  (sigma, cosmograph) sí escalan, pero están hechas para EXPLORAR grafos, no
+  para editarlos: el arrastre, la selección múltiple y la edición hay que
+  construirlos encima igual. Queda un renderer propio sobre `<canvas>` con
+  árbol cuaternario, recorte por viewport y nivel de detalle por zoom: unas mil
+  líneas, cero dependencias, y el único enfoque que llega a la escala pedida.
+  **D-008 sigue intacto.** El precio, dicho sin adornos: ese código es nuestro
+  y hay que mantenerlo; a cambio, todo lo que se puede probar sin DOM vive en
+  `src/lib/domain/graph/**` y está cubierto por 66 casos de `node --test`.
+
+- **D-118 · `pg_trgm`, la primera extensión que declara el repo.** El buscador
+  del lienzo necesita subcadena y tolerancia a erratas sobre etiquetas cortas
+  —escribir «mudan» y que salga «Mudanza»—, y `to_tsvector` no hace prefijos.
+  Copiar el patrón de 0039 habría añadido un QUINTO `tsvector` sobre los mismos
+  títulos que ya indexan `projects`, `tasks`, `notes`, `comments` y
+  `workspace_activity`, y habría convertido cada renombrado de tarea en una
+  inserción en un índice GIN. Hay además un motivo de rendimiento que va más
+  allá de este módulo y conviene dejar escrito: el operador `@@`
+  (`ts_match_vq`) **no es leakproof**, así que en una tabla con RLS Postgres no
+  puede usarlo como condición de índice por delante de los quals de seguridad
+  —evalúa la política fila a fila antes de mirar el GIN—. Eso ya le pasa hoy a
+  `search_workspace` y no se nota porque las tablas son pequeñas; a cien mil
+  nodos sería la diferencia entre 2 ms y 2 s. La extensión se declara en 0054
+  con `with schema extensions`, que es donde viven en Supabase, y por eso la
+  clase de operadores va cualificada.
+
+- **D-119 · El grafo es una PROYECCIÓN, no la fuente de verdad.** Se descartó
+  el modelo «todo vive en `graph_nodes` con metadatos jsonb», que es el más
+  puro sobre el papel: obligaba a migrar sesenta tablas de dominio, a perder
+  las restricciones tipadas que hoy impiden un estado de tarea inventado, y a
+  reescribir features que funcionan. En su lugar, catorce triggers proyectan lo
+  que ya existe. La consecuencia buena es que el módulo nace con datos reales
+  —`tasks.deps` lleva en la base desde 0003 y nadie la había visto dibujada— y
+  que si mañana se borra el módulo entero no falta nada en ninguna pantalla. La
+  mala es la amplificación de escritura: cada cambio en una tarea puede tocar
+  `graph_nodes`. Se contiene con `update of` en cada trigger (se evalúa una vez
+  por sentencia, así que el reordenado masivo del tablero ni lo roza) y con un
+  `where … is distinct from` en el `on conflict do update` (que evita la
+  escritura aunque el trigger se dispare).
+
+- **D-120 · La frontera de privacidad se aplica en la base, no en la interfaz.**
+  `graph_nodes` es la primera tabla donde una fila de Money OS y una de un
+  proyecto compartido conviven bajo la misma política, así que el control que
+  `docs/SECURITY.md` declaraba —«ninguna tabla mezcla los dos mundos»— deja de
+  aplicarse. Se sustituye por tres capas: un CHECK que hace imposible la fila
+  anfibia, **dos** políticas de SELECT separadas por `scope` en vez de un `or`
+  (para que un fallo en la de espacios no pueda alcanzar una fila privada), y
+  un trigger que RECHAZA la arista que cruzaría. La consecuencia de producto se
+  acepta a conciencia: el Personal Graph y el Money Graph son grafos separados
+  del Project Graph, y una Decisión de la bitácora no se puede enlazar con el
+  proyecto del que salió. Antes eso que un nodo que filtre tu bitácora a tus
+  compañeros de espacio.
+
+- **D-121 · Las aristas `system` no se comprueban contra ciclos.** El trigger
+  `graph_edge_sin_ciclos` rechaza una dependencia que cierre un círculo, pero
+  solo si la dibuja una persona. Las que proyectan el dominio (`tasks.deps`)
+  pasan siempre. La razón: el grafo tiene que poder MOSTRAR un ciclo que ya
+  existía; negarse a proyectarlo haría fallar el guardado de una tarea desde
+  una pantalla que no sabe nada de grafos, y dejaría el mapa mintiendo. Un
+  grafo que rechaza la realidad es peor que uno que la enseña fea. El recorrido
+  lleva conjunto de visitados y `criticalPath` una guarda, así que un ciclo
+  heredado se ve, no cuelga nada.
+
+- **D-122 · Las posiciones del lienzo viven en su propia tabla, y solo se
+  guardan las que alguien mueve a mano.** Dos columnas `x`/`y` en `graph_nodes`
+  habrían hecho que arrastrar un nodo escribiera en la misma fila que mantiene
+  el trigger de proyección y que indexa el buscador: decenas de escrituras por
+  segundo compitiendo con el trigger de `tasks`. Y hay un motivo de producto
+  además del técnico: la posición no es una propiedad del nodo sino de cómo
+  cada persona mira el grafo, y la misma tarea ocupa sitios distintos en el
+  Project Graph y en el Impact Graph. `graph_layouts` lleva `(node_id, user_id,
+  view)`. Ausencia de fila significa «lo coloca el auto-layout», y por eso el
+  guardado se dispara SOLO al arrastrar: persistir también las posiciones
+  calculadas marcaría cada nodo como «colocado a mano» la primera vez que se
+  abre la pantalla, y la colocación automática no volvería a aplicarse jamás.
+
+- **D-123 · La simulación corre dentro del bucle de dibujo, no en un
+  trabajador web.** Se consideró un `Worker` —la CSP ya lo permite,
+  `worker-src 'self'` está en `middleware.ts` desde las notificaciones push— y
+  no hace falta: el tope de un recorrido son 5.000 nodos y un paso de
+  Barnes-Hut sobre eso son pocos milisegundos. Repartiéndolo con un presupuesto
+  de 6 ms por fotograma, el hilo principal nunca se bloquea y además se VE la
+  colocación animada, que enseña la estructura mucho mejor que verla ya
+  colocada. Un trabajador habría añadido un canal de mensajes y un modo de
+  fallo nuevo a cambio de nada. Con `prefers-reduced-motion` se corre entera de
+  golpe y se pinta el resultado.
+
+- **D-124 · Vacío y roto no son lo mismo, y la capa de lectura tiene que
+  distinguirlos.** `src/lib/data/graph.ts` devolvía listas vacías ante cualquier
+  error, siguiendo el patrón de los demás lectores de `lib/data/**`. Contra una
+  base sin la migración 0054, PostgREST responde `PGRST205` y la pantalla
+  concluía «todavía no hay nada que dibujar»: le decía al dueño del sistema que
+  no tenía proyectos mientras los tenía delante en otra pestaña. Es el mismo
+  incidente que documenta la cabecera de `lib/supabase/errors.ts` con
+  `books.cover_url` y la migración 0026, repetido.
+  Ahora cada lectura del grafo devuelve un `reason`: null si todo fue bien, el
+  texto de `describeDbError` si no, y la página pinta el motivo en vez del
+  estado vacío. Se añadió `PGRST205` —«no encuentro la TABLA», el hermano de
+  `PGRST204`— a `MIGRACION_PENDIENTE`, que es lo que hace que el mensaje diga
+  qué comando ejecutar. La regla que queda: un lector puede devolver vacío
+  cuando no hay datos, nunca cuando no pudo mirar.
