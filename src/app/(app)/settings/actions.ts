@@ -1,5 +1,6 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { isValidTimeZone } from "@/lib/domain/datetime.ts";
@@ -111,5 +112,16 @@ export async function updateNotificationPrefs(formData: FormData): Promise<Actio
 export async function toggleTheme(theme: "light" | "dark") {
   const { supabase, user } = await requireUser();
   await supabase.from("profiles").update({ theme }).eq("user_id", user.id);
-  revalidatePath("/settings");
+
+  // La columna es la verdad y sincroniza entre dispositivos; la cookie es lo
+  // que el layout raíz puede leer sin ir a la base en cada petición. Ver el
+  // comentario de src/app/layout.tsx. Un año de vigencia y `sameSite: lax`:
+  // no es un dato sensible, es una preferencia de aspecto.
+  (await cookies()).set("lifeos_theme", theme, {
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
+    sameSite: "lax"
+  });
+
+  revalidatePath("/", "layout");
 }

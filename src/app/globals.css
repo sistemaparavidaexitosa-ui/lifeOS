@@ -75,6 +75,11 @@
      por debajo, el botón flotante se pintaba encima de ↩︎ ↪︎ y se comía los
      toques. Queda por debajo del drawer y de los menús anclados. */
   --z-formatbar: 49;
+  /* Capas del Execution Graph. El lienzo va POR DEBAJO de todo el chrome: es
+     contenido, aunque ocupe la pantalla entera. El minimapa y el buscador
+     flotan sobre él pero siguen por debajo de la barra superior, o taparían el
+     menú al abrirlo en una pantalla estrecha. */
+  --z-graph-float: 15;
 }
 
 html[data-theme="dark"] {
@@ -3501,4 +3506,263 @@ textarea:focus {
 .nb-prose .nb-todo li > .nb-line {
   flex: 1 1 auto;
   min-width: 0;
+}
+
+
+/* ===========================================================================
+   EXECUTION GRAPH
+   ---------------------------------------------------------------------------
+   El lienzo se dibuja en <canvas>, así que aquí NO hay estilo de nodos ni de
+   aristas: eso vive en src/lib/domain/graph/theme.ts como nombres de variable
+   CSS, y el componente los lee con getComputedStyle en el momento de pintar.
+   Por eso el tema oscuro de este módulo no necesita una sola regla propia: los
+   tokens de :root y de html[data-theme="dark"] ya están definidos arriba y el
+   lienzo los sigue solo.
+
+   Lo que sí vive aquí es el andamiaje alrededor: la rejilla, el panel lateral,
+   la barra y los flotantes.
+   ========================================================================= */
+
+.gr-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  /* El lienzo quiere TODO el alto que quede bajo la barra superior. `dvh` y no
+     `vh` por la barra del navegador en móvil (F12). */
+  height: calc(100dvh - var(--topbar-total) - 24px);
+  min-height: 420px;
+}
+
+.gr-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.gr-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
+
+.gr-tab {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  color: var(--muted);
+  background: var(--surface2);
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.gr-tab:hover { background: var(--surface3); color: var(--text); }
+.gr-tab.active { background: var(--accent); color: #fff; }
+
+.gr-toolbar-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.gr-root { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.gr-select select,
+.gr-btn {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+.gr-btn:hover { background: var(--surface2); }
+
+.gr-body {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+@media (min-width: 1024px) {
+  /* El panel de impacto solo aparece cuando hay sitio de verdad. Por debajo de
+     mil pixeles se apila bajo el lienzo, que sigue siendo usable. */
+  .gr-body { grid-template-columns: 1fr 320px; }
+}
+
+.gr-stage {
+  position: relative;
+  border-radius: var(--r2);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  overflow: hidden;
+  min-height: 0;
+}
+
+.gr-canvas-wrap { position: absolute; inset: 0; }
+
+.gr-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* `touch-action: none` es obligatorio: sin él, arrastrar en un móvil hace
+     scroll de la página y el lienzo no recibe los eventos de puntero. */
+  touch-action: none;
+  cursor: grab;
+}
+.gr-canvas:active { cursor: grabbing; }
+
+.gr-stage-top {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: var(--z-graph-float);
+}
+
+.gr-search { position: relative; width: min(280px, 60vw); }
+.gr-search input {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 7px 11px;
+  font-size: 13px;
+  box-shadow: var(--shadow-sm);
+}
+
+.gr-hits {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 4px;
+}
+.gr-hits button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text);
+}
+.gr-hits button:hover { background: var(--surface2); }
+
+.gr-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
+
+.gr-minimap {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: var(--z-graph-float);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  box-shadow: var(--shadow-sm);
+  cursor: crosshair;
+}
+
+.gr-ayuda {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: var(--z-graph-float);
+  font-size: 11px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  padding: 4px 8px;
+  border-radius: 8px;
+  pointer-events: none;
+  max-width: 60%;
+}
+/* En móvil no hay rueda ni botón central, así que la ayuda estorba. */
+@media (max-width: 640px) { .gr-ayuda { display: none; } }
+
+.gr-inspector {
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--surface);
+  padding: 14px;
+  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.gr-inspector-head { display: flex; align-items: center; gap: 8px; }
+.gr-inspector-title { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.25; }
+
+.gr-link { font-size: 12px; color: var(--accent); }
+.gr-link:hover { text-decoration: underline; }
+
+.gr-seg { display: flex; gap: 2px; background: var(--surface2); padding: 3px; border-radius: 10px; }
+.gr-seg button {
+  flex: 1;
+  font-size: 12px;
+  padding: 5px 6px;
+  border-radius: 8px;
+  color: var(--muted);
+}
+.gr-seg button.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
+
+.gr-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.gr-stats div { background: var(--surface2); border-radius: 10px; padding: 8px; text-align: center; }
+.gr-stats b { display: block; font-size: 18px; letter-spacing: -0.02em; }
+.gr-stats span { font-size: 11px; color: var(--muted); }
+
+.gr-h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 6px; }
+
+.gr-lista { display: flex; flex-direction: column; gap: 4px; }
+.gr-lista li { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.gr-lista button, .gr-camino button {
+  font-size: 13px;
+  color: var(--text);
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gr-lista button:hover, .gr-camino button:hover { color: var(--accent); }
+
+.gr-camino { display: flex; flex-direction: column; gap: 4px; }
+.gr-camino li { position: relative; padding-left: 14px; font-size: 13px; }
+/* La línea vertical que hace que la cadena se lea como una cadena. */
+.gr-camino li::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--line);
+}
+.gr-camino li:first-child::before { top: 50%; }
+.gr-camino li:last-child::before { bottom: 50%; }
+
+.gr-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.gr-muted { font-size: 12px; color: var(--muted); }
+
+.gr-aviso {
+  font-size: 12px;
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+.gr-aviso-inline { font-size: 11px; color: var(--warn); }
+
+.gr-cargando {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* Quien prefiere no ver animaciones tampoco quiere ver un grafo recolocándose
+   solo. El lienzo lo consulta para saltar directo al resultado. */
+@media (prefers-reduced-motion: reduce) {
+  .gr-canvas { transition: none; }
 }

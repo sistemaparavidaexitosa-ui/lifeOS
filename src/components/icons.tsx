@@ -356,10 +356,25 @@ export const IconNutrition = (p: IconProps) =>
     p
   );
 
+/** Tres nodos y sus aristas: lo mínimo que se lee como «grafo» a 20 px. */
+export const IconGraph = (p: IconProps) =>
+  base(
+    <>
+      <circle cx="6" cy="7" r="2.4" />
+      <circle cx="18" cy="6" r="2.4" />
+      <circle cx="12" cy="18" r="2.4" />
+      <path d="M8.1 8.4 10.4 15.9" />
+      <path d="M16.3 7.9 13.7 15.9" />
+      <path d="M8.4 6.7h7.2" />
+    </>,
+    p
+  );
+
 export const NAV_ICONS = {
   home: IconHome,
   reports: IconReports,
   board: IconBoard,
+  graph: IconGraph,
   eisenhower: IconEisenhower,
   planning: IconPlanning,
   time: IconTime,

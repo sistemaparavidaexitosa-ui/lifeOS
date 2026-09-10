@@ -253,6 +253,40 @@ normalmente porque esa cuenta todavía no ha iniciado sesión nunca y su fila de
 Para quitarlo, el mismo `update` con `false`. Es reversible y no borra nada: las
 plantillas que haya publicado siguen publicadas.
 
+## 3ter) Aplicar la migración 0054 (Execution Graph) sobre una base con datos
+
+Es la primera migración del repo que **rellena tablas nuevas a partir de las
+que ya existen**, así que conviene saber qué va a pasar antes de lanzarla.
+
+**Lo que hace, en una sola transacción:** crea cinco tablas, sus índices y sus
+políticas; declara la extensión `pg_trgm`; recorre catorce tablas de dominio
+proyectando un nodo por fila y las aristas que ya vivían en los datos
+(`tasks.deps`, `parent_task_id`, `habits.routine_id`…); y solo entonces crea los
+triggers que la mantienen al día. Si algo falla, aborta entera: no existe el
+estado «tablas creadas y grafo a medias».
+
+**El riesgo real no es el volumen, es el bloqueo.** `create trigger` sobre
+`tasks` necesita `ACCESS EXCLUSIVE`, y si hay una sesión larga leyendo esa
+tabla, el bloqueo queda pendiente y —esto es lo que duele— **encola detrás a
+todos los lectores nuevos**. La migración lleva `set local lock_timeout = '10s'`
+justamente para eso: convierte «la aplicación estuvo caída durante el
+despliegue» en «la migración falló, vuelve a lanzarla». Si falla por bloqueo, no
+hay nada que limpiar; se relanza.
+
+**Pico de WAL.** El backfill de una base grande escribe todos los nodos y
+aristas de golpe. En Supabase alojado eso es un pico de replicación y, si tienes
+PITR, un salto en el tamaño del bucket. No rompe nada; conviene no lanzarlo a la
+vez que otra cosa pesada.
+
+**Comprobación después:**
+
+```sql
+select node_type, count(*) from public.graph_nodes group by 1 order by 1;
+select count(*) from public.graph_edges;
+-- Tiene que salir VACÍO: ninguna arista cruza la frontera de privacidad.
+select * from public.graph_check_integrity();
+```
+
 ## 4) Smoke test post-deploy (§8bis)
 
 - [ ] `GET https://tu-dominio.vercel.app/api/health` → `{"status":"ok",...}`.

@@ -1004,6 +1004,243 @@ export type Database = {
         }
         Relationships: []
       }
+      graph_edges: {
+        Row: {
+          confidence: number | null
+          created_at: string
+          created_by: string | null
+          metadata: Json | null
+          origin: string
+          project_id: string | null
+          rel_type: string
+          source_id: string
+          target_id: string
+          user_id: string | null
+          weight: number | null
+          workspace_id: string | null
+        }
+        Insert: {
+          confidence?: number | null
+          created_at?: string
+          created_by?: string | null
+          metadata?: Json | null
+          origin?: string
+          project_id?: string | null
+          rel_type: string
+          source_id: string
+          target_id: string
+          user_id?: string | null
+          weight?: number | null
+          workspace_id?: string | null
+        }
+        Update: {
+          confidence?: number | null
+          created_at?: string
+          created_by?: string | null
+          metadata?: Json | null
+          origin?: string
+          project_id?: string | null
+          rel_type?: string
+          source_id?: string
+          target_id?: string
+          user_id?: string | null
+          weight?: number | null
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "graph_edges_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "graph_edges_rel_type_fkey"
+            columns: ["rel_type"]
+            isOneToOne: false
+            referencedRelation: "graph_rel_types"
+            referencedColumns: ["rel_type"]
+          },
+          {
+            foreignKeyName: "graph_edges_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "graph_nodes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "graph_edges_target_id_fkey"
+            columns: ["target_id"]
+            isOneToOne: false
+            referencedRelation: "graph_nodes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "graph_edges_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      graph_layouts: {
+        Row: {
+          node_id: string
+          updated_at: string
+          user_id: string
+          view: string
+          x: number
+          y: number
+        }
+        Insert: {
+          node_id: string
+          updated_at?: string
+          user_id: string
+          view?: string
+          x: number
+          y: number
+        }
+        Update: {
+          node_id?: string
+          updated_at?: string
+          user_id?: string
+          view?: string
+          x?: number
+          y?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "graph_layouts_node_id_fkey"
+            columns: ["node_id"]
+            isOneToOne: false
+            referencedRelation: "graph_nodes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      graph_node_types: {
+        Row: {
+          color: string
+          is_projected: boolean
+          label: string
+          node_type: string
+          position: number
+        }
+        Insert: {
+          color?: string
+          is_projected?: boolean
+          label: string
+          node_type: string
+          position?: number
+        }
+        Update: {
+          color?: string
+          is_projected?: boolean
+          label?: string
+          node_type?: string
+          position?: number
+        }
+        Relationships: []
+      }
+      graph_nodes: {
+        Row: {
+          archived_at: string | null
+          created_at: string
+          entity_id: string | null
+          entity_table: string | null
+          id: string
+          label: string
+          metadata: Json | null
+          node_type: string
+          project_id: string | null
+          scope: string
+          updated_at: string
+          user_id: string | null
+          workspace_id: string | null
+        }
+        Insert: {
+          archived_at?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_table?: string | null
+          id?: string
+          label?: string
+          metadata?: Json | null
+          node_type: string
+          project_id?: string | null
+          scope: string
+          updated_at?: string
+          user_id?: string | null
+          workspace_id?: string | null
+        }
+        Update: {
+          archived_at?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_table?: string | null
+          id?: string
+          label?: string
+          metadata?: Json | null
+          node_type?: string
+          project_id?: string | null
+          scope?: string
+          updated_at?: string
+          user_id?: string | null
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "graph_nodes_node_type_fkey"
+            columns: ["node_type"]
+            isOneToOne: false
+            referencedRelation: "graph_node_types"
+            referencedColumns: ["node_type"]
+          },
+          {
+            foreignKeyName: "graph_nodes_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "graph_nodes_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      graph_rel_types: {
+        Row: {
+          is_dependency: boolean
+          is_symmetric: boolean
+          label: string
+          position: number
+          rel_type: string
+          reversed: boolean
+        }
+        Insert: {
+          is_dependency?: boolean
+          is_symmetric?: boolean
+          label: string
+          position?: number
+          rel_type: string
+          reversed?: boolean
+        }
+        Update: {
+          is_dependency?: boolean
+          is_symmetric?: boolean
+          label?: string
+          position?: number
+          rel_type?: string
+          reversed?: boolean
+        }
+        Relationships: []
+      }
       habit_logs: {
         Row: {
           completed_at: string
@@ -2736,6 +2973,86 @@ export type Database = {
           p_user_id: string
         }
         Returns: string
+      }
+      graph_check_integrity: {
+        Args: never
+        Returns: {
+          motivo: string
+          rel_type: string
+          source_id: string
+          target_id: string
+        }[]
+      }
+      graph_edges_of: {
+        Args: { p_nodes: string[] }
+        Returns: {
+          confidence: number
+          origin: string
+          rel_type: string
+          source_id: string
+          target_id: string
+          weight: number
+        }[]
+      }
+      graph_impact: {
+        Args: {
+          p_direction?: string
+          p_max_depth?: number
+          p_max_nodes?: number
+          p_root: string
+        }
+        Returns: {
+          depth: number
+          entity_id: string
+          entity_table: string
+          label: string
+          node_id: string
+          node_type: string
+          parent_id: string
+          truncated: boolean
+          via_rel: string
+        }[]
+      }
+      graph_meta: { Args: { p_campos: string[]; p_row: Json }; Returns: Json }
+      graph_node_of: { Args: { p_entity_id: string }; Returns: string }
+      graph_search: {
+        Args: { p_limit?: number; p_query: string }
+        Returns: {
+          entity_id: string
+          entity_table: string
+          label: string
+          node_id: string
+          node_type: string
+          similitud: number
+        }[]
+      }
+      graph_subgraph: {
+        Args: {
+          p_max_depth?: number
+          p_max_nodes?: number
+          p_node_types?: string[]
+          p_rel_types?: string[]
+          p_root: string
+        }
+        Returns: {
+          depth: number
+          entity_id: string
+          entity_table: string
+          label: string
+          metadata: Json
+          node_id: string
+          node_type: string
+          scope: string
+          truncated: boolean
+        }[]
+      }
+      graph_system_edges: {
+        Args: { p_rel: string; p_source: string; p_targets: string[] }
+        Returns: undefined
+      }
+      graph_system_edges_in: {
+        Args: { p_rel: string; p_sources: string[]; p_target: string }
+        Returns: undefined
       }
       has_notebook_access: { Args: { p_notebook_id: string }; Returns: boolean }
       has_project_access: { Args: { p_project_id: string }; Returns: boolean }
