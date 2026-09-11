@@ -3523,13 +3523,60 @@ textarea:focus {
    la barra y los flotantes.
    ========================================================================= */
 
+/* ---------------------------------------------------------------------------
+   LA PANTALLA DEL GRAFO ES OSCURA SIEMPRE, VAYA EL RESTO DE LA APP COMO VAYA.
+   ---------------------------------------------------------------------------
+   No es una preferencia estética: un lienzo de nodos se lee mucho mejor sobre
+   fondo oscuro. Las aristas finas y los colores saturados desaparecen sobre
+   blanco —hay que subirles el contraste hasta que chillan— mientras que sobre
+   un fondo casi negro se ven a su tamaño real. Es por lo que los visores de
+   grafos son oscuros, incluido el de graphify del que sale esta paleta.
+
+   Se hace redefiniendo los TOKENS en `.gr-shell`, no tocando `data-theme` en
+   <html>: las variables CSS cascadean, así que todo lo que hay dentro —el
+   armazón, el panel, y el <canvas>, que las lee con getComputedStyle desde su
+   propio contenedor— coge esta paleta sin enterarse de nada. El resto de la
+   aplicación no se entera tampoco.
+
+   Los colores de tipo de nodo conservan su SIGNIFICADO (morado = ejecución,
+   naranja = personal, verde = dinero) y solo se aclaran lo justo para que
+   tengan contraste sobre el fondo nuevo. Cambiarlos por una paleta categórica
+   haría más bonito el grafo y más difícil relacionarlo con el resto de la app.
+   --------------------------------------------------------------------------- */
 .gr-shell {
+  --bg: #0f0f1a;
+  --surface: #16162b;
+  --surface2: #1e1e38;
+  --surface3: #2a2a4e;
+  --text: #e6e6f0;
+  --muted: #8f8fb0;
+  --line: #2f2f52;
+  --accent: #7b7bff;
+  --accent-d: #6161ff;
+  --c-purple: #8f8fff;
+  --c-blue: #6fb0ff;
+  --c-green: #3ddc97;
+  --c-orange: #ffb454;
+  --c-pink: #ff7ad1;
+  --c-teal: #45e0cf;
+  --danger: #ff6b7f;
+  --warn: #ffc061;
+  --ok: #3ddc97;
+
+  /* Fondo propio: sin él, los huecos entre la barra, el lienzo y el panel
+     dejarían ver el fondo claro de la aplicación y la pantalla se vería como
+     un parche oscuro mal recortado en vez de una superficie. */
+  background: var(--bg);
+  color: var(--text);
+  border-radius: var(--r2);
+  padding: 10px;
   display: flex;
   flex-direction: column;
   gap: 10px;
   /* El lienzo quiere TODO el alto que quede bajo la barra superior. `dvh` y no
      `vh` por la barra del navegador en móvil (F12). */
   height: calc(100dvh - var(--topbar-total) - 24px);
+  box-sizing: border-box;
   min-height: 420px;
 }
 
@@ -3566,7 +3613,7 @@ textarea:focus {
   transition: background 0.15s ease, color 0.15s ease;
 }
 .gr-tab:hover { background: var(--surface3); color: var(--text); }
-.gr-tab.active { background: var(--accent); color: #fff; }
+.gr-tab.active { background: var(--accent); color: #0f0f1a; }
 
 .gr-toolbar-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .gr-root { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -3607,6 +3654,9 @@ textarea:focus {
      es un fallo tan silencioso —no hay error, no hay hueco, simplemente no se
      ve nada— que conviene que sea imposible por dos vías. */
   min-height: 240px;
+  /* El lienzo va sobre el fondo MÁS profundo de la paleta, no sobre la
+     superficie: es el lugar donde las aristas tienen que verse. */
+  background: var(--bg);
   border-radius: var(--r2);
   border: 1px solid var(--line);
   background: var(--surface);

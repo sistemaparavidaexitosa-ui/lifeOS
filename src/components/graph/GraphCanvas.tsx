@@ -208,7 +208,13 @@ export default function GraphCanvas({
   // --- Colores del tema -----------------------------------------------------
   useEffect(() => {
     const leer = () => {
-      const cs = getComputedStyle(document.documentElement);
+      // Se leen del CONTENEDOR, no de `document.documentElement`. Las variables
+      // CSS cascadean, así que leyéndolas aquí el lienzo hereda la paleta que le
+      // toque: la de la aplicación, o la oscura que `.gr-shell` define solo para
+      // esta pantalla. Leyéndolas de la raíz, esa paleta acotada no existiría
+      // para el <canvas> y el grafo se pintaría con los colores del tema claro
+      // sobre un fondo oscuro.
+      const cs = getComputedStyle(contenedorRef.current ?? document.documentElement);
       const tabla: ColorTable = {};
       for (const v of COLOR_VARS) tabla[v] = cs.getPropertyValue(v).trim();
       colores.current = tabla;

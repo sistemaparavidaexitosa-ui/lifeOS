@@ -2,6 +2,7 @@ import { EmptyState } from "@/components/ui";
 import GraphWorkspace from "@/components/graph/GraphWorkspace";
 import { defaultRootFor, loadAllNodes, loadSubgraph, nodeForEntity } from "@/lib/data/graph";
 import { resolveView } from "@/lib/domain/graph/views";
+import { listWorkspaces } from "@/lib/data/workspaces";
 import { loadLayout } from "./actions";
 
 // El Execution Graph.
@@ -23,10 +24,23 @@ import { loadLayout } from "./actions";
 export default async function GraphPage({
   searchParams
 }: {
-  searchParams: Promise<{ view?: string; node?: string; entity?: string }>;
+  searchParams: Promise<{ view?: string; node?: string; entity?: string; ws?: string }>;
 }) {
-  const { view: viewParam, node, entity } = await searchParams;
+  const { view: viewParam, node, entity, ws } = await searchParams;
   const view = resolveView(viewParam);
+
+  // EL ESPACIO ACTIVO, CON LA MISMA PRECEDENCIA QUE /execution: `?ws=` si
+  // todavía lo alcanzas, si no el personal, si no el primero.
+  //
+  // Antes esto no existía y el grafo elegía espacio SOLO por fecha, lo que con
+  // el backfill de la 0054 —que le puso el mismo `updated_at` a todos los nodos
+  // de espacio— era elegirlo al azar: con tres espacios, abría en uno distinto
+  // según le diera. El enlace además es compartible, igual que en /execution.
+  const espacios = view.scope === "workspace" ? await listWorkspaces() : [];
+  const espacioActivo =
+    espacios.find((w) => w.id === ws) ??
+    espacios.find((w) => w.isPersonal) ??
+    espacios[0];
 
   // LAS VISTAS SIN RAÍZ NO NECESITAN PUNTO DE PARTIDA, y por eso no pueden
   // fallar por elegirlo mal. Lo privado no tiene un nodo contenedor —no existe
@@ -41,6 +55,8 @@ export default async function GraphPage({
         view={view}
         initial={todo}
         rootLabel={null}
+        workspaces={[]}
+        activeWorkspaceId={null}
         savedPositions={await loadLayout(view.id)}
       />
     );
@@ -57,7 +73,7 @@ export default async function GraphPage({
       )
     : entity !== undefined
       ? await nodeForEntity(entity)
-      : await defaultRootFor(view);
+      : await defaultRootFor(view, espacioActivo?.id ?? null);
 
   // ROTO Y VACÍO NO SON LO MISMO, y esta pantalla llegó a confundirlos: contra
   // una base sin la migración 0054, PostgREST devuelve PGRST205, la consulta no
@@ -76,6 +92,8 @@ export default async function GraphPage({
       view={view}
       initial={subgrafo}
       rootLabel={raiz.root.label === "" ? null : raiz.root.label}
+      workspaces={espacios.map((w) => ({ id: w.id, name: w.name, isPersonal: w.isPersonal }))}
+      activeWorkspaceId={espacioActivo?.id ?? null}
       savedPositions={posiciones}
     />
   );
