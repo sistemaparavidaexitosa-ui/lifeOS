@@ -2229,3 +2229,37 @@ implementa:
   `PGRST204`— a `MIGRACION_PENDIENTE`, que es lo que hace que el mensaje diga
   qué comando ejecutar. La regla que queda: un lector puede devolver vacío
   cuando no hay datos, nunca cuando no pudo mirar.
+
+<!-- D-125 a D-128 viven en la rama fix/grafo-en-el-telefono (PR #31); se dejan
+     libres a propósito para que al fusionar las dos no colisione la numeración. -->
+
+- **D-129 · La frontera del grafo se redefine, no se abre (0055).** D-120 la
+  cerró con la regla «los dos extremos tienen el mismo dueño», y al usarlo esa
+  consecuencia salió más cara de lo previsto: una meta personal que se persigue
+  a través de un proyecto es exactamente lo que un sistema operativo personal
+  existe para enseñar, y estaba prohibida. La regla nueva es más PRECISA, no más
+  laxa: «a los dos extremos los ve exactamente la misma persona». El espacio
+  personal cumple eso por construcción —dos guardas de 0030 impiden invitar a
+  nadie y meter miembros ajenos, y un índice único garantiza uno por persona—,
+  así que una arista ahí dentro no se le puede enseñar a nadie porque no hay
+  nadie. Cualquier arista que toque un espacio COMPARTIDO desde fuera sigue
+  lanzando igual. D-120 no se borra: se enmienda.
+
+- **D-130 · Al mudar un proyecto fuera del espacio personal, las aristas que
+  dejan de ser legales se BORRAN, no bloquean la mudanza.** Es la otra mitad de
+  D-129 y sin ella abrir la frontera habría sido peor que dejarla cerrada:
+  `moveProject` puede sacar un proyecto del espacio personal, y una arista legal
+  hoy pasaría mañana a cruzar de verdad sin que nadie la hubiera tocado. Se
+  borran en el mismo trigger que re-etiqueta los nodos, o sea en la misma
+  transacción que el UPDATE, así que no hay un instante en el que el proyecto ya
+  esté compartido y la arista siga viva. Se borran en vez de rechazar la mudanza
+  porque mover un proyecto es una acción de `/execution`, una pantalla que no
+  sabe nada de grafos: hacerla fallar porque alguien dibujó una línea en otro
+  módulo convertiría una función nueva en un obstáculo para una que ya existía.
+  Queda rastro en `audit_log` para que la desaparición no sea un misterio.
+
+- **D-131 · La regla de la frontera vive en una sola función.**
+  `graph_misma_audiencia` la comparten el trigger de creación de aristas y
+  `graph_check_integrity()`. Escrita dos veces, el día que una cambiara la otra
+  dejaría de detectar lo que ya no cumple, y la auditoría diría que todo está
+  bien mientras deja de mirar lo que importa.
