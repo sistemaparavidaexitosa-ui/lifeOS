@@ -3541,7 +3541,20 @@ textarea:focus {
   gap: 10px;
 }
 
-.gr-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
+/* UNA sola fila que se desliza, no tres apiladas. Con siete vistas y 390px de
+   ancho, `flex-wrap` convertía la barra en un bloque de ~140px de alto que se
+   comía la pantalla antes de que el lienzo existiera. */
+.gr-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  /* Sin esto, la fila deslizable puede empujar la rejilla y desbordar en
+     horizontal: un contenedor flex tiene `min-width: auto` por defecto. */
+  min-width: 0;
+}
+.gr-tabs::-webkit-scrollbar { display: none; }
 
 .gr-tab {
   padding: 6px 12px;
@@ -3572,6 +3585,12 @@ textarea:focus {
 .gr-body {
   display: grid;
   grid-template-columns: 1fr;
+  /* LA FILA DEL LIENZO ES `minmax(0, 1fr)`, Y NO ES UN DETALLE.
+     Con filas implícitas `auto`, la del lienzo COLAPSABA A CERO: el único hijo
+     de .gr-stage es `position: absolute`, así que no aporta altura intrínseca,
+     y el panel de al lado se quedaba con toda la pantalla. En un teléfono eso
+     significaba que el grafo, sencillamente, no estaba. */
+  grid-template-rows: minmax(0, 1fr) auto;
   gap: 12px;
   flex: 1;
   min-height: 0;
@@ -3584,6 +3603,10 @@ textarea:focus {
 
 .gr-stage {
   position: relative;
+  /* Suelo duro. La rejilla ya reserva la fila, pero un lienzo de cero píxeles
+     es un fallo tan silencioso —no hay error, no hay hueco, simplemente no se
+     ve nada— que conviene que sea imposible por dos vías. */
+  min-height: 240px;
   border-radius: var(--r2);
   border: 1px solid var(--line);
   background: var(--surface);
@@ -3676,10 +3699,23 @@ textarea:focus {
   pointer-events: none;
   max-width: 60%;
 }
-/* En móvil no hay rueda ni botón central, así que la ayuda estorba. */
-@media (max-width: 640px) { .gr-ayuda { display: none; } }
+/* En móvil la ayuda habla de gestos que no existen ahí, y el minimapa se come
+   un cuarto de un lienzo que ya es pequeño. */
+@media (max-width: 640px) {
+  .gr-ayuda { display: none; }
+  .gr-minimap { display: none; }
+  .gr-toolbar-right .gr-muted { display: none; }
+}
+
+@media (min-width: 1024px) {
+  .gr-inspector { max-height: none; }
+}
 
 .gr-inspector {
+  /* En una pantalla estrecha el panel va DEBAJO y con tope: sin él, un informe
+     de impacto largo empuja el lienzo fuera de la vista. Por encima de 1024px
+     es una columna y recupera toda la altura. */
+  max-height: 42dvh;
   border: 1px solid var(--line);
   border-radius: var(--r2);
   background: var(--surface);
