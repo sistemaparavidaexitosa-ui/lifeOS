@@ -2364,3 +2364,19 @@ implementa:
   conservan su SIGNIFICADO (morado = ejecución, naranja = personal, verde =
   dinero) y solo se aclaran para tener contraste: una paleta categórica sería
   más bonita y haría más difícil relacionar el grafo con el resto de la app.
+- **D-137 · El layout por capas es un ÁRBOL, no dos columnas.** La primera
+  versión ponía todos los nodos de una profundidad en una columna ordenados por
+  etiqueta. Con siete proyectos y setenta y cuatro tareas eso da dos columnas
+  donde las tareas de un proyecto y las de otro quedan intercaladas por
+  casualidad alfabética: se ve ordenado y no dice nada, porque lo único que un
+  mapa de dependencias tiene que contestar —de quién cuelga esto— es justo lo
+  que se pierde. Ahora las hojas se reparten en orden y cada nodo interno se
+  centra sobre sus hijos (Reingold–Tilford sin sus refinamientos), con un hueco
+  extra al cerrar cada bloque: sin ese hueco, dos proyectos seguidos se leen
+  como una lista continua de tareas. El recorrido es iterativo y no recursivo a
+  propósito, por dos razones que ya han mordido antes en este módulo: un grafo
+  grande desbordaría la pila, y los ciclos heredados del dominio —las aristas
+  `system` no se comprueban, D-121— harían que una recursión ingenua no
+  terminara nunca. Cualquier nodo que quede fuera del árbol (un huérfano cuyo
+  padre no se ha cargado, o parte de un ciclo) se coloca igualmente al final:
+  un nodo que existe y no se dibuja es peor que uno mal colocado.

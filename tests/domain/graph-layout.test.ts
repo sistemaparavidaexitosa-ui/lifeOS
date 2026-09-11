@@ -5,7 +5,7 @@
 // que no escupa NaN, y que las capas ordenen de verdad por profundidad.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createSimulation, forceLayout, layeredLayout, seedOf } from "../../src/lib/domain/graph/layout.ts";
+import { createSimulation, forceLayout, seedOf, treeLayout } from "../../src/lib/domain/graph/layout.ts";
 
 const NODOS = Array.from({ length: 30 }, (_, i) => ({ id: `n${i}` }));
 const ARISTAS = Array.from({ length: 29 }, (_, i) => ({ sourceId: `n${i}`, targetId: `n${i + 1}` }));
@@ -79,26 +79,125 @@ test("una arista hacia un nodo que no está no rompe nada", () => {
   assert.ok(Number.isFinite(pos.get("a")!.x));
 });
 
-test("layeredLayout pone cada profundidad en su columna", () => {
-  const pos = layeredLayout([
-    { id: "r", depth: 0, label: "Raíz" },
-    { id: "a", depth: 1, label: "Alfa" },
-    { id: "b", depth: 1, label: "Beta" },
-    { id: "z", depth: 2, label: "Zeta" }
-  ], { columnWidth: 100 });
-  assert.strictEqual(pos.get("r")!.x, 0);
-  assert.strictEqual(pos.get("a")!.x, 100);
-  assert.strictEqual(pos.get("b")!.x, 100);
-  assert.strictEqual(pos.get("z")!.x, 200);
+// ---------------------------------------------------------------------------
+// EL LAYOUT POR CAPAS, AHORA EN ÁRBOL
+//
+// Antes ponía TODOS los nodos de una profundidad en una columna ordenados por
+// etiqueta. Con 7 proyectos y 74 tareas eso son dos columnas donde las tareas
+// de «Tiktok» y las de «Punto de Venta» quedan intercaladas por casualidad
+// alfabética: no se puede saber de quién cuelga nada, que es justo lo único que
+// un mapa de dependencias tiene que decir.
+// ---------------------------------------------------------------------------
+
+/** Espacio → 2 proyectos → 2 tareas cada uno. El caso que se reportó, en pequeño. */
+const ARBOL = {
+  nodes: [
+    { id: "ws", depth: 0, label: "Mi espacio" },
+    { id: "pA", depth: 1, label: "Alfa" },
+    { id: "pZ", depth: 1, label: "Zeta" },
+    { id: "a1", depth: 2, label: "Tarea de Alfa 1" },
+    { id: "a2", depth: 2, label: "Tarea de Alfa 2" },
+    { id: "z1", depth: 2, label: "Aaa tarea de Zeta" },
+    { id: "z2", depth: 2, label: "Bbb tarea de Zeta" }
+  ],
+  edges: [
+    { sourceId: "pA", targetId: "ws" },
+    { sourceId: "pZ", targetId: "ws" },
+    { sourceId: "a1", targetId: "pA" },
+    { sourceId: "a2", targetId: "pA" },
+    { sourceId: "z1", targetId: "pZ" },
+    { sourceId: "z2", targetId: "pZ" }
+  ]
+};
+
+test("cada profundidad sigue teniendo su columna", () => {
+  const pos = treeLayout(ARBOL.nodes, ARBOL.edges, { columnWidth: 100 });
+  assert.strictEqual(pos.get("ws")!.x, 0);
+  assert.strictEqual(pos.get("pA")!.x, 100);
+  assert.strictEqual(pos.get("a1")!.x, 200);
 });
 
-test("layeredLayout ordena por etiqueta, no por orden de llegada", () => {
-  // Así añadir una tarea no baraja las demás: el dibujo de ayer sigue siendo
-  // reconocible mañana.
-  const entrada = [
-    { id: "2", depth: 1, label: "Zeta" },
-    { id: "1", depth: 1, label: "Alfa" }
-  ];
-  const pos = layeredLayout(entrada);
-  assert.ok(pos.get("1")!.y < pos.get("2")!.y, "Alfa debería ir encima de Zeta");
+test("las tareas de un proyecto NO se intercalan con las de otro", () => {
+  // Es la razón de ser de este layout. Con orden alfabético global, «Aaa tarea
+  // de Zeta» se colaba entre las dos de Alfa y el dibujo dejaba de significar
+  // nada.
+  const pos = treeLayout(ARBOL.nodes, ARBOL.edges);
+  const deAlfa = ["a1", "a2"].map((id) => pos.get(id)!.y).sort((x, y) => x - y);
+  const deZeta = ["z1", "z2"].map((id) => pos.get(id)!.y).sort((x, y) => x - y);
+  const alfaMax = deAlfa[deAlfa.length - 1]!;
+  const zetaMin = deZeta[0]!;
+  assert.ok(alfaMax < zetaMin, `Alfa acaba en ${alfaMax} y Zeta empieza en ${zetaMin}`);
+});
+
+test("un proyecto queda centrado sobre sus tareas", () => {
+  // Así la flecha sale del medio del bloque y se ve de un vistazo qué cuelga de
+  // qué, sin tener que seguir la línea.
+  const pos = treeLayout(ARBOL.nodes, ARBOL.edges);
+  const medioAlfa = (pos.get("a1")!.y + pos.get("a2")!.y) / 2;
+  assert.ok(Math.abs(pos.get("pA")!.y - medioAlfa) < 1e-9);
+});
+
+test("y el espacio queda centrado sobre sus proyectos", () => {
+  const pos = treeLayout(ARBOL.nodes, ARBOL.edges);
+  const medio = (pos.get("pA")!.y + pos.get("pZ")!.y) / 2;
+  assert.ok(Math.abs(pos.get("ws")!.y - medio) < 1e-9);
+});
+
+test("hay un hueco entre bloques hermanos, no solo una fila más", () => {
+  // Sin separación extra, dos proyectos seguidos se leen como una lista
+  // continua de tareas y se pierde justo lo que este layout va a enseñar.
+  const pos = treeLayout(ARBOL.nodes, ARBOL.edges, { rowHeight: 10, groupGap: 40 });
+  const saltoDentro = Math.abs(pos.get("a2")!.y - pos.get("a1")!.y);
+  const saltoEntre = Math.abs(pos.get("z1")!.y - pos.get("a2")!.y);
+  assert.ok(saltoEntre > saltoDentro, `dentro ${saltoDentro} vs entre ${saltoEntre}`);
+});
+
+test("es determinista: el mismo árbol se coloca igual dos veces", () => {
+  assert.deepStrictEqual(
+    [...treeLayout(ARBOL.nodes, ARBOL.edges)],
+    [...treeLayout(ARBOL.nodes, ARBOL.edges)]
+  );
+});
+
+test("el orden de los hermanos sale de la etiqueta, no de cómo llegaron", () => {
+  // Añadir una tarea no debe barajar las demás.
+  const alReves = { ...ARBOL, nodes: [...ARBOL.nodes].reverse() };
+  assert.deepStrictEqual(
+    [...treeLayout(ARBOL.nodes, ARBOL.edges)].sort(),
+    [...treeLayout(alReves.nodes, alReves.edges)].sort()
+  );
+});
+
+test("un nodo sin padre en la capa anterior se coloca igual, no se pierde", () => {
+  // Pasa al expandir desde un borde: llega una tarea cuyo proyecto todavía no
+  // se ha cargado. Perderla sería peor que enseñarla suelta.
+  const pos = treeLayout(
+    [...ARBOL.nodes, { id: "huerfana", depth: 2, label: "Sin proyecto" }],
+    ARBOL.edges
+  );
+  assert.ok(pos.has("huerfana"));
+  assert.ok(Number.isFinite(pos.get("huerfana")!.y));
+});
+
+test("un nodo con DOS padres aparece una sola vez", () => {
+  const pos = treeLayout(ARBOL.nodes, [...ARBOL.edges, { sourceId: "a1", targetId: "pZ" }]);
+  assert.strictEqual(pos.size, ARBOL.nodes.length);
+  assert.ok(Number.isFinite(pos.get("a1")!.y));
+});
+
+test("un ciclo heredado del dominio no cuelga el layout", () => {
+  // Las aristas 'system' no se comprueban contra ciclos (D-121), así que el
+  // layout tiene que sobrevivir a uno.
+  const pos = treeLayout(ARBOL.nodes, [...ARBOL.edges, { sourceId: "ws", targetId: "a1" }]);
+  assert.strictEqual(pos.size, ARBOL.nodes.length);
+});
+
+test("sin aristas se comporta como una simple lista por capas", () => {
+  const pos = treeLayout(
+    [{ id: "a", depth: 0, label: "A" }, { id: "b", depth: 0, label: "B" }],
+    [],
+    { rowHeight: 10 }
+  );
+  assert.strictEqual(pos.get("a")!.x, pos.get("b")!.x);
+  assert.notStrictEqual(pos.get("a")!.y, pos.get("b")!.y);
 });
