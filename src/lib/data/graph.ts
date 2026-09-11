@@ -222,7 +222,10 @@ export const loadImpact = cache(async (
  * de que no hay nada. Se lee de `graph_nodes` con RLS puesta: aquí no hay
  * recorrido que optimizar, así que no hace falta bajar a una RPC.
  */
-export const defaultRootFor = cache(async (view: GraphView): Promise<GraphRootResult> => {
+export const defaultRootFor = cache(async (
+  view: GraphView,
+  workspaceId?: string | null
+): Promise<GraphRootResult> => {
   const supabase = await createClient();
   const user = await getSessionUser();
   if (!user) return { root: null, reason: null };
@@ -230,46 +233,53 @@ export const defaultRootFor = cache(async (view: GraphView): Promise<GraphRootRe
   // POR QUÉ LAS VISTAS DE ESPACIO ARRANCAN EN EL ESPACIO Y NO EN UN PROYECTO
   //
   // Arrancaban en «el proyecto modificado más recientemente», y eso resultó ser
-  // justo la peor señal posible: lo más reciente es lo más VACÍO. Un proyecto
-  // recién creado no tiene tareas, así que el recorrido devolvía UN nodo y la
-  // pantalla enseñaba una burbuja sola. Se reportó tal cual: «¿por qué solo se
-  // ve el nodo Café mío?».
+  // la peor señal posible: lo más reciente es lo más VACÍO. Un proyecto recién
+  // creado no tiene tareas, así que el recorrido devolvía UN nodo. El espacio,
+  // en cambio, es el único nodo del que cuelga todo lo suyo.
   //
-  // El espacio, en cambio, es el único nodo del que cuelga TODO lo del espacio:
-  // cada proyecto tiene su arista `belongs_to` hacia él desde la migración
-  // 0054. Arrancar ahí es lo que hace que al abrir se vean los proyectos, sus
-  // tareas y las dependencias entre ellas. Al pulsar un proyecto la pantalla se
-  // vuelve a enraizar ahí con `?node=`, que es cuando la vista ego-céntrica sí
-  // es lo que se quiere.
-  const tipos: Record<string, GraphNodeType[]> = {
-    project: ["workspace"],
-    workspace: ["workspace"],
-    knowledge: ["workspace"],
-    impact: ["workspace"],
-    // Lo privado no tiene un nodo contenedor: no existe un «nodo usuario» del
-    // que cuelguen las metas y los hábitos. Se arranca en el nodo con más
-    // conexiones, que es el que más grafo tiene alrededor.
-    personal: ["goal", "routine"],
-    money: ["goal", "budget"],
-    ai: ["goal", "project"]
-  };
-  const buscados = tipos[view.id] ?? ["workspace"];
+  // Y POR QUÉ EL ESPACIO LLEGA POR PARÁMETRO
+  // Porque elegirlo aquí, ordenando por fecha, era elegirlo AL AZAR: el backfill
+  // de la 0054 le puso a TODOS los nodos de espacio el mismo `updated_at`, así
+  // que `order by updated_at desc limit 1` es un empate total y Postgres
+  // devuelve la fila que quiera. Con tres espacios, el grafo abría en uno
+  // distinto según le diera. Ahora el espacio activo lo decide la página con la
+  // misma precedencia que /execution —`?ws=`, si no el personal, si no el
+  // primero— y aquí solo se busca su nodo.
+  if (view.scope === "workspace") {
+    if (workspaceId === undefined || workspaceId === null) {
+      return { root: null, reason: null };
+    }
+    const { data, error } = await supabase
+      .from("graph_nodes")
+      .select("id, label, node_type")
+      .eq("node_type", "workspace")
+      .eq("entity_id", workspaceId)
+      .maybeSingle();
+    if (error) return { root: null, reason: describeDbError(error) };
+    if (data === null) return { root: null, reason: null };
+    return {
+      root: { nodeId: data.id, label: data.label, nodeType: "workspace" },
+      reason: null
+    };
+  }
 
+  // Lo privado no tiene un nodo contenedor —no existe un «nodo usuario» del que
+  // cuelguen las metas y los hábitos—. Las vistas privadas son `rooted: false` y
+  // no pasan por aquí; esto queda para la de IA, que sí recorre.
   const { data, error } = await supabase
     .from("graph_nodes")
     .select("id, label, node_type")
-    .eq("scope", view.scope)
-    .in("node_type", buscados)
+    .eq("scope", "user")
+    .in("node_type", ["goal", "routine", "project"])
     .is("archived_at", null)
+    // Desempate por `id` a propósito: `updated_at` empata en masa tras un
+    // backfill, y un orden sin desempate devuelve una fila distinta en cada
+    // llamada. Un grafo que abre en otro sitio cada vez parece estropeado.
     .order("updated_at", { ascending: false })
+    .order("id", { ascending: true })
     .limit(1);
 
-  // AQUÍ es donde se veía el fallo: sin esta rama, una base sin la migración
-  // 0054 devuelve PGRST205, `data` llega como null, y la pantalla concluía que
-  // no tenías nada. describeDbError ya sabe traducir ese código desde este
-  // mismo incidente.
   if (error) return { root: null, reason: describeDbError(error) };
-
   const fila = data?.[0];
   if (fila === undefined) return { root: null, reason: null };
   return {

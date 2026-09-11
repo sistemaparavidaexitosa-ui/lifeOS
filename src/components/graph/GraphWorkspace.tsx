@@ -26,12 +26,21 @@ import NodeInspector from "./NodeInspector";
 // Es caché, no interfaz: que un nodo esté ya pedido no cambia lo que se ve, así
 // que meterlo en estado solo provocaría renders de más.
 
+export interface WorkspaceOption {
+  id: string;
+  name: string;
+  isPersonal: boolean;
+}
+
 export default function GraphWorkspace({
-  view, initial, rootLabel, savedPositions
+  view, initial, rootLabel, workspaces, activeWorkspaceId, savedPositions
 }: {
   view: GraphView;
   initial: Subgraph;
   rootLabel: string | null;
+  /** Los espacios que alcanzas. Vacío en las vistas privadas, que no tienen. */
+  workspaces: WorkspaceOption[];
+  activeWorkspaceId: string | null;
   savedPositions: Record<string, NodePosition>;
 }) {
   const [nodes, setNodes] = useState<GraphNode[]>(initial.nodes);
@@ -166,6 +175,8 @@ export default function GraphWorkspace({
       <GraphToolbar
         view={view.id}
         rootLabel={rootLabel}
+        workspaces={workspaces}
+        activeWorkspaceId={activeWorkspaceId}
         cluster={cluster}
         onCluster={setCluster}
         onFit={() => lienzo.current?.fit()}
