@@ -6,9 +6,10 @@ import { createSimulation, forceLayout, layeredLayout, type Simulation } from "@
 import { cull, cullEdges, degreeOf, detailFor, pickLabels } from "@/lib/domain/graph/lod";
 import { COLOR_VARS, styleOf, type ColorTable } from "@/lib/domain/graph/theme";
 import {
-  boundsOf, fitToBounds, panBy, screenToWorld, visibleWorld, zoomAt, type Viewport
+  boundsOf, frameFor, panBy, pinch, screenToWorld, visibleWorld, zoomAt, type Viewport
 } from "@/lib/domain/graph/viewport";
-import { applySelection, esArrastre, marquee, modeFromEvent } from "@/lib/domain/graph/selection";
+import { LOD_LABEL } from "@/lib/domain/graph/lod";
+import { applySelection, esArrastre, gestureFor, marquee, modeFromEvent } from "@/lib/domain/graph/selection";
 import type { GraphEdge, GraphNode, NodePosition } from "@/lib/domain/graph/types";
 import { drawGraph } from "./draw";
 
@@ -70,6 +71,18 @@ export interface GraphCanvasProps {
 /** Cuánto tiempo del fotograma se le deja a la simulación. 16 ms es un cuadro. */
 const PRESUPUESTO_MS = 6;
 
+/**
+ * Dónde está la raíz del recorrido. Es el nodo de profundidad 0, que es justo
+ * lo que devuelven `graph_subgraph` y `graph_impact` para el nodo de partida.
+ */
+function posicionRaiz(
+  nodes: readonly GraphNode[],
+  posiciones: ReadonlyMap<string, NodePosition>
+): NodePosition | null {
+  const raiz = nodes.find((n) => n.depth === 0) ?? nodes[0];
+  return raiz === undefined ? null : posiciones.get(raiz.id) ?? null;
+}
+
 export default function GraphCanvas({
   nodes, edges, layoutMode, savedPositions, selected, onSelectedChange,
   highlighted, onNodeActivate, onNodesMoved, onPositionsChanged, onViewportChange, handleRef
@@ -86,12 +99,24 @@ export default function GraphCanvas({
   const gesto = useRef<
     | { tipo: "ninguno" }
     | { tipo: "pan"; ultimo: { x: number; y: number } }
-    | { tipo: "nodo"; id: string; movido: boolean }
+    | { tipo: "nodo"; id: string; desde: { x: number; y: number }; movido: boolean }
+    | { tipo: "pinch" }
     | { tipo: "rect"; desde: { x: number; y: number }; hasta: { x: number; y: number } }
   >({ tipo: "ninguno" });
   const sucio = useRef(true);
   /** La barra espaciadora, para arrastrar el lienzo sin botón central. */
   const espacio = useRef(false);
+  /** Píxeles físicos por píxel de CSS. Entra en la matriz de dibujo. */
+  const densidad = useRef(1);
+  /**
+   * Los punteros apoyados ahora mismo, por id.
+   *
+   * Hace falta un mapa y no un contador porque el pellizco necesita las DOS
+   * posiciones, y porque en un teléfono los dedos se levantan en cualquier
+   * orden: con un contador, levantar el primero dejaría el gesto creyendo que
+   * sigue habiendo dos.
+   */
+  const punteros = useRef<Map<number, { x: number; y: number }>>(new Map());
 
   // Props que el bucle de dibujo necesita leer sin volver a montarse. Guardarlas
   // en refs es lo que permite que el efecto del bucle no dependa de ellas: si
@@ -137,7 +162,7 @@ export default function GraphCanvas({
 
     const b = boundsOf([...posiciones.current.values()]);
     if (b !== null) {
-      camara.current = fitToBounds(camara.current, b);
+      camara.current = frameFor(camara.current, b, posicionRaiz(nodes, posiciones.current), LOD_LABEL);
       rect.current = b;
     }
     // El layout por capas ya está terminado aquí: sin este aviso, el minimapa
@@ -160,6 +185,7 @@ export default function GraphCanvas({
       // El lienzo se dibuja en píxeles FÍSICOS y se escala por CSS a los
       // lógicos: sin esto, en una pantalla retina todo sale borroso.
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      densidad.current = dpr;
       canvas.width = Math.max(1, Math.round(r.width * dpr));
       canvas.height = Math.max(1, Math.round(r.height * dpr));
       canvas.style.width = `${r.width}px`;
@@ -238,9 +264,6 @@ export default function GraphCanvas({
       if (canvas === undefined || canvas === null || ctx === null || ctx === undefined) return;
 
       const v = camara.current;
-      const dpr = canvas.width / Math.max(v.width, 1);
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
       const p = props.current;
       const vista = visibleWorld(v);
       // El margen del recorte se calcula en unidades del MUNDO a partir del
@@ -271,12 +294,11 @@ export default function GraphCanvas({
           })()
         : null;
 
-      // El escalado por dpr ya está aplicado en el contexto; drawGraph vuelve a
-      // fijar la transformación con la cámara, así que se le pasa un contexto
-      // que ya sabe su densidad de píxeles.
-      ctx.save();
-      ctx.scale(1, 1);
-      drawGraph(ctx as CanvasRenderingContext2D, {
+      // La densidad va DENTRO de drawGraph y no en una llamada previa: allí se
+      // compone con la cámara en una sola matriz. Fijarla aquí no servía de
+      // nada —el setTransform de drawGraph la borraba— y ese era el fallo que
+      // dejaba rastros y dibujaba a media escala en pantallas de alta densidad.
+      drawGraph(ctx, {
         nodes: visibles,
         edges: aristas,
         positions: posiciones.current,
@@ -286,9 +308,9 @@ export default function GraphCanvas({
         hovered: encima.current,
         highlighted: p.highlighted ?? new Set<string>(),
         labelled: etiquetados,
-        marquee: rectSel
+        marquee: rectSel,
+        dpr: densidad.current
       });
-      ctx.restore();
 
       p.onViewportChange?.(v, rect.current);
     };
@@ -366,32 +388,63 @@ export default function GraphCanvas({
   const onPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     e.currentTarget.setPointerCapture(e.pointerId);
     const p = enPantalla(e);
+    punteros.current.set(e.pointerId, p);
 
-    // Botón central o barra espaciadora pulsada = arrastrar el lienzo. Es la
-    // convención de todas las herramientas de este tipo y la gente la trae
-    // aprendida; el botón izquierdo sobre el vacío hace rectángulo, no pan.
-    if (e.button === 1 || espacio.current) {
+    // Una sola consulta: `nodoEn` reconstruye el árbol de búsqueda, y pedirlo
+    // dos veces por toque es pagar el doble por la misma respuesta.
+    const bajoElDedo = nodoEn(p.x, p.y);
+    const gesto_ = gestureFor({
+      pointerType: e.pointerType,
+      button: e.button,
+      spaceHeld: espacio.current,
+      onNode: bajoElDedo !== null,
+      activePointers: punteros.current.size
+    });
+
+    if (gesto_ === "pinch") {
+      // Si el primer dedo había agarrado un nodo, se suelta: al apoyar el
+      // segundo dedo la intención es hacer zoom, no arrastrar lo que hubiera
+      // debajo del primero.
+      const previo = gesto.current;
+      if (previo.tipo === "nodo") simulacion.current?.pin(previo.id, null);
+      gesto.current = { tipo: "pinch" };
+      return;
+    }
+    if (gesto_ === "pan") {
       gesto.current = { tipo: "pan", ultimo: p };
       return;
     }
-
-    const id = nodoEn(p.x, p.y);
-    if (id !== null) {
-      gesto.current = { tipo: "nodo", id, movido: false };
-      // Fijarlo mientras dura el arrastre: si no, las fuerzas siguen tirando de
-      // él y el nodo se escapa del cursor.
-      simulacion.current?.pin(id, posiciones.current.get(id) ?? { x: 0, y: 0 });
+    if (gesto_ === "node" && bajoElDedo !== null) {
+      gesto.current = { tipo: "nodo", id: bajoElDedo, desde: p, movido: false };
+      simulacion.current?.pin(bajoElDedo, posiciones.current.get(bajoElDedo) ?? { x: 0, y: 0 });
       return;
     }
-
     gesto.current = { tipo: "rect", desde: p, hasta: p };
   }, [enPantalla, nodoEn]);
 
   const onPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     const p = enPantalla(e);
+    const previo = punteros.current.get(e.pointerId);
+    punteros.current.set(e.pointerId, p);
     const g = gesto.current;
 
+    if (g.tipo === "pinch") {
+      // Incremental, con las posiciones del fotograma anterior: acumular desde
+      // el inicio del gesto va derivando porque los dedos no son precisos.
+      const otros = [...punteros.current.entries()].filter(([id]) => id !== e.pointerId);
+      const otro = otros[0];
+      if (previo !== undefined && otro !== undefined) {
+        camara.current = pinch(camara.current, previo, otro[1], p, otro[1]);
+        sucio.current = true;
+      }
+      return;
+    }
+
     if (g.tipo === "ninguno") {
+      // El resaltado al pasar por encima es de ratón: en táctil no existe
+      // «pasar por encima» y calcularlo en cada movimiento del dedo sería
+      // reconstruir el árbol de búsqueda sesenta veces por segundo para nada.
+      if (e.pointerType === "touch") return;
       const id = nodoEn(p.x, p.y);
       if (id !== encima.current) {
         encima.current = id;
@@ -408,9 +461,12 @@ export default function GraphCanvas({
     }
 
     if (g.tipo === "nodo") {
+      // UMBRAL. Sin esto, el temblor de un dedo en un toque limpio marcaba el
+      // gesto como arrastre y el nodo nunca llegaba a seleccionarse: es el
+      // «no se pueden seleccionar los nodos» que se reportó desde el teléfono.
+      if (!g.movido && !esArrastre(g.desde, p)) return;
+
       const w = screenToWorld(camara.current, p.x, p.y);
-      // Arrastrar un nodo arrastra TODA la selección si ese nodo estaba
-      // seleccionado. Sin esto, mover un grupo hay que hacerlo de uno en uno.
       const sel = props.current.selected;
       const mueve = sel.has(g.id) ? [...sel] : [g.id];
       const base = posiciones.current.get(g.id);
@@ -425,7 +481,7 @@ export default function GraphCanvas({
           simulacion.current?.pin(id, nuevo);
         }
       }
-      gesto.current = { tipo: "nodo", id: g.id, movido: true };
+      gesto.current = { tipo: "nodo", id: g.id, desde: g.desde, movido: true };
       sucio.current = true;
       return;
     }
@@ -436,12 +492,23 @@ export default function GraphCanvas({
 
   const onPointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     const p = enPantalla(e);
+    punteros.current.delete(e.pointerId);
     const g = gesto.current;
+
+    // Levantar UN dedo de un pellizco no termina el gesto: queda el otro
+    // apoyado y lo natural es seguir desplazando con él.
+    if (g.tipo === "pinch") {
+      const queda = [...punteros.current.values()][0];
+      gesto.current = queda === undefined ? { tipo: "ninguno" } : { tipo: "pan", ultimo: queda };
+      return;
+    }
+
     gesto.current = { tipo: "ninguno" };
 
     if (g.tipo === "nodo") {
       if (!g.movido) {
         props.current.onSelectedChange(applySelection(props.current.selected, [g.id], modeFromEvent(e)));
+        simulacion.current?.pin(g.id, null);
       } else if (onNodesMoved !== undefined) {
         const sel = props.current.selected;
         const movidos = sel.has(g.id) ? [...sel] : [g.id];
@@ -460,8 +527,6 @@ export default function GraphCanvas({
 
     if (g.tipo === "rect") {
       if (!esArrastre(g.desde, p)) {
-        // Un clic en el vacío deselecciona. Es lo que espera todo el mundo y
-        // es la única forma de vaciar la selección sin ir a un botón.
         props.current.onSelectedChange(applySelection(props.current.selected, [], modeFromEvent(e)));
         sucio.current = true;
         return;
@@ -472,6 +537,14 @@ export default function GraphCanvas({
         .filter(([, q]) => q.x >= r.x && q.x <= r.x + r.width && q.y >= r.y && q.y <= r.y + r.height)
         .map(([id]) => id);
       props.current.onSelectedChange(applySelection(props.current.selected, dentro, modeFromEvent(e)));
+      sucio.current = true;
+      return;
+    }
+
+    // Un toque limpio sobre el vacío en táctil: el gesto fue "pan" pero no se
+    // movió nada, así que la intención era deseleccionar.
+    if (g.tipo === "pan" && e.pointerType === "touch" && !esArrastre(g.ultimo, p)) {
+      props.current.onSelectedChange(new Set());
       sucio.current = true;
     }
   }, [enPantalla, onNodesMoved]);
@@ -488,7 +561,9 @@ export default function GraphCanvas({
     handleRef.current = {
       fit() {
         const b = boundsOf([...posiciones.current.values()]);
-        if (b !== null) camara.current = fitToBounds(camara.current, b);
+        if (b !== null) {
+          camara.current = frameFor(camara.current, b, posicionRaiz(props.current.nodes, posiciones.current), LOD_LABEL);
+        }
         sucio.current = true;
       },
       focusOn(nodeId: string) {

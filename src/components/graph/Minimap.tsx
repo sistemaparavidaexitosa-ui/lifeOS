@@ -50,8 +50,7 @@ export default function Minimap({
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = ANCHO * dpr;
     canvas.height = ALTO * dpr;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawMinimap(ctx, { nodes, positions, colors: colores.current, viewport }, bounds, { width: ANCHO, height: ALTO });
+    drawMinimap(ctx, { nodes, positions, colors: colores.current, viewport }, bounds, { width: ANCHO, height: ALTO }, dpr);
   }, [nodes, positions, version, viewport, bounds]);
 
   if (bounds === null) return null;
