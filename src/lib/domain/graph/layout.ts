@@ -267,38 +267,150 @@ export function forceLayout(
 }
 
 /**
- * Layout por capas para las vistas de dependencia.
+ * Layout por capas, en forma de ÁRBOL.
  *
- * `depth` viene de la base: `graph_impact` devuelve la profundidad MÍNIMA a la
- * que se alcanzó cada nodo, así que la columna ya está calculada y aquí solo
- * hay que repartir en vertical. Recalcularla en el navegador sería repetir un
- * recorrido que Postgres acaba de hacer con los índices puestos.
+ * POR QUÉ NO BASTA CON UNA COLUMNA POR PROFUNDIDAD
+ * La primera versión ponía todos los nodos de una capa en una columna ordenados
+ * por etiqueta. Con siete proyectos y setenta y cuatro tareas eso da dos
+ * columnas donde las tareas de un proyecto y las de otro quedan intercaladas
+ * por casualidad alfabética. Se ve ordenado y no dice nada: lo único que un
+ * mapa de dependencias tiene que contestar —de quién cuelga esto— es justo lo
+ * que se pierde.
  *
- * Dentro de cada columna se ordena por etiqueta y NO por el orden en que
- * llegaron: así añadir una tarea no baraja las demás.
+ * CÓMO SE COLOCA
+ * Es la idea de Reingold–Tilford sin sus refinamientos: las HOJAS se reparten
+ * en orden, una tras otra, y cada nodo interno se centra sobre sus hijos. El
+ * resultado es que cada proyecto queda a la altura del bloque de sus tareas, la
+ * flecha sale del medio, y los bloques no se solapan.
+ *
+ * La `x` sigue saliendo de `depth`, que lo calculó Postgres en el recorrido: es
+ * la profundidad MÍNIMA a la que se alcanzó cada nodo, y recalcularla aquí
+ * sería repetir un trabajo hecho con los índices puestos.
+ *
+ * EL HUECO ENTRE HERMANOS NO ES DECORACIÓN. Sin él, dos proyectos seguidos se
+ * leen como una lista continua de tareas y se pierde exactamente lo que este
+ * layout viene a enseñar.
  */
-export function layeredLayout(
+export function treeLayout(
   nodes: readonly { id: string; depth: number; label: string }[],
-  options: { columnWidth?: number; rowHeight?: number } = {}
+  edges: readonly LayoutEdge[],
+  options: { columnWidth?: number; rowHeight?: number; groupGap?: number } = {}
 ): Map<string, NodePosition> {
   const columnWidth = options.columnWidth ?? 260;
-  const rowHeight = options.rowHeight ?? 72;
-  const porCapa = new Map<number, { id: string; label: string }[]>();
-  for (const n of nodes) {
-    const capa = porCapa.get(n.depth) ?? [];
-    capa.push({ id: n.id, label: n.label });
-    porCapa.set(n.depth, capa);
+  const rowHeight = options.rowHeight ?? 56;
+  const groupGap = options.groupGap ?? rowHeight * 0.6;
+
+  const porId = new Map(nodes.map((n) => [n.id, n]));
+  const orden = (a: string, b: string) => {
+    const na = porId.get(a);
+    const nb = porId.get(b);
+    if (na === undefined || nb === undefined) return a.localeCompare(b);
+    // Por etiqueta y no por orden de llegada: añadir una tarea no debe barajar
+    // las demás. Desempate por id para que sea estable del todo.
+    return na.label.localeCompare(nb.label, "es") || a.localeCompare(b);
+  };
+
+  // --- Quién cuelga de quién ------------------------------------------------
+  // El padre de un nodo es su vecino en la capa ANTERIOR, venga la arista en el
+  // sentido que venga: `belongs_to` sale del hijo y `parent_of` saldría del
+  // padre, y a este layout le da igual cuál de los dos exista.
+  const padreDe = new Map<string, string>();
+  for (const e of edges) {
+    const a = porId.get(e.sourceId);
+    const b = porId.get(e.targetId);
+    if (a === undefined || b === undefined) continue;
+    const [hijo, padre] = a.depth > b.depth ? [a, b] : b.depth > a.depth ? [b, a] : [null, null];
+    if (hijo === null || padre === null) continue;
+    // Con dos candidatos gana el de etiqueta menor. Elegir «el primero que
+    // llegue» haría que el dibujo dependiera del orden de las aristas.
+    const actual = padreDe.get(hijo.id);
+    if (actual === undefined || orden(padre.id, actual) < 0) padreDe.set(hijo.id, padre.id);
   }
 
-  const pos = new Map<string, NodePosition>();
-  for (const [depth, capa] of porCapa) {
-    capa.sort((a, b) => a.label.localeCompare(b.label, "es") || a.id.localeCompare(b.id));
-    // Centrada en vertical: las columnas quedan alineadas por el medio y el
-    // dibujo se lee como un árbol, no como una escalera.
-    const alto = (capa.length - 1) * rowHeight;
-    capa.forEach((n, i) => {
-      pos.set(n.id, { x: depth * columnWidth, y: i * rowHeight - alto / 2 });
-    });
+  const hijosDe = new Map<string, string[]>();
+  for (const [hijo, padre] of padreDe) {
+    const l = hijosDe.get(padre) ?? [];
+    l.push(hijo);
+    hijosDe.set(padre, l);
   }
+  for (const l of hijosDe.values()) l.sort(orden);
+
+  // Raíces: lo que no cuelga de nada. Incluye los huérfanos —una tarea cuyo
+  // proyecto todavía no se ha cargado— que se colocan sueltos en vez de
+  // perderse.
+  const raices = nodes.filter((n) => !padreDe.has(n.id)).map((n) => n.id).sort(orden);
+
+  // --- Reparto vertical -----------------------------------------------------
+  const pos = new Map<string, NodePosition>();
+  let siguienteFila = 0;
+
+  // Iterativo y no recursivo: un grafo grande desbordaría la pila, y los ciclos
+  // heredados del dominio (D-121: las aristas `system` no se comprueban) harían
+  // que una recursión ingenua no terminara nunca.
+  const visitados = new Set<string>();
+  const pila: { id: string; fase: "bajar" | "subir" }[] = [];
+  for (const r of [...raices].reverse()) pila.push({ id: r, fase: "bajar" });
+
+  while (pila.length > 0) {
+    const actual = pila.pop()!;
+    const nodo = porId.get(actual.id);
+    if (nodo === undefined) continue;
+
+    if (actual.fase === "bajar") {
+      if (visitados.has(actual.id)) continue;
+      visitados.add(actual.id);
+      const hijos = (hijosDe.get(actual.id) ?? []).filter((h) => !visitados.has(h));
+      if (hijos.length === 0) {
+        // Hoja: ocupa la siguiente fila libre.
+        pos.set(actual.id, { x: nodo.depth * columnWidth, y: siguienteFila * rowHeight });
+        siguienteFila += 1;
+        continue;
+      }
+      // Se vuelve a este nodo cuando sus hijos ya tengan sitio.
+      pila.push({ id: actual.id, fase: "subir" });
+      for (const h of [...hijos].reverse()) pila.push({ id: h, fase: "bajar" });
+      continue;
+    }
+
+    // Subida: centrado sobre los hijos que de verdad se colocaron.
+    const hijos = (hijosDe.get(actual.id) ?? []).map((h) => pos.get(h)).filter((p): p is NodePosition => p !== undefined);
+    if (hijos.length === 0) {
+      pos.set(actual.id, { x: nodo.depth * columnWidth, y: siguienteFila * rowHeight });
+      siguienteFila += 1;
+      continue;
+    }
+    let min = Infinity;
+    let max = -Infinity;
+    for (const p of hijos) {
+      if (p.y < min) min = p.y;
+      if (p.y > max) max = p.y;
+    }
+    pos.set(actual.id, { x: nodo.depth * columnWidth, y: (min + max) / 2 });
+    // El hueco se abre al CERRAR un bloque, no al abrirlo: así separa bloques
+    // hermanos y no mete aire dentro de uno.
+    siguienteFila += groupGap / rowHeight;
+  }
+
+  // Cualquiera que se haya quedado fuera —parte de un ciclo, por ejemplo— se
+  // coloca igualmente. Un nodo sin posición no se dibuja, y un nodo que existe y
+  // no se ve es peor que uno mal colocado.
+  for (const n of nodes) {
+    if (!pos.has(n.id)) {
+      pos.set(n.id, { x: n.depth * columnWidth, y: siguienteFila * rowHeight });
+      siguienteFila += 1;
+    }
+  }
+
+  // Centrado en vertical alrededor del cero, para que la cámara inicial no
+  // tenga que compensar un dibujo que empieza en la esquina.
+  let min = Infinity;
+  let max = -Infinity;
+  for (const p of pos.values()) {
+    if (p.y < min) min = p.y;
+    if (p.y > max) max = p.y;
+  }
+  const centro = (min + max) / 2;
+  for (const [id, p] of pos) pos.set(id, { x: p.x, y: p.y - centro });
+
   return pos;
 }

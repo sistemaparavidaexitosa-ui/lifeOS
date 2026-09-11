@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { buildQuadtree } from "@/lib/domain/graph/quadtree";
-import { createSimulation, forceLayout, layeredLayout, type Simulation } from "@/lib/domain/graph/layout";
+import { createSimulation, forceLayout, treeLayout, type Simulation } from "@/lib/domain/graph/layout";
 import { cull, cullEdges, degreeOf, detailFor, pickLabels } from "@/lib/domain/graph/lod";
 import { COLOR_VARS, styleOf, type ColorTable } from "@/lib/domain/graph/theme";
 import {
@@ -139,8 +139,13 @@ export default function GraphCanvas({
 
     if (layoutMode === "layered") {
       // La profundidad ya la calculó Postgres en el recorrido: recalcularla
-      // aquí sería repetir un trabajo que se hizo con los índices puestos.
-      const calculadas = layeredLayout(nodes.map((n) => ({ id: n.id, depth: n.depth, label: n.label })));
+      // aquí sería repetir un trabajo hecho con los índices puestos. Las
+      // ARISTAS sí entran, y son lo que convierte dos columnas sueltas en un
+      // árbol: sin ellas no hay forma de saber qué tarea cuelga de qué proyecto.
+      const calculadas = treeLayout(
+        nodes.map((n) => ({ id: n.id, depth: n.depth, label: n.label })),
+        edges
+      );
       posiciones.current = new Map(calculadas);
       simulacion.current = null;
     } else if (sinAnimacion) {
