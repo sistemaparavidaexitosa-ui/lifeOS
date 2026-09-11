@@ -3014,6 +3014,13 @@ export type Database = {
         }[]
       }
       graph_meta: { Args: { p_campos: string[]; p_row: Json }; Returns: Json }
+      graph_misma_audiencia: {
+        Args: {
+          a: Database["public"]["Tables"]["graph_nodes"]["Row"]
+          b: Database["public"]["Tables"]["graph_nodes"]["Row"]
+        }
+        Returns: boolean
+      }
       graph_node_of: { Args: { p_entity_id: string }; Returns: string }
       graph_search: {
         Args: { p_limit?: number; p_query: string }
