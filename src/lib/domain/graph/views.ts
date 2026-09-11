@@ -36,6 +36,17 @@ export interface GraphView {
   relTypes: GraphRelType[] | null;
   /** Por capas cuando el orden es el contenido; por fuerzas cuando no lo es. */
   layout: "force" | "layered";
+  /**
+   * Si la vista RECORRE desde un nodo o trae todos los de sus tipos.
+   *
+   * Un espacio de trabajo es un nodo del que cuelga todo lo suyo, así que
+   * recorrer desde ahí enseña el espacio entero. Lo privado no tiene
+   * equivalente: no existe un «nodo usuario» del que cuelguen las metas, los
+   * hábitos y el dinero. Recorrer desde una meta suelta enseña esa meta y poco
+   * más, que es exactamente lo que se reportó. Esas vistas piden TODO lo suyo y
+   * dejan que el lienzo lo coloque.
+   */
+  rooted: boolean;
   /** Saltos que se traen de entrada. Más profundidad, más espera. */
   depth: number;
 }
@@ -49,7 +60,8 @@ export const GRAPH_VIEWS: Record<GraphViewId, GraphView> = {
     nodeTypes: ["project", "task", "person", "document"],
     relTypes: ["depends_on", "blocks", "child_of", "belongs_to", "assigned_to"],
     layout: "layered",
-    depth: 3
+    depth: 3,
+    rooted: true
   },
   workspace: {
     id: "workspace",
@@ -59,7 +71,8 @@ export const GRAPH_VIEWS: Record<GraphViewId, GraphView> = {
     nodeTypes: ["workspace", "project", "person"],
     relTypes: ["depends_on", "blocks", "belongs_to", "related_to", "assigned_to"],
     layout: "force",
-    depth: 2
+    depth: 2,
+    rooted: true
   },
   knowledge: {
     id: "knowledge",
@@ -69,7 +82,8 @@ export const GRAPH_VIEWS: Record<GraphViewId, GraphView> = {
     nodeTypes: ["note", "document", "meeting", "decision", "book", "project"],
     relTypes: ["references", "created_from", "belongs_to", "related_to", "duplicates"],
     layout: "force",
-    depth: 3
+    depth: 3,
+    rooted: true
   },
   personal: {
     id: "personal",
@@ -79,7 +93,8 @@ export const GRAPH_VIEWS: Record<GraphViewId, GraphView> = {
     nodeTypes: ["goal", "habit", "routine", "book", "decision"],
     relTypes: ["supports", "belongs_to", "depends_on", "leads_to", "related_to"],
     layout: "force",
-    depth: 3
+    depth: 3,
+    rooted: false
   },
   money: {
     id: "money",
@@ -89,7 +104,8 @@ export const GRAPH_VIEWS: Record<GraphViewId, GraphView> = {
     nodeTypes: ["investment", "budget", "asset", "goal"],
     relTypes: ["supports", "belongs_to", "leads_to", "related_to"],
     layout: "force",
-    depth: 3
+    depth: 3,
+    rooted: false
   },
   ai: {
     id: "ai",
@@ -99,7 +115,8 @@ export const GRAPH_VIEWS: Record<GraphViewId, GraphView> = {
     nodeTypes: null,
     relTypes: ["generated_by_ai", "related_to", "duplicates", "caused_by"],
     layout: "force",
-    depth: 2
+    depth: 2,
+    rooted: false
   },
   impact: {
     id: "impact",
@@ -109,7 +126,8 @@ export const GRAPH_VIEWS: Record<GraphViewId, GraphView> = {
     nodeTypes: null,
     relTypes: ["depends_on", "blocks", "leads_to", "caused_by", "child_of"],
     layout: "layered",
-    depth: 6
+    depth: 6,
+    rooted: true
   }
 };
 

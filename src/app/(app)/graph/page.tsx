@@ -1,6 +1,6 @@
 import { EmptyState } from "@/components/ui";
 import GraphWorkspace from "@/components/graph/GraphWorkspace";
-import { defaultRootFor, loadSubgraph, nodeForEntity } from "@/lib/data/graph";
+import { defaultRootFor, loadAllNodes, loadSubgraph, nodeForEntity } from "@/lib/data/graph";
 import { resolveView } from "@/lib/domain/graph/views";
 import { loadLayout } from "./actions";
 
@@ -28,6 +28,24 @@ export default async function GraphPage({
   const { view: viewParam, node, entity } = await searchParams;
   const view = resolveView(viewParam);
 
+  // LAS VISTAS SIN RAÍZ NO NECESITAN PUNTO DE PARTIDA, y por eso no pueden
+  // fallar por elegirlo mal. Lo privado no tiene un nodo contenedor —no existe
+  // un «nodo usuario» del que cuelguen las metas y los hábitos—, así que aquí
+  // se piden todos los nodos de sus tipos en vez de recorrer desde uno suelto.
+  if (!view.rooted && node === undefined && entity === undefined) {
+    const todo = await loadAllNodes(view);
+    if (todo.reason !== null) return <GraphNoDisponible reason={todo.reason} />;
+    if (todo.nodes.length === 0) return <GraphVacio scope={view.scope} />;
+    return (
+      <GraphWorkspace
+        view={view}
+        initial={todo}
+        rootLabel={null}
+        savedPositions={await loadLayout(view.id)}
+      />
+    );
+  }
+
   const raiz = node !== undefined
     ? await nodeForEntity(node).then((r) =>
         r.root !== null || r.reason !== null
@@ -45,35 +63,8 @@ export default async function GraphPage({
   // una base sin la migración 0054, PostgREST devuelve PGRST205, la consulta no
   // trae filas, y decir «todavía no hay nada que dibujar» era mentirle a
   // alguien que tenía sus proyectos abiertos en otra pestaña.
-  if (raiz.reason !== null) {
-    return (
-      <div className="gr-shell">
-        <div className="gr-fallo">
-          <h2>El mapa de dependencias no está disponible en esta base de datos.</h2>
-          <p>{raiz.reason}</p>
-          <p className="gr-muted">
-            Tus proyectos y tareas están intactos: este módulo LEE lo que ya existe, no lo guarda.
-            En cuanto la migración se aplique, el grafo aparece solo con lo que ya tienes.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (raiz.root === null) {
-    return (
-      <div className="gr-shell">
-        <EmptyState
-          icon="◍"
-          text={
-            view.scope === "workspace"
-              ? "Todavía no hay nada en este espacio que dibujar. Crea un proyecto y vuelve: el grafo se construye solo a partir de lo que ya tienes."
-              : "Todavía no hay metas, rutinas ni movimientos que dibujar. El grafo se construye solo a partir de lo que ya tienes."
-          }
-        />
-      </div>
-    );
-  }
+  if (raiz.reason !== null) return <GraphNoDisponible reason={raiz.reason} />;
+  if (raiz.root === null) return <GraphVacio scope={view.scope} />;
 
   const [subgrafo, posiciones] = await Promise.all([
     loadSubgraph(raiz.root.nodeId, view),
@@ -87,5 +78,42 @@ export default async function GraphPage({
       rootLabel={raiz.root.label === "" ? null : raiz.root.label}
       savedPositions={posiciones}
     />
+  );
+}
+
+
+/**
+ * Roto y vacío no son lo mismo, y esta pantalla llegó a confundirlos: contra una
+ * base sin la migración 0054, PostgREST devuelve PGRST205, la consulta no trae
+ * filas, y decir «todavía no hay nada que dibujar» era mentirle a alguien que
+ * tenía sus proyectos abiertos en otra pestaña.
+ */
+function GraphNoDisponible({ reason }: { reason: string }) {
+  return (
+    <div className="gr-shell">
+      <div className="gr-fallo">
+        <h2>El mapa de dependencias no está disponible en esta base de datos.</h2>
+        <p>{reason}</p>
+        <p className="gr-muted">
+          Tus proyectos y tareas están intactos: este módulo LEE lo que ya existe, no lo guarda.
+          En cuanto la migración se aplique, el grafo aparece solo con lo que ya tienes.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function GraphVacio({ scope }: { scope: "workspace" | "user" }) {
+  return (
+    <div className="gr-shell">
+      <EmptyState
+        icon="◍"
+        text={
+          scope === "workspace"
+            ? "Todavía no hay nada en este espacio que dibujar. Crea un proyecto y vuelve: el grafo se construye solo a partir de lo que ya tienes."
+            : "Todavía no hay metas, rutinas ni movimientos que dibujar. El grafo se construye solo a partir de lo que ya tienes."
+        }
+      />
+    </div>
   );
 }

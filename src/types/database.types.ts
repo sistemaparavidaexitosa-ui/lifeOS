@@ -2209,6 +2209,7 @@ export type Database = {
           area: string
           created_at: string
           dependencies: string
+          depends_on: string[]
           description: string
           folder_id: string | null
           id: string
@@ -2232,6 +2233,7 @@ export type Database = {
           area?: string
           created_at?: string
           dependencies?: string
+          depends_on?: string[]
           description?: string
           folder_id?: string | null
           id?: string
@@ -2255,6 +2257,7 @@ export type Database = {
           area?: string
           created_at?: string
           dependencies?: string
+          depends_on?: string[]
           description?: string
           folder_id?: string | null
           id?: string
@@ -2973,6 +2976,20 @@ export type Database = {
           p_user_id: string
         }
         Returns: string
+      }
+      graph_all: {
+        Args: { p_limit?: number; p_node_types?: string[]; p_scope?: string }
+        Returns: {
+          depth: number
+          entity_id: string
+          entity_table: string
+          label: string
+          metadata: Json
+          node_id: string
+          node_type: string
+          scope: string
+          truncated: boolean
+        }[]
       }
       graph_check_integrity: {
         Args: never

@@ -2229,3 +2229,39 @@ implementa:
   `PGRST204`— a `MIGRACION_PENDIENTE`, que es lo que hace que el mensaje diga
   qué comando ejecutar. La regla que queda: un lector puede devolver vacío
   cuando no hay datos, nunca cuando no pudo mirar.
+
+<!-- D-125..D-131 viven en las ramas fix/grafo-en-el-telefono (PR #31) y
+     feat/grafo-cruza-en-espacio-personal (PR #32). Se dejan libres a propósito
+     para que al fusionar no colisione la numeración. -->
+
+- **D-132 · Las dependencias entre proyectos son un dato, no prosa.**
+  `projects.dependencies` lleva en la base desde 0003 y es TEXTO LIBRE: una
+  frase que una persona escribe y que ningún programa puede recorrer. Con eso,
+  «¿qué proyectos bloquea este?» era incontestable y el grafo no podía dibujar
+  una relación que solo existía dentro de un campo. `projects.depends_on uuid[]`
+  la convierte en dato, con la misma forma que `tasks.deps` (0003) para no meter
+  una segunda manera de expresar lo mismo en el esquema. **La columna de texto
+  NO se migra**: adivinar a qué proyecto se refiere cada frase sería inventarse
+  datos de otra persona. Se conserva y en la interfaz pasa a llamarse «Notas de
+  dependencias».
+
+- **D-133 · La guarda de ciclos vive en la Server Action, no en la base.**
+  `setTaskDeps` (0003) nunca tuvo guarda —se limita a quitar la
+  autorreferencia—, así que A→B→A es posible hoy en tareas. No se repite el
+  error en proyectos, porque un ciclo deja sin sentido el camino crítico que el
+  grafo promete y hace entrar en bucle al secuenciador. Pero la comprobación NO
+  baja a un trigger: exigiría un recorrido en cada UPDATE de `projects`, y la
+  base ya tiene que cargar con los triggers de proyección. Lo que sí baja es lo
+  único comprobable sin mirar otras filas —un CHECK contra la autodependencia—.
+  Y el detector devuelve el CAMINO del ciclo, no un booleano: «Mudanza → Obra →
+  Mudanza» se entiende y se puede arreglar; «no se puede» no.
+
+- **D-134 · Hay vistas del grafo que no recorren desde ninguna raíz.** Un
+  espacio de trabajo es un nodo del que cuelga todo lo suyo, así que recorrer
+  desde ahí enseña el espacio entero. Lo privado no tiene equivalente: no existe
+  un «nodo usuario» del que cuelguen las metas, los hábitos y el dinero, así que
+  recorrer desde una meta suelta enseñaba esa meta y poco más. Las vistas
+  Personal, Dinero e IA pasan a `rooted: false` y piden todos sus nodos con
+  `graph_all`. El efecto secundario que más importa: esas vistas ya no pueden
+  fallar por elegir mal el punto de partida, que es el modo de fallo que se
+  reportó como «solo se ve un nodo».
