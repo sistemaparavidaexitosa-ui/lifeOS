@@ -3,16 +3,19 @@
 import Link from "next/link";
 import type { ClusterBy } from "@/lib/domain/graph/cluster";
 import { GRAPH_VIEWS, VIEW_ORDER, type GraphViewId } from "@/lib/domain/graph/views";
+import type { WorkspaceOption } from "./GraphWorkspace";
 
 // La barra del lienzo. Las pestañas salen de GRAPH_VIEWS, no de una lista
 // escrita a mano: añadir una vista es añadir un objeto en views.ts y aparece
 // aquí sola.
 
 export default function GraphToolbar({
-  view, rootLabel, cluster, onCluster, onFit, truncated, total
+  view, rootLabel, workspaces, activeWorkspaceId, cluster, onCluster, onFit, truncated, total
 }: {
   view: GraphViewId;
   rootLabel: string | null;
+  workspaces: WorkspaceOption[];
+  activeWorkspaceId: string | null;
   cluster: ClusterBy;
   onCluster(next: ClusterBy): void;
   onFit(): void;
@@ -36,7 +39,29 @@ export default function GraphToolbar({
       </nav>
 
       <div className="gr-toolbar-right">
-        {rootLabel !== null && <span className="gr-muted gr-root">desde «{rootLabel}»</span>}
+        {/* QUÉ ESPACIO SE ESTÁ MIRANDO, y poder cambiarlo. Sin esto el grafo
+            elegía uno por su cuenta y no había forma de saber cuál ni de pasar
+            a otro: con tres espacios, abrías en el que le diera la gana. El
+            enlace lleva `?ws=` para que sea compartible, igual que /execution. */}
+        {workspaces.length > 1 && (
+          <label className="gr-select">
+            <span className="sr-only">Espacio de trabajo</span>
+            <select
+              value={activeWorkspaceId ?? ""}
+              onChange={(e) => { window.location.href = `/graph?view=${view}&ws=${e.target.value}`; }}
+            >
+              {workspaces.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.isPersonal ? `${w.name} (personal)` : w.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        {rootLabel !== null && workspaces.length <= 1 && (
+          <span className="gr-muted gr-root">desde «{rootLabel}»</span>
+        )}
 
         <label className="gr-select">
           <span className="sr-only">Agrupar</span>

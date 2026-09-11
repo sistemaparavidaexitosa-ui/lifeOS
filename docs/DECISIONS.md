@@ -2337,3 +2337,30 @@ implementa:
   `graph_all`. El efecto secundario que más importa: esas vistas ya no pueden
   fallar por elegir mal el punto de partida, que es el modo de fallo que se
   reportó como «solo se ve un nodo».
+
+- **D-135 · El grafo no elige el espacio: lo elige la persona, igual que en
+  /execution.** `defaultRootFor` ordenaba los nodos de espacio por `updated_at`
+  y se quedaba el primero. El backfill de la 0054 le puso a TODOS el mismo
+  `updated_at`, así que ese orden es un empate total y Postgres devuelve la fila
+  que quiera: con tres espacios alcanzables, el grafo abría en uno distinto
+  según le diera, y no había forma de saber en cuál ni de pasar a otro. Ahora
+  `/graph` acepta `?ws=` con la misma precedencia que `/execution` —el pedido si
+  lo alcanzas, si no el personal, si no el primero—, lo enseña en un selector en
+  la barra, y el enlace es compartible. Donde queda un orden por fecha se añade
+  desempate por `id`: un orden sin desempate devuelve una fila distinta en cada
+  llamada, y una pantalla que abre en otro sitio cada vez parece estropeada.
+
+- **D-136 · La pantalla del grafo es oscura siempre, vaya el resto de la app
+  como vaya.** No es preferencia estética: un lienzo de nodos se lee mucho mejor
+  sobre fondo oscuro. Las aristas finas y los colores saturados desaparecen
+  sobre blanco —hay que subirles el contraste hasta que chillan— mientras que
+  sobre un fondo casi negro se ven a su tamaño real. Es la razón por la que los
+  visores de grafos son oscuros, incluido el de graphify, de donde sale la
+  paleta. Se implementa redefiniendo los TOKENS en `.gr-shell` y no tocando
+  `data-theme` en `<html>`: las variables CSS cascadean, así que todo lo de
+  dentro las hereda —incluido el `<canvas>`, que pasa a leerlas de su propio
+  contenedor en vez de `document.documentElement`, que era lo que impedía
+  acotarlas— y el resto de la aplicación no se entera. Los colores de tipo
+  conservan su SIGNIFICADO (morado = ejecución, naranja = personal, verde =
+  dinero) y solo se aclaran para tener contraste: una paleta categórica sería
+  más bonita y haría más difícil relacionar el grafo con el resto de la app.

@@ -37,7 +37,9 @@ export default function Minimap({
   const colores = useRef<ColorTable>({});
 
   useEffect(() => {
-    const cs = getComputedStyle(document.documentElement);
+    // Del propio <canvas> y no de la raíz: hereda así la paleta acotada de
+    // `.gr-shell`. Ver el comentario equivalente en GraphCanvas.
+    const cs = getComputedStyle(ref.current ?? document.documentElement);
     const tabla: ColorTable = {};
     for (const v of COLOR_VARS) tabla[v] = cs.getPropertyValue(v).trim();
     colores.current = tabla;
