@@ -41,6 +41,19 @@ export interface Viewport {
 export const MIN_SCALE = 0.02;
 export const MAX_SCALE = 8;
 
+/**
+ * El tope de AMPLIACIÓN al encuadrar. Distinto de `MAX_SCALE`, que es lo que
+ * permite el zoom manual.
+ *
+ * Sin esto, encuadrar un grafo de un solo nodo daba 8x: el rectángulo tiene
+ * área cero, el mínimo de 1 de abajo evita la división por cero, y la escala
+ * se iba al tope. En un teléfono eso pintaba un proyecto con 320 px de
+ * diámetro dentro de un lienzo de 366 px, que es el «se ven muy grandes» que
+ * se reportó. Encuadrar sirve para que QUEPA lo que hay; nunca para agrandarlo
+ * por encima de su tamaño natural.
+ */
+export const MAX_FIT_SCALE = 1;
+
 export function clampScale(scale: number): number {
   if (!Number.isFinite(scale)) return 1;
   return Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
@@ -105,7 +118,7 @@ export function fitToBounds(v: Viewport, bounds: Rect, padding = 48): Viewport {
   const h = Math.max(bounds.height, 1);
   const usableW = Math.max(v.width - padding * 2, 1);
   const usableH = Math.max(v.height - padding * 2, 1);
-  const scale = clampScale(Math.min(usableW / w, usableH / h));
+  const scale = Math.min(MAX_FIT_SCALE, clampScale(Math.min(usableW / w, usableH / h)));
   const cx = bounds.x + bounds.width / 2;
   const cy = bounds.y + bounds.height / 2;
   return {
@@ -127,4 +140,89 @@ export function boundsOf(points: readonly { x: number; y: number }[]): Rect | nu
     if (p.y > maxY) maxY = p.y;
   }
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+
+/**
+ * Centrar un punto del mundo, opcionalmente cambiando el zoom.
+ *
+ * Sin `scale` el zoom no se toca, que es lo que se quiere al saltar a un
+ * resultado del buscador: mover la cámara Y el zoom a la vez desorienta porque
+ * se pierde la referencia de dónde estabas.
+ *
+ * Con `scale` es la salida para pantallas estrechas. Encuadrar ciento sesenta
+ * tareas en 366 px da una escala de 0,03, y a esa escala no se dibuja una sola
+ * etiqueta: son puntos de colores sin nombre. Ver diez nodos con su nombre y
+ * poder moverte es útil; ver ciento sesenta puntos mudos no lo es.
+ */
+export function focusAt(v: Viewport, point: { x: number; y: number }, scale?: number): Viewport {
+  const s = scale === undefined ? v.scale : clampScale(scale);
+  return { ...v, scale: s, x: point.x - v.width / (2 * s), y: point.y - v.height / (2 * s) };
+}
+
+/**
+ * El pellizco de dos dedos: zoom y desplazamiento a la vez.
+ *
+ * La propiedad que lo hace sentir bien es la misma que la del zoom con rueda
+ * anclado al cursor: el punto del mundo que está en el PUNTO MEDIO entre los
+ * dos dedos no se mueve. Se lee ese punto antes de cambiar la escala y se
+ * recoloca la cámara para que siga cayendo bajo el nuevo punto medio, lo que
+ * de paso da el desplazamiento gratis —arrastrar dos dedos juntos mueve el
+ * lienzo sin escribir una línea más—.
+ */
+export function pinch(
+  v: Viewport,
+  a0: { x: number; y: number }, b0: { x: number; y: number },
+  a1: { x: number; y: number }, b1: { x: number; y: number }
+): Viewport {
+  const d0 = Math.hypot(b0.x - a0.x, b0.y - a0.y);
+  const d1 = Math.hypot(b1.x - a1.x, b1.y - a1.y);
+  // Dedos que acaban juntos en el mismo punto: la razón sería Infinity. Se
+  // conserva la escala y se aplica solo el desplazamiento del punto medio.
+  const razon = d0 > 1 && d1 > 1 ? d1 / d0 : 1;
+  const scale = clampScale(v.scale * razon);
+
+  const medio0 = { x: (a0.x + b0.x) / 2, y: (a0.y + b0.y) / 2 };
+  const medio1 = { x: (a1.x + b1.x) / 2, y: (a1.y + b1.y) / 2 };
+  const anclaje = screenToWorld(v, medio0.x, medio0.y);
+  const conEscala = { ...v, scale };
+  const despues = screenToWorld(conEscala, medio1.x, medio1.y);
+  return { ...conEscala, x: conEscala.x + (anclaje.x - despues.x), y: conEscala.y + (anclaje.y - despues.y) };
+}
+
+
+/**
+ * Por debajo de este ancho de lienzo se deja de intentar que quepa todo.
+ *
+ * 640 px es donde una pantalla deja de tener sitio para varias columnas de
+ * nodos con sus nombres, y coincide a propósito con el corte que ya usa
+ * `globals.css` para esconder la ayuda y el minimapa del lienzo.
+ */
+export const ANCHO_ESTRECHO = 640;
+
+/**
+ * Dónde poner la cámara al abrir el lienzo.
+ *
+ * Encuadrar TODO es lo correcto mientras todo quepa legible. Deja de serlo en
+ * un teléfono: ciento sesenta tareas en 366 px dan una escala de 0,03, y por
+ * debajo del umbral de etiqueta no se dibuja un solo nombre —son puntos de
+ * colores mudos—. Eso fue el «no se ven los proyectos» que se reportó desde un
+ * iPhone.
+ *
+ * La salida no es apretar más el dibujo, es dejar de intentarlo: se centra en
+ * la raíz del recorrido a una escala en la que se lean los nombres y se navega
+ * desde ahí. Ver diez nodos con su nombre y poder moverte es útil; ver ciento
+ * sesenta puntos sin nombre no lo es.
+ *
+ * En pantalla ancha no cambia nada: encuadrar sigue siendo lo que se quiere.
+ */
+export function frameFor(
+  v: Viewport,
+  bounds: Rect,
+  rootPosition: { x: number; y: number } | null,
+  minLegible: number
+): Viewport {
+  const encaje = fitToBounds(v, bounds);
+  if (v.width >= ANCHO_ESTRECHO || encaje.scale >= minLegible) return encaje;
+  return rootPosition === null ? encaje : focusAt(v, rootPosition, minLegible);
 }

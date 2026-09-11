@@ -2230,10 +2230,82 @@ implementa:
   qué comando ejecutar. La regla que queda: un lector puede devolver vacío
   cuando no hay datos, nunca cuando no pudo mirar.
 
-<!-- D-125..D-131 viven en las ramas fix/grafo-en-el-telefono (PR #31) y
-     feat/grafo-cruza-en-espacio-personal (PR #32). Se dejan libres a propósito
-     para que al fusionar no colisione la numeración. -->
+- **D-125 · El dedo y el ratón no son el mismo dispositivo, y el lienzo se envió
+  creyendo que sí.** El Mapa de dependencias salió sin un solo gesto táctil:
+  desplazarse exigía botón central del ratón o barra espaciadora —en un teléfono
+  no existe ninguno de los dos— y arrastrar con un dedo dibujaba un rectángulo
+  de selección, así que el grafo era literalmente inmovible. Ahora la decisión
+  vive en `gestureFor` (dominio puro, con su tabla de pruebas): dos punteros son
+  siempre pellizco; el botón central y la barra espaciadora mandan sobre el nodo
+  que haya debajo; un dedo sobre el vacío MUEVE el lienzo; con ratón o lápiz
+  sigue siendo rectángulo. Se pierde el rectángulo en táctil y es un precio
+  barato: se selecciona tocando. Y se añadió el umbral de 4 px al arrastre de
+  nodos, que ya existía para el rectángulo y faltaba aquí: sin él, el temblor de
+  un dedo en un toque limpio marcaba el gesto como arrastre y el nodo no llegaba
+  a seleccionarse nunca.
 
+- **D-126 · La densidad de pantalla va DENTRO de la matriz de dibujo.** El
+  componente aplicaba el `dpr` con `setTransform` y `drawGraph` volvía a llamar
+  a `setTransform`, que reemplaza la matriz en vez de componerla: el `dpr` se
+  perdía entero. En un teléfono con pantalla del doble de densidad eso dibujaba
+  el grafo a la mitad de tamaño dentro del cuarto superior izquierdo del búfer,
+  y como `clearRect` limpiaba solo ese cuarto, el resto no se borraba nunca y
+  quedaban rastros al mover. La regla que queda: si una función recibe un
+  contexto 2D y llama a `setTransform`, la densidad tiene que entrar por
+  parámetro, porque cualquier matriz que se fije antes la va a borrar.
+
+- **D-127 · Encuadrar nunca amplía, y en una pantalla estrecha a veces no se
+  encuadra.** `fitToBounds` solo topaba contra `MAX_SCALE`, que es el límite del
+  zoom manual: con un grafo de un solo nodo el rectángulo tiene área cero, el
+  mínimo de 1 evitaba la división por cero y la escala se iba a 8x, pintando un
+  proyecto con 320 px de diámetro en un lienzo de 366 px. Se añade
+  `MAX_FIT_SCALE = 1`: encuadrar sirve para que quepa lo que hay, nunca para
+  agrandarlo. Y por debajo de 640 px de ancho, cuando encuadrarlo todo daría una
+  escala por debajo del umbral de etiqueta, se deja de intentar: se centra en la
+  raíz del recorrido a una escala legible (`frameFor`). Ciento sesenta tareas en
+  366 px daban escala 0,03 y ni un solo nombre. Ver diez nodos con su nombre y
+  poder moverte es útil; ver ciento sesenta puntos mudos no lo es.
+
+- **D-128 · La fila del lienzo es `minmax(0, 1fr)`, no `auto`.** Debajo de
+  1024 px la rejilla de `/graph` pasa a una columna, o sea a filas implícitas
+  `auto`. El único hijo de `.gr-stage` es `position: absolute`, así que no
+  aporta altura intrínseca, y `min-height: 0` le dejaba colapsar a CERO: en un
+  teléfono el grafo sencillamente no estaba, y el panel de impacto se quedaba
+  con toda la pantalla. Es un fallo especialmente traicionero porque no da error
+  ni deja hueco: no se ve nada y parece que no hay datos. Se arregla por dos
+  vías a propósito —la fila reservada y un `min-height: 240px` en el propio
+  escenario—, porque el modo de fallo es demasiado silencioso para dejarlo
+  colgando de una sola regla.
+- **D-129 · La frontera del grafo se redefine, no se abre (0055).** D-120 la
+  cerró con la regla «los dos extremos tienen el mismo dueño», y al usarlo esa
+  consecuencia salió más cara de lo previsto: una meta personal que se persigue
+  a través de un proyecto es exactamente lo que un sistema operativo personal
+  existe para enseñar, y estaba prohibida. La regla nueva es más PRECISA, no más
+  laxa: «a los dos extremos los ve exactamente la misma persona». El espacio
+  personal cumple eso por construcción —dos guardas de 0030 impiden invitar a
+  nadie y meter miembros ajenos, y un índice único garantiza uno por persona—,
+  así que una arista ahí dentro no se le puede enseñar a nadie porque no hay
+  nadie. Cualquier arista que toque un espacio COMPARTIDO desde fuera sigue
+  lanzando igual. D-120 no se borra: se enmienda.
+
+- **D-130 · Al mudar un proyecto fuera del espacio personal, las aristas que
+  dejan de ser legales se BORRAN, no bloquean la mudanza.** Es la otra mitad de
+  D-129 y sin ella abrir la frontera habría sido peor que dejarla cerrada:
+  `moveProject` puede sacar un proyecto del espacio personal, y una arista legal
+  hoy pasaría mañana a cruzar de verdad sin que nadie la hubiera tocado. Se
+  borran en el mismo trigger que re-etiqueta los nodos, o sea en la misma
+  transacción que el UPDATE, así que no hay un instante en el que el proyecto ya
+  esté compartido y la arista siga viva. Se borran en vez de rechazar la mudanza
+  porque mover un proyecto es una acción de `/execution`, una pantalla que no
+  sabe nada de grafos: hacerla fallar porque alguien dibujó una línea en otro
+  módulo convertiría una función nueva en un obstáculo para una que ya existía.
+  Queda rastro en `audit_log` para que la desaparición no sea un misterio.
+
+- **D-131 · La regla de la frontera vive en una sola función.**
+  `graph_misma_audiencia` la comparten el trigger de creación de aristas y
+  `graph_check_integrity()`. Escrita dos veces, el día que una cambiara la otra
+  dejaría de detectar lo que ya no cumple, y la auditoría diría que todo está
+  bien mientras deja de mirar lo que importa.
 - **D-132 · Las dependencias entre proyectos son un dato, no prosa.**
   `projects.dependencies` lleva en la base desde 0003 y es TEXTO LIBRE: una
   frase que una persona escribe y que ningún programa puede recorrer. Con eso,

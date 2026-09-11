@@ -6,7 +6,7 @@
 |---|---|---|
 | Usuario A lee/escribe datos de Usuario B | Falta de RLS o RLS sin GRANT | RLS por `user_id = auth.uid()` en TODA tabla de negocio + GRANT explícito por migración (F9) + pruebas pgTAP positivas y negativas |
 | Colaborador de un Workspace ve Money OS/Hogar/Tiempo/Hábitos de otro miembro | Política RLS que use `has_project_access`/`workspace_role` sobre tablas equivocadas | Ninguna tabla de Money OS, Hogar, Time o Habits tiene `workspace_id`; sus políticas RLS son siempre `user_id = auth.uid()` puro (BR-012/019/020/027) |
-| **Colaborador de un Workspace ve datos privados a través del grafo** | `graph_nodes` es la primera tabla del sistema donde una fila de Money OS y una de un proyecto compartido conviven bajo la misma política, así que el control de la fila de arriba —«ninguna tabla mezcla los dos mundos»— deja de aplicarse | Tres capas, ninguna suficiente sola: (1) el CHECK `graph_nodes_tenant_shape` hace imposible una fila «anfibia»; (2) **dos** políticas de SELECT separadas por `scope`, no un `or`, para que un fallo en la de espacios no pueda alcanzar una fila privada; (3) el trigger `graph_edge_tenant` **rechaza** cualquier arista cuyos extremos no compartan dueño. Probado en `supabase/tests/0025_rls_grafo.sql` (migración 0054) |
+| **Colaborador de un Workspace ve datos privados a través del grafo** | (regla afinada en 0055, ver abajo: se puede cruzar dentro del espacio PERSONAL, que no admite a nadie más) `graph_nodes` es la primera tabla del sistema donde una fila de Money OS y una de un proyecto compartido conviven bajo la misma política, así que el control de la fila de arriba —«ninguna tabla mezcla los dos mundos»— deja de aplicarse | Tres capas, ninguna suficiente sola: (1) el CHECK `graph_nodes_tenant_shape` hace imposible una fila «anfibia»; (2) **dos** políticas de SELECT separadas por `scope`, no un `or`, para que un fallo en la de espacios no pueda alcanzar una fila privada; (3) el trigger `graph_edge_tenant` **rechaza** cualquier arista cuyos extremos no compartan dueño. Probado en `supabase/tests/0025_rls_grafo.sql` (migración 0054) |
 | **Fuga a través de una función que camina con la RLS apagada** | `graph_impact` y `graph_subgraph` son las primeras funciones `SECURITY DEFINER` con `row_security = off` que recorren filas: la RLS no las protege, las protege el código de dentro | El acceso a la raíz se comprueba antes de caminar y el permiso se filtra **en cada salto**, no al hidratar; el permiso se precalcula en **dos** conjuntos (espacios donde se es miembro no-Guest, y proyectos compartidos de un Guest) porque uno solo le habría dado a un Guest el espacio entero; las funciones son `stable` (no pueden escribir) y `revoke execute … from anon` deshace el default de `0010`. `supabase/tests/0025_rls_grafo.sql` incluye pruebas sobre `proconfig` y `provolatile` para detectar que alguien les quite los `set` |
 | Filtración de `service_role` al cliente | Import accidental de `admin.ts` en un Client Component | `import "server-only"` en `admin.ts` — falla en build time si se intenta bundlear para el navegador |
 | XSS vía scripts inline no autorizados | CSP ausente o mal configurada | `middleware.ts` aplica CSP con nonce por request + `strict-dynamic` (F5) |
@@ -91,6 +91,40 @@ Las consecuencias visibles del producto, aceptadas a conciencia:
 
 Antes que un nodo que filtre el texto de tu bitácora a tus compañeros de
 espacio, un nodo que vive solo en tu grafo personal.
+
+### La frontera se redefinió en 0055: dentro del espacio personal sí se cruza
+
+La regla de 0054 era «los dos extremos tienen el mismo dueño». La de 0055 es más
+precisa, no más laxa: **«a los dos extremos los ve exactamente la misma
+persona»**. El espacio personal cumple eso y el compartido no, y no es una
+opinión sobre el producto sino una propiedad del esquema: desde 0030 hay dos
+guardas que impiden invitar a nadie a un espacio personal y meter a un miembro
+ajeno, más un índice único parcial que garantiza uno por persona. Una arista ahí
+dentro no se le puede enseñar a nadie porque no hay nadie.
+
+Lo que eso permite: una meta personal puede alimentarse de un proyecto de TU
+espacio personal — la clase de relación que un sistema operativo personal existe
+para enseñar y que 0054 prohibía sin querer.
+
+Lo que sigue prohibido, y sigue lanzando: **cualquier arista que toque un espacio
+COMPARTIDO desde fuera**. Ahí es donde BR-012 importaba, y ahí no cambia nada.
+
+**El agujero que 0055 cierra en el mismo sitio**: `moveProject` puede sacar un
+proyecto del espacio personal y llevarlo a uno compartido, y una arista legal hoy
+pasaría mañana a cruzar de verdad sin que nadie la tocara. El trigger
+`graph_reproject_project` **borra** esas aristas en la misma transacción que el
+UPDATE —así no existe un instante en el que el proyecto ya esté compartido y la
+arista siga viva— y deja rastro en `audit_log` (`graph.edges.dropped_on_move`).
+Se borran en vez de rechazar la mudanza porque mover un proyecto es una acción de
+`/execution`, una pantalla que no sabe nada de grafos.
+
+La condición vive en UNA función, `graph_misma_audiencia`, que comparten el
+trigger de creación y `graph_check_integrity()`: con la regla escrita dos veces,
+el día que una cambiara la otra dejaría de detectar lo que ya no cumple.
+
+Probado en `supabase/tests/0026_rls_grafo_personal.sql`, incluida la comprobación
+de que el trigger rechaza igual **sin la RLS de por medio**, que es como escribe
+`service_role`.
 
 ## Datos de menores de edad (Hogar)
 

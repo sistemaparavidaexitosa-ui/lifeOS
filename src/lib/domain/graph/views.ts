@@ -57,7 +57,11 @@ export const GRAPH_VIEWS: Record<GraphViewId, GraphView> = {
     label: "Proyecto",
     hint: "Qué depende de qué dentro de un proyecto",
     scope: "workspace",
-    nodeTypes: ["project", "task", "person", "document"],
+    // `workspace` entra en la lista aunque la vista se llame «Proyecto»: es el
+    // nodo del que cuelgan TODOS los proyectos del espacio, y sin él, al abrir
+    // sin un proyecto elegido, el recorrido no tenía por dónde saltar de uno a
+    // otro y se veía un proyecto solo.
+    nodeTypes: ["workspace", "project", "task", "person", "document"],
     relTypes: ["depends_on", "blocks", "child_of", "belongs_to", "assigned_to"],
     layout: "layered",
     depth: 3,
@@ -79,7 +83,7 @@ export const GRAPH_VIEWS: Record<GraphViewId, GraphView> = {
     label: "Conocimiento",
     hint: "Notas, documentos, decisiones y lecturas",
     scope: "workspace",
-    nodeTypes: ["note", "document", "meeting", "decision", "book", "project"],
+    nodeTypes: ["workspace", "note", "document", "meeting", "decision", "book", "project"],
     relTypes: ["references", "created_from", "belongs_to", "related_to", "duplicates"],
     layout: "force",
     depth: 3,

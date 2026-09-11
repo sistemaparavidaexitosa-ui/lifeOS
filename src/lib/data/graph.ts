@@ -227,22 +227,39 @@ export const defaultRootFor = cache(async (view: GraphView): Promise<GraphRootRe
   const user = await getSessionUser();
   if (!user) return { root: null, reason: null };
 
-  const preferidos: Record<string, GraphNodeType[]> = {
-    project: ["project"],
+  // POR QUÉ LAS VISTAS DE ESPACIO ARRANCAN EN EL ESPACIO Y NO EN UN PROYECTO
+  //
+  // Arrancaban en «el proyecto modificado más recientemente», y eso resultó ser
+  // justo la peor señal posible: lo más reciente es lo más VACÍO. Un proyecto
+  // recién creado no tiene tareas, así que el recorrido devolvía UN nodo y la
+  // pantalla enseñaba una burbuja sola. Se reportó tal cual: «¿por qué solo se
+  // ve el nodo Café mío?».
+  //
+  // El espacio, en cambio, es el único nodo del que cuelga TODO lo del espacio:
+  // cada proyecto tiene su arista `belongs_to` hacia él desde la migración
+  // 0054. Arrancar ahí es lo que hace que al abrir se vean los proyectos, sus
+  // tareas y las dependencias entre ellas. Al pulsar un proyecto la pantalla se
+  // vuelve a enraizar ahí con `?node=`, que es cuando la vista ego-céntrica sí
+  // es lo que se quiere.
+  const tipos: Record<string, GraphNodeType[]> = {
+    project: ["workspace"],
     workspace: ["workspace"],
-    knowledge: ["project", "note"],
+    knowledge: ["workspace"],
+    impact: ["workspace"],
+    // Lo privado no tiene un nodo contenedor: no existe un «nodo usuario» del
+    // que cuelguen las metas y los hábitos. Se arranca en el nodo con más
+    // conexiones, que es el que más grafo tiene alrededor.
     personal: ["goal", "routine"],
     money: ["goal", "budget"],
-    ai: ["goal", "project"],
-    impact: ["project"]
+    ai: ["goal", "project"]
   };
-  const tipos = preferidos[view.id] ?? ["project"];
+  const buscados = tipos[view.id] ?? ["workspace"];
 
   const { data, error } = await supabase
     .from("graph_nodes")
     .select("id, label, node_type")
     .eq("scope", view.scope)
-    .in("node_type", tipos)
+    .in("node_type", buscados)
     .is("archived_at", null)
     .order("updated_at", { ascending: false })
     .limit(1);

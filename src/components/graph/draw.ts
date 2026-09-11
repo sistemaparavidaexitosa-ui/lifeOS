@@ -37,18 +37,36 @@ export interface DrawInput {
   labelled: ReadonlySet<string>;
   /** El rectángulo de selección en curso, en coordenadas del mundo. */
   marquee: { x: number; y: number; width: number; height: number } | null;
+  /**
+   * Píxeles físicos por píxel de CSS.
+   *
+   * TIENE QUE ENTRAR AQUÍ, y esa es la corrección de un fallo real: antes el
+   * componente aplicaba el `dpr` con `setTransform` y acto seguido esta función
+   * volvía a llamar a `setTransform`, que REEMPLAZA la matriz en vez de
+   * componerla. El `dpr` se perdía entero. En un teléfono con pantalla del
+   * doble de densidad eso dibujaba el grafo a la mitad de tamaño dentro del
+   * cuarto superior izquierdo del búfer, y como `clearRect` también limpiaba
+   * solo ese cuarto, el resto no se borraba nunca y quedaban rastros al mover.
+   */
+  dpr: number;
 }
 
 export function drawGraph(ctx: CanvasRenderingContext2D, input: DrawInput): void {
   const { viewport: v, colors } = input;
   const detail = detailFor(v.scale);
+  const dpr = input.dpr > 0 ? input.dpr : 1;
 
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.clearRect(0, 0, v.width, v.height);
+  // El búfer ENTERO, en píxeles físicos. Limpiar solo el tamaño en CSS dejaba
+  // sin borrar el resto de la pantalla en cualquier equipo de alta densidad.
+  ctx.clearRect(0, 0, v.width * dpr, v.height * dpr);
 
-  // Todo el dibujo va en coordenadas del MUNDO: se aplica la cámara una vez
-  // como transformación y a partir de aquí nadie multiplica nada a mano.
-  ctx.setTransform(v.scale, 0, 0, v.scale, -v.x * v.scale, -v.y * v.scale);
+  // Una sola matriz para las dos cosas: la cámara y la densidad de pantalla.
+  // Componerlas aquí —y no en dos llamadas— es lo que impide que la segunda se
+  // coma a la primera. A partir de esta línea todo se dibuja en coordenadas del
+  // MUNDO y nadie multiplica nada a mano.
+  const k = v.scale * dpr;
+  ctx.setTransform(k, 0, 0, k, -v.x * k, -v.y * k);
 
   drawEdges(ctx, input, detail);
   drawNodes(ctx, input, detail);
@@ -231,10 +249,13 @@ export function drawMinimap(
   ctx: CanvasRenderingContext2D,
   input: Pick<DrawInput, "nodes" | "positions" | "colors" | "viewport">,
   bounds: { x: number; y: number; width: number; height: number },
-  size: { width: number; height: number }
+  size: { width: number; height: number },
+  dpr = 1
 ): void {
   const { colors, positions, viewport: v } = input;
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  // Mismo fallo que arriba, misma corrección: la densidad va DENTRO de la
+  // matriz, no en una llamada previa que esta línea borraría.
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, size.width, size.height);
 
   const escala = Math.min(size.width / Math.max(bounds.width, 1), size.height / Math.max(bounds.height, 1)) * 0.9;
