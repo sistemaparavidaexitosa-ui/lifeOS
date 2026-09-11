@@ -2229,3 +2229,50 @@ implementa:
   `PGRST204`— a `MIGRACION_PENDIENTE`, que es lo que hace que el mensaje diga
   qué comando ejecutar. La regla que queda: un lector puede devolver vacío
   cuando no hay datos, nunca cuando no pudo mirar.
+
+- **D-125 · El dedo y el ratón no son el mismo dispositivo, y el lienzo se envió
+  creyendo que sí.** El Mapa de dependencias salió sin un solo gesto táctil:
+  desplazarse exigía botón central del ratón o barra espaciadora —en un teléfono
+  no existe ninguno de los dos— y arrastrar con un dedo dibujaba un rectángulo
+  de selección, así que el grafo era literalmente inmovible. Ahora la decisión
+  vive en `gestureFor` (dominio puro, con su tabla de pruebas): dos punteros son
+  siempre pellizco; el botón central y la barra espaciadora mandan sobre el nodo
+  que haya debajo; un dedo sobre el vacío MUEVE el lienzo; con ratón o lápiz
+  sigue siendo rectángulo. Se pierde el rectángulo en táctil y es un precio
+  barato: se selecciona tocando. Y se añadió el umbral de 4 px al arrastre de
+  nodos, que ya existía para el rectángulo y faltaba aquí: sin él, el temblor de
+  un dedo en un toque limpio marcaba el gesto como arrastre y el nodo no llegaba
+  a seleccionarse nunca.
+
+- **D-126 · La densidad de pantalla va DENTRO de la matriz de dibujo.** El
+  componente aplicaba el `dpr` con `setTransform` y `drawGraph` volvía a llamar
+  a `setTransform`, que reemplaza la matriz en vez de componerla: el `dpr` se
+  perdía entero. En un teléfono con pantalla del doble de densidad eso dibujaba
+  el grafo a la mitad de tamaño dentro del cuarto superior izquierdo del búfer,
+  y como `clearRect` limpiaba solo ese cuarto, el resto no se borraba nunca y
+  quedaban rastros al mover. La regla que queda: si una función recibe un
+  contexto 2D y llama a `setTransform`, la densidad tiene que entrar por
+  parámetro, porque cualquier matriz que se fije antes la va a borrar.
+
+- **D-127 · Encuadrar nunca amplía, y en una pantalla estrecha a veces no se
+  encuadra.** `fitToBounds` solo topaba contra `MAX_SCALE`, que es el límite del
+  zoom manual: con un grafo de un solo nodo el rectángulo tiene área cero, el
+  mínimo de 1 evitaba la división por cero y la escala se iba a 8x, pintando un
+  proyecto con 320 px de diámetro en un lienzo de 366 px. Se añade
+  `MAX_FIT_SCALE = 1`: encuadrar sirve para que quepa lo que hay, nunca para
+  agrandarlo. Y por debajo de 640 px de ancho, cuando encuadrarlo todo daría una
+  escala por debajo del umbral de etiqueta, se deja de intentar: se centra en la
+  raíz del recorrido a una escala legible (`frameFor`). Ciento sesenta tareas en
+  366 px daban escala 0,03 y ni un solo nombre. Ver diez nodos con su nombre y
+  poder moverte es útil; ver ciento sesenta puntos mudos no lo es.
+
+- **D-128 · La fila del lienzo es `minmax(0, 1fr)`, no `auto`.** Debajo de
+  1024 px la rejilla de `/graph` pasa a una columna, o sea a filas implícitas
+  `auto`. El único hijo de `.gr-stage` es `position: absolute`, así que no
+  aporta altura intrínseca, y `min-height: 0` le dejaba colapsar a CERO: en un
+  teléfono el grafo sencillamente no estaba, y el panel de impacto se quedaba
+  con toda la pantalla. Es un fallo especialmente traicionero porque no da error
+  ni deja hueco: no se ve nada y parece que no hay datos. Se arregla por dos
+  vías a propósito —la fila reservada y un `min-height: 240px` en el propio
+  escenario—, porque el modo de fallo es demasiado silencioso para dejarlo
+  colgando de una sola regla.
