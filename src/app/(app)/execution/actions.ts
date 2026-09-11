@@ -2,7 +2,6 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { requireUser } from "@/lib/data/session";
 import { getPersonalWorkspace } from "@/lib/data/workspaces";
 import { recordActivity } from "@/lib/data/activity";
 import { evaluateTransition } from "@/lib/domain/task-state.ts";
@@ -13,7 +12,9 @@ import { templateFromPayload } from "@/lib/domain/execution/ai-plan.ts";
 import { writeTemplate } from "./template-actions";
 import { suggestProjectSequence } from "@/lib/domain/project-sequence.ts";
 import type { TaskStatus } from "@/lib/domain/types.ts";
-import { describeDbError } from "@/lib/supabase/errors";
+import { actionOk, describeDbError, type ActionResult } from "@/lib/supabase/errors";
+import { getSessionUser, requireUser } from "@/lib/data/session";
+import { MAX_DEPS, cicloAlAnadir, limpiarDeps } from "@/lib/domain/execution/project-deps.ts";
 
 const projectSchema = z.object({
   title: z.string().min(1),
@@ -508,6 +509,78 @@ export async function patchProject(projectId: string, patch: ProjectPatch) {
   }
   revalidatePath("/execution");
   revalidatePath("/home");
+}
+
+/**
+ * De qué proyectos depende este.
+ *
+ * CONTRATO `{ok, reason}` y no lanzar, al contrario que `updateProject`, y hay
+ * un motivo concreto: el fallo esperable aquí NO es un dato mal capturado sino
+ * un ciclo, y un ciclo hay que EXPLICARLO. «Mudanza → Obra → Mudanza» se
+ * entiende y se puede arreglar; «Error» no.
+ *
+ * LA GUARDA DE CICLOS ES NUEVA EN EL SISTEMA. `setTaskDeps` (0003) se limita a
+ * quitar la autorreferencia, así que A→B→A es posible hoy en tareas. No se
+ * repite aquí porque un ciclo entre proyectos deja sin sentido el camino
+ * crítico que el grafo promete y hace entrar en bucle al secuenciador.
+ */
+export async function setProjectDeps(projectId: string, dependsOn: string[]): Promise<ActionResult> {
+  const parsed = z
+    .object({
+      projectId: z.string().uuid(),
+      dependsOn: z.array(z.string().uuid()).max(MAX_DEPS)
+    })
+    .safeParse({ projectId, dependsOn });
+  if (!parsed.success) return { ok: false, reason: "Esa lista de dependencias no es válida." };
+
+  const user = await getSessionUser();
+  if (!user) return { ok: false, reason: "Tu sesión expiró. Vuelve a iniciar sesión." };
+
+  const supabase = await createClient();
+  const { data: propio } = await supabase
+    .from("projects")
+    .select("workspace_id")
+    .eq("id", parsed.data.projectId)
+    .maybeSingle();
+  if (propio === null) return { ok: false, reason: "Ese proyecto ya no existe." };
+
+  // Solo los del MISMO espacio. Dos razones: una dependencia hacia un proyecto
+  // de otro espacio no se podría dibujar —el trigger de 0055 la rechazaría— y
+  // además delataría que ese proyecto existe.
+  const { data: hermanos, error } = await supabase
+    .from("projects")
+    .select("id, title, depends_on")
+    .eq("workspace_id", propio.workspace_id);
+  if (error) return { ok: false, reason: describeDbError(error) };
+
+  const porId = new Map((hermanos ?? []).map((p) => [p.id, p]));
+  const limpias = limpiarDeps(parsed.data.projectId, parsed.data.dependsOn)
+    // Un id que no está entre los hermanos es de otro espacio o ya no existe.
+    .filter((id) => porId.has(id));
+
+  const grafo = new Map((hermanos ?? []).map((p) => [p.id, p.depends_on ?? []]));
+  const ciclo = cicloAlAnadir(parsed.data.projectId, limpias, grafo);
+  if (ciclo !== null) {
+    const nombres = ciclo.map((id) => porId.get(id)?.title ?? "?").join(" → ");
+    return {
+      ok: false,
+      reason: `Eso cierra un círculo: ${nombres}. Ninguno de esos proyectos podría empezar nunca.`
+    };
+  }
+
+  const { error: errorGuardar } = await supabase
+    .from("projects")
+    .update({ depends_on: limpias })
+    .eq("id", parsed.data.projectId);
+  if (errorGuardar) return { ok: false, reason: describeDbError(errorGuardar) };
+
+  await supabase.from("audit_log").insert({
+    user_id: user.id, action: "project.deps", object: parsed.data.projectId,
+    meta: { depends_on: limpias }
+  });
+  revalidatePath("/execution");
+  revalidatePath("/graph");
+  return actionOk;
 }
 
 export async function updateProject(formData: FormData) {

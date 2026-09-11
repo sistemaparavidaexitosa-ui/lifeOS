@@ -143,6 +143,42 @@ export const loadSubgraph = cache(async (
   return { nodes, edges, truncated, reason: null };
 });
 
+/**
+ * Todos tus nodos de unos tipos, sin recorrer desde ninguna raíz.
+ *
+ * Es lo que consumen las vistas `rooted: false`. Un espacio de trabajo es un
+ * nodo del que cuelga todo lo suyo; lo privado no tiene equivalente, así que
+ * recorrer desde una meta suelta enseñaba esa meta y poco más.
+ */
+export const loadAllNodes = cache(async (view: GraphView, maxNodes = 500): Promise<Subgraph> => {
+  const supabase = await createClient();
+  const user = await getSessionUser();
+  if (!user) return { nodes: [], edges: [], truncated: false, reason: null };
+
+  const { data, error } = await supabase.rpc("graph_all", {
+    p_node_types: view.nodeTypes ?? undefined,
+    p_scope: view.scope,
+    p_limit: maxNodes
+  });
+  if (error) return { nodes: [], edges: [], truncated: false, reason: describeDbError(error) };
+  if (data === null || data.length === 0) {
+    return { nodes: [], edges: [], truncated: false, reason: null };
+  }
+
+  const nodes = data.map(mapNode);
+  const truncated = data[0]!.truncated === true;
+
+  const { data: aristas } = await supabase.rpc("graph_edges_of", {
+    p_nodes: nodes.map((n) => n.id)
+  });
+  const permitidas = view.relTypes === null ? null : new Set<string>(view.relTypes);
+  const edges = (aristas ?? [])
+    .map(mapEdge)
+    .filter((e) => permitidas === null || permitidas.has(e.relType));
+
+  return { nodes, edges, truncated, reason: null };
+});
+
 /** El análisis de impacto de un nodo, en las dos direcciones. */
 export const loadImpact = cache(async (
   rootId: string,

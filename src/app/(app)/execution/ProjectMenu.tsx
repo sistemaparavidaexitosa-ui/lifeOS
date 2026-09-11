@@ -36,6 +36,10 @@ export interface ProjectMenuData {
   status: string;
   priority: string;
   targetDate: string | null;
+  /** De qué proyectos depende (0056). Antes esto solo existía como prosa. */
+  dependsOn: string[];
+  /** Los demás proyectos del MISMO espacio, para poder elegir entre ellos. */
+  siblings: { id: string; title: string; status: string }[];
 }
 
 type Panel = "sequence" | "ai-plan" | "template" | "edit" | "move" | "guests" | "logbook" | "knowledge" | "delete" | null;

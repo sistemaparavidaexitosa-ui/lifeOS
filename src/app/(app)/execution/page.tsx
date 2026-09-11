@@ -206,7 +206,12 @@ async function BoardWorkspace({
   today,
   openTaskId
 }: {
-  projectRow: { id: string; title: string; objective: string | null; status: string; priority: string; target_date: string | null; workspace_id: string };
+  projectRow: {
+    id: string; title: string; objective: string | null; status: string;
+    priority: string; target_date: string | null; workspace_id: string;
+    /** Proyectos que tienen que avanzar antes que este (0056). */
+    depends_on: string[] | null;
+  };
   view: ExecutionView;
   userId: string;
   today: string;
@@ -215,6 +220,17 @@ async function BoardWorkspace({
 }) {
   const supabase = await createClient();
   const projectId = projectRow.id;
+
+  // Los candidatos a dependencia: solo los del MISMO espacio. Una dependencia
+  // hacia un proyecto de otro espacio no se podría dibujar —el trigger de 0055
+  // la rechazaría— y además delataría que ese proyecto existe.
+  const { data: hermanosRows } = await supabase
+    .from("projects")
+    .select("id, title, status")
+    .eq("workspace_id", projectRow.workspace_id)
+    .neq("id", projectId)
+    .order("title");
+  const hermanos = (hermanosRows ?? []).map((p) => ({ id: p.id, title: p.title, status: p.status }));
 
   // Destinos válidos para "Mover a otro espacio": solo donde el usuario puede
   // crear/escribir. Ofrecer un espacio donde es Viewer sería enseñarle un
@@ -331,7 +347,9 @@ async function BoardWorkspace({
           objective: projectRow.objective ?? "",
           status: projectRow.status,
           priority: projectRow.priority,
-          targetDate: projectRow.target_date
+          targetDate: projectRow.target_date,
+          dependsOn: projectRow.depends_on ?? [],
+          siblings: hermanos
         }}
         progress={countable.length ? Math.round((done / countable.length) * 100) : 0}
         taskCount={rootTasks.length}
