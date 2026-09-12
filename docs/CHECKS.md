@@ -1397,3 +1397,71 @@ para que cada uno vuelva a fallar por su motivo.
 - ⚠️ **NO MEDIDO: el efecto de construir `NODE_STYLES` con `Object.fromEntries`**
   en vez de como literal. Se evalúa una vez al importar el módulo, no por
   fotograma, pero no se ha medido.
+
+---
+
+## Grafo Universal — Milestone 5: el dinero y los cuadernos (0061), 12-sep-2026
+
+| Ítem | Estado | Evidencia |
+|---|---|---|
+| `supabase migration up` (0061) | ✅ EJECUTADO OK | `{"applied":["…/0061_dinero_y_cuadernos.sql"]}` |
+| Aserciones de la migración | ✅ EJECUTADO OK | Las tres —triggers, nodos y aristas— tienen que salir vacías o aborta |
+| `pnpm gen:types:local` | ✅ EJECUTADO OK | Regenera tipos y catálogo: 23 tipos de nodo, 20 rutas |
+| `pnpm typecheck` | ✅ EJECUTADO OK | **Después de arreglar el fallo esperado** — ver abajo |
+| `pnpm lint` | ✅ EJECUTADO OK | «✔ No ESLint warnings or errors» |
+| `pnpm test:unit` | ✅ EJECUTADO OK | **939 pruebas, 0 fallos** |
+| `pnpm build` | ✅ EJECUTADO OK | Build de producción completo |
+| `supabase test db` | ✅ EJECUTADO OK | **Files=33, Tests=299, Result: PASS** (9 nuevas en `0032`) |
+
+### El diseño de M4 hizo saltar la compilación, y eso es lo que tenía que pasar
+
+Al insertar los cinco tipos de nodo nuevos y regenerar el catálogo, `tsc` falló:
+
+```
+src/lib/domain/graph/theme.ts(34,7): error TS2739: Type '{ … }' is missing the
+following properties from type 'Record<…>': financial_goal, notebook, account,
+debt, liability
+```
+
+Y la prueba del candado de colores se puso en rojo por lo mismo. No es una
+molestia del refactor: es D-147 funcionando. De qué tamaño se dibuja un tipo y
+de qué color se contestan a la vez, o no se contesta ninguna.
+
+### Comprobado sobre datos, no solo por aserción
+
+Dentro de una transacción con reversión, antes de aplicar:
+
+- Las tres notas locales pasaron a colgar de su **cuaderno** (antes, del
+  espacio): «Acta de la reunión de dirección» → «Actas y decisiones», etc.
+- Insertando una meta financiera con una cuenta en `account_ids`, la arista
+  salió `account --supports--> financial_goal` — la dirección invertida— y
+  `graph_edges_deriva()` siguió vacía.
+
+### Estado de la base tras migrar
+
+```
+deriva nodos   | 0     deriva aristas | 0
+diff triggers  | 0     integridad     | 0
+fuentes        | 20    tipos de nodo  | 23    nodos | 29
+```
+
+### Dos suites anteriores quedaron inválidas de verdad
+
+No es mantenimiento cosmético: este milestone las contradijo.
+
+- `0028` usaba `debts` como tabla de pega para probar el validador, y `debts`
+  pasó a ser una fuente real — la clave primaria chocaba. Se cambió a
+  `weekly_reviews`.
+- `0029` afirmaba «una nota cuelga del espacio de su cuaderno, saltándose el
+  cuaderno». Eso dejó de ser cierto a propósito. La assertion pasa ahora a
+  comprobar la jerarquía nueva: nota → cuaderno → espacio.
+
+### Lo que NO se ejecutó
+
+- ⚠️ **NO EJECUTADO: `/graph` abierto en un navegador.** Quinto milestone
+  seguido. Y este añade cinco tipos de nodo a dos vistas, así que lo que no se
+  ha mirado es precisamente si la vista Dinero se lee bien con cuentas y deudas
+  dentro, y si el cuaderno no ensucia la de Conocimiento.
+- ⚠️ **NO DESPLEGADO todavía a la nube** en el momento de escribir esto.
+- ⚠️ **NO MEDIDO: el efecto de seis triggers más.** Son tablas frías —ninguna
+  se escribe como `tasks`—, pero no se ha medido.

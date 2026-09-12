@@ -3169,6 +3169,10 @@ export type Database = {
           weight: number
         }[]
       }
+      graph_edges_trigger_ddl: {
+        Args: { p_source_table: string }
+        Returns: string
+      }
       graph_edges_validar: {
         Args: { p_source_table: string }
         Returns: undefined

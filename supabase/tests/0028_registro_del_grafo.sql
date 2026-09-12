@@ -78,10 +78,10 @@ select is_empty(
 insert into public.graph_sources
   (entity_table, node_type, scope, projector, label_column, tenant_column, watch_columns, route_template)
 values
-  ('debts', 'custom', 'user', 'user_row', 'columna_que_no_existe', 'user_id', '{columna_que_no_existe}', '/debt');
+  ('weekly_reviews', 'custom', 'user', 'user_row', 'columna_que_no_existe', 'user_id', '{columna_que_no_existe}', '/planning');
 
 select throws_ok(
-  $$ select public.graph_registry_validar('debts') $$,
+  $$ select public.graph_registry_validar('weekly_reviews') $$,
   'P0001',
   null,
   'Una fuente que declara una columna inexistente se rechaza al validar, no al guardar'
@@ -99,7 +99,7 @@ select throws_ok(
   'Una tabla de clave primaria compuesta no puede ser fuente: el on conflict (entity_id) necesita un solo uuid'
 );
 
-delete from public.graph_sources where entity_table in ('debts', 'task_assignees');
+delete from public.graph_sources where entity_table in ('weekly_reviews', 'task_assignees');
 
 
 -- ===========================================================================

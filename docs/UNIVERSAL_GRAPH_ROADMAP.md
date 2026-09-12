@@ -1,8 +1,8 @@
 # UNIVERSAL GRAPH — hoja de ruta
 
-> **Estado al 12-sep-2026.** Los milestones 1 a 4 están implementados
-> (migraciones `0057` a `0060`, con las pruebas `0028` a `0031` en
-> `supabase/tests/`). Los milestones 5 a 8 son diseño acordado, no código. Este documento es el
+> **Estado al 12-sep-2026.** Los milestones 1 a 5 están implementados
+> (migraciones `0057` a `0061`, con las pruebas `0028` a `0032` en
+> `supabase/tests/`). Los milestones 6 a 8 son diseño acordado, no código. Este documento es el
 > plan de implementación; `docs/DECISIONS.md` (D-138…D-141) guarda las
 > decisiones ya tomadas y `docs/CHECKS.md` lo que se ejecutó de verdad.
 
@@ -312,21 +312,38 @@ así desde 0054 y no daba error ninguno.
 commiteado —el job `build` de CI no tiene base de datos— y el job `db`, que sí
 la tiene, comprueba con `--check` que no se haya quedado atrás.
 
-### M5 · Cobertura: dinero, tiempo y conocimiento — siguiente
+### M5 · Cobertura: el dinero y los cuadernos — **hecho** (`0061`)
 
-Con M1 a M4 puestos, esto es una migración de filas de registro. Candidatas por
-orden de valor —tienen `id uuid` y `user_id`, así que pasan el validador—:
-`debts`, `savings_goals`, `financial_goals`, `accounts`, `liabilities`,
-`occupations`, `daily_plans`, `knowledge_items`, `memory_items`,
-`family_members`, y con `workspace_id`: `notebooks`, `folders`.
+Seis fuentes nuevas y tres reglas de arista, casi todo en filas: **Money OS**
+(`accounts`, `debts`, `savings_goals`, `financial_goals`, `liabilities`) y
+`notebooks`. Cinco tipos de nodo nuevos, que son un INSERT.
 
-Más filas nuevas en `graph_node_types`, que es un INSERT.
+La vista Dinero enseñaba inversiones, presupuestos y activos — el patrimonio
+sin las cuentas ni las deudas. Ahora enseña el dinero. Y una nota deja de
+colgar del espacio: cuelga de su cuaderno, y el cuaderno del espacio, que es la
+jerarquía real. 0054 lo había dejado escrito como limitación («no hay nodo de
+Cuaderno, así que la nota cuelga directamente del espacio»).
 
-Lo que desbloquea: «¿qué proyecto me está costando dinero?», «¿qué hábito
-sostiene esta meta y cuánto tiempo le dedico?». Hoy son incontestables porque
-las entidades no están en el mismo grafo.
+**La lista se recortó respecto a lo planeado, y cada exclusión tiene motivo:**
 
-### M6 · Superficie de recuperación
+| Fuera | Por qué |
+|---|---|
+| El tiempo (`occupations`, `daily_plans`, `reminders`) | Se ofreció y **se pospuso el 2026-09-10**. No se reabre por cuenta propia. |
+| `knowledge_items` | Es privada y su `project_id` apunta a proyectos de espacios compartidos, así que su única arista está prohibida por la frontera (D-120) — igual que la bitácora. Sería un nodo isla en una vista donde no pega. |
+| `folders` | Un proyecto ya pertenece a su espacio, y una segunda regla `belongs_to` sobre la misma fila se pisaría con la primera. Agrupar en el tablero no es una relación del dominio. |
+| `family_members` | Puede guardar el nombre de un menor y eso es una decisión legal abierta (OD-016). No se proyecta de pasada. |
+| `journal_entries`, `food_entries`, `ai_chat_messages`, `net_worth_snapshots` | Son EVENTOS, no cosas a las que nadie se refiera. Proyectarlos haría crecer el grafo sin hacerlo más útil. |
+
+**El diseño de M4 hizo su trabajo durante este milestone**: al insertar los
+cinco tipos nuevos, `pnpm typecheck` falló nombrando exactamente los cinco que
+no tenían radio, y la prueba del candado de colores se puso en rojo por la
+misma razón. De qué tamaño se dibuja y de qué color se contestan a la vez, o no
+se contesta ninguna.
+
+**Y la ampliación destapó dos fallos latentes en la maquinaria de M2**, los dos
+inofensivos hasta que alguien declarara la regla adecuada — ver D-149.
+
+### M6 · Superficie de recuperación — siguiente
 
 `graph_nodes.search_text` y `content_hash`, mantenidos por el mismo proyector a
 partir de un `search_fields` nuevo del registro. Un RPC `graph_context()` para
@@ -446,6 +463,20 @@ aditivos.
 - Una regresión evitada por el camino: el CHECK nuevo de `route_template` dejaba
   dos `throws_ok` de `0028` pasando por el motivo equivocado —saltaban por la
   ruta, no por lo que decían comprobar—. Se arreglaron los INSERT de prueba.
+
+**M5, medido:**
+
+- 6 fuentes (de 14 a 20), 5 tipos de nodo (de 18 a 23), 3 reglas de arista (de
+  11 a 13, una de ellas cambiada de destino).
+- La migración instala triggers sobre seis tablas **frías** — ninguna es
+  `tasks`—, así que el `ACCESS EXCLUSIVE` que D-139 evitaba en 0057 aquí sí se
+  paga, y es barato.
+- En `src/` solo geometría y vistas: cinco radios en `theme.ts` y dos listas de
+  `nodeTypes` en `views.ts`. Ni una línea de lógica.
+- 1 prueba unitaria nueva (939) y 9 assertions pgTAP nuevas (299).
+- Dos suites anteriores hubo que corregirlas porque este milestone las
+  invalidó de verdad: `0028` usaba `debts` como tabla de pega y ahora es una
+  fuente real, y `0029` afirmaba que una nota cuelga del espacio.
 
 **Del plan completo, estimado:**
 

@@ -2556,3 +2556,53 @@ implementa:
   `docker exec` si no, que es lo que permite que funcione igual en la máquina
   del dueño (Docker, sin postgresql-client) y en un runner de GitHub (con él).
   Cero dependencias npm nuevas: D-008 intacto.
+
+- **D-148 · No todo lo que tiene tabla merece ser nodo.** Con el registro puesto,
+  proyectar una entidad nueva cuesta una fila, y esa es exactamente la razón por
+  la que hay que decidir qué NO se proyecta: lo barato se hace sin pensar. La
+  regla que queda escrita: **el grafo es para las cosas a las que la gente se
+  refiere, no para los eventos que las mueven**. Un movimiento del diario, una
+  comida apuntada, un turno de chat o una foto del patrimonio son hechos con
+  fecha; proyectarlos haría crecer `graph_nodes` sin que el mapa contestara una
+  pregunta más. Una cuenta, una deuda o una meta financiera sí: se les pone
+  nombre y se habla de ellas. Con ese criterio 0061 deja fuera
+  `journal_entries`, `food_entries`, `ai_chat_messages` y `net_worth_snapshots`.
+  Tres exclusiones más no son por el criterio sino por razones propias, y
+  conviene no confundirlas: **el tiempo** (`occupations`, `daily_plans`,
+  `reminders`) se pospuso a conciencia el 2026-09-10 y no se reabre por cuenta
+  propia; **`knowledge_items`** es privada y su `project_id` apunta a proyectos
+  de espacios compartidos, así que su única arista está prohibida por la
+  frontera y quedaría de isla, igual que la bitácora; y **`family_members`**
+  puede guardar el nombre de un menor, que es una decisión legal abierta
+  (OD-016) y no algo que se resuelva metiéndolo en una tabla nueva.
+
+- **D-149 · Ampliar la cobertura es cómo se encuentran los agujeros de la
+  maquinaria.** M5 no iba a tocar código: con el registro y el generador de
+  aristas puestos, la promesa era «filas y ya». Y al escribir las filas
+  aparecieron dos fallos que llevaban dentro desde 0058, los dos silenciosos y
+  los dos imposibles de ver leyendo el código sin una regla que los provocara.
+
+  El primero: `graph_edges_expected()` IGNORABA `direction` en las reglas de
+  array. Sacaba siempre la arista de la fila hacia cada uuid, porque ninguna
+  regla combinaba `uuid_array` con `in` todavía. `financial_goals.account_ids`
+  es la primera —son las CUENTAS las que apoyan a la meta, no al revés— y sin
+  el arreglo el conjunto derivado no habría cuadrado con el que produce la
+  función generada, abortando la migración sin explicar el motivo. La función
+  generadora sí lo hacía bien; era la de comprobación la que mentía, que es el
+  sitio más incómodo donde tener un fallo.
+
+  El segundo: **dos reglas que compartan tabla, relación y ancla se pisan.**
+  `graph_system_edges` RECONCILIA el conjunto de (origen, relación) —borra lo
+  que no esté en la lista—, así que dos reglas así se llamarían una detrás de
+  otra y cada una borraría lo que acaba de poner la anterior; el resultado
+  dependería del orden alfabético del nombre de la regla. Apareció de frente al
+  intentar añadir `folders` («un proyecto pertenece a su carpeta» junto a
+  «pertenece a su espacio»). Se cierra con un índice único sobre
+  `(source_table, rel_type, coalesce(anchor_column, ''))`, que lo convierte en
+  un error de migración en vez de en aristas que parpadean. `folders` se quedó
+  fuera: agrupar en el tablero no es una relación del dominio y no valía la pena
+  forzarle otra relación para esquivar el choque.
+
+  Lo que esto deja como método: un milestone de cobertura no es solo cobertura.
+  Es la primera vez que la maquinaria se usa con formas que no se escribieron
+  pensando en ella, y hay que presupuestar que aparezca algo.

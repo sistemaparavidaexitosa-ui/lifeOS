@@ -17,17 +17,25 @@ import {
 import { NODE_STYLES, EDGE_STYLES, styleOf } from "../../src/lib/domain/graph/theme.ts";
 import { buildImpactReport } from "../../src/lib/domain/graph/impact.ts";
 
-test("los colores son los mismos que había escritos a mano antes de derivarlos", () => {
-  // Escritos aquí a propósito, copiados del `NODE_STYLES` anterior a 0060. Si
-  // alguien cambia un color en la base, esta prueba se pone en rojo y obliga a
-  // decidirlo a conciencia en vez de descubrirlo mirando el lienzo.
+test("cada tipo tiene el color que le toca, y no entra ninguno sin decidirlo", () => {
+  // Escritos aquí a propósito. Los dieciocho primeros vienen copiados del
+  // `NODE_STYLES` anterior a 0060 —son el cierre contra una regresión al
+  // derivarlos— y los cinco de 0061 se añadieron a mano al ampliarlo.
+  //
+  // La comprobación de LONGITUD al final es la que hace trabajar a esta prueba:
+  // un tipo nuevo en la base la pone en rojo, igual que deja el `RADIO` de
+  // `theme.ts` sin compilar. Las dos preguntas —de qué color y de qué tamaño—
+  // se contestan a la vez o no se contesta ninguna.
   const esperados: Record<string, string> = {
     workspace: "--accent", project: "--c-purple", task: "--c-purple",
     person: "--c-pink", document: "--c-blue", note: "--c-blue",
     decision: "--c-blue", meeting: "--c-pink", goal: "--c-orange",
     routine: "--c-orange", habit: "--c-orange", book: "--c-orange",
     investment: "--c-green", budget: "--c-green", asset: "--c-green",
-    ai_conversation: "--c-teal", risk: "--danger", custom: "--muted"
+    ai_conversation: "--c-teal", risk: "--danger", custom: "--muted",
+    // 0061 · el dinero y los cuadernos
+    notebook: "--c-blue", account: "--c-green", debt: "--danger",
+    financial_goal: "--c-green", liability: "--danger"
   };
   for (const [tipo, colorVar] of Object.entries(esperados)) {
     assert.strictEqual(NODE_STYLES[tipo as keyof typeof NODE_STYLES].colorVar, colorVar, tipo);
@@ -83,6 +91,19 @@ test("cada entidad proyectada sabe a qué pantalla lleva", () => {
   assert.ok(rutas.length >= 14, "faltan fuentes en el mapa de rutas");
   for (const [tabla, plantilla] of rutas) {
     assert.ok(plantilla.startsWith("/"), `${tabla}: «${plantilla}» no es una ruta`);
+  }
+});
+
+test("el dinero llegó al grafo, y con su jerarquía", () => {
+  // 0061. Antes de él, la vista Dinero enseñaba el patrimonio sin las cuentas
+  // ni las deudas, y una nota colgaba del espacio porque no existía el nodo
+  // Cuaderno.
+  for (const tipo of ["account", "debt", "financial_goal", "liability", "notebook"]) {
+    assert.ok(tipo in NODE_CATALOG, `falta el tipo ${tipo}`);
+  }
+  for (const tabla of ["accounts", "debts", "savings_goals", "financial_goals",
+                       "liabilities", "notebooks"]) {
+    assert.ok(tabla in ROUTE_TEMPLATES, `${tabla} no sabe a qué pantalla lleva`);
   }
 });
 

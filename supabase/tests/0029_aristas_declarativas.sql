@@ -160,15 +160,16 @@ select is(
 
 
 -- ===========================================================================
--- 8) NOTAS — el `via_lookup` que salta el cuaderno
+-- 8) NOTAS — de quién cuelga una nota
 --
--- No hay tipo de nodo Cuaderno, así que la nota cuelga del ESPACIO de su
--- cuaderno. Es la relación que obliga al registro a saber pasar por una tabla
--- intermedia.
+-- Hasta 0061 la nota colgaba del ESPACIO, saltándose el cuaderno, porque no
+-- existía el tipo de nodo Cuaderno y no había dónde colgarla. Ahora existe, y
+-- la jerarquía es la real: nota -> cuaderno -> espacio.
 -- ===========================================================================
 select is(
-  pg_temp.arista('a8ee0000-0000-4000-8000-000000000001', 'belongs_to', 'a8999999-9999-4999-8999-999999999999'),
-  1, 'Una nota cuelga del espacio de su cuaderno, saltándose el cuaderno (via_lookup)'
+  pg_temp.arista('a8ee0000-0000-4000-8000-000000000001', 'belongs_to', 'a8dd0000-0000-4000-8000-000000000001')
+  + pg_temp.arista('a8dd0000-0000-4000-8000-000000000001', 'belongs_to', 'a8999999-9999-4999-8999-999999999999'),
+  2, 'La nota cuelga de su cuaderno y el cuaderno del espacio (0061)'
 );
 
 
