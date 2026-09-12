@@ -1010,6 +1010,10 @@ export type Database = {
           column_kind: string
           direction: string
           implementado_por: string
+          lookup_key: string | null
+          lookup_scope_column: string | null
+          lookup_table: string | null
+          lookup_value: string | null
           nombre: string
           notes: string
           rel_type: string
@@ -1023,6 +1027,10 @@ export type Database = {
           column_kind: string
           direction?: string
           implementado_por: string
+          lookup_key?: string | null
+          lookup_scope_column?: string | null
+          lookup_table?: string | null
+          lookup_value?: string | null
           nombre: string
           notes?: string
           rel_type: string
@@ -1036,6 +1044,10 @@ export type Database = {
           column_kind?: string
           direction?: string
           implementado_por?: string
+          lookup_key?: string | null
+          lookup_scope_column?: string | null
+          lookup_table?: string | null
+          lookup_value?: string | null
           nombre?: string
           notes?: string
           rel_type?: string
@@ -3103,6 +3115,10 @@ export type Database = {
           truncated: boolean
         }[]
       }
+      graph_backfill_edges: {
+        Args: { p_source_table: string }
+        Returns: number
+      }
       graph_backfill_source: {
         Args: { p_entity_table: string }
         Returns: number
@@ -3111,6 +3127,24 @@ export type Database = {
         Args: never
         Returns: {
           motivo: string
+          rel_type: string
+          source_id: string
+          target_id: string
+        }[]
+      }
+      graph_edges_ddl: { Args: { p_source_table: string }; Returns: string }
+      graph_edges_deriva: {
+        Args: never
+        Returns: {
+          lado: string
+          rel_type: string
+          source_id: string
+          target_id: string
+        }[]
+      }
+      graph_edges_expected: {
+        Args: never
+        Returns: {
           rel_type: string
           source_id: string
           target_id: string
@@ -3126,6 +3160,10 @@ export type Database = {
           target_id: string
           weight: number
         }[]
+      }
+      graph_edges_validar: {
+        Args: { p_source_table: string }
+        Returns: undefined
       }
       graph_impact: {
         Args: {
@@ -3145,6 +3183,10 @@ export type Database = {
           truncated: boolean
           via_rel: string
         }[]
+      }
+      graph_install_edges: {
+        Args: { p_source_table: string }
+        Returns: undefined
       }
       graph_install_source: {
         Args: { p_entity_table: string }

@@ -1,8 +1,10 @@
 # UNIVERSAL GRAPH — hoja de ruta
 
-> **Estado al 11-sep-2026.** El milestone 1 está implementado (migración
-> `0057_registro_del_grafo.sql`, pruebas `supabase/tests/0028_registro_del_grafo.sql`).
-> Los milestones 2 a 8 son diseño acordado, no código. Este documento es el
+> **Estado al 12-sep-2026.** Los milestones 1 y 2 están implementados
+> (migraciones `0057_registro_del_grafo.sql` y `0058_aristas_declarativas.sql`,
+> pruebas `supabase/tests/0028_registro_del_grafo.sql` y
+> `0029_aristas_declarativas.sql`). Los milestones 3 a 8 son diseño acordado,
+> no código. Este documento es el
 > plan de implementación; `docs/DECISIONS.md` (D-138…D-141) guarda las
 > decisiones ya tomadas y `docs/CHECKS.md` lo que se ejecutó de verdad.
 
@@ -65,10 +67,12 @@ tabla sino **por de dónde sale el dueño**, que es el eje real:
 | dos o tres saltos | `graph_project_note`, `graph_project_task_file` | `notes`, `task_files` |
 | con filtro de fila | `graph_project_decision` | `logbook` donde `type = 'decision'` |
 
-Más siete funciones de arista escritas a mano (`graph_edges_task`,
-`graph_edges_project`, `graph_edges_habit`, `graph_edges_note`,
-`graph_edges_task_file`, `graph_edges_assignee`, `graph_edges_key_result`) que
-mantienen once relaciones del dominio como aristas `origin = 'system'`.
+Más siete funciones de arista (`graph_edges_task`, `graph_edges_project`,
+`graph_edges_habit`, `graph_edges_note`, `graph_edges_task_file`,
+`graph_edges_assignee`, `graph_edges_key_result`) que mantienen once relaciones
+del dominio como aristas `origin = 'system'`. **Desde 0058 su cuerpo lo genera
+`graph_edges_ddl()` a partir de `graph_edge_rules`**; conservan los nombres de
+0054 para que los triggers no haya que tocarlos.
 
 Tres detalles del mecanismo que no son opcionales y que cualquier cambio tiene
 que conservar:
@@ -220,18 +224,35 @@ producción a cambio de nada. Comparar demuestra lo mismo y no toca una fila.
 
 Elimina: la divergencia backfill↔trigger. Deja: la deriva como consulta.
 
-### M2 · Aristas declarativas
+### M2 · Aristas declarativas — **hecho** (`0058`)
 
-Una función genérica dirigida por `graph_edge_rules` sustituye a las siete
-funciones de arista a medida. Los cuatro `column_kind` ya declarados
-(`scalar_fk`, `uuid_array`, `via_lookup`, `polymorphic`) cubren los once casos
-vivos. `graph_registry_diff()` se amplía para cubrir también los triggers
-`_b_aristas`, y el backfill pasa a reconstruir aristas además de nodos.
+El cuerpo de las siete funciones lo genera `graph_edges_ddl()` a partir de las
+once reglas. Los cuatro `column_kind` cubren todos los casos vivos, incluido el
+más irregular —`task_assignees`, donde la arista va de la TAREA a la persona y
+la persona es la fila de `memberships` de ESE espacio—, resuelto con
+`lookup_scope_column` en vez de dejándolo escrito a mano.
 
-Es el prerrequisito de M5: hoy, proyectar una entidad nueva con relaciones
-sigue pidiendo plpgsql a mano.
+Un hallazgo que simplificó el modelo: `polymorphic` no necesita resolverse de
+forma distinta a `scalar_fk`. `graph_node_of()` busca por `entity_id`, que es
+único en todo el sistema, así que resolver el nodo de un uuid **no requiere
+saber de qué tabla salió** — y `key_results.source_id`, que apunta a cinco
+tablas sin FK, se trata como cualquier otra columna.
 
-### M3 · Un solo predicado de permiso
+Se añaden `graph_edges_expected()` —el conjunto de aristas que las reglas
+derivan de los datos— y `graph_edges_deriva()`, que es a las aristas lo que
+`graph_registry_diff()` es a los triggers. Y `graph_backfill_edges()`, que
+completa a `graph_backfill_source()` de 0057.
+
+**No se tocó ningún trigger.** `create or replace function` conserva el oid, así
+que se sustituye el cuerpo sin pedir ACCESS EXCLUSIVE sobre `tasks` ni sobre
+nada (D-143). Eso también hace la reversión trivial: volver a ejecutar los
+`create or replace` originales de 0054/0056, que siguen literales en esos
+archivos.
+
+Elimina: las siete funciones escritas a mano. Deja: una relación nueva es una
+fila, que es el prerrequisito de M5.
+
+### M3 · Un solo predicado de permiso — siguiente
 
 Las siete copias del precómputo del Guest pasan a una función `stable` de
 lenguaje `sql` —inlinable por el planificador, así que no cuesta rendimiento— y
@@ -313,6 +334,7 @@ vectores y qué sale del sistema para ello — la misma conversación que
 | 3 | **SQL dinámico.** | `format('%I')` en todo identificador, validación contra `information_schema` antes de emitir, `EXECUTE` revocado de `anon` y `authenticated`, y solo se invoca desde migraciones. | mitigado en M1 |
 | 4 | **Crecimiento de `graph_nodes`.** El objetivo de D-117 son 100.000 nodos. | `enabled` por fuente permite apagar una sin migración. M5 mide el conteo antes y después. | pendiente de M5 |
 | 5 | **Deriva entre registro y triggers.** | `graph_registry_diff()` y la assertion nº 1 de `0028`, que corre en CI en cada PR. | mitigado en M1 |
+| 5b | **Deriva entre las reglas de arista y las aristas vivas.** | `graph_edges_deriva()` compara el conjunto que las reglas derivan contra el que hay, y la assertion nº 1 de `0029` lo exige vacío en cada PR. Además, la nº 2 comprueba que las siete funciones sigan siendo generadas y nadie las haya editado a mano. | mitigado en M2 |
 | 6 | **Pérdida de auditabilidad del filtro de IA (M6).** Hoy el filtro de dominios cabe en un archivo. | M6 no fusiona sin conservar esa propiedad; se revisa aparte antes de implementarlo. | abierto |
 | 7 | **El backfill reescribe tablas enteras.** `update … set etiqueta = etiqueta` toca todas las filas y recalcula los `tsvector` generados de 0039. | Es coste de mantenimiento, no de operación normal. En tablas grandes, por lotes y con `lock_timeout`. Documentado en la propia función. | aceptado |
 
@@ -327,9 +349,14 @@ funciones; los 37 triggers de 0054/0056 siguen exactamente donde estaban. Cero
 pérdida de datos y cero ventana de inconsistencia. El bloque literal está al pie
 de `0057_registro_del_grafo.sql`.
 
-De M2 en adelante cada migración lleva su bloque de reversión comentado al pie,
-con el `create trigger` original literal para poder restaurarlo. M2 y M3 son los
-únicos que sustituyen código vivo; M4 a M7 son aditivos.
+De M2 en adelante cada migración lleva su bloque de reversión comentado al pie.
+**M2 también es reversible sin tocar tablas**: las siete funciones conservan
+nombre y firma, los triggers no se movieron, y revertir es volver a ejecutar sus
+`create or replace function` originales, que siguen literales en 0054 §10 y
+0056 §2. Ese procedimiento se ejecutó de verdad durante el desarrollo —las siete
+funciones volvieron a su longitud original byte a byte— así que no es una
+promesa sin probar. M3 es el último que sustituye código vivo; M4 a M7 son
+aditivos.
 
 ---
 
@@ -348,14 +375,27 @@ con el `create trigger` original literal para poder restaurarlo. M2 y M3 son los
 - Cero dependencias npm nuevas. Cero extensiones de Postgres nuevas.
 - 18 assertions pgTAP nuevas, sobre las 52 ya existentes.
 
+**M2, medido:**
+
+- Cuatro columnas nuevas en `graph_edge_rules` y dos CHECK. Ninguna tabla nueva.
+- Seis funciones. Las siete de arista pasan a tener cuerpo generado; **ningún
+  trigger se tocó**, así que la migración no pidió un solo bloqueo de tabla.
+- **Cero cambios en `src/`** otra vez: solo `database.types.ts` regenerado.
+- 21 assertions pgTAP nuevas. El total del repositorio pasa de 246 a 267.
+- La equivalencia se demostró dos veces: la migración exige que las reglas
+  deriven exactamente las aristas vivas ANTES de sustituir nada, y sobre un
+  juego de datos que toca las once relaciones se reconstruyeron todas las
+  aristas con las funciones generadas — 28 aristas, cero diferencias en las
+  siete columnas, en los dos sentidos.
+
 **Del plan completo, estimado:**
 
 - `graph_nodes` pasaría de 14 a ~26 tipos de entidad proyectados en M5. Con los
   volúmenes de una persona real eso es del orden de miles de nodos, no de
   cientos de miles: el techo de 100.000 de D-117 sigue lejos.
-- Desaparecerían, contadas: siete funciones de arista a medida (M2), seis copias
-  del predicado de permiso (M3), y cuatro copias del vocabulario de tipos más
-  dos reimplementaciones de metadatos del catálogo (M4).
+- Ya desaparecieron: siete funciones de arista a medida (M2). Quedan por
+  desaparecer seis copias del predicado de permiso (M3), y cuatro copias del
+  vocabulario de tipos más dos reimplementaciones de metadatos del catálogo (M4).
 - La amplificación de escritura crece en las tablas que se añadan, y en ninguna
   de las que ya se escriben mucho: `tasks` y `projects` ya están proyectadas y
   M5 no las toca.

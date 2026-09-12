@@ -1153,3 +1153,82 @@ siguen funcionando igual que antes de la migración.
   ejerció en pgTAP sobre una tabla de dos filas. Su coste —reescribe toda la
   tabla y recalcula los `tsvector` generados de 0039— está razonado en D-140,
   no medido.
+
+---
+
+## Grafo Universal — Milestone 2: aristas declarativas (0058), 12-sep-2026
+
+Misma ruta no destructiva que M1: `supabase migration up` sobre la base viva,
+sin `db reset`, para comprobar la migración contra datos reales.
+
+| Ítem | Estado | Evidencia |
+|---|---|---|
+| `supabase migration up` (0058) | ✅ EJECUTADO OK | `{"applied":["…/0058_aristas_declarativas.sql"],"message":"Migrations applied"}` |
+| Aserción previa (las reglas derivan las aristas vivas) | ✅ EJECUTADO OK | La migración aborta si difieren; aplicó sin abortar |
+| Ejercicio en caliente de las funciones generadas | ✅ EJECUTADO OK | `NOTICE: funciones de arista ejercitadas sobre una fila de: habits, key_results, notes, projects, task_assignees, tasks` |
+| `pnpm gen:types:local` | ✅ EJECUTADO OK | `database.types.ts` +42 líneas |
+| `pnpm typecheck` | ✅ EJECUTADO OK | `tsc --noEmit`, sin salida |
+| `pnpm lint` | ✅ EJECUTADO OK | «✔ No ESLint warnings or errors» |
+| `pnpm test:unit` | ✅ EJECUTADO OK | **929 pruebas, 0 fallos** |
+| `pnpm build` | ✅ EJECUTADO OK | Build de producción completo |
+| `supabase test db` | ✅ EJECUTADO OK | **Files=30, Tests=267, Result: PASS** — las 29 suites previas siguen en verde y `0029_aristas_declarativas.sql` añade 21 assertions |
+
+### La prueba de equivalencia, en detalle
+
+No basta con que la migración aplique: sustituye el cuerpo de siete funciones
+que llevaban meses en producción. Se comprobó en dos pasos, ambos ejecutados:
+
+1. **Antes de sustituir nada**, con las funciones originales todavía puestas, se
+   exigió que el conjunto que las reglas DERIVAN fuera idéntico al que hay. Es
+   la aserción que lleva la migración dentro.
+2. **Sobre un juego de datos que toca las once relaciones** (2 proyectos con
+   dependencia, 3 tareas con madre y `deps`, 2 asignados, 1 archivo, 1 nota en
+   su cuaderno, 2 hábitos apilados en una rutina, 3 resultados clave de los
+   cuales uno apunta a un proyecto), se tomó una foto de las aristas `system`,
+   se aplicó 0058 y se reconstruyeron TODAS las aristas con las funciones
+   generadas. Resultado: **28 aristas antes, 28 después, cero diferencias en los
+   dos sentidos** comparando las siete columnas (`source_id`, `rel_type`,
+   `target_id`, `origin`, `workspace_id`, `user_id`, `project_id`).
+
+### Comprobaciones sobre la base, después de migrar
+
+```
+deriva nodos   | 0    -- graph_registry_deriva()
+deriva aristas | 0    -- graph_edges_deriva()
+diff triggers  | 0    -- graph_registry_diff()
+integridad     | 0    -- graph_check_integrity() (0055)
+nodos          | 22   -- idéntico al de antes
+aristas system | 10   -- idéntico al de antes
+reglas         | 11
+fn generadas   | 7    -- más graph_edges_ddl, que emite la marca
+```
+
+### Un incidente durante el desarrollo, y lo que salió de él
+
+Al preparar la prueba de equivalencia, un `rollback;` que quedó a media altura
+de un script terminó la transacción antes de tiempo, y todo lo que venía detrás
+—la migración 0058 entera y una reconstrucción de aristas— se ejecutó en
+autocommit **contra la base local**, sin quedar registrado en
+`supabase_migrations.schema_migrations`.
+
+Se revirtió a mano siguiendo el bloque «cómo se revierte» del pie de 0058, y
+eso tuvo un efecto secundario útil: **el procedimiento de reversión quedó
+probado de verdad**. Las siete funciones volvieron a su longitud original byte a
+byte (659, 511, 529, 461, 661, 974 y 159 caracteres), las cuatro columnas y las
+dos restricciones se soltaron, y el conteo de aristas volvió a 10. Después se
+aplicó 0058 por el camino normal.
+
+### Lo que NO se ejecutó
+
+- ⚠️ **NO EJECUTADO: `/graph` abierto en un navegador.** M2 tampoco toca `src/`
+  —el diff es solo `database.types.ts`—, pero sigue sin recorrerse la pantalla a
+  mano.
+- ⚠️ **NO EJECUTADO: despliegue.** Ni 0057 ni 0058 se han aplicado a la nube.
+- ⚠️ **NO EJECUTADO: `graph_backfill_edges()` sobre una tabla grande.** Se
+  ejerció sobre seis tablas con decenas de filas. Su coste —reescribe la tabla
+  entera— está razonado, no medido.
+- ⚠️ **NO MEDIDO: el efecto en el rendimiento de escritura.** Los cuerpos
+  generados hacen las mismas llamadas que los escritos a mano y una mejora
+  menor (una sola resolución por uuid en los arrays, donde el original llamaba
+  a `graph_node_of` dos veces por elemento), pero no se ha medido un `UPDATE`
+  masivo antes y después.

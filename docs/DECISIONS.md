@@ -2442,3 +2442,48 @@ implementa:
   haya. La invariante que vigila no cambia: `graph_nodes` es la única tabla
   donde conviven una fila de Money OS y una de un proyecto compartido (D-120),
   y lo único que las separa es el `scope`.
+
+- **D-142 · Una columna polimórfica se resuelve como cualquier otra, y eso
+  simplificó el modelo de aristas.** `key_results.source_id` apunta a cinco
+  tablas distintas y no tiene FK (0035), así que al diseñar las reglas
+  declarativas parecía necesitar un tratamiento aparte: primero averiguar a qué
+  tabla apunta, y luego buscar allí. No hace falta ninguna de las dos cosas.
+  `graph_node_of()` busca por `entity_id`, que es único en TODO el sistema
+  —`idx_graph_nodes_entity` (0054:201) lo es sobre la tabla entera, no por
+  tabla de origen, y todas las claves primarias del esquema son
+  `gen_random_uuid()`—, así que resolver el nodo de un uuid **no requiere saber
+  de qué tabla salió**. El `column_kind` `polymorphic` se conserva porque dice
+  algo cierto y útil para quien lea el registro —esta columna no tiene
+  integridad referencial—, pero el generador lo trata exactamente igual que un
+  `scalar_fk`. Conviene tenerlo presente antes de añadir maquinaria: la
+  unicidad global de los uuid es una propiedad del esquema de la que este
+  módulo ya depende en varios sitios.
+
+- **D-143 · Las funciones de arista generadas conservan los nombres feos de
+  0054.** `graph_edges_key_result` está en singular y `graph_edges_assignee` no
+  nombra su tabla; generándolas desde cero salían siete nombres coherentes.
+  Renombrarlas habría obligado a `drop trigger` + `create trigger` sobre las
+  siete tablas —`tasks` incluida—, y `create trigger` pide ACCESS EXCLUSIVE, que
+  es exactamente la ventana de bloqueo que D-139 había evitado en 0057.
+  `create or replace function` conserva el oid, y un trigger apunta a su función
+  por oid: se sustituye el cuerpo entero sin que la tabla se entere. El nombre
+  feo es gratis y el bloqueo no. Tiene además una consecuencia buena para la
+  reversión: como los triggers no se movieron, revertir 0058 es volver a
+  ejecutar los `create or replace function` originales de 0054 §10 y 0056 §2.
+
+- **D-144 · Una migración que sustituye código generado tiene que EJECUTARLO
+  antes de terminar.** `create or replace function` sobre plpgsql comprueba la
+  sintaxis del cuerpo, no que las columnas que menciona existan: una función
+  generada con un nombre de columna mal puesto se crea sin protestar y falla en
+  el primer guardado de un usuario, en producción, con el generador ya
+  desplegado. Por eso 0058 dispara cada trigger sustituido sobre UNA fila real
+  —un `update` que pone la columna a su propio valor— y después vuelve a exigir
+  que las reglas y las aristas vivas coincidan. Una fila por tabla y no la tabla
+  entera: basta para recorrer todos los caminos del cuerpo generado y no cuesta
+  una reescritura masiva. Se elige la fila **por `ctid` y no por `id`**, porque
+  `task_assignees` es una tabla puente de clave primaria compuesta y no tiene
+  columna `id`; el ctid lo tiene toda fila de toda tabla. `task_files` queda
+  fuera y hay que saber por qué: su trigger de aristas nació en 0054 disparándose
+  solo con INSERT, así que ningún UPDATE lo despierta — lo cubre la prueba
+  pgTAP, que inserta un archivo, y `graph_backfill_edges()` lanza un error que
+  lo explica en vez de devolver «0 filas» y parecer que funcionó.
