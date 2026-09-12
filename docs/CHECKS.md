@@ -1097,3 +1097,59 @@ un `bottom: 0` normal.
 pruebas de dominio y construye, pero **nadie lo ha abierto en un teléfono**.
 Hasta que esta tabla se rellene con resultados reales, no se puede afirmar que
 el editor funcione en el sitio donde se van a escribir las notas.
+
+---
+
+## Grafo Universal — Milestone 1: el registro de proyección (0057), 11-sep-2026
+
+Cadena completa ejecutada de verdad contra la pila local de Supabase en Docker,
+en la rama `feat/registro-del-grafo`. La migración se aplicó con
+`supabase migration up` sobre la base viva, **sin `db reset`**: 0057 es aditiva
+y el objetivo era comprobarla contra datos reales, no contra el seed.
+
+| Ítem | Estado | Evidencia |
+|---|---|---|
+| `supabase migration up` (0057) | ✅ EJECUTADO OK | `{"applied":["…/0057_registro_del_grafo.sql"],"message":"Migrations applied"}` |
+| Aserción de equivalencia dentro de la migración | ✅ EJECUTADO OK | La migración aborta si el registro no describe los triggers instalados; aplicó sin abortar |
+| `pnpm gen:types:local` | ✅ EJECUTADO OK | `database.types.ts` +149 líneas (dos tablas y siete funciones nuevas) |
+| `pnpm typecheck` | ✅ EJECUTADO OK | `tsc --noEmit`, sin salida |
+| `pnpm lint` | ✅ EJECUTADO OK | «✔ No ESLint warnings or errors» |
+| `pnpm test:unit` | ✅ EJECUTADO OK | **929 pruebas, 0 fallos** |
+| `pnpm build` | ✅ EJECUTADO OK | Build de producción completo, tabla de rutas impresa |
+| `supabase test db` | ✅ EJECUTADO OK | **Files=29, Tests=246, Result: PASS** — las 28 suites previas siguen en verde y `0028_registro_del_grafo.sql` añade 18 assertions |
+
+### Comprobaciones sobre la base, después de migrar
+
+```
+deriva        | 0     -- graph_registry_deriva(): ninguna fila de negocio sin nodo
+diff          | 0     -- graph_registry_diff(): lo declarado = lo instalado
+integridad    | 0     -- graph_check_integrity() (0055) sigue vacía
+nodos         | 22    -- idéntico al conteo de antes de migrar
+aristas       | 10    -- idéntico
+fuentes       | 14
+reglas_arista | 11
+```
+
+Los RPC del grafo se llamaron suplantando a un usuario real
+(`set_config('request.jwt.claims', …)` + `set local role authenticated`):
+`graph_all` devolvió 13 nodos, `graph_subgraph` desde el nodo de espacio
+devolvió 6, y `graph_search` sobre una subcadena real encontró el proyecto por
+trigramas con `similitud = 0.26`. La proyección, el recorrido y la búsqueda
+siguen funcionando igual que antes de la migración.
+
+### Lo que NO se ejecutó
+
+- ⚠️ **NO EJECUTADO: `/graph` abierto en un navegador.** M1 no toca ni una línea
+  de `src/components/graph/`, `src/lib/data/graph.ts` ni de las Server Actions
+  —el diff de `src/` es solo `database.types.ts` regenerado—, y las pruebas
+  pgTAP cubren los RPC que la pantalla consume. Aun así, nadie ha recorrido las
+  siete vistas a mano después de migrar.
+- ⚠️ **NO EJECUTADO: `pnpm verify` completo.** Su último tramo es
+  `supabase db reset`, que borra la base local; se corrieron sus siete pasos por
+  separado contra la base viva, que es lo que la tabla de arriba documenta.
+- ⚠️ **NO EJECUTADO: despliegue.** La migración no se ha aplicado al proyecto de
+  Supabase en la nube.
+- ⚠️ **NO EJECUTADO: `graph_backfill_source()` sobre una tabla grande.** Se
+  ejerció en pgTAP sobre una tabla de dos filas. Su coste —reescribe toda la
+  tabla y recalcula los `tsvector` generados de 0039— está razonado en D-140,
+  no medido.

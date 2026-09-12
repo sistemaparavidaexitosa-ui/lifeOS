@@ -8,6 +8,7 @@
 | Colaborador de un Workspace ve Money OS/Hogar/Tiempo/Hábitos de otro miembro | Política RLS que use `has_project_access`/`workspace_role` sobre tablas equivocadas | Ninguna tabla de Money OS, Hogar, Time o Habits tiene `workspace_id`; sus políticas RLS son siempre `user_id = auth.uid()` puro (BR-012/019/020/027) |
 | **Colaborador de un Workspace ve datos privados a través del grafo** | (regla afinada en 0055, ver abajo: se puede cruzar dentro del espacio PERSONAL, que no admite a nadie más) `graph_nodes` es la primera tabla del sistema donde una fila de Money OS y una de un proyecto compartido conviven bajo la misma política, así que el control de la fila de arriba —«ninguna tabla mezcla los dos mundos»— deja de aplicarse | Tres capas, ninguna suficiente sola: (1) el CHECK `graph_nodes_tenant_shape` hace imposible una fila «anfibia»; (2) **dos** políticas de SELECT separadas por `scope`, no un `or`, para que un fallo en la de espacios no pueda alcanzar una fila privada; (3) el trigger `graph_edge_tenant` **rechaza** cualquier arista cuyos extremos no compartan dueño. Probado en `supabase/tests/0025_rls_grafo.sql` (migración 0054) |
 | **Fuga a través de una función que camina con la RLS apagada** | `graph_impact` y `graph_subgraph` son las primeras funciones `SECURITY DEFINER` con `row_security = off` que recorren filas: la RLS no las protege, las protege el código de dentro | El acceso a la raíz se comprueba antes de caminar y el permiso se filtra **en cada salto**, no al hidratar; el permiso se precalcula en **dos** conjuntos (espacios donde se es miembro no-Guest, y proyectos compartidos de un Guest) porque uno solo le habría dado a un Guest el espacio entero; las funciones son `stable` (no pueden escribir) y `revoke execute … from anon` deshace el default de `0010`. `supabase/tests/0025_rls_grafo.sql` incluye pruebas sobre `proconfig` y `provolatile` para detectar que alguien les quite los `set` |
+| **Un usuario declara una fuente de proyección y cambia el ámbito de nodos ajenos** | `graph_sources` (0057) es la tabla que decide en qué `scope` nace cada nodo: declarar `budgets` de ámbito espacio pondría los presupuestos de alguien bajo `graph_nodes_select_espacio` en el siguiente guardado | Es catálogo, no dato de usuario: la escritura se cierra con `REVOKE insert, update, delete … from anon, authenticated` —igual que `graph_node_types` en 0054— y no con políticas, porque no hay nada que filtrar por fila. `graph_install_source` (emite DDL), `graph_backfill_source` (escribe tablas de negocio) y `graph_registry_deriva` (cuenta filas de todos los usuarios) se revocan además a `authenticated`. Probado en `supabase/tests/0028_registro_del_grafo.sql`, assertions 11-13 y 16 |
 | Filtración de `service_role` al cliente | Import accidental de `admin.ts` en un Client Component | `import "server-only"` en `admin.ts` — falla en build time si se intenta bundlear para el navegador |
 | XSS vía scripts inline no autorizados | CSP ausente o mal configurada | `middleware.ts` aplica CSP con nonce por request + `strict-dynamic` (F5) |
 | Clickjacking | Falta de `X-Frame-Options`/`frame-ancestors` | `next.config.ts` (`X-Frame-Options: DENY`) + CSP `frame-ancestors 'none'` |
@@ -125,6 +126,34 @@ el día que una cambiara la otra dejaría de detectar lo que ya no cumple.
 Probado en `supabase/tests/0026_rls_grafo_personal.sql`, incluida la comprobación
 de que el trigger rechaza igual **sin la RLS de por medio**, que es como escribe
 `service_role`.
+
+### El registro de proyección (migración 0057) no relaja nada de lo anterior
+
+`graph_sources` describe como dato lo que 0054 tenía escrito solo dentro de sus
+`CREATE TRIGGER`: qué tabla es qué nodo, con qué etiqueta, qué metadatos y —lo
+que importa aquí— **en qué ámbito**. Tres cosas que conviene tener claras:
+
+1. **No abre la frontera.** `graph_misma_audiencia` no se toca, ni el trigger que
+   la aplica, ni las dos políticas de SELECT separadas por `scope`. El registro
+   describe la proyección; la frontera sigue siendo de las aristas.
+2. **La cierra un poco más.** La assertion nº 10 de
+   `supabase/tests/0028_registro_del_grafo.sql` comprueba que ninguna fuente
+   produzca nodos en un ámbito distinto del que declara, y está escrita
+   recorriendo `graph_sources` en vez de enumerar tablas (D-141): cuando se
+   proyecte Money OS entero, cada tabla nueva llegará con esa comprobación ya
+   aplicada.
+3. **Lo que no puede ser fuente.** El validador rechaza cualquier tabla cuya
+   clave primaria no sea una sola columna `id` de tipo `uuid`, porque todos los
+   proyectores hacen `on conflict (entity_id)`. Eso deja fuera a `profiles`,
+   `notification_prefs`, `nutrition_profiles`, `task_assignees`, `comment_reads`
+   y `comment_reactions`, y el rechazo ocurre en la migración y no en un trigger
+   en producción.
+
+La hoja de ruta completa está en `docs/UNIVERSAL_GRAPH_ROADMAP.md`. El milestone
+que más superficie de privacidad añade —unificar la recuperación de la IA con el
+registro— queda marcado ahí como **pendiente de su propia revisión**: hoy el
+filtro de dominios vive entero en `src/lib/insights/context.ts`, en un archivo
+que se audita de una sentada, y esa propiedad no se puede perder por el camino.
 
 ## Datos de menores de edad (Hogar)
 

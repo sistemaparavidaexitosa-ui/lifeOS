@@ -1004,6 +1004,56 @@ export type Database = {
         }
         Relationships: []
       }
+      graph_edge_rules: {
+        Row: {
+          anchor_column: string | null
+          column_kind: string
+          direction: string
+          implementado_por: string
+          nombre: string
+          notes: string
+          rel_type: string
+          row_filter: string | null
+          source_column: string
+          source_table: string
+          target_table: string
+        }
+        Insert: {
+          anchor_column?: string | null
+          column_kind: string
+          direction?: string
+          implementado_por: string
+          nombre: string
+          notes?: string
+          rel_type: string
+          row_filter?: string | null
+          source_column: string
+          source_table: string
+          target_table?: string
+        }
+        Update: {
+          anchor_column?: string | null
+          column_kind?: string
+          direction?: string
+          implementado_por?: string
+          nombre?: string
+          notes?: string
+          rel_type?: string
+          row_filter?: string | null
+          source_column?: string
+          source_table?: string
+          target_table?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "graph_edge_rules_rel_type_fkey"
+            columns: ["rel_type"]
+            isOneToOne: false
+            referencedRelation: "graph_rel_types"
+            referencedColumns: ["rel_type"]
+          },
+        ]
+      }
       graph_edges: {
         Row: {
           confidence: number | null
@@ -1240,6 +1290,68 @@ export type Database = {
           reversed?: boolean
         }
         Relationships: []
+      }
+      graph_sources: {
+        Row: {
+          delete_trigger: boolean
+          enabled: boolean
+          entity_table: string
+          label_column: string
+          metadata_fields: string[]
+          node_type: string
+          notes: string
+          parent_column: string | null
+          parent_table: string | null
+          project_column: string | null
+          projector: string
+          row_filter: string | null
+          scope: string
+          tenant_column: string | null
+          watch_columns: string[]
+        }
+        Insert: {
+          delete_trigger?: boolean
+          enabled?: boolean
+          entity_table: string
+          label_column: string
+          metadata_fields?: string[]
+          node_type: string
+          notes?: string
+          parent_column?: string | null
+          parent_table?: string | null
+          project_column?: string | null
+          projector: string
+          row_filter?: string | null
+          scope: string
+          tenant_column?: string | null
+          watch_columns: string[]
+        }
+        Update: {
+          delete_trigger?: boolean
+          enabled?: boolean
+          entity_table?: string
+          label_column?: string
+          metadata_fields?: string[]
+          node_type?: string
+          notes?: string
+          parent_column?: string | null
+          parent_table?: string | null
+          project_column?: string | null
+          projector?: string
+          row_filter?: string | null
+          scope?: string
+          tenant_column?: string | null
+          watch_columns?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "graph_sources_node_type_fkey"
+            columns: ["node_type"]
+            isOneToOne: false
+            referencedRelation: "graph_node_types"
+            referencedColumns: ["node_type"]
+          },
+        ]
       }
       habit_logs: {
         Row: {
@@ -2991,6 +3103,10 @@ export type Database = {
           truncated: boolean
         }[]
       }
+      graph_backfill_source: {
+        Args: { p_entity_table: string }
+        Returns: number
+      }
       graph_check_integrity: {
         Args: never
         Returns: {
@@ -3030,6 +3146,10 @@ export type Database = {
           via_rel: string
         }[]
       }
+      graph_install_source: {
+        Args: { p_entity_table: string }
+        Returns: undefined
+      }
       graph_meta: { Args: { p_campos: string[]; p_row: Json }; Returns: Json }
       graph_misma_audiencia: {
         Args: {
@@ -3039,6 +3159,35 @@ export type Database = {
         Returns: boolean
       }
       graph_node_of: { Args: { p_entity_id: string }; Returns: string }
+      graph_registry_args: {
+        Args: { p_entity_table: string }
+        Returns: string[]
+      }
+      graph_registry_ddl: {
+        Args: { p_entity_table: string }
+        Returns: string[]
+      }
+      graph_registry_deriva: {
+        Args: never
+        Returns: {
+          entity_table: string
+          faltan: number
+          sobran: number
+        }[]
+      }
+      graph_registry_diff: {
+        Args: never
+        Returns: {
+          entity_table: string
+          motivo: string
+          trigger_name: string
+        }[]
+      }
+      graph_registry_funcion: { Args: { p_projector: string }; Returns: string }
+      graph_registry_validar: {
+        Args: { p_entity_table: string }
+        Returns: undefined
+      }
       graph_search: {
         Args: { p_limit?: number; p_query: string }
         Returns: {

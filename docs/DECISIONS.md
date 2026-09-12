@@ -2380,3 +2380,65 @@ implementa:
   terminara nunca. Cualquier nodo que quede fuera del árbol (un huérfano cuyo
   padre no se ha cargado, o parte de un ciclo) se coloca igualmente al final:
   un nodo que existe y no se dibuja es peor que uno mal colocado.
+
+- **D-138 · El SQL dinámico del registro corre en tiempo de DDL, nunca por
+  fila.** Con `graph_sources` había dos maneras de que una fila de registro se
+  convirtiera en proyección, y la diferencia entre ellas es todo el
+  rendimiento del módulo. La tentadora es una función de trigger genérica que
+  lea el registro y arme la sentencia con `execute format(...)`: son cincuenta
+  líneas y vale para cualquier tabla. Es también un intérprete de SQL dentro de
+  un trigger, con `EXECUTE` por fila y sin plan cacheado, y D-119 ya la había
+  descartado por escrito antes de que existiera el registro. La elegida es la
+  otra: `graph_install_source()` valida contra `information_schema` y **emite
+  un `create trigger` estático**, una vez, desde una migración. El cuerpo que
+  corre en cada `UPDATE` sigue siendo el mismo plpgsql compilado de 0054. El
+  registro gana la extensibilidad y el camino caliente no se entera.
+
+- **D-139 · La migración 0057 COMPARA los triggers, no los recrea.** Lo natural
+  al introducir un generador es hacerle generar lo que ya existe: soltar los 37
+  triggers y volver a crearlos desde el registro, y así el registro queda
+  probado porque es lo que está instalado. El precio de eso no se ve en local y
+  sí en producción: `create trigger` sobre `tasks` necesita `ACCESS EXCLUSIVE`,
+  y un bloqueo pendiente **encola detrás a todos los lectores nuevos** — es el
+  riesgo que 0054 documentó y contuvo con `lock_timeout` al crearlos la primera
+  vez. Pagar esa ventana para dejar los triggers idénticos habría sido pagar
+  por nada. `graph_registry_diff()` compara estructura —función, eventos,
+  columnas vigiladas y argumentos, leídos de `pg_trigger`— y la migración aborta
+  si difiere en algo. Demuestra lo mismo sin tocar una fila, y tiene una
+  consecuencia que vale más que el ahorro: **el grafo no depende del registro
+  para funcionar**, así que revertir 0057 es un `drop table` y no un incidente.
+  Se compara estructura y no el texto de `pg_get_triggerdef()` porque ese texto
+  es el formato con que una versión concreta de Postgres imprime el DDL: atar
+  una prueba de CI a eso es programar un rojo falso para el día de la próxima
+  actualización mayor.
+
+- **D-140 · El backfill vuelve a disparar el trigger en vez de reimplementar la
+  proyección.** 0054 reconstruía los nodos con catorce `INSERT … SELECT` que
+  repetían la lista blanca de metadatos ya escrita en el argumento del trigger,
+  y la assertion nº 9 de `0025_rls_grafo.sql` existe únicamente para vigilar que
+  las dos copias no divergieran — o sea, había una prueba dedicada a un problema
+  que no debería existir. `graph_backfill_source()` hace
+  `update <tabla> set <etiqueta> = <etiqueta>`: el `update of` del trigger
+  incluye la etiqueta, así que el proyector corre con su propio código, y el
+  `where … is distinct from` del `on conflict` evita reescribir lo que ya estaba
+  bien. No puede divergir de la proyección porque **es** la proyección. Lo que
+  esto obliga a fijar, y por eso hay un CHECK: la etiqueta tiene que estar
+  dentro de `watch_columns`. Si no lo estuviera, ese `UPDATE` no dispararía nada
+  y la herramienta de reparación mentiría en silencio, que es la peor forma de
+  fallar que puede tener una herramienta de reparación. El precio, dicho sin
+  adornos: reescribe todas las filas de la tabla y recalcula los `tsvector`
+  generados de 0039. Es coste de mantenimiento, no de operación.
+
+- **D-141 · La prueba de la frontera de privacidad recorre el registro, no una
+  lista de tablas.** La assertion nº 10 de `0028_registro_del_grafo.sql` podría
+  haberse escrito enumerando las catorce fuentes, que es como está escrita la
+  nº 9 de `0025_rls_grafo.sql` (`entity_table in ('habits','routines','budgets',
+  …)`). Esa forma es correcta hoy y se queda atrás el día que alguien añada una
+  fuente, que es justo lo que el registro existe para hacer fácil: el plan
+  llega hasta proyectar Money OS entero. Escrita como un `join` contra
+  `graph_sources`, **cada fuente nueva nace con su prueba de privacidad
+  puesta**, sin que nadie tenga que acordarse. Es la diferencia entre una
+  prueba que cubre lo que había el día que se escribió y una que cubre lo que
+  haya. La invariante que vigila no cambia: `graph_nodes` es la única tabla
+  donde conviven una fila de Money OS y una de un proyecto compartido (D-120),
+  y lo único que las separa es el `scope`.
