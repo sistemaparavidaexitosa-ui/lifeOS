@@ -1147,8 +1147,8 @@ siguen funcionando igual que antes de la migración.
 - ⚠️ **NO EJECUTADO: `pnpm verify` completo.** Su último tramo es
   `supabase db reset`, que borra la base local; se corrieron sus siete pasos por
   separado contra la base viva, que es lo que la tabla de arriba documenta.
-- ⚠️ **NO EJECUTADO: despliegue.** La migración no se ha aplicado al proyecto de
-  Supabase en la nube.
+- ✅ **Desplegada el 12-sep-2026** junto con 0058 y 0059 — ver la sección de
+  despliegue al final de este documento.
 - ⚠️ **NO EJECUTADO: `graph_backfill_source()` sobre una tabla grande.** Se
   ejerció en pgTAP sobre una tabla de dos filas. Su coste —reescribe toda la
   tabla y recalcula los `tsvector` generados de 0039— está razonado en D-140,
@@ -1223,7 +1223,7 @@ aplicó 0058 por el camino normal.
 - ⚠️ **NO EJECUTADO: `/graph` abierto en un navegador.** M2 tampoco toca `src/`
   —el diff es solo `database.types.ts`—, pero sigue sin recorrerse la pantalla a
   mano.
-- ⚠️ **NO EJECUTADO: despliegue.** Ni 0057 ni 0058 se han aplicado a la nube.
+- ✅ **Desplegada el 12-sep-2026** — ver la sección de despliegue al final.
 - ⚠️ **NO EJECUTADO: `graph_backfill_edges()` sobre una tabla grande.** Se
   ejerció sobre seis tablas con decenas de filas. Su coste —reescribe la tabla
   entera— está razonado, no medido.
@@ -1299,8 +1299,52 @@ explícita que falla si algún día deja de haber camino. Queda como D-146.
 - ⚠️ **NO EJECUTADO: `/graph` abierto en un navegador.** Tercer milestone
   seguido sin tocar `src/` —el diff es solo `database.types.ts`—, y tercero sin
   recorrer la pantalla a mano.
-- ⚠️ **NO EJECUTADO: despliegue.** 0057, 0058 y 0059 siguen sin aplicarse a la nube.
+- ✅ **Desplegada el 12-sep-2026** — ver la sección de despliegue al final.
 - ⚠️ **NO MEDIDO: el rendimiento con volumen real.** Se comprobó que el
   predicado se embebe, que es la propiedad de la que depende el plan. No se ha
   medido `graph_all` contra una tabla grande antes y después, porque la base
   local tiene 22 nodos y el planificador elige `Seq Scan` en cualquier caso.
+
+---
+
+## Despliegue del Grafo Universal a producción, 12-sep-2026
+
+`supabase db push` sobre el proyecto vinculado, desde la rama
+`feat/registro-del-grafo` — sin fusionar a `main`, que es como se despliega en
+este repositorio.
+
+| Ítem | Estado | Evidencia |
+|---|---|---|
+| Ensayo en seco (`--dry-run`) | ✅ EJECUTADO OK | 3 migraciones, `seeds: []`, `roles: []` — nada de repoblar ni borrar |
+| `supabase db push` (0057, 0058, 0059) | ✅ EJECUTADO OK | `{"upToDate":false,"dryRun":false,"migrations":["0057…","0058…","0059…"],"message":"Finished supabase db push."}` |
+| `supabase migration list` | ✅ EJECUTADO OK | local y remoto coinciden hasta 0059 |
+| Rama publicada | ✅ EJECUTADO OK | `origin/feat/registro-del-grafo`, PR #36 |
+
+**Lo que el despliegue demuestra por sí solo, y es más de lo que parece.** Las
+tres migraciones llevan aserciones dentro que abortan la transacción si el
+estado real no cuadra, así que aplicar sin abortar ES la comprobación:
+
+- **0057** exigió que el registro describiera exactamente los 37 triggers
+  instalados **en producción** — función, eventos, columnas vigiladas y
+  argumentos.
+- **0058** exigió, antes de sustituir ningún cuerpo, que las once reglas
+  derivaran exactamente el conjunto de aristas `system` **de la base real**.
+  Esto es lo que más valía: en local eran 28 aristas de un fixture; aquí son
+  los datos de verdad, con su historia y sus casos raros, y el modelo
+  declarativo los reprodujo sin una diferencia. Después disparó cada función
+  generada sobre una fila real de cada tabla y volvió a exigir que cuadrara.
+- **0059** exigió que las cuatro funciones de recorrido conservaran `stable`,
+  `security definer` y sus tres `set`, y que el predicado siguiera siendo
+  embebible.
+
+**No hizo falta desplegar la aplicación.** Ninguna firma cambió, así que lo que
+hay en Vercel sigue funcionando igual; las tablas y funciones nuevas todavía no
+las llama nadie desde `src/`.
+
+### Lo que sigue sin ejecutarse
+
+- ⚠️ **NO EJECUTADO: `/graph` abierto en un navegador contra producción.** Las
+  aserciones prueban el estado de la base, no que la pantalla se vea bien. Sigue
+  siendo la comprobación que falta desde el primer milestone.
+- ⚠️ **NO MEDIDO: el rendimiento en producción.** No se ha comparado un
+  `graph_all` antes y después con el volumen real.
