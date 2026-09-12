@@ -1232,3 +1232,75 @@ aplicó 0058 por el camino normal.
   menor (una sola resolución por uuid en los arrays, donde el original llamaba
   a `graph_node_of` dos veces por elemento), pero no se ha medido un `UPDATE`
   masivo antes y después.
+
+---
+
+## Grafo Universal — Milestone 3: un solo predicado de permiso (0059), 12-sep-2026
+
+Misma ruta no destructiva: `supabase migration up` sobre la base viva.
+
+| Ítem | Estado | Evidencia |
+|---|---|---|
+| `supabase migration up` (0059) | ✅ EJECUTADO OK | `{"applied":["…/0059_un_solo_predicado_de_permiso.sql"],"message":"Migrations applied"}` |
+| Aserción de garantías dentro de la migración | ✅ EJECUTADO OK | Aborta si alguna de las cuatro pierde `stable`, `security definer` o sus tres `set`; aplicó sin abortar |
+| `pnpm gen:types:local` | ✅ EJECUTADO OK | `database.types.ts` +14 líneas |
+| `pnpm typecheck` | ✅ EJECUTADO OK | `tsc --noEmit`, sin salida |
+| `pnpm lint` | ✅ EJECUTADO OK | «✔ No ESLint warnings or errors» |
+| `pnpm test:unit` | ✅ EJECUTADO OK | **929 pruebas, 0 fallos** |
+| `pnpm build` | ✅ EJECUTADO OK | Build de producción completo |
+| `supabase test db` | ✅ EJECUTADO OK | **Files=31, Tests=284, Result: PASS** — las 30 suites previas en verde y `0030_un_solo_predicado.sql` añade 17 assertions |
+
+### La prueba de equivalencia
+
+Estas cuatro funciones caminan con `row_security = off`: que compilen no
+demuestra nada. Antes de aplicar la migración se capturó la salida de las
+CUATRO (`graph_impact`, `graph_subgraph`, `graph_all`, `graph_edges_of`) para
+cuatro niveles de acceso y cuatro raíces distintas, se aplicó el cambio en la
+misma transacción y se volvió a capturar: **44 observaciones por fase, cero
+diferencias**.
+
+El gradiente que quedó registrado, idéntico antes y después:
+
+| | nodos de espacio | privados | aristas | recorre su proyecto | recorre el otro |
+|---|---|---|---|---|---|
+| Dueña | 11 | 2 | 7 | sí | sí |
+| Miembro | 11 | 0 | 6 | sí | sí |
+| **Invitada (Guest)** | **5** | 0 | 3 | sí | **42501** |
+| Extraña | 2 (su espacio personal) | 0 | 0 | 42501 | 42501 |
+
+### El embebido, comprobado en los dos sentidos
+
+`graph_all` depende de que el predicado se embeba para poder usar sus índices.
+No se dio por supuesto:
+
+```
+-- tal como queda: el Filter enseña la condición expandida
+Filter: ((n.archived_at IS NULL) AND (n.scope = 'workspace') AND
+         (((n.scope = 'user') AND (n.user_id = …)) OR …))
+
+-- añadiéndole security definer: el Filter enseña la llamada opaca
+Filter: ((n.scope = 'workspace') AND graph_nodo_visible(n.scope, n.user_id, …))
+```
+
+Por eso `0030` lleva una assertion sobre esas cuatro propiedades: el modo de
+fallo no da error, solo va más lento cada mes.
+
+### Una prueba que nació vacía, y cómo se detectó
+
+La primera versión de la assertion «la invitada no cruza a la tarea del otro
+proyecto» recorría `upstream`, y en ese sentido **ni siquiera la dueña llega a
+esa tarea**: la prueba pasaba sin vigilar nada. Se detectó comprobando a mano
+qué ve la dueña, se corrigió a `downstream` —donde la dueña la alcanza a dos
+saltos y la invitada se queda en uno— y se añadió una assertion de CONTROL
+explícita que falla si algún día deja de haber camino. Queda como D-146.
+
+### Lo que NO se ejecutó
+
+- ⚠️ **NO EJECUTADO: `/graph` abierto en un navegador.** Tercer milestone
+  seguido sin tocar `src/` —el diff es solo `database.types.ts`—, y tercero sin
+  recorrer la pantalla a mano.
+- ⚠️ **NO EJECUTADO: despliegue.** 0057, 0058 y 0059 siguen sin aplicarse a la nube.
+- ⚠️ **NO MEDIDO: el rendimiento con volumen real.** Se comprobó que el
+  predicado se embebe, que es la propiedad de la que depende el plan. No se ha
+  medido `graph_all` contra una tabla grande antes y después, porque la base
+  local tiene 22 nodos y el planificador elige `Seq Scan` en cualquier caso.

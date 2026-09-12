@@ -1,10 +1,10 @@
 # UNIVERSAL GRAPH — hoja de ruta
 
-> **Estado al 12-sep-2026.** Los milestones 1 y 2 están implementados
-> (migraciones `0057_registro_del_grafo.sql` y `0058_aristas_declarativas.sql`,
-> pruebas `supabase/tests/0028_registro_del_grafo.sql` y
-> `0029_aristas_declarativas.sql`). Los milestones 3 a 8 son diseño acordado,
-> no código. Este documento es el
+> **Estado al 12-sep-2026.** Los milestones 1, 2 y 3 están implementados
+> (migraciones `0057_registro_del_grafo.sql`, `0058_aristas_declarativas.sql` y
+> `0059_un_solo_predicado_de_permiso.sql`, con las pruebas `0028`, `0029` y
+> `0030` en `supabase/tests/`). Los milestones 4 a 8 son diseño acordado, no
+> código. Este documento es el
 > plan de implementación; `docs/DECISIONS.md` (D-138…D-141) guarda las
 > decisiones ya tomadas y `docs/CHECKS.md` lo que se ejecutó de verdad.
 
@@ -140,6 +140,7 @@ entidad en LifeOS» envejeciendo cada una por su lado.
 **d) El predicado de permiso está copiado siete veces** entre `graph_impact`,
 `graph_subgraph`, `graph_edges_of` y `graph_all`. Es el control que separa a un
 Guest del espacio entero: la clase de código que no puede vivir por duplicado.
+*(Resuelto en M3 — `0059`.)*
 
 ---
 
@@ -252,15 +253,33 @@ archivos.
 Elimina: las siete funciones escritas a mano. Deja: una relación nueva es una
 fila, que es el prerrequisito de M5.
 
-### M3 · Un solo predicado de permiso — siguiente
+### M3 · Un solo predicado de permiso — **hecho** (`0059`)
 
-Las siete copias del precómputo del Guest pasan a una función `stable` de
-lenguaje `sql` —inlinable por el planificador, así que no cuesta rendimiento— y
-las cuatro RPC de recorrido la llaman. Refactor puro; las pruebas de
-`0025_rls_grafo.sql` son el guardián, y se les añade la de que el Guest sigue
-sin cruzar a un proyecto hermano.
+Las siete copias de la condición que decide quién ve qué nodo pasan a
+`graph_nodo_visible()`, y el precómputo de los dos conjuntos —copiado cuatro
+veces— a `graph_acceso_espacios()` y `graph_acceso_proyectos()`.
 
-### M4 · Un solo vocabulario
+Los cuerpos de las cuatro RPC se generaron **transformando** los que había
+—sustituyendo el precómputo y el predicado y nada más—, no reescribiéndolos:
+ni una firma, ni un mensaje de error, ni un `set`, ni un orden de salida
+cambian.
+
+`graph_nodo_visible` es `sql` + `immutable`, **sin `security definer` y sin
+`strict`**, y eso no es estilo: son las cuatro propiedades que permiten al
+planificador sustituir la llamada por su cuerpo. Se comprobó con `explain` que
+se embebe —el `Filter` enseña la expresión expandida— y se comprobó también el
+caso contrario: añadiéndole `security definer`, el `Filter` pasa a enseñar la
+llamada opaca y `graph_all` perdería `idx_graph_nodes_ws` sin que nada fallara.
+Dos assertions de `0030` vigilan esas propiedades.
+
+La equivalencia se demostró capturando la salida de las cuatro RPC para cuatro
+niveles de acceso (dueña, miembro, invitada y extraña) antes y después: 44
+observaciones por fase, cero diferencias.
+
+Elimina: seis copias del predicado y tres del precómputo. Es el último milestone
+que sustituye código vivo; M4 a M7 son aditivos.
+
+### M4 · Un solo vocabulario — siguiente
 
 `scripts/gen-graph-catalog.ts` lee `graph_node_types` y `graph_rel_types` de la
 base y escribe `src/lib/domain/graph/catalog.generated.ts`, junto a
@@ -388,14 +407,26 @@ aditivos.
   aristas con las funciones generadas — 28 aristas, cero diferencias en las
   siete columnas, en los dos sentidos.
 
+**M3, medido:**
+
+- Tres funciones nuevas, cuatro recreadas. Ninguna tabla, ningún trigger,
+  ninguna fila.
+- El predicado pasa de 7 copias a 1, y el precómputo de 4 a 1.
+- **Cero cambios en `src/`**: otra vez solo `database.types.ts`.
+- 17 assertions pgTAP nuevas, específicamente sobre la frontera de la invitada a
+  través de las CUATRO funciones — `graph_subgraph`, `graph_all` y
+  `graph_edges_of` apenas estaban cubiertas, y son las que la pantalla usa por
+  debajo. El total del repositorio pasa de 267 a 284.
+
 **Del plan completo, estimado:**
 
 - `graph_nodes` pasaría de 14 a ~26 tipos de entidad proyectados en M5. Con los
   volúmenes de una persona real eso es del orden de miles de nodos, no de
   cientos de miles: el techo de 100.000 de D-117 sigue lejos.
-- Ya desaparecieron: siete funciones de arista a medida (M2). Quedan por
-  desaparecer seis copias del predicado de permiso (M3), y cuatro copias del
-  vocabulario de tipos más dos reimplementaciones de metadatos del catálogo (M4).
+- Ya desaparecieron: siete funciones de arista a medida (M2) y seis copias del
+  predicado de permiso más tres del precómputo (M3). Quedan por desaparecer
+  cuatro copias del vocabulario de tipos y dos reimplementaciones de metadatos
+  del catálogo (M4).
 - La amplificación de escritura crece en las tablas que se añadan, y en ninguna
   de las que ya se escriben mucho: `tasks` y `projects` ya están proyectadas y
   M5 no las toca.

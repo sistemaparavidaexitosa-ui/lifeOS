@@ -2487,3 +2487,40 @@ implementa:
   solo con INSERT, así que ningún UPDATE lo despierta — lo cubre la prueba
   pgTAP, que inserta un archivo, y `graph_backfill_edges()` lanza un error que
   lo explica en vez de devolver «0 filas» y parecer que funcionó.
+
+- **D-145 · El predicado de permiso del grafo es `sql` e `immutable`, y NO
+  `security definer`, porque tiene que poder EMBEBERSE.** Al unificar las siete
+  copias de la condición que decide quién ve qué nodo, lo natural en este
+  repositorio habría sido escribirla como las demás funciones de seguridad
+  —`security definer` con `row_security = off`, como `is_workspace_member()`—.
+  Habría sido un error silencioso y caro. Una función `sql` de una sola
+  expresión la sustituye el planificador por su cuerpo, y solo si **no** es
+  `security definer` ni `strict`; embebida, el `where` de `graph_all` sigue
+  pudiendo usar `idx_graph_nodes_ws` e `idx_graph_nodes_user`. Sin embeber, el
+  filtro se evalúa fila a fila y esos índices dejan de servir — sin que nada
+  falle, solo más lento cada mes que pasa. Se comprobó con `explain` en los dos
+  sentidos: tal como está, el `Filter` enseña la condición expandida; añadiéndole
+  `security definer`, enseña la llamada opaca. No hace falta que sea `security
+  definer` porque **no lee ninguna tabla**: recibe los cuatro campos del nodo y
+  los dos conjuntos ya calculados. Y tampoco puede ser `strict`: casi todos los
+  nodos tienen `project_id` nulo, y con `strict` la función devolvería null sin
+  mirar nada, dejando sin evaluar la rama de los nodos privados.
+
+- **D-146 · Un refactor de seguridad se demuestra comparando salidas, no
+  leyendo el diff.** Las cuatro funciones que 0059 recrea caminan con la RLS
+  apagada; que compilen y que las pruebas anteriores sigan en verde no basta,
+  porque esas pruebas cubrían sobre todo `graph_impact` y la invitada. Antes de
+  aplicar la migración se capturó la salida de las CUATRO para cuatro niveles de
+  acceso —dueña, miembro, invitada y extraña— sobre cuatro raíces distintas, se
+  aplicó el cambio en la misma transacción y se volvió a capturar: 44
+  observaciones por fase, cero diferencias. Los cuerpos nuevos se generaron
+  además **transformando** los viejos con una sustitución acotada al precómputo
+  y al predicado, no reescribiéndolos a mano, que es lo que garantiza que no se
+  colara un cambio de más en los topes, el `distinct on` o el orden de salida.
+  La suite `0030` deja fija esa cobertura: la frontera de la invitada
+  comprobada a través de las cuatro, incluidas `graph_subgraph`, `graph_all` y
+  `graph_edges_of`, que apenas se probaban y son las que la pantalla usa por
+  debajo. Y lleva una assertion de CONTROL —que la dueña SÍ alcanza la tarea del
+  otro proyecto—, sin la cual las tres que comprueban que la invitada no la
+  alcanza podrían estar pasando porque no hay camino. La primera versión de esa
+  prueba recorría en el sentido equivocado y era exactamente eso: verde y vacía.

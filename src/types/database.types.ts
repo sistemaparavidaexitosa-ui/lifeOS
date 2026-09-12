@@ -3101,6 +3101,8 @@ export type Database = {
         }
         Returns: string
       }
+      graph_acceso_espacios: { Args: never; Returns: string[] }
+      graph_acceso_proyectos: { Args: never; Returns: string[] }
       graph_all: {
         Args: { p_limit?: number; p_node_types?: string[]; p_scope?: string }
         Returns: {
@@ -3201,6 +3203,18 @@ export type Database = {
         Returns: boolean
       }
       graph_node_of: { Args: { p_entity_id: string }; Returns: string }
+      graph_nodo_visible: {
+        Args: {
+          p_proj: string[]
+          p_project_id: string
+          p_scope: string
+          p_uid: string
+          p_user_id: string
+          p_workspace_id: string
+          p_ws: string[]
+        }
+        Returns: boolean
+      }
       graph_registry_args: {
         Args: { p_entity_table: string }
         Returns: string[]
