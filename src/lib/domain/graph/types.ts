@@ -12,19 +12,20 @@
 // claro que mover un nodo NO modifica el nodo, y que dos vistas del mismo nodo
 // pueden estar en sitios distintos a la vez.
 
-/** Los dieciocho tipos del catálogo `graph_node_types`. */
-export type GraphNodeType =
-  | "workspace" | "project" | "task" | "goal" | "habit" | "routine"
-  | "book" | "note" | "document" | "decision" | "person"
-  | "investment" | "budget" | "asset"
-  | "ai_conversation" | "meeting" | "risk" | "custom";
+import type { NODE_CATALOG, REL_CATALOG } from "./catalog.generated.ts";
 
-/** Las catorce del catálogo `graph_rel_types`. */
-export type GraphRelType =
-  | "depends_on" | "blocks" | "leads_to" | "caused_by"
-  | "child_of" | "parent_of" | "belongs_to" | "supports"
-  | "references" | "created_from" | "generated_by_ai" | "assigned_to"
-  | "related_to" | "duplicates";
+/**
+ * Los tipos del catálogo `graph_node_types`, DERIVADOS y no escritos.
+ *
+ * Hasta 0060 esta unión estaba a mano, y con ella los colores en `theme.ts`,
+ * los plurales en `cluster.ts` y la lista de tipos nativos en las Server
+ * Actions: cuatro copias que coincidían por suerte. Ahora la copia es una sola
+ * y la pone `pnpm gen:graph-catalog` leyendo la base.
+ */
+export type GraphNodeType = keyof typeof NODE_CATALOG;
+
+/** Las del catálogo `graph_rel_types`, por el mismo camino. */
+export type GraphRelType = keyof typeof REL_CATALOG;
 
 export type GraphScope = "workspace" | "user";
 

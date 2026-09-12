@@ -1187,6 +1187,7 @@ export type Database = {
           color: string
           is_projected: boolean
           label: string
+          label_plural: string
           node_type: string
           position: number
         }
@@ -1194,6 +1195,7 @@ export type Database = {
           color?: string
           is_projected?: boolean
           label: string
+          label_plural?: string
           node_type: string
           position?: number
         }
@@ -1201,6 +1203,7 @@ export type Database = {
           color?: string
           is_projected?: boolean
           label?: string
+          label_plural?: string
           node_type?: string
           position?: number
         }
@@ -1316,6 +1319,7 @@ export type Database = {
           parent_table: string | null
           project_column: string | null
           projector: string
+          route_template: string
           row_filter: string | null
           scope: string
           tenant_column: string | null
@@ -1333,6 +1337,7 @@ export type Database = {
           parent_table?: string | null
           project_column?: string | null
           projector: string
+          route_template?: string
           row_filter?: string | null
           scope: string
           tenant_column?: string | null
@@ -1350,6 +1355,7 @@ export type Database = {
           parent_table?: string | null
           project_column?: string | null
           projector?: string
+          route_template?: string
           row_filter?: string | null
           scope?: string
           tenant_column?: string | null

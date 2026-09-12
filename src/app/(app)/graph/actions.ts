@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/data/session";
 import { actionOk, describeDbError, type ActionResult } from "@/lib/supabase/errors";
+import { NODE_CATALOG, REL_CATALOG } from "@/lib/domain/graph/catalog.generated";
 import type { GraphNodeType, GraphRelType } from "@/lib/domain/graph/types";
 
 // Las escrituras del lienzo.
@@ -26,14 +27,20 @@ import type { GraphNodeType, GraphRelType } from "@/lib/domain/graph/types";
 //   - No inserta aristas con origin 'ai'. Esas pasan por su cola de propuestas
 //     y por un botón, igual que las del coach (0053).
 
-const REL_TYPES = [
-  "depends_on", "blocks", "leads_to", "caused_by", "child_of", "parent_of",
-  "belongs_to", "supports", "references", "created_from", "generated_by_ai",
-  "assigned_to", "related_to", "duplicates"
-] as const satisfies readonly GraphRelType[];
+// Las dos listas salen del catálogo generado, no de escribirlas otra vez. El
+// `as unknown as` es lo que pide `z.enum`, que quiere una tupla no vacía:
+// `Object.keys` devuelve `string[]` y pierde los literales por el camino, así
+// que se le vuelve a decir de qué unión son. El casteo no inventa nada — las
+// claves SON esa unión, por construcción.
+const REL_TYPES = Object.keys(REL_CATALOG) as unknown as readonly [GraphRelType, ...GraphRelType[]];
 
-/** Los únicos tipos que una persona puede dibujar: los que no tienen tabla detrás. */
-const TIPOS_NATIVOS = ["custom", "risk", "meeting", "ai_conversation"] as const satisfies readonly GraphNodeType[];
+/**
+ * Los únicos tipos que una persona puede dibujar: los que no tienen tabla
+ * detrás. Antes era una lista a mano que repetía la columna `is_projected` del
+ * catálogo; ahora es esa columna.
+ */
+const TIPOS_NATIVOS = (Object.keys(NODE_CATALOG) as GraphNodeType[])
+  .filter((t) => !NODE_CATALOG[t].proyectado) as unknown as readonly [GraphNodeType, ...GraphNodeType[]];
 
 const edgeSchema = z.object({
   sourceId: z.string().uuid(),

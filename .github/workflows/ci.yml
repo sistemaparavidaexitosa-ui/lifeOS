@@ -106,3 +106,12 @@ jobs:
 
       - name: Run pgTAP tests (RLS positive/negative)
         run: supabase test db
+
+      # El vocabulario del grafo (tipos de nodo, relaciones y rutas) se genera
+      # desde el catálogo de la base — ver 0060 y D-147. El archivo generado va
+      # commiteado porque el job `build` no tiene base de datos, así que hace
+      # falta comprobar aquí, donde sí la hay, que no se haya quedado atrás.
+      # Un catálogo que crece sin regenerar no rompe nada: simplemente el
+      # lienzo deja de conocer el tipo nuevo.
+      - name: Verify generated graph catalog is current
+        run: node scripts/gen-graph-catalog.mjs --check

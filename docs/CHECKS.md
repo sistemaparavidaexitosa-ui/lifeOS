@@ -1348,3 +1348,52 @@ las llama nadie desde `src/`.
   siendo la comprobación que falta desde el primer milestone.
 - ⚠️ **NO MEDIDO: el rendimiento en producción.** No se ha comparado un
   `graph_all` antes y después con el volumen real.
+
+---
+
+## Grafo Universal — Milestone 4: un solo vocabulario (0060), 12-sep-2026
+
+El primero que toca `src/`, así que la cadena se corrió entera y en orden.
+
+| Ítem | Estado | Evidencia |
+|---|---|---|
+| `supabase migration up` (0060) | ✅ EJECUTADO OK | `{"applied":["…/0060_vocabulario_del_grafo.sql"]}` |
+| Aserción de siembra completa | ✅ EJECUTADO OK | La migración aborta si algún tipo queda sin plural o alguna fuente sin ruta |
+| `pnpm gen:graph-catalog` | ✅ EJECUTADO OK | Escribe `src/lib/domain/graph/catalog.generated.ts` — 18 tipos, 14 relaciones, 14 rutas |
+| `gen-graph-catalog.mjs --check` | ✅ EJECUTADO OK | Verde con el archivo al día; **y probado en rojo** ensuciando el archivo a propósito (exit 1) |
+| `pnpm gen:types:local` | ✅ EJECUTADO OK | `database.types.ts` +6 líneas (las dos columnas nuevas) |
+| `pnpm typecheck` | ✅ EJECUTADO OK | `tsc --noEmit`, sin salida |
+| `pnpm lint` | ✅ EJECUTADO OK | «✔ No ESLint warnings or errors» |
+| `pnpm test:unit` | ✅ EJECUTADO OK | **938 pruebas, 0 fallos** (9 nuevas) |
+| `pnpm build` | ✅ EJECUTADO OK | Build de producción completo |
+| `supabase test db` | ✅ EJECUTADO OK | **Files=32, Tests=290, Result: PASS** (6 nuevas en `0031`) |
+
+### Las rutas se comprobaron una a una
+
+`route_template` se sembró mirando `src/app/(app)/**/page.tsx`, no de memoria —
+y menos mal: la primera versión sembraba `/development/logbook` para la
+bitácora, **y esa ruta no existe**. La bitácora se abre dentro de `ProjectMenu`,
+en `/execution`, y los adjuntos dentro de `TaskFilesPanel`, también en
+`/execution`. Las catorce rutas se verificaron con un bucle contra el sistema de
+archivos antes de aplicar la migración.
+
+### Una prueba que pasaba por el motivo equivocado
+
+El CHECK nuevo de `route_template` dejó dos `throws_ok` de
+`0028_registro_del_grafo.sql` en verde **sin comprobar lo que dicen**: sus
+INSERT de prueba no llevaban ruta, así que saltaban por el CHECK de la ruta en
+vez de por el de `watch_columns` vacío y el de la etiqueta no vigilada. Ambos
+afirman `23514`, que es el código de las dos cosas, de modo que la suite no se
+habría quejado nunca. Se añadió la ruta a los cinco INSERT de prueba del archivo
+para que cada uno vuelva a fallar por su motivo.
+
+### Lo que NO se ejecutó
+
+- ⚠️ **NO EJECUTADO: `/graph` abierto en un navegador.** Y este milestone es el
+  primero en el que de verdad importa: cambia seis archivos de `src/`, incluido
+  el panel lateral. La cadena en verde dice que compila y que las derivaciones
+  son correctas; no dice que el lienzo se vea bien ni que el enlace nuevo de
+  Documento y Decisión lleve a donde debe.
+- ⚠️ **NO MEDIDO: el efecto de construir `NODE_STYLES` con `Object.fromEntries`**
+  en vez de como literal. Se evalúa una vez al importar el módulo, no por
+  fotograma, pero no se ha medido.

@@ -2524,3 +2524,35 @@ implementa:
   otro proyecto—, sin la cual las tres que comprueban que la invitada no la
   alcanza podrían estar pasando porque no hay camino. La primera versión de esa
   prueba recorría en el sentido equivocado y era exactamente eso: verde y vacía.
+
+- **D-147 · La base es dueña de las palabras; TypeScript, de la geometría.** Al
+  generar el vocabulario del grafo desde el catálogo había que decidir dónde
+  cortar, y las dos respuestas fáciles eran malas. Bajarlo TODO a Postgres
+  —radio del círculo, grosor del trazo, si la línea va discontinua— habría
+  metido píxeles en la base: columnas que ninguna consulta, ningún informe y
+  ninguna respuesta de la IA van a leer jamás, y que obligan a una migración
+  para mover un nodo dos puntos. Dejarlo todo en TypeScript es lo que ya había
+  y es de donde venimos: cuatro copias de los dieciocho tipos que coincidían por
+  suerte. La línea queda en el significado: **a la base, el nombre, la etiqueta,
+  el plural, el color, `is_projected`, `is_dependency`, `reversed`,
+  `is_symmetric` y la ruta de la pantalla; a TypeScript, el radio, el grosor y
+  el trazo discontinuo**. El color va a la base aunque suene a píxel porque no
+  lo es: es un nombre de variable CSS —`var(--c-purple)`— y por tanto una
+  decisión de SIGNIFICADO («ejecución es morado») que la leyenda, un informe o
+  una exportación pueden querer. Lo que hace que la frontera se sostenga sin
+  vigilancia es el tipo generado: los `Record` de geometría van indexados por la
+  unión que sale del catálogo, así que **un INSERT en `graph_node_types` rompe
+  la compilación** hasta que alguien decida de qué tamaño se dibuja. No es un
+  estorbo, es la pregunta que hay que contestar antes de que el tipo llegue a
+  una pantalla.
+
+  El archivo generado **va commiteado**, y eso también es una decisión: el job
+  `build` de CI no levanta base de datos —solo el job `db` lo hace—, así que un
+  generador que hiciera falta para compilar dejaría el build dependiendo de
+  Docker. Commitearlo tiene el modo de fallo conocido de todo archivo generado
+  —quedarse atrás— y por eso el job `db` corre `gen-graph-catalog.mjs --check`,
+  que regenera contra la base y falla si el archivo del repositorio no coincide.
+  El generador habla con Postgres por `psql` si está en el PATH y por
+  `docker exec` si no, que es lo que permite que funcione igual en la máquina
+  del dueño (Docker, sin postgresql-client) y en un runner de GitHub (con él).
+  Cero dependencias npm nuevas: D-008 intacto.

@@ -1,10 +1,8 @@
 # UNIVERSAL GRAPH — hoja de ruta
 
-> **Estado al 12-sep-2026.** Los milestones 1, 2 y 3 están implementados
-> (migraciones `0057_registro_del_grafo.sql`, `0058_aristas_declarativas.sql` y
-> `0059_un_solo_predicado_de_permiso.sql`, con las pruebas `0028`, `0029` y
-> `0030` en `supabase/tests/`). Los milestones 4 a 8 son diseño acordado, no
-> código. Este documento es el
+> **Estado al 12-sep-2026.** Los milestones 1 a 4 están implementados
+> (migraciones `0057` a `0060`, con las pruebas `0028` a `0031` en
+> `supabase/tests/`). Los milestones 5 a 8 son diseño acordado, no código. Este documento es el
 > plan de implementación; `docs/DECISIONS.md` (D-138…D-141) guarda las
 > decisiones ya tomadas y `docs/CHECKS.md` lo que se ejecutó de verdad.
 
@@ -116,7 +114,7 @@ trigger y en el `SELECT` del backfill, con una prueba pgTAP dedicada a vigilar
 que no divergieran); ninguna forma de detectar deriva; y añadir una entidad
 tocando tres sitios del SQL.
 
-**b) El vocabulario está escrito cuatro veces.** Los 18 tipos de nodo viven en
+**b) El vocabulario está escrito cuatro veces.** *(Resuelto en M4 — `0060`.)* Los 18 tipos de nodo viven en
 el catálogo SQL, en la unión `GraphNodeType` (`src/lib/domain/graph/types.ts`),
 en `NODE_STYLES` (`theme.ts`) y en `PLURAL` (`cluster.ts`). Las 14 relaciones,
 tres veces más `EDGE_STYLES`. `graph_rel_types.is_dependency` está
@@ -279,23 +277,42 @@ observaciones por fase, cero diferencias.
 Elimina: seis copias del predicado y tres del precómputo. Es el último milestone
 que sustituye código vivo; M4 a M7 son aditivos.
 
-### M4 · Un solo vocabulario — siguiente
+### M4 · Un solo vocabulario — **hecho** (`0060`)
 
-`scripts/gen-graph-catalog.ts` lee `graph_node_types` y `graph_rel_types` de la
-base y escribe `src/lib/domain/graph/catalog.generated.ts`, junto a
-`pnpm gen:types`. Desaparecen: la unión `GraphNodeType` escrita a mano, los
-colores duplicados en `NODE_STYLES`, el `Set` de `impact.ts` que reimplementa
-`is_dependency`, y `TIPOS_NATIVOS` que reimplementa `is_projected`.
+`scripts/gen-graph-catalog.mjs` lee los tres catálogos de la base y escribe
+`src/lib/domain/graph/catalog.generated.ts`. Se ejecuta solo dentro de
+`pnpm gen:types:local`, así que quien ya regeneraba los tipos tras una
+migración no tiene que aprender nada nuevo.
 
-Se añade `route_template` a `graph_sources` — la pantalla donde vive cada
-entidad—, que hoy es un `Record` incompleto en `NodeInspector.tsx` (le faltan
-`task_files` y `logbook`, así que los nodos de tipo Documento y Decisión no
-tienen enlace a «abrir donde vive»). Con la ruta en el registro, los enlaces
-«ver en el grafo» pendientes desde 0054 salen de la misma fila.
+**La línea que se trazó, y conviene no moverla sin pensarlo: la base es dueña
+de las PALABRAS y de la SEMÁNTICA; TypeScript es dueño de la GEOMETRÍA.** A la
+base bajan el nombre, la etiqueta, el plural, el color, `is_projected`,
+`is_dependency`, `reversed`, `is_symmetric` y la ruta — todo lo que una
+consulta, un informe o la IA podrían querer. En TypeScript se quedan el radio
+del círculo, el grosor del trazo y si la línea va discontinua: eso no lo va a
+leer nadie desde SQL, y meterlo en Postgres sería guardar píxeles.
 
-**Cero dependencias npm nuevas.** D-008 intacto.
+Esa frontera se sostiene sola porque los `Record` de geometría van indexados
+por la unión generada: **añadir un tipo de nodo con un INSERT rompe la
+compilación** hasta que alguien diga de qué tamaño se dibuja, que es justo la
+pregunta que hay que contestar.
 
-### M5 · Cobertura: dinero, tiempo y conocimiento
+Desaparecen, derivadas: la unión `GraphNodeType` (18 literales), `GraphRelType`
+(14), los colores de `NODE_STYLES`, el `PLURAL` de `cluster.ts`, el `Set`
+`ROMPEN` de `impact.ts` que reimplementaba `is_dependency`, el `REL_TYPES` de
+las Server Actions y `TIPOS_NATIVOS`, que reimplementaba `is_projected`.
+
+`route_template` en `graph_sources` sustituye al `Record` de `NodeInspector.tsx`
+**y le añade las dos entradas que le faltaban**: hasta ahora un nodo de tipo
+Documento o Decisión se veía en el mapa y no tenía enlace para abrirse. Llevaba
+así desde 0054 y no daba error ninguno.
+
+**Cero dependencias npm nuevas** (D-008): el generador habla con la base por
+`psql` si está en el PATH y por `docker exec` si no. El archivo generado va
+commiteado —el job `build` de CI no tiene base de datos— y el job `db`, que sí
+la tiene, comprueba con `--check` que no se haya quedado atrás.
+
+### M5 · Cobertura: dinero, tiempo y conocimiento — siguiente
 
 Con M1 a M4 puestos, esto es una migración de filas de registro. Candidatas por
 orden de valor —tienen `id uuid` y `user_id`, así que pasan el validador—:
@@ -418,15 +435,28 @@ aditivos.
   `graph_edges_of` apenas estaban cubiertas, y son las que la pantalla usa por
   debajo. El total del repositorio pasa de 267 a 284.
 
+**M4, medido:**
+
+- Dos columnas nuevas (`graph_node_types.label_plural`, `graph_sources.route_template`)
+  con su CHECK cada una, un script de 150 líneas y un archivo generado.
+- **El primer milestone que toca `src/`**: 6 archivos, todos para BORRAR una
+  copia y leer del catálogo. Ni un cambio de comportamiento buscado, salvo el
+  enlace que antes no salía.
+- 9 pruebas unitarias nuevas (938 en total) y 6 assertions pgTAP nuevas (290).
+- Una regresión evitada por el camino: el CHECK nuevo de `route_template` dejaba
+  dos `throws_ok` de `0028` pasando por el motivo equivocado —saltaban por la
+  ruta, no por lo que decían comprobar—. Se arreglaron los INSERT de prueba.
+
 **Del plan completo, estimado:**
 
 - `graph_nodes` pasaría de 14 a ~26 tipos de entidad proyectados en M5. Con los
   volúmenes de una persona real eso es del orden de miles de nodos, no de
   cientos de miles: el techo de 100.000 de D-117 sigue lejos.
-- Ya desaparecieron: siete funciones de arista a medida (M2) y seis copias del
-  predicado de permiso más tres del precómputo (M3). Quedan por desaparecer
-  cuatro copias del vocabulario de tipos y dos reimplementaciones de metadatos
-  del catálogo (M4).
+- Ya desaparecieron: siete funciones de arista a medida (M2), seis copias del
+  predicado de permiso más tres del precómputo (M3), y las cuatro copias del
+  vocabulario de tipos más las dos reimplementaciones de metadatos del catálogo
+  (M4). Del inventario de duplicación que abrió este documento no queda nada
+  pendiente salvo unificar las tres proyecciones universales, que es M6.
 - La amplificación de escritura crece en las tablas que se añadan, y en ninguna
   de las que ya se escriben mucho: `tasks` y `projects` ya están proyectadas y
   M5 no las toca.
