@@ -2380,3 +2380,147 @@ implementa:
   terminara nunca. Cualquier nodo que quede fuera del árbol (un huérfano cuyo
   padre no se ha cargado, o parte de un ciclo) se coloca igualmente al final:
   un nodo que existe y no se dibuja es peor que uno mal colocado.
+
+- **D-138 · El SQL dinámico del registro corre en tiempo de DDL, nunca por
+  fila.** Con `graph_sources` había dos maneras de que una fila de registro se
+  convirtiera en proyección, y la diferencia entre ellas es todo el
+  rendimiento del módulo. La tentadora es una función de trigger genérica que
+  lea el registro y arme la sentencia con `execute format(...)`: son cincuenta
+  líneas y vale para cualquier tabla. Es también un intérprete de SQL dentro de
+  un trigger, con `EXECUTE` por fila y sin plan cacheado, y D-119 ya la había
+  descartado por escrito antes de que existiera el registro. La elegida es la
+  otra: `graph_install_source()` valida contra `information_schema` y **emite
+  un `create trigger` estático**, una vez, desde una migración. El cuerpo que
+  corre en cada `UPDATE` sigue siendo el mismo plpgsql compilado de 0054. El
+  registro gana la extensibilidad y el camino caliente no se entera.
+
+- **D-139 · La migración 0057 COMPARA los triggers, no los recrea.** Lo natural
+  al introducir un generador es hacerle generar lo que ya existe: soltar los 37
+  triggers y volver a crearlos desde el registro, y así el registro queda
+  probado porque es lo que está instalado. El precio de eso no se ve en local y
+  sí en producción: `create trigger` sobre `tasks` necesita `ACCESS EXCLUSIVE`,
+  y un bloqueo pendiente **encola detrás a todos los lectores nuevos** — es el
+  riesgo que 0054 documentó y contuvo con `lock_timeout` al crearlos la primera
+  vez. Pagar esa ventana para dejar los triggers idénticos habría sido pagar
+  por nada. `graph_registry_diff()` compara estructura —función, eventos,
+  columnas vigiladas y argumentos, leídos de `pg_trigger`— y la migración aborta
+  si difiere en algo. Demuestra lo mismo sin tocar una fila, y tiene una
+  consecuencia que vale más que el ahorro: **el grafo no depende del registro
+  para funcionar**, así que revertir 0057 es un `drop table` y no un incidente.
+  Se compara estructura y no el texto de `pg_get_triggerdef()` porque ese texto
+  es el formato con que una versión concreta de Postgres imprime el DDL: atar
+  una prueba de CI a eso es programar un rojo falso para el día de la próxima
+  actualización mayor.
+
+- **D-140 · El backfill vuelve a disparar el trigger en vez de reimplementar la
+  proyección.** 0054 reconstruía los nodos con catorce `INSERT … SELECT` que
+  repetían la lista blanca de metadatos ya escrita en el argumento del trigger,
+  y la assertion nº 9 de `0025_rls_grafo.sql` existe únicamente para vigilar que
+  las dos copias no divergieran — o sea, había una prueba dedicada a un problema
+  que no debería existir. `graph_backfill_source()` hace
+  `update <tabla> set <etiqueta> = <etiqueta>`: el `update of` del trigger
+  incluye la etiqueta, así que el proyector corre con su propio código, y el
+  `where … is distinct from` del `on conflict` evita reescribir lo que ya estaba
+  bien. No puede divergir de la proyección porque **es** la proyección. Lo que
+  esto obliga a fijar, y por eso hay un CHECK: la etiqueta tiene que estar
+  dentro de `watch_columns`. Si no lo estuviera, ese `UPDATE` no dispararía nada
+  y la herramienta de reparación mentiría en silencio, que es la peor forma de
+  fallar que puede tener una herramienta de reparación. El precio, dicho sin
+  adornos: reescribe todas las filas de la tabla y recalcula los `tsvector`
+  generados de 0039. Es coste de mantenimiento, no de operación.
+
+- **D-141 · La prueba de la frontera de privacidad recorre el registro, no una
+  lista de tablas.** La assertion nº 10 de `0028_registro_del_grafo.sql` podría
+  haberse escrito enumerando las catorce fuentes, que es como está escrita la
+  nº 9 de `0025_rls_grafo.sql` (`entity_table in ('habits','routines','budgets',
+  …)`). Esa forma es correcta hoy y se queda atrás el día que alguien añada una
+  fuente, que es justo lo que el registro existe para hacer fácil: el plan
+  llega hasta proyectar Money OS entero. Escrita como un `join` contra
+  `graph_sources`, **cada fuente nueva nace con su prueba de privacidad
+  puesta**, sin que nadie tenga que acordarse. Es la diferencia entre una
+  prueba que cubre lo que había el día que se escribió y una que cubre lo que
+  haya. La invariante que vigila no cambia: `graph_nodes` es la única tabla
+  donde conviven una fila de Money OS y una de un proyecto compartido (D-120),
+  y lo único que las separa es el `scope`.
+
+- **D-142 · Una columna polimórfica se resuelve como cualquier otra, y eso
+  simplificó el modelo de aristas.** `key_results.source_id` apunta a cinco
+  tablas distintas y no tiene FK (0035), así que al diseñar las reglas
+  declarativas parecía necesitar un tratamiento aparte: primero averiguar a qué
+  tabla apunta, y luego buscar allí. No hace falta ninguna de las dos cosas.
+  `graph_node_of()` busca por `entity_id`, que es único en TODO el sistema
+  —`idx_graph_nodes_entity` (0054:201) lo es sobre la tabla entera, no por
+  tabla de origen, y todas las claves primarias del esquema son
+  `gen_random_uuid()`—, así que resolver el nodo de un uuid **no requiere saber
+  de qué tabla salió**. El `column_kind` `polymorphic` se conserva porque dice
+  algo cierto y útil para quien lea el registro —esta columna no tiene
+  integridad referencial—, pero el generador lo trata exactamente igual que un
+  `scalar_fk`. Conviene tenerlo presente antes de añadir maquinaria: la
+  unicidad global de los uuid es una propiedad del esquema de la que este
+  módulo ya depende en varios sitios.
+
+- **D-143 · Las funciones de arista generadas conservan los nombres feos de
+  0054.** `graph_edges_key_result` está en singular y `graph_edges_assignee` no
+  nombra su tabla; generándolas desde cero salían siete nombres coherentes.
+  Renombrarlas habría obligado a `drop trigger` + `create trigger` sobre las
+  siete tablas —`tasks` incluida—, y `create trigger` pide ACCESS EXCLUSIVE, que
+  es exactamente la ventana de bloqueo que D-139 había evitado en 0057.
+  `create or replace function` conserva el oid, y un trigger apunta a su función
+  por oid: se sustituye el cuerpo entero sin que la tabla se entere. El nombre
+  feo es gratis y el bloqueo no. Tiene además una consecuencia buena para la
+  reversión: como los triggers no se movieron, revertir 0058 es volver a
+  ejecutar los `create or replace function` originales de 0054 §10 y 0056 §2.
+
+- **D-144 · Una migración que sustituye código generado tiene que EJECUTARLO
+  antes de terminar.** `create or replace function` sobre plpgsql comprueba la
+  sintaxis del cuerpo, no que las columnas que menciona existan: una función
+  generada con un nombre de columna mal puesto se crea sin protestar y falla en
+  el primer guardado de un usuario, en producción, con el generador ya
+  desplegado. Por eso 0058 dispara cada trigger sustituido sobre UNA fila real
+  —un `update` que pone la columna a su propio valor— y después vuelve a exigir
+  que las reglas y las aristas vivas coincidan. Una fila por tabla y no la tabla
+  entera: basta para recorrer todos los caminos del cuerpo generado y no cuesta
+  una reescritura masiva. Se elige la fila **por `ctid` y no por `id`**, porque
+  `task_assignees` es una tabla puente de clave primaria compuesta y no tiene
+  columna `id`; el ctid lo tiene toda fila de toda tabla. `task_files` queda
+  fuera y hay que saber por qué: su trigger de aristas nació en 0054 disparándose
+  solo con INSERT, así que ningún UPDATE lo despierta — lo cubre la prueba
+  pgTAP, que inserta un archivo, y `graph_backfill_edges()` lanza un error que
+  lo explica en vez de devolver «0 filas» y parecer que funcionó.
+
+- **D-145 · El predicado de permiso del grafo es `sql` e `immutable`, y NO
+  `security definer`, porque tiene que poder EMBEBERSE.** Al unificar las siete
+  copias de la condición que decide quién ve qué nodo, lo natural en este
+  repositorio habría sido escribirla como las demás funciones de seguridad
+  —`security definer` con `row_security = off`, como `is_workspace_member()`—.
+  Habría sido un error silencioso y caro. Una función `sql` de una sola
+  expresión la sustituye el planificador por su cuerpo, y solo si **no** es
+  `security definer` ni `strict`; embebida, el `where` de `graph_all` sigue
+  pudiendo usar `idx_graph_nodes_ws` e `idx_graph_nodes_user`. Sin embeber, el
+  filtro se evalúa fila a fila y esos índices dejan de servir — sin que nada
+  falle, solo más lento cada mes que pasa. Se comprobó con `explain` en los dos
+  sentidos: tal como está, el `Filter` enseña la condición expandida; añadiéndole
+  `security definer`, enseña la llamada opaca. No hace falta que sea `security
+  definer` porque **no lee ninguna tabla**: recibe los cuatro campos del nodo y
+  los dos conjuntos ya calculados. Y tampoco puede ser `strict`: casi todos los
+  nodos tienen `project_id` nulo, y con `strict` la función devolvería null sin
+  mirar nada, dejando sin evaluar la rama de los nodos privados.
+
+- **D-146 · Un refactor de seguridad se demuestra comparando salidas, no
+  leyendo el diff.** Las cuatro funciones que 0059 recrea caminan con la RLS
+  apagada; que compilen y que las pruebas anteriores sigan en verde no basta,
+  porque esas pruebas cubrían sobre todo `graph_impact` y la invitada. Antes de
+  aplicar la migración se capturó la salida de las CUATRO para cuatro niveles de
+  acceso —dueña, miembro, invitada y extraña— sobre cuatro raíces distintas, se
+  aplicó el cambio en la misma transacción y se volvió a capturar: 44
+  observaciones por fase, cero diferencias. Los cuerpos nuevos se generaron
+  además **transformando** los viejos con una sustitución acotada al precómputo
+  y al predicado, no reescribiéndolos a mano, que es lo que garantiza que no se
+  colara un cambio de más en los topes, el `distinct on` o el orden de salida.
+  La suite `0030` deja fija esa cobertura: la frontera de la invitada
+  comprobada a través de las cuatro, incluidas `graph_subgraph`, `graph_all` y
+  `graph_edges_of`, que apenas se probaban y son las que la pantalla usa por
+  debajo. Y lleva una assertion de CONTROL —que la dueña SÍ alcanza la tarea del
+  otro proyecto—, sin la cual las tres que comprueban que la invitada no la
+  alcanza podrían estar pasando porque no hay camino. La primera versión de esa
+  prueba recorría en el sentido equivocado y era exactamente eso: verde y vacía.

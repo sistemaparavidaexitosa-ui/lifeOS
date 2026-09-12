@@ -1097,3 +1097,254 @@ un `bottom: 0` normal.
 pruebas de dominio y construye, pero **nadie lo ha abierto en un teléfono**.
 Hasta que esta tabla se rellene con resultados reales, no se puede afirmar que
 el editor funcione en el sitio donde se van a escribir las notas.
+
+---
+
+## Grafo Universal — Milestone 1: el registro de proyección (0057), 11-sep-2026
+
+Cadena completa ejecutada de verdad contra la pila local de Supabase en Docker,
+en la rama `feat/registro-del-grafo`. La migración se aplicó con
+`supabase migration up` sobre la base viva, **sin `db reset`**: 0057 es aditiva
+y el objetivo era comprobarla contra datos reales, no contra el seed.
+
+| Ítem | Estado | Evidencia |
+|---|---|---|
+| `supabase migration up` (0057) | ✅ EJECUTADO OK | `{"applied":["…/0057_registro_del_grafo.sql"],"message":"Migrations applied"}` |
+| Aserción de equivalencia dentro de la migración | ✅ EJECUTADO OK | La migración aborta si el registro no describe los triggers instalados; aplicó sin abortar |
+| `pnpm gen:types:local` | ✅ EJECUTADO OK | `database.types.ts` +149 líneas (dos tablas y siete funciones nuevas) |
+| `pnpm typecheck` | ✅ EJECUTADO OK | `tsc --noEmit`, sin salida |
+| `pnpm lint` | ✅ EJECUTADO OK | «✔ No ESLint warnings or errors» |
+| `pnpm test:unit` | ✅ EJECUTADO OK | **929 pruebas, 0 fallos** |
+| `pnpm build` | ✅ EJECUTADO OK | Build de producción completo, tabla de rutas impresa |
+| `supabase test db` | ✅ EJECUTADO OK | **Files=29, Tests=246, Result: PASS** — las 28 suites previas siguen en verde y `0028_registro_del_grafo.sql` añade 18 assertions |
+
+### Comprobaciones sobre la base, después de migrar
+
+```
+deriva        | 0     -- graph_registry_deriva(): ninguna fila de negocio sin nodo
+diff          | 0     -- graph_registry_diff(): lo declarado = lo instalado
+integridad    | 0     -- graph_check_integrity() (0055) sigue vacía
+nodos         | 22    -- idéntico al conteo de antes de migrar
+aristas       | 10    -- idéntico
+fuentes       | 14
+reglas_arista | 11
+```
+
+Los RPC del grafo se llamaron suplantando a un usuario real
+(`set_config('request.jwt.claims', …)` + `set local role authenticated`):
+`graph_all` devolvió 13 nodos, `graph_subgraph` desde el nodo de espacio
+devolvió 6, y `graph_search` sobre una subcadena real encontró el proyecto por
+trigramas con `similitud = 0.26`. La proyección, el recorrido y la búsqueda
+siguen funcionando igual que antes de la migración.
+
+### Lo que NO se ejecutó
+
+- ⚠️ **NO EJECUTADO: `/graph` abierto en un navegador.** M1 no toca ni una línea
+  de `src/components/graph/`, `src/lib/data/graph.ts` ni de las Server Actions
+  —el diff de `src/` es solo `database.types.ts` regenerado—, y las pruebas
+  pgTAP cubren los RPC que la pantalla consume. Aun así, nadie ha recorrido las
+  siete vistas a mano después de migrar.
+- ⚠️ **NO EJECUTADO: `pnpm verify` completo.** Su último tramo es
+  `supabase db reset`, que borra la base local; se corrieron sus siete pasos por
+  separado contra la base viva, que es lo que la tabla de arriba documenta.
+- ✅ **Desplegada el 12-sep-2026** junto con 0058 y 0059 — ver la sección de
+  despliegue al final de este documento.
+- ⚠️ **NO EJECUTADO: `graph_backfill_source()` sobre una tabla grande.** Se
+  ejerció en pgTAP sobre una tabla de dos filas. Su coste —reescribe toda la
+  tabla y recalcula los `tsvector` generados de 0039— está razonado en D-140,
+  no medido.
+
+---
+
+## Grafo Universal — Milestone 2: aristas declarativas (0058), 12-sep-2026
+
+Misma ruta no destructiva que M1: `supabase migration up` sobre la base viva,
+sin `db reset`, para comprobar la migración contra datos reales.
+
+| Ítem | Estado | Evidencia |
+|---|---|---|
+| `supabase migration up` (0058) | ✅ EJECUTADO OK | `{"applied":["…/0058_aristas_declarativas.sql"],"message":"Migrations applied"}` |
+| Aserción previa (las reglas derivan las aristas vivas) | ✅ EJECUTADO OK | La migración aborta si difieren; aplicó sin abortar |
+| Ejercicio en caliente de las funciones generadas | ✅ EJECUTADO OK | `NOTICE: funciones de arista ejercitadas sobre una fila de: habits, key_results, notes, projects, task_assignees, tasks` |
+| `pnpm gen:types:local` | ✅ EJECUTADO OK | `database.types.ts` +42 líneas |
+| `pnpm typecheck` | ✅ EJECUTADO OK | `tsc --noEmit`, sin salida |
+| `pnpm lint` | ✅ EJECUTADO OK | «✔ No ESLint warnings or errors» |
+| `pnpm test:unit` | ✅ EJECUTADO OK | **929 pruebas, 0 fallos** |
+| `pnpm build` | ✅ EJECUTADO OK | Build de producción completo |
+| `supabase test db` | ✅ EJECUTADO OK | **Files=30, Tests=267, Result: PASS** — las 29 suites previas siguen en verde y `0029_aristas_declarativas.sql` añade 21 assertions |
+
+### La prueba de equivalencia, en detalle
+
+No basta con que la migración aplique: sustituye el cuerpo de siete funciones
+que llevaban meses en producción. Se comprobó en dos pasos, ambos ejecutados:
+
+1. **Antes de sustituir nada**, con las funciones originales todavía puestas, se
+   exigió que el conjunto que las reglas DERIVAN fuera idéntico al que hay. Es
+   la aserción que lleva la migración dentro.
+2. **Sobre un juego de datos que toca las once relaciones** (2 proyectos con
+   dependencia, 3 tareas con madre y `deps`, 2 asignados, 1 archivo, 1 nota en
+   su cuaderno, 2 hábitos apilados en una rutina, 3 resultados clave de los
+   cuales uno apunta a un proyecto), se tomó una foto de las aristas `system`,
+   se aplicó 0058 y se reconstruyeron TODAS las aristas con las funciones
+   generadas. Resultado: **28 aristas antes, 28 después, cero diferencias en los
+   dos sentidos** comparando las siete columnas (`source_id`, `rel_type`,
+   `target_id`, `origin`, `workspace_id`, `user_id`, `project_id`).
+
+### Comprobaciones sobre la base, después de migrar
+
+```
+deriva nodos   | 0    -- graph_registry_deriva()
+deriva aristas | 0    -- graph_edges_deriva()
+diff triggers  | 0    -- graph_registry_diff()
+integridad     | 0    -- graph_check_integrity() (0055)
+nodos          | 22   -- idéntico al de antes
+aristas system | 10   -- idéntico al de antes
+reglas         | 11
+fn generadas   | 7    -- más graph_edges_ddl, que emite la marca
+```
+
+### Un incidente durante el desarrollo, y lo que salió de él
+
+Al preparar la prueba de equivalencia, un `rollback;` que quedó a media altura
+de un script terminó la transacción antes de tiempo, y todo lo que venía detrás
+—la migración 0058 entera y una reconstrucción de aristas— se ejecutó en
+autocommit **contra la base local**, sin quedar registrado en
+`supabase_migrations.schema_migrations`.
+
+Se revirtió a mano siguiendo el bloque «cómo se revierte» del pie de 0058, y
+eso tuvo un efecto secundario útil: **el procedimiento de reversión quedó
+probado de verdad**. Las siete funciones volvieron a su longitud original byte a
+byte (659, 511, 529, 461, 661, 974 y 159 caracteres), las cuatro columnas y las
+dos restricciones se soltaron, y el conteo de aristas volvió a 10. Después se
+aplicó 0058 por el camino normal.
+
+### Lo que NO se ejecutó
+
+- ⚠️ **NO EJECUTADO: `/graph` abierto en un navegador.** M2 tampoco toca `src/`
+  —el diff es solo `database.types.ts`—, pero sigue sin recorrerse la pantalla a
+  mano.
+- ✅ **Desplegada el 12-sep-2026** — ver la sección de despliegue al final.
+- ⚠️ **NO EJECUTADO: `graph_backfill_edges()` sobre una tabla grande.** Se
+  ejerció sobre seis tablas con decenas de filas. Su coste —reescribe la tabla
+  entera— está razonado, no medido.
+- ⚠️ **NO MEDIDO: el efecto en el rendimiento de escritura.** Los cuerpos
+  generados hacen las mismas llamadas que los escritos a mano y una mejora
+  menor (una sola resolución por uuid en los arrays, donde el original llamaba
+  a `graph_node_of` dos veces por elemento), pero no se ha medido un `UPDATE`
+  masivo antes y después.
+
+---
+
+## Grafo Universal — Milestone 3: un solo predicado de permiso (0059), 12-sep-2026
+
+Misma ruta no destructiva: `supabase migration up` sobre la base viva.
+
+| Ítem | Estado | Evidencia |
+|---|---|---|
+| `supabase migration up` (0059) | ✅ EJECUTADO OK | `{"applied":["…/0059_un_solo_predicado_de_permiso.sql"],"message":"Migrations applied"}` |
+| Aserción de garantías dentro de la migración | ✅ EJECUTADO OK | Aborta si alguna de las cuatro pierde `stable`, `security definer` o sus tres `set`; aplicó sin abortar |
+| `pnpm gen:types:local` | ✅ EJECUTADO OK | `database.types.ts` +14 líneas |
+| `pnpm typecheck` | ✅ EJECUTADO OK | `tsc --noEmit`, sin salida |
+| `pnpm lint` | ✅ EJECUTADO OK | «✔ No ESLint warnings or errors» |
+| `pnpm test:unit` | ✅ EJECUTADO OK | **929 pruebas, 0 fallos** |
+| `pnpm build` | ✅ EJECUTADO OK | Build de producción completo |
+| `supabase test db` | ✅ EJECUTADO OK | **Files=31, Tests=284, Result: PASS** — las 30 suites previas en verde y `0030_un_solo_predicado.sql` añade 17 assertions |
+
+### La prueba de equivalencia
+
+Estas cuatro funciones caminan con `row_security = off`: que compilen no
+demuestra nada. Antes de aplicar la migración se capturó la salida de las
+CUATRO (`graph_impact`, `graph_subgraph`, `graph_all`, `graph_edges_of`) para
+cuatro niveles de acceso y cuatro raíces distintas, se aplicó el cambio en la
+misma transacción y se volvió a capturar: **44 observaciones por fase, cero
+diferencias**.
+
+El gradiente que quedó registrado, idéntico antes y después:
+
+| | nodos de espacio | privados | aristas | recorre su proyecto | recorre el otro |
+|---|---|---|---|---|---|
+| Dueña | 11 | 2 | 7 | sí | sí |
+| Miembro | 11 | 0 | 6 | sí | sí |
+| **Invitada (Guest)** | **5** | 0 | 3 | sí | **42501** |
+| Extraña | 2 (su espacio personal) | 0 | 0 | 42501 | 42501 |
+
+### El embebido, comprobado en los dos sentidos
+
+`graph_all` depende de que el predicado se embeba para poder usar sus índices.
+No se dio por supuesto:
+
+```
+-- tal como queda: el Filter enseña la condición expandida
+Filter: ((n.archived_at IS NULL) AND (n.scope = 'workspace') AND
+         (((n.scope = 'user') AND (n.user_id = …)) OR …))
+
+-- añadiéndole security definer: el Filter enseña la llamada opaca
+Filter: ((n.scope = 'workspace') AND graph_nodo_visible(n.scope, n.user_id, …))
+```
+
+Por eso `0030` lleva una assertion sobre esas cuatro propiedades: el modo de
+fallo no da error, solo va más lento cada mes.
+
+### Una prueba que nació vacía, y cómo se detectó
+
+La primera versión de la assertion «la invitada no cruza a la tarea del otro
+proyecto» recorría `upstream`, y en ese sentido **ni siquiera la dueña llega a
+esa tarea**: la prueba pasaba sin vigilar nada. Se detectó comprobando a mano
+qué ve la dueña, se corrigió a `downstream` —donde la dueña la alcanza a dos
+saltos y la invitada se queda en uno— y se añadió una assertion de CONTROL
+explícita que falla si algún día deja de haber camino. Queda como D-146.
+
+### Lo que NO se ejecutó
+
+- ⚠️ **NO EJECUTADO: `/graph` abierto en un navegador.** Tercer milestone
+  seguido sin tocar `src/` —el diff es solo `database.types.ts`—, y tercero sin
+  recorrer la pantalla a mano.
+- ✅ **Desplegada el 12-sep-2026** — ver la sección de despliegue al final.
+- ⚠️ **NO MEDIDO: el rendimiento con volumen real.** Se comprobó que el
+  predicado se embebe, que es la propiedad de la que depende el plan. No se ha
+  medido `graph_all` contra una tabla grande antes y después, porque la base
+  local tiene 22 nodos y el planificador elige `Seq Scan` en cualquier caso.
+
+---
+
+## Despliegue del Grafo Universal a producción, 12-sep-2026
+
+`supabase db push` sobre el proyecto vinculado, desde la rama
+`feat/registro-del-grafo` — sin fusionar a `main`, que es como se despliega en
+este repositorio.
+
+| Ítem | Estado | Evidencia |
+|---|---|---|
+| Ensayo en seco (`--dry-run`) | ✅ EJECUTADO OK | 3 migraciones, `seeds: []`, `roles: []` — nada de repoblar ni borrar |
+| `supabase db push` (0057, 0058, 0059) | ✅ EJECUTADO OK | `{"upToDate":false,"dryRun":false,"migrations":["0057…","0058…","0059…"],"message":"Finished supabase db push."}` |
+| `supabase migration list` | ✅ EJECUTADO OK | local y remoto coinciden hasta 0059 |
+| Rama publicada | ✅ EJECUTADO OK | `origin/feat/registro-del-grafo`, PR #36 |
+
+**Lo que el despliegue demuestra por sí solo, y es más de lo que parece.** Las
+tres migraciones llevan aserciones dentro que abortan la transacción si el
+estado real no cuadra, así que aplicar sin abortar ES la comprobación:
+
+- **0057** exigió que el registro describiera exactamente los 37 triggers
+  instalados **en producción** — función, eventos, columnas vigiladas y
+  argumentos.
+- **0058** exigió, antes de sustituir ningún cuerpo, que las once reglas
+  derivaran exactamente el conjunto de aristas `system` **de la base real**.
+  Esto es lo que más valía: en local eran 28 aristas de un fixture; aquí son
+  los datos de verdad, con su historia y sus casos raros, y el modelo
+  declarativo los reprodujo sin una diferencia. Después disparó cada función
+  generada sobre una fila real de cada tabla y volvió a exigir que cuadrara.
+- **0059** exigió que las cuatro funciones de recorrido conservaran `stable`,
+  `security definer` y sus tres `set`, y que el predicado siguiera siendo
+  embebible.
+
+**No hizo falta desplegar la aplicación.** Ninguna firma cambió, así que lo que
+hay en Vercel sigue funcionando igual; las tablas y funciones nuevas todavía no
+las llama nadie desde `src/`.
+
+### Lo que sigue sin ejecutarse
+
+- ⚠️ **NO EJECUTADO: `/graph` abierto en un navegador contra producción.** Las
+  aserciones prueban el estado de la base, no que la pantalla se vea bien. Sigue
+  siendo la comprobación que falta desde el primer milestone.
+- ⚠️ **NO MEDIDO: el rendimiento en producción.** No se ha comparado un
+  `graph_all` antes y después con el volumen real.
