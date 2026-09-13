@@ -173,3 +173,33 @@ pudo hacer esa revisión.
 
 Ninguna de estas se cerró unilateralmente en este build; permanecen como
 decisiones pendientes del Product Owner.
+
+## IA: datos, grafo y ejecución (0062)
+
+Tres invariantes, cada una con su prueba:
+
+1. **El modelo no calcula ni escribe.** Cita ids de hechos, filas o nodos
+   (`validateAnchoring`) y propone. Toda escritura pasa por una Server Action con
+   la sesión del usuario o, en el caso de las aristas, por
+   `graph_aceptar_arista`. El cron solo crea propuestas y notificaciones.
+2. **La lista blanca es `TABLAS_CONSULTABLES`, y manda `profiles.ai_domains`.**
+   Un hecho de cadena atraviesa varias tablas y sale solo si todos sus dominios
+   están encendidos (`tests/domain/insights-chains.test.ts`). Toda fuente del
+   grafo tiene dominio o un motivo escrito para no tenerlo
+   (`tests/domain/insights-graph-coherence.test.ts`).
+3. **La visibilidad del grafo es `graph_nodo_visible` y la frontera
+   `graph_misma_audiencia`, también para la IA.** Las funciones que reciben un
+   usuario como argumento (`graph_cadenas_de`, `graph_detectar_de`,
+   `graph_acceso_*_de`) no las puede llamar `authenticated`
+   (`supabase/tests/0033`, `0035`). `origin = 'ai'` no se puede insertar de
+   forma directa —la política sigue admitiendo solo `user`— (`0034`, nº 9); la
+   única puerta es `graph_aceptar_arista`, y solo sobre una propuesta PROPIA.
+   Eso no es una escalada: alguien puede escribirse su propia fila en
+   `coach_proposals` sin pasar por `graph_detectar_de` —0053 lo permite— y
+   llamar a la función igual, pero esta vuelve a exigir `graph_nodo_visible` y
+   `graph_misma_audiencia` antes de escribir, así que solo enlaza nodos que ya
+   ve y que ya podría unir él mismo con `origin = 'user'`. `origin = 'ai'` es
+   la procedencia «propuesta aceptada», no un camino con más alcance. Ver D-153.
+
+La herramienta `explorar_grafo` no existe en el coach: `graph_search` filtra con
+RLS y el coach usa el cliente de servicio.

@@ -217,6 +217,20 @@ export function tablaConsultable(
 }
 
 /**
+ * El dominio de una tabla según la lista blanca, o `null` si no está en ella.
+ *
+ * Lo leen los hechos de cadena y la herramienta del grafo para decidir si un
+ * nodo puede viajar al modelo. Vive aquí, con el resto del filtro, por lo mismo
+ * que `tablaConsultable`: la pregunta «¿esto puede salir?» se contesta en un
+ * solo archivo. Una tabla fuera de la lista no tiene dominio, y sin dominio no
+ * sale — no se adivina por el nombre.
+ */
+export function dominioDeTabla(tabla: string): Domain | null {
+  const meta = (TABLAS_CONSULTABLES as Record<string, TablaConsultable | undefined>)[tabla];
+  return meta?.domain ?? null;
+}
+
+/**
  * Tope de filas por consulta. No es rendimiento: es que lo que vuelve va DENTRO
  * del prompt de la siguiente llamada, y doscientas filas de diario se comen la
  * ventana y la cuota que la cadena de modelos acaba de ganar.

@@ -13,6 +13,7 @@ import {
 } from "@/lib/domain/push/schedule.ts";
 import { claveDelCoach, momentoQueToca, PREFS_POR_DEFECTO } from "@/lib/domain/coach/schedule.ts";
 import { generarYGuardarMensajeDiario } from "@/lib/coach/daily";
+import { proponerAristas } from "@/lib/coach/graph-suggestions";
 
 export const dynamic = "force-dynamic";
 /** Un minuto de techo: el trabajo va por lotes y no debe acercarse al límite. */
@@ -55,6 +56,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, reason: "No autorizado" }, { status: 401 });
   }
 
+  // Se mide desde aquí, no desde que Vercel recibió la petición: es el reloj
+  // contra el que se compara `PRESUPUESTO_ARISTAS_MS` más abajo.
+  const inicio = Date.now();
   const supabase = createAdminClient();
   const ahora = new Date();
 
@@ -65,7 +69,7 @@ export async function POST(request: Request) {
   // tardar decenas de segundos o quedarse sin cuota. Poniéndolo aquí, un coach
   // lento no retrasa recordatorios ni vencimientos, y el reintento de lo que ya
   // estaba en la bandeja sigue corriendo detrás con lo que quede de minuto.
-  const coach = await despacharCoach(supabase, ahora);
+  const coach = await despacharCoach(supabase, ahora, inicio);
   const reintentos = await reintentarPendientes(supabase);
 
   // «creados» y «entregados» se cuentan aparte a propósito: sin ningún
@@ -255,10 +259,33 @@ async function despacharVencimientos(supabase: Admin, ahora: Date): Promise<numb
  *
  * NUNCA LANZA. Un usuario cuyo mensaje falla —cuota agotada, zona horaria rota,
  * el modelo devolviendo basura— no puede dejar al resto sin el suyo.
+ *
+ * LAS SUGERENCIAS DEL GRAFO (`proponerAristas`) VIVEN AQUÍ Y NO EN
+ * `generarYGuardarMensajeDiario`, y en un orden preciso: después de que
+ * `notifySystem` deje escrito el dedupe de ESTE mensaje. Es la segunda llamada
+ * al modelo del camino matutino, y si viviera dentro de la generación del
+ * mensaje, un platform kill a mitad de esa llamada dejaría el mensaje y las
+ * propuestas ya guardados pero el dedupe sin escribir — el siguiente tick de
+ * cinco minutos no vería `yaEstaba` y volvería a generar y mandar el mensaje
+ * entero por segunda vez. Puesta aquí, lo peor que pasa si se corta a media
+ * llamada es que un usuario se queda sin sugerencias de arista ese día.
  */
 const LOTE_COACH = 5;
 
-async function despacharCoach(supabase: Admin, ahora: Date): Promise<number> {
+/**
+ * Tope de milisegundos ya gastados en ESTA pasada del despachador para todavía
+ * intentar `proponerAristas`. `maxDuration` es 60s y `LOTE_COACH` deja pasar
+ * hasta cinco mensajes con su propia llamada al modelo; sumarle una segunda
+ * llamada por usuario sin límite podría dejar la petición cortada a mitad de
+ * `proponerAristas` — que nunca lanza, pero si el proceso muere de verdad por
+ * el timeout, la propuesta insertada a medias no es peor que no proponer nada.
+ * Por debajo de este tope hay margen de sobra; por encima, se prefiere dejar
+ * tiempo para `reintentarPendientes`, que corre después, y perder solo las
+ * sugerencias de arista de ese usuario por hoy.
+ */
+const PRESUPUESTO_ARISTAS_MS = 35_000;
+
+async function despacharCoach(supabase: Admin, ahora: Date, inicio: number): Promise<number> {
   // Solo quien tiene perfil, que es todo el mundo. Se leen las dos tablas de
   // golpe en vez de una consulta por usuario: son dos viajes, no doscientos.
   const [{ data: perfiles }, { data: prefs }] = await Promise.all([
@@ -319,6 +346,22 @@ async function despacharCoach(supabase: Admin, ahora: Date): Promise<number> {
         dedupeKey
       });
       enviados++;
+
+      // Por la mañana y solo entonces, y SOLO si todavía hay margen de tiempo:
+      // ver el porqué del orden y del tope en la cabecera de esta función.
+      if (momento === "morning" && Date.now() - inicio < PRESUPUESTO_ARISTAS_MS) {
+        const aristas = await proponerAristas({
+          supabase,
+          userId: perfil.user_id,
+          autorizados: mensaje.domains ?? []
+        });
+        await supabase.from("audit_log").insert({
+          user_id: perfil.user_id,
+          action: "ai.graph.suggestions",
+          object: hoy,
+          meta: { aristas }
+        });
+      }
     } catch {
       // Ni un perfil roto ni una cuota agotada pueden dejar al resto sin su
       // mensaje. Se sigue con el siguiente, en silencio: el rastro de lo que sí

@@ -12,6 +12,7 @@
 // componente lee la variable con getComputedStyle en el momento de pintar y se
 // entera del tema sin preguntarle a nadie.
 
+import { NODE_CATALOG } from "./catalog.generated.ts";
 import type { GraphNodeType, GraphRelType } from "./types.ts";
 
 export interface NodeStyle {
@@ -30,26 +31,47 @@ export interface NodeStyle {
  * porque nunca van a aparecer en el mismo lienzo que los de espacio: BR-012 lo
  * impide.
  */
-export const NODE_STYLES: Record<GraphNodeType, NodeStyle> = {
-  workspace:       { colorVar: "--accent",    radius: 26 },
-  project:         { colorVar: "--c-purple",  radius: 20 },
-  task:            { colorVar: "--c-purple",  radius: 12 },
-  person:          { colorVar: "--c-pink",    radius: 14 },
-  document:        { colorVar: "--c-blue",    radius: 10 },
-  note:            { colorVar: "--c-blue",    radius: 12 },
-  decision:        { colorVar: "--c-blue",    radius: 12 },
-  meeting:         { colorVar: "--c-pink",    radius: 12 },
-  goal:            { colorVar: "--c-orange",  radius: 20 },
-  routine:         { colorVar: "--c-orange",  radius: 16 },
-  habit:           { colorVar: "--c-orange",  radius: 11 },
-  book:            { colorVar: "--c-orange",  radius: 12 },
-  investment:      { colorVar: "--c-green",   radius: 16 },
-  budget:          { colorVar: "--c-green",   radius: 14 },
-  asset:           { colorVar: "--c-green",   radius: 14 },
-  ai_conversation: { colorVar: "--c-teal",    radius: 12 },
-  risk:            { colorVar: "--danger",    radius: 14 },
-  custom:          { colorVar: "--muted",     radius: 12 }
+const RADIO: Record<GraphNodeType, number> = {
+  workspace: 26,
+  project: 20,
+  task: 12,
+  person: 14,
+  document: 10,
+  note: 12,
+  decision: 12,
+  meeting: 12,
+  goal: 20,
+  routine: 16,
+  habit: 11,
+  book: 12,
+  notebook: 16,
+  investment: 16,
+  budget: 14,
+  asset: 14,
+  account: 16,
+  debt: 14,
+  financial_goal: 20,
+  liability: 14,
+  ai_conversation: 12,
+  risk: 14,
+  custom: 12
 };
+
+/**
+ * El color lo pone el catálogo de la base; el radio, la tabla de arriba.
+ *
+ * Esa frontera es la de 0060 —la base es dueña de las palabras y la semántica,
+ * TypeScript de la geometría— y se sostiene sola: `RADIO` va indexado por la
+ * unión generada, así que un tipo nuevo en la base no compila hasta que alguien
+ * diga de qué tamaño se dibuja.
+ */
+export const NODE_STYLES: Record<GraphNodeType, NodeStyle> = Object.fromEntries(
+  (Object.keys(NODE_CATALOG) as GraphNodeType[]).map((t) => [
+    t,
+    { colorVar: NODE_CATALOG[t].colorVar, radius: RADIO[t] }
+  ])
+) as Record<GraphNodeType, NodeStyle>;
+
 
 export function styleOf(nodeType: string): NodeStyle {
   // Un tipo que no conozcamos NO puede dejar el lienzo en blanco: el catálogo

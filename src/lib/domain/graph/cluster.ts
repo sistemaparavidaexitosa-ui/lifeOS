@@ -14,6 +14,7 @@
 //   - ninguno: cuando el grafo es pequeño, agrupar estorba.
 // La elección es del usuario y vive en la barra de herramientas.
 
+import { NODE_CATALOG } from "./catalog.generated.ts";
 import type { GraphEdge, GraphNode, GraphNodeType } from "./types.ts";
 
 export type ClusterBy = "none" | "type" | "parent";
@@ -120,14 +121,6 @@ function porPadre(nodes: readonly GraphNode[], edges: readonly GraphEdge[]): Map
   return g;
 }
 
-const PLURAL: Record<GraphNodeType, string> = {
-  workspace: "espacios", project: "proyectos", task: "tareas", goal: "metas",
-  habit: "hábitos", routine: "rutinas", book: "libros", note: "notas",
-  document: "documentos", decision: "decisiones", person: "personas",
-  investment: "inversiones", budget: "presupuestos", asset: "activos",
-  ai_conversation: "conversaciones", meeting: "reuniones", risk: "riesgos",
-  custom: "nodos"
-};
 
 /**
  * «12 tareas en «Mudanza»» dice bastante más que «12 tareas». Cuando la clave
@@ -136,7 +129,7 @@ const PLURAL: Record<GraphNodeType, string> = {
  * tipo, que sigue siendo cierto.
  */
 function etiqueta(clave: string, tipo: GraphNodeType, n: number, porId: ReadonlyMap<string, GraphNode>): string {
-  const nombre = PLURAL[tipo];
+  const nombre = NODE_CATALOG[tipo].plural;
   if (clave.startsWith("padre:")) {
     const padreId = clave.split(":")[1] ?? "";
     const padre = porId.get(padreId);

@@ -2524,3 +2524,128 @@ implementa:
   otro proyecto—, sin la cual las tres que comprueban que la invitada no la
   alcanza podrían estar pasando porque no hay camino. La primera versión de esa
   prueba recorría en el sentido equivocado y era exactamente eso: verde y vacía.
+
+- **D-147 · La base es dueña de las palabras; TypeScript, de la geometría.** Al
+  generar el vocabulario del grafo desde el catálogo había que decidir dónde
+  cortar, y las dos respuestas fáciles eran malas. Bajarlo TODO a Postgres
+  —radio del círculo, grosor del trazo, si la línea va discontinua— habría
+  metido píxeles en la base: columnas que ninguna consulta, ningún informe y
+  ninguna respuesta de la IA van a leer jamás, y que obligan a una migración
+  para mover un nodo dos puntos. Dejarlo todo en TypeScript es lo que ya había
+  y es de donde venimos: cuatro copias de los dieciocho tipos que coincidían por
+  suerte. La línea queda en el significado: **a la base, el nombre, la etiqueta,
+  el plural, el color, `is_projected`, `is_dependency`, `reversed`,
+  `is_symmetric` y la ruta de la pantalla; a TypeScript, el radio, el grosor y
+  el trazo discontinuo**. El color va a la base aunque suene a píxel porque no
+  lo es: es un nombre de variable CSS —`var(--c-purple)`— y por tanto una
+  decisión de SIGNIFICADO («ejecución es morado») que la leyenda, un informe o
+  una exportación pueden querer. Lo que hace que la frontera se sostenga sin
+  vigilancia es el tipo generado: los `Record` de geometría van indexados por la
+  unión que sale del catálogo, así que **un INSERT en `graph_node_types` rompe
+  la compilación** hasta que alguien decida de qué tamaño se dibuja. No es un
+  estorbo, es la pregunta que hay que contestar antes de que el tipo llegue a
+  una pantalla.
+
+  El archivo generado **va commiteado**, y eso también es una decisión: el job
+  `build` de CI no levanta base de datos —solo el job `db` lo hace—, así que un
+  generador que hiciera falta para compilar dejaría el build dependiendo de
+  Docker. Commitearlo tiene el modo de fallo conocido de todo archivo generado
+  —quedarse atrás— y por eso el job `db` corre `gen-graph-catalog.mjs --check`,
+  que regenera contra la base y falla si el archivo del repositorio no coincide.
+  El generador habla con Postgres por `psql` si está en el PATH y por
+  `docker exec` si no, que es lo que permite que funcione igual en la máquina
+  del dueño (Docker, sin postgresql-client) y en un runner de GitHub (con él).
+  Cero dependencias npm nuevas: D-008 intacto.
+
+- **D-148 · No todo lo que tiene tabla merece ser nodo.** Con el registro puesto,
+  proyectar una entidad nueva cuesta una fila, y esa es exactamente la razón por
+  la que hay que decidir qué NO se proyecta: lo barato se hace sin pensar. La
+  regla que queda escrita: **el grafo es para las cosas a las que la gente se
+  refiere, no para los eventos que las mueven**. Un movimiento del diario, una
+  comida apuntada, un turno de chat o una foto del patrimonio son hechos con
+  fecha; proyectarlos haría crecer `graph_nodes` sin que el mapa contestara una
+  pregunta más. Una cuenta, una deuda o una meta financiera sí: se les pone
+  nombre y se habla de ellas. Con ese criterio 0061 deja fuera
+  `journal_entries`, `food_entries`, `ai_chat_messages` y `net_worth_snapshots`.
+  Tres exclusiones más no son por el criterio sino por razones propias, y
+  conviene no confundirlas: **el tiempo** (`occupations`, `daily_plans`,
+  `reminders`) se pospuso a conciencia el 2026-09-10 y no se reabre por cuenta
+  propia; **`knowledge_items`** es privada y su `project_id` apunta a proyectos
+  de espacios compartidos, así que su única arista está prohibida por la
+  frontera y quedaría de isla, igual que la bitácora; y **`family_members`**
+  puede guardar el nombre de un menor, que es una decisión legal abierta
+  (OD-016) y no algo que se resuelva metiéndolo en una tabla nueva.
+
+- **D-149 · Ampliar la cobertura es cómo se encuentran los agujeros de la
+  maquinaria.** M5 no iba a tocar código: con el registro y el generador de
+  aristas puestos, la promesa era «filas y ya». Y al escribir las filas
+  aparecieron dos fallos que llevaban dentro desde 0058, los dos silenciosos y
+  los dos imposibles de ver leyendo el código sin una regla que los provocara.
+
+  El primero: `graph_edges_expected()` IGNORABA `direction` en las reglas de
+  array. Sacaba siempre la arista de la fila hacia cada uuid, porque ninguna
+  regla combinaba `uuid_array` con `in` todavía. `financial_goals.account_ids`
+  es la primera —son las CUENTAS las que apoyan a la meta, no al revés— y sin
+  el arreglo el conjunto derivado no habría cuadrado con el que produce la
+  función generada, abortando la migración sin explicar el motivo. La función
+  generadora sí lo hacía bien; era la de comprobación la que mentía, que es el
+  sitio más incómodo donde tener un fallo.
+
+  El segundo: **dos reglas que compartan tabla, relación y ancla se pisan.**
+  `graph_system_edges` RECONCILIA el conjunto de (origen, relación) —borra lo
+  que no esté en la lista—, así que dos reglas así se llamarían una detrás de
+  otra y cada una borraría lo que acaba de poner la anterior; el resultado
+  dependería del orden alfabético del nombre de la regla. Apareció de frente al
+  intentar añadir `folders` («un proyecto pertenece a su carpeta» junto a
+  «pertenece a su espacio»). Se cierra con un índice único sobre
+  `(source_table, rel_type, coalesce(anchor_column, ''))`, que lo convierte en
+  un error de migración en vez de en aristas que parpadean. `folders` se quedó
+  fuera: agrupar en el tablero no es una relación del dominio y no valía la pena
+  forzarle otra relación para esquivar el choque.
+
+  Lo que esto deja como método: un milestone de cobertura no es solo cobertura.
+  Es la primera vez que la maquinaria se usa con formas que no se escribieron
+  pensando en ella, y hay que presupuestar que aparezca algo.
+
+- **D-150 · El grafo es contexto y herramienta de la IA, no su única vía de
+  recuperación.** Un plan externo proponía hacer de `graph_context()` la única
+  puerta de la IA y proyectar todas las tablas. Se rechazó por dos razones
+  escritas en el propio plan: dejaba los eventos fuera del grafo (D-148), que
+  es justo de donde salen los hechos; y cambiaba la RLS de la herramienta
+  `consultar` por un predicado a mano. Lo que se hizo (0062): las cadenas del
+  grafo entran como HECHOS (`facts/chains.ts`) y como una HERRAMIENTA más
+  (`explorar_grafo`), y `TABLAS_CONSULTABLES` sigue mandando. Una prueba
+  unitaria obliga a que toda fuente del grafo tenga dominio en la lista blanca
+  o un motivo escrito para no tenerlo.
+- **D-151 · Una sola cola de propuestas, y crece `coach_proposals`.** Las
+  sugerencias del grafo no estrenan tabla (0054 hablaba de `graph_suggestions`):
+  entran en la cola que ya tenía botón, rail y dispatcher, con `origen`,
+  `fingerprint` único en cualquier estado —descartar es «no me lo vuelvas a
+  proponer»— y los estados `aplicando` y `fallida`. `aplicando` arregla una
+  carrera real de `acceptProposal`: dos clics a la vez creaban la cosa dos veces.
+- **D-152 · Las funciones `_de(p_uid)` que caminan el grafo solo las ejecuta
+  `service_role`.** El coach corre sin sesión y necesita el grafo:
+  `graph_cadenas_de` y `graph_detectar_de` quedan revocadas a `anon` y
+  `authenticated`, y solo `service_role` las ejecuta. En vez de copiar el
+  precómputo de permiso, se parametrizó (`graph_acceso_espacios_de`,
+  `graph_acceso_proyectos_de`) y las versiones de siempre delegan en él: sigue
+  habiendo una sola copia de la condición. Esos dos ayudantes se revocan de
+  TODO rol, `service_role` incluido — solo se alcanzan desde dentro de una
+  función `security definer`, nunca por RPC directa. Las suites 0033 y 0035 lo
+  vigilan.
+- **D-153 · `origin = 'ai'` entra por una sola puerta, y esa puerta no es un
+  privilegio nuevo.** `graph_edges_insert` sigue admitiendo solo `user`: la
+  única función que escribe `ai` es `graph_aceptar_arista`, y solo sobre una
+  fila de `coach_proposals` PROPIA, de `tipo = 'arista'` y todavía `pending`.
+  Nada obliga a que esa fila haya salido de `graph_detectar_de` — las
+  políticas de 0053 dejan a cualquiera insertar o actualizar sus propias
+  `coach_proposals` — así que alguien podría escribirse una a mano y llamar a
+  la función igual. No es una escalada de privilegio: `graph_aceptar_arista`
+  vuelve a comprobar `graph_nodo_visible` y `graph_misma_audiencia` (BR-012)
+  en la misma transacción, así que solo puede enlazar nodos que quien llama YA
+  VE y que ya podría unir él mismo con `origin = 'user'`. Lo único que cambia
+  es la procedencia que queda escrita: `origin = 'ai'` significa «propuesta
+  aceptada», no «el modelo decidió esto sin que nadie mirara». Devuelve
+  `frontera`/`no_visible` en vez de lanzar para poder dejar la propuesta
+  `fallida` sin deshacer también el cambio de estado. El modelo, aparte, nunca
+  ve un uuid: elige índices de listas que salieron de `graph_detectar_de`.

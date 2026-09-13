@@ -173,6 +173,12 @@ export default function AiChatRail({
       const result = await acceptProposal(p.id, workspaceId);
       if (!result.ok) {
         setError(result.reason ?? "No se pudo crear.");
+        // `resuelta` significa que la propuesta ya quedó `fallida` en la base
+        // (la frontera o un nodo que ya no se ve, ver `graph_aceptar_arista`):
+        // la tarjeta se retira igual que si se hubiera aceptado, porque un
+        // segundo clic solo puede volver a fallar por lo mismo. La razón se
+        // enseña igual, con el aviso de error de arriba.
+        if (result.resuelta) setPropuestas((prev) => prev.filter((x) => x.id !== p.id));
         return;
       }
       setPropuestas((prev) => prev.filter((x) => x.id !== p.id));
@@ -241,15 +247,17 @@ export default function AiChatRail({
             }}
           >
             <div className="text-xs" style={{ color: "var(--muted)" }}>
-              {p.tipo === "bloque"
-                ? "Propongo agendar esto"
-                : p.tipo === "rutina"
-                  ? "Propongo esta rutina"
-                  : p.tipo === "meta"
-                    ? "Propongo esta meta"
-                    : p.tipo === "estructura"
-                      ? "Este proyecto necesita estructura"
-                      : "Propongo esta tarea"}
+              {p.tipo === "arista"
+                ? "Propongo conectar esto en tu mapa"
+                : p.tipo === "bloque"
+                  ? "Propongo agendar esto"
+                  : p.tipo === "rutina"
+                    ? "Propongo esta rutina"
+                    : p.tipo === "meta"
+                      ? "Propongo esta meta"
+                      : p.tipo === "estructura"
+                        ? "Este proyecto necesita estructura"
+                        : "Propongo esta tarea"}
             </div>
             <div className="text-sm" style={{ fontWeight: 700, margin: "3px 0 2px" }}>
               {p.titulo}
@@ -265,11 +273,16 @@ export default function AiChatRail({
                 disabled={pending || (p.tipo === "tarea" && !workspaceId)}
                 onClick={() => aceptarPropuesta(p)}
               >
-                {p.tipo === "estructura" ? "Ir al proyecto" : "Crear"}
+                {p.tipo === "estructura" ? "Ir al proyecto" : p.tipo === "arista" ? "Conectar" : "Crear"}
               </button>
               <button className="btn-ghost btn-sm" disabled={pending} onClick={() => descartarPropuesta(p)}>
                 Descartar
               </button>
+              {p.tipo === "arista" && p.payload.source && (
+                <a className="btn-ghost btn-sm" href={`/graph?entity=${p.payload.source}`}>
+                  Ver en el grafo
+                </a>
+              )}
             </div>
           </div>
         ))}

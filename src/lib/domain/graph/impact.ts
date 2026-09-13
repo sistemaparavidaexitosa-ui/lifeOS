@@ -18,6 +18,7 @@
 // cambiar el criterio de `masProfundo` y nada más.
 
 import type { GraphNodeType } from "./types.ts";
+import { REL_CATALOG } from "./catalog.generated.ts";
 
 export interface ImpactRow {
   nodeId: string;
@@ -53,11 +54,18 @@ export interface ImpactReport {
 /**
  * Las relaciones que significan «si esto cambia, aquello se rompe».
  *
+ * Ya no se enumeran aquí: son las que el catálogo marca como `is_dependency`,
+ * que es exactamente la misma lista y ahora no puede desviarse de ella.
+ *
  * `belongs_to` y `child_of` se quedan fuera a conciencia: expresan estructura,
  * no fragilidad. Meterlas haría que cualquier proyecto «rompiese» sus doscientas
  * tareas, y un aviso que sale siempre no es un aviso.
  */
-const ROMPEN = new Set(["depends_on", "blocks", "leads_to", "caused_by"]);
+const ROMPEN: ReadonlySet<string> = new Set(
+  Object.entries(REL_CATALOG)
+    .filter(([, r]) => r.dependencia)
+    .map(([rel]) => rel)
+);
 
 export function buildImpactReport(rows: readonly ImpactRow[], truncated = false): ImpactReport {
   const direct = rows.filter((r) => r.depth === 1);

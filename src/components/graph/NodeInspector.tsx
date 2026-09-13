@@ -6,6 +6,7 @@ import { Chip, EmptyState } from "@/components/ui";
 import { fetchImpact } from "@/app/(app)/graph/actions";
 import { countByType, type ImpactReport } from "@/lib/domain/graph/impact";
 import { NODE_STYLES } from "@/lib/domain/graph/theme";
+import { ROUTE_TEMPLATES } from "@/lib/domain/graph/catalog.generated";
 import type { GraphNode } from "@/lib/domain/graph/types";
 
 // El panel de impacto: las seis preguntas del nodo seleccionado.
@@ -14,21 +15,23 @@ import type { GraphNode } from "@/lib/domain/graph/types";
 // conjuntos de permiso precalculados y los índices puestos— y `buildImpactReport`
 // convierte esas filas en las seis respuestas. Este archivo solo las pinta.
 
-/** De la tabla del dominio a la pantalla donde vive esa cosa de verdad. */
-const RUTA_DE: Record<string, (id: string) => string> = {
-  projects: (id) => `/execution?project=${id}`,
-  tasks: () => "/execution",
-  notes: () => "/notebooks",
-  personal_goals: () => "/development/goals",
-  habits: () => "/development/routines",
-  routines: () => "/development/routines",
-  books: () => "/development/library",
-  investments: () => "/investments",
-  budgets: () => "/money/budget",
-  assets: () => "/wealth",
-  workspaces: () => "/execution",
-  memberships: () => "/execution"
-};
+/**
+ * De la tabla del dominio a la pantalla donde vive esa cosa de verdad.
+ *
+ * Esta tabla estaba escrita aquí y le faltaban DOS entradas —`task_files` y
+ * `logbook`—, así que un nodo de tipo Documento o de tipo Decisión se veía en
+ * el mapa y no tenía por dónde abrirse. Llevaba así desde 0054, y no daba error
+ * ninguno: simplemente no salía el enlace.
+ *
+ * Ahora sale de `graph_sources.route_template` (0060), que es la misma fila que
+ * ya decía qué tabla se proyecta como qué nodo. Una fuente nueva llega con su
+ * ruta puesta o no pasa el CHECK.
+ */
+function rutaDe(entityTable: string | null, entityId: string | null): string | null {
+  if (entityTable === null || entityId === null) return null;
+  const plantilla = ROUTE_TEMPLATES[entityTable as keyof typeof ROUTE_TEMPLATES];
+  return plantilla ? plantilla.replace("{id}", entityId) : null;
+}
 
 export default function NodeInspector({
   node, onHighlight, onFocus
@@ -68,9 +71,7 @@ export default function NodeInspector({
     );
   }
 
-  const ruta = node.entityTable !== null && node.entityId !== null
-    ? RUTA_DE[node.entityTable]?.(node.entityId) ?? null
-    : null;
+  const ruta = rutaDe(node.entityTable, node.entityId);
 
   return (
     <aside className="gr-inspector">

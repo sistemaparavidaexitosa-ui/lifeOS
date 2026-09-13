@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { crearCajaDeHerramientas } from "@/lib/ai/tools";
 import { loadFacts } from "@/lib/insights/facts-loader";
 import { allowedDomains, buildContext, MAX_FACTS_COACH } from "@/lib/insights/context";
+import { loadChainFacts } from "@/lib/insights/graph-context";
 import { sanearPropuestas } from "@/lib/domain/coach/proposals.ts";
 import { claveDelCoach, type Momento } from "@/lib/domain/coach/schedule.ts";
 import type { Domain } from "@/lib/domain/insights/types.ts";
@@ -39,6 +40,12 @@ export interface MensajeCoach {
   resumen?: string;
   propuestas?: number;
   reason?: string;
+  /**
+   * Los dominios autorizados que se usaron para este mensaje. El despachador
+   * los necesita para `proponerAristas` sin tener que volver a leer
+   * `profiles.ai_domains` ni ampliar por su cuenta lo que está autorizado.
+   */
+  domains?: Domain[];
 }
 
 export interface EntradaCoach {
@@ -78,6 +85,9 @@ export async function generarYGuardarMensajeDiario(entrada: EntradaCoach): Promi
   };
 
   const facts = await loadFacts(supabase, userId, permitidos, today, perfil, overrides);
+
+  // Sin sesión: la variante `_de`, que solo el cliente de servicio puede llamar.
+  facts.push(...(await loadChainFacts(supabase, facts, permitidos, { modo: "servicio", userId })));
 
   const context = buildContext({
     scope: "global",
@@ -138,6 +148,12 @@ export async function generarYGuardarMensajeDiario(entrada: EntradaCoach): Promi
   // El rastro, con lo mismo que registra un turno de chat más el momento. Sin
   // él, «el coach no me escribió» y «el coach escribió y el push no salió» se
   // ven igual desde fuera.
+  //
+  // Las sugerencias de arista del grafo YA NO se cuentan aquí (F1): esa
+  // segunda llamada al modelo se movió al despachador, DESPUÉS de que
+  // `notifySystem` deje escrito el dedupe de este mensaje. Si se hiciera
+  // aquí, un platform kill a mitad de esa llamada haría que el siguiente tick
+  // de cinco minutos regenerase y volviera a mandar el mensaje entero.
   await supabase.from("audit_log").insert({
     user_id: userId,
     action: "ai.coach",
@@ -151,5 +167,5 @@ export async function generarYGuardarMensajeDiario(entrada: EntradaCoach): Promi
     }
   });
 
-  return { ok: true, messageId: guardado.id, resumen: result.resumen, propuestas: propuestas.length };
+  return { ok: true, messageId: guardado.id, resumen: result.resumen, propuestas: propuestas.length, domains: permitidos };
 }

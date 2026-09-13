@@ -15,8 +15,18 @@
 // entera en vez de guardarse a medias, porque un botón que falla al pulsarlo es
 // peor que un botón que no existe.
 
-export const TIPOS = ["tarea", "bloque", "rutina", "estructura", "meta"] as const;
+export const TIPOS = ["tarea", "bloque", "rutina", "estructura", "meta", "arista"] as const;
 export type Tipo = (typeof TIPOS)[number];
+
+/**
+ * Lo que el COACH puede proponer. `arista` no está: la proponen los detectores
+ * del grafo (0062) sobre candidatas que salieron de SQL, nunca un modelo que
+ * redacta libremente. Si el coach devolviera una igual, se descarta aquí.
+ */
+export const TIPOS_DEL_COACH: readonly Tipo[] = ["tarea", "bloque", "rutina", "estructura", "meta"];
+
+/** Las únicas relaciones que la IA puede sugerir. Ninguna es de dependencia: esas bloquean. */
+export const RELACIONES_SUGERIBLES = ["supports", "related_to", "duplicates"] as const;
 
 export const AREAS = ["Salud", "Carrera", "Relaciones", "Finanzas", "Aprendizaje", "Espiritual", "Personal"] as const;
 export const CATEGORIAS = ["Trabajo", "Familia", "Personal", "Salud", "Descanso", "Otros"] as const;
@@ -137,15 +147,30 @@ export function sanearPropuesta(cruda: PropuestaCruda): PropuestaSaneada | null 
           area: unaDe(datos.area, AREAS, "Personal")
         }
       };
+
+    case "arista": {
+      const source = texto(datos.source, 36);
+      const target = texto(datos.target, 36);
+      if (!UUID.test(source) || !UUID.test(target) || source === target) return null;
+      const rel = RELACIONES_SUGERIBLES.find((r) => r === datos.rel);
+      if (!rel) return null;
+      const bruta = typeof datos.confianza === "number" ? datos.confianza : Number(datos.confianza);
+      const confianza = Number.isFinite(bruta) ? Math.max(0, Math.min(1, bruta)) : 0.6;
+      return { tipo, titulo, detalle, payload: { source, target, rel, confianza: String(confianza) } };
+    }
   }
 }
 
 /** Las que sobreviven, con tope. Dos es lo que el prompt pide y lo que cabe en el rail. */
-export function sanearPropuestas(crudas: readonly PropuestaCruda[], max = 2): PropuestaSaneada[] {
+export function sanearPropuestas(
+  crudas: readonly PropuestaCruda[],
+  max = 2,
+  permitidos: readonly Tipo[] = TIPOS_DEL_COACH
+): PropuestaSaneada[] {
   const salida: PropuestaSaneada[] = [];
   for (const c of crudas) {
     const limpia = sanearPropuesta(c);
-    if (limpia) salida.push(limpia);
+    if (limpia && permitidos.includes(limpia.tipo)) salida.push(limpia);
     if (salida.length >= max) break;
   }
   return salida;

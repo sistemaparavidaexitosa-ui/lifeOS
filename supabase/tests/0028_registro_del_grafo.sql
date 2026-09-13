@@ -76,21 +76,21 @@ select is_empty(
 -- (entity_id)` del proyector, en producción, la primera vez que alguien guarde.
 -- ===========================================================================
 insert into public.graph_sources
-  (entity_table, node_type, scope, projector, label_column, tenant_column, watch_columns)
+  (entity_table, node_type, scope, projector, label_column, tenant_column, watch_columns, route_template)
 values
-  ('debts', 'custom', 'user', 'user_row', 'columna_que_no_existe', 'user_id', '{columna_que_no_existe}');
+  ('weekly_reviews', 'custom', 'user', 'user_row', 'columna_que_no_existe', 'user_id', '{columna_que_no_existe}', '/planning');
 
 select throws_ok(
-  $$ select public.graph_registry_validar('debts') $$,
+  $$ select public.graph_registry_validar('weekly_reviews') $$,
   'P0001',
   null,
   'Una fuente que declara una columna inexistente se rechaza al validar, no al guardar'
 );
 
 insert into public.graph_sources
-  (entity_table, node_type, scope, projector, label_column, tenant_column, watch_columns)
+  (entity_table, node_type, scope, projector, label_column, tenant_column, watch_columns, route_template)
 values
-  ('task_assignees', 'person', 'workspace', 'ws_row', 'user_name', 'workspace_id', '{user_name}');
+  ('task_assignees', 'person', 'workspace', 'ws_row', 'user_name', 'workspace_id', '{user_name}', '/execution');
 
 select throws_ok(
   $$ select public.graph_registry_validar('task_assignees') $$,
@@ -99,7 +99,7 @@ select throws_ok(
   'Una tabla de clave primaria compuesta no puede ser fuente: el on conflict (entity_id) necesita un solo uuid'
 );
 
-delete from public.graph_sources where entity_table in ('debts', 'task_assignees');
+delete from public.graph_sources where entity_table in ('weekly_reviews', 'task_assignees');
 
 
 -- ===========================================================================
@@ -121,10 +121,10 @@ create table public.zz_registro_prueba (
 
 insert into public.graph_sources
   (entity_table, node_type, scope, projector, label_column, tenant_column,
-   metadata_fields, watch_columns)
+   metadata_fields, watch_columns, route_template)
 values
   ('zz_registro_prueba', 'custom', 'user', 'user_row', 'nombre', 'user_id',
-   '{color}', '{nombre,color}');
+   '{color}', '{nombre,color}', '/execution');
 
 select public.graph_install_source('zz_registro_prueba');
 
@@ -283,8 +283,8 @@ select ok(
 -- ===========================================================================
 select throws_ok(
   $$ insert into public.graph_sources
-       (entity_table, node_type, scope, projector, label_column, tenant_column, watch_columns)
-     values ('zz_sin_vigilancia', 'custom', 'user', 'user_row', 'nombre', 'user_id', '{}') $$,
+       (entity_table, node_type, scope, projector, label_column, tenant_column, watch_columns, route_template)
+     values ('zz_sin_vigilancia', 'custom', 'user', 'user_row', 'nombre', 'user_id', '{}', '/execution') $$,
   '23514',
   null,
   'Una fuente sin columnas vigiladas se rechaza: su trigger se dispararía en cada UPDATE de la tabla'
@@ -292,8 +292,8 @@ select throws_ok(
 
 select throws_ok(
   $$ insert into public.graph_sources
-       (entity_table, node_type, scope, projector, label_column, tenant_column, watch_columns)
-     values ('zz_etiqueta_suelta', 'custom', 'user', 'user_row', 'nombre', 'user_id', '{color}') $$,
+       (entity_table, node_type, scope, projector, label_column, tenant_column, watch_columns, route_template)
+     values ('zz_etiqueta_suelta', 'custom', 'user', 'user_row', 'nombre', 'user_id', '{color}', '/execution') $$,
   '23514',
   null,
   'Una fuente cuya etiqueta no está vigilada se rechaza: el backfill vuelve a disparar el trigger por la etiqueta'

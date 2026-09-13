@@ -1348,3 +1348,169 @@ las llama nadie desde `src/`.
   siendo la comprobación que falta desde el primer milestone.
 - ⚠️ **NO MEDIDO: el rendimiento en producción.** No se ha comparado un
   `graph_all` antes y después con el volumen real.
+
+---
+
+## Grafo Universal — Milestone 4: un solo vocabulario (0060), 12-sep-2026
+
+El primero que toca `src/`, así que la cadena se corrió entera y en orden.
+
+| Ítem | Estado | Evidencia |
+|---|---|---|
+| `supabase migration up` (0060) | ✅ EJECUTADO OK | `{"applied":["…/0060_vocabulario_del_grafo.sql"]}` |
+| Aserción de siembra completa | ✅ EJECUTADO OK | La migración aborta si algún tipo queda sin plural o alguna fuente sin ruta |
+| `pnpm gen:graph-catalog` | ✅ EJECUTADO OK | Escribe `src/lib/domain/graph/catalog.generated.ts` — 18 tipos, 14 relaciones, 14 rutas |
+| `gen-graph-catalog.mjs --check` | ✅ EJECUTADO OK | Verde con el archivo al día; **y probado en rojo** ensuciando el archivo a propósito (exit 1) |
+| `pnpm gen:types:local` | ✅ EJECUTADO OK | `database.types.ts` +6 líneas (las dos columnas nuevas) |
+| `pnpm typecheck` | ✅ EJECUTADO OK | `tsc --noEmit`, sin salida |
+| `pnpm lint` | ✅ EJECUTADO OK | «✔ No ESLint warnings or errors» |
+| `pnpm test:unit` | ✅ EJECUTADO OK | **938 pruebas, 0 fallos** (9 nuevas) |
+| `pnpm build` | ✅ EJECUTADO OK | Build de producción completo |
+| `supabase test db` | ✅ EJECUTADO OK | **Files=32, Tests=290, Result: PASS** (6 nuevas en `0031`) |
+
+### Las rutas se comprobaron una a una
+
+`route_template` se sembró mirando `src/app/(app)/**/page.tsx`, no de memoria —
+y menos mal: la primera versión sembraba `/development/logbook` para la
+bitácora, **y esa ruta no existe**. La bitácora se abre dentro de `ProjectMenu`,
+en `/execution`, y los adjuntos dentro de `TaskFilesPanel`, también en
+`/execution`. Las catorce rutas se verificaron con un bucle contra el sistema de
+archivos antes de aplicar la migración.
+
+### Una prueba que pasaba por el motivo equivocado
+
+El CHECK nuevo de `route_template` dejó dos `throws_ok` de
+`0028_registro_del_grafo.sql` en verde **sin comprobar lo que dicen**: sus
+INSERT de prueba no llevaban ruta, así que saltaban por el CHECK de la ruta en
+vez de por el de `watch_columns` vacío y el de la etiqueta no vigilada. Ambos
+afirman `23514`, que es el código de las dos cosas, de modo que la suite no se
+habría quejado nunca. Se añadió la ruta a los cinco INSERT de prueba del archivo
+para que cada uno vuelva a fallar por su motivo.
+
+### Lo que NO se ejecutó
+
+- ⚠️ **NO EJECUTADO: `/graph` abierto en un navegador.** Y este milestone es el
+  primero en el que de verdad importa: cambia seis archivos de `src/`, incluido
+  el panel lateral. La cadena en verde dice que compila y que las derivaciones
+  son correctas; no dice que el lienzo se vea bien ni que el enlace nuevo de
+  Documento y Decisión lleve a donde debe.
+- ⚠️ **NO MEDIDO: el efecto de construir `NODE_STYLES` con `Object.fromEntries`**
+  en vez de como literal. Se evalúa una vez al importar el módulo, no por
+  fotograma, pero no se ha medido.
+
+---
+
+## Grafo Universal — Milestone 5: el dinero y los cuadernos (0061), 12-sep-2026
+
+| Ítem | Estado | Evidencia |
+|---|---|---|
+| `supabase migration up` (0061) | ✅ EJECUTADO OK | `{"applied":["…/0061_dinero_y_cuadernos.sql"]}` |
+| Aserciones de la migración | ✅ EJECUTADO OK | Las tres —triggers, nodos y aristas— tienen que salir vacías o aborta |
+| `pnpm gen:types:local` | ✅ EJECUTADO OK | Regenera tipos y catálogo: 23 tipos de nodo, 20 rutas |
+| `pnpm typecheck` | ✅ EJECUTADO OK | **Después de arreglar el fallo esperado** — ver abajo |
+| `pnpm lint` | ✅ EJECUTADO OK | «✔ No ESLint warnings or errors» |
+| `pnpm test:unit` | ✅ EJECUTADO OK | **939 pruebas, 0 fallos** |
+| `pnpm build` | ✅ EJECUTADO OK | Build de producción completo |
+| `supabase test db` | ✅ EJECUTADO OK | **Files=33, Tests=299, Result: PASS** (9 nuevas en `0032`) |
+
+### El diseño de M4 hizo saltar la compilación, y eso es lo que tenía que pasar
+
+Al insertar los cinco tipos de nodo nuevos y regenerar el catálogo, `tsc` falló:
+
+```
+src/lib/domain/graph/theme.ts(34,7): error TS2739: Type '{ … }' is missing the
+following properties from type 'Record<…>': financial_goal, notebook, account,
+debt, liability
+```
+
+Y la prueba del candado de colores se puso en rojo por lo mismo. No es una
+molestia del refactor: es D-147 funcionando. De qué tamaño se dibuja un tipo y
+de qué color se contestan a la vez, o no se contesta ninguna.
+
+### Comprobado sobre datos, no solo por aserción
+
+Dentro de una transacción con reversión, antes de aplicar:
+
+- Las tres notas locales pasaron a colgar de su **cuaderno** (antes, del
+  espacio): «Acta de la reunión de dirección» → «Actas y decisiones», etc.
+- Insertando una meta financiera con una cuenta en `account_ids`, la arista
+  salió `account --supports--> financial_goal` — la dirección invertida— y
+  `graph_edges_deriva()` siguió vacía.
+
+### Estado de la base tras migrar
+
+```
+deriva nodos   | 0     deriva aristas | 0
+diff triggers  | 0     integridad     | 0
+fuentes        | 20    tipos de nodo  | 23    nodos | 29
+```
+
+### Dos suites anteriores quedaron inválidas de verdad
+
+No es mantenimiento cosmético: este milestone las contradijo.
+
+- `0028` usaba `debts` como tabla de pega para probar el validador, y `debts`
+  pasó a ser una fuente real — la clave primaria chocaba. Se cambió a
+  `weekly_reviews`.
+- `0029` afirmaba «una nota cuelga del espacio de su cuaderno, saltándose el
+  cuaderno». Eso dejó de ser cierto a propósito. La assertion pasa ahora a
+  comprobar la jerarquía nueva: nota → cuaderno → espacio.
+
+### Lo que NO se ejecutó
+
+- ⚠️ **NO EJECUTADO: `/graph` abierto en un navegador.** Quinto milestone
+  seguido. Y este añade cinco tipos de nodo a dos vistas, así que lo que no se
+  ha mirado es precisamente si la vista Dinero se lee bien con cuentas y deudas
+  dentro, y si el cuaderno no ensucia la de Conocimiento.
+- ⚠️ **NO DESPLEGADO todavía a la nube** en el momento de escribir esto.
+- ⚠️ **NO MEDIDO: el efecto de seis triggers más.** Son tablas frías —ninguna
+  se escribe como `tasks`—, pero no se ha medido.
+
+## Grafo Universal — Milestone 6: el grafo como contexto y herramienta de la IA (0062), 13-sep-2026
+
+Rama `feat/sistema-cognitivo`. Verificación corrida en la máquina del owner,
+sobre la pila local de Supabase.
+
+| Ítem | Estado | Evidencia |
+|---|---|---|
+| `supabase migration up --local` (0062) | ✅ EJECUTADO OK | `supabase migration list --local` lista `0062` aplicada |
+| `pnpm typecheck` | ✅ EJECUTADO OK | `tsc --noEmit` sin salida |
+| `pnpm test:unit` | ✅ EJECUTADO OK | **958 pruebas, 0 fallos** |
+| `pnpm db:test` | ✅ EJECUTADO OK | **Files=36, Tests=332, Result: PASS** (33 nuevas: 13 en `0033`, 11 en `0034`, 9 en `0035`) |
+| Tras la revisión final (6 commits de arreglos) | ✅ EJECUTADO OK | `pnpm test:unit` **960/960**, `pnpm db:test` **Files=36, Tests=333, PASS**, `pnpm lint` limpio, `pnpm build` OK |
+| E2E por script contra la pila local, usuario desechable | ✅ EJECUTADO OK | **19/19**: cadena tarea → proyecto → meta, detector `sin_meta`, `graph_aceptar_arista` crea `origin = 'ai'` y el reintento da P0002, insert `ai` directo rechazado por RLS, `_de` rechazadas a `authenticated`; usuario borrado al terminar |
+| `supabase db push` (nube) | ✅ EJECUTADO OK, 13-sep-2026 | `--dry-run` listó `0061` y `0062` (la `0060` ya estaba); el push aplicó las dos sin error. El código de esta rama todavía NO está desplegado |
+
+### Lo que NO se ejecutó
+
+- ⚠️ **NO EJECUTADO: verificación con el modelo y en navegador.** No había
+  `GEMINI_API_KEY` ni `PUSH_DISPATCH_SECRET` en `.env.local`. Sin ver: el chat
+  llamando de verdad a `explorar_grafo`, el despacho matutino dejando
+  `ai.graph.suggestions` en `audit_log`, y los botones «Conectar» / «Ver en el
+  grafo» del rail.
+- ⚠️ **NO EJECUTADO: reproducir `0062` desde cero en local.** Se aplicó por
+  secciones durante el desarrollo; su primera ejecución completa de principio a
+  fin fue el `db push` a la nube, que terminó sin error.
+
+### Orden de despliegue: la migración 0062 va ANTES que el código
+
+Nunca al revés. `acceptProposal` (`src/lib/coach/actions.ts`) reclama una
+propuesta poniendo `status = 'aplicando'`, y ese estado no existe en el CHECK
+de `coach_proposals` de antes de 0062. Si el código de esta fase se despliega
+antes de correr la migración, cada intento de aceptar CUALQUIER propuesta —no
+solo una arista, cualquiera— revienta el CHECK a mitad de la transacción, que
+se deshace entera, y quien pulsó el botón ve «esa propuesta ya se resolvió»
+sin que nada se haya resuelto. Ver el bloque «CÓMO SE REVIERTE» al final de
+`supabase/migrations/0062_conecta.sql` para el camino de vuelta, con el orden
+en que hay que tocar las cosas porque hay datos de por medio.
+
+### Dos límites que se aceptaron a conciencia, no que se pasaron por alto
+
+- Una propuesta que quede en `aplicando` porque el proceso muere entre el
+  reclamo (`acceptProposal`) y su reversión desaparece del rail sin que nada la
+  recoja — no hay barrido todavía. Se aplaza a la fase E (misiones).
+- Las sugerencias del grafo hacen una segunda llamada al modelo por la mañana.
+  Tras la revisión final corren DESPUÉS de que `notifySystem` deja el dedupe del
+  coach y solo si quedan menos de `PRESUPUESTO_ARISTAS_MS` usados, así que un
+  corte ya no puede repetir el mensaje; como mucho se pierde la sugerencia de ese
+  día. Se revisa en la fase A.

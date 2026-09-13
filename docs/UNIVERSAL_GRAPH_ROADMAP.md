@@ -1,12 +1,12 @@
 # UNIVERSAL GRAPH — hoja de ruta
 
-> **Estado al 12-sep-2026.** Los milestones 1, 2 y 3 están implementados
-> (migraciones `0057_registro_del_grafo.sql`, `0058_aristas_declarativas.sql` y
-> `0059_un_solo_predicado_de_permiso.sql`, con las pruebas `0028`, `0029` y
-> `0030` en `supabase/tests/`). Los milestones 4 a 8 son diseño acordado, no
-> código. Este documento es el
-> plan de implementación; `docs/DECISIONS.md` (D-138…D-141) guarda las
-> decisiones ya tomadas y `docs/CHECKS.md` lo que se ejecutó de verdad.
+> **Estado al 13-sep-2026.** Los milestones 1 a 6 están implementados
+> (migraciones `0057` a `0062`, con las pruebas `0028` a `0035` en
+> `supabase/tests/`). M6 se redefinió el 13-sep-2026 (D-150): no unifica
+> `TABLAS_CONSULTABLES` con el registro. M7 sigue sin implementar y M8 se
+> retiró de la hoja de ruta (D-150). Este documento es el
+> plan de implementación; `docs/DECISIONS.md` (D-138…D-141, D-150…D-153) guarda
+> las decisiones ya tomadas y `docs/CHECKS.md` lo que se ejecutó de verdad.
 
 ---
 
@@ -116,7 +116,7 @@ trigger y en el `SELECT` del backfill, con una prueba pgTAP dedicada a vigilar
 que no divergieran); ninguna forma de detectar deriva; y añadir una entidad
 tocando tres sitios del SQL.
 
-**b) El vocabulario está escrito cuatro veces.** Los 18 tipos de nodo viven en
+**b) El vocabulario está escrito cuatro veces.** *(Resuelto en M4 — `0060`.)* Los 18 tipos de nodo viven en
 el catálogo SQL, en la unión `GraphNodeType` (`src/lib/domain/graph/types.ts`),
 en `NODE_STYLES` (`theme.ts`) y en `PLURAL` (`cluster.ts`). Las 14 relaciones,
 tres veces más `EDGE_STYLES`. `graph_rel_types.is_dependency` está
@@ -156,7 +156,7 @@ Cuatro capas, de las que tres ya existían:
 | 0 · **Catálogo** | `graph_node_types`, `graph_rel_types` — el vocabulario, con metadatos por tipo | existía |
 | 1 · **Registro** | `graph_sources`, `graph_edge_rules` — cómo una tabla de negocio se convierte en nodos y aristas | **M1, hecho** |
 | 2 · **Núcleo** | proyectores genéricos, `graph_system_edges`, RPC de recorrido, frontera de privacidad | existía; M1 le añadió instalador, backfill y detección de deriva derivados de la capa 1 |
-| 3 · **Consumidores** | el lienzo (existe); recuperación de IA, buscador y analítica (M6, M7) | uno de tres |
+| 3 · **Consumidores** | el lienzo (existe); recuperación de IA como hechos de cadena y la herramienta `explorar_grafo` (M6, **hecho**, `0062`); analítica (M7, pendiente). El buscador queda aparte: D-150 decidió no unificarlo con el registro. | dos de tres |
 
 ### 3.1 La decisión que lo sostiene
 
@@ -186,17 +186,18 @@ divergir de la proyección porque *es* la proyección.
 
 Lo que el diseño deja listo sin implementarlo:
 
-- **Búsqueda semántica y *embeddings*** — `search_text` y `content_hash` en
-  `graph_nodes` (M6). El `content_hash` es lo que hace barato a M8: sin él, el
-  día que haya *embeddings* hay que recalcularlo todo en cada pasada para saber
-  qué cambió.
-- **Recuperación para IA** — `graph_context()` (M6), un punto único que sustituye
-  a `TABLAS_CONSULTABLES` como descripción de qué entidades existen.
+- **Búsqueda semántica y *embeddings*** — retirado (D-150, 2026-09-13): M6 no
+  añade `search_text` ni `content_hash`, y M8 se retira de la hoja de ruta sin
+  haberlos necesitado.
+- **Recuperación para IA** — redefinido (D-150): M6 no crea `graph_context()` ni
+  sustituye a `TABLAS_CONSULTABLES`; la IA lee el grafo como hechos de cadena y
+  como la herramienta `explorar_grafo`, con la lista blanca intacta.
 - **Análisis de dependencias e impacto** — ya existe (`graph_impact`), y se
   amplía solo con cobertura.
-- **Recomendadores** — el contrato de `graph_suggestions` quedó fijado en 0054 y
-  sigue sin implementar; con `graph_edge_rules` los detectores deterministas
-  pasan a poder escribirse sobre el registro en vez de tabla a tabla.
+- **Recomendadores** — el contrato de `graph_suggestions` de 0054 se resolvió
+  distinto en M6 (0062): entran en la cola única `coach_proposals` (D-151), y
+  los detectores deterministas son `graph_detectar_de`, sobre el registro y no
+  tabla a tabla.
 - **Analítica de grafos** — M7, sobre el grafo ya materializado.
 
 **No se implementan *embeddings* ni se declara `pgvector`.**
@@ -279,68 +280,91 @@ observaciones por fase, cero diferencias.
 Elimina: seis copias del predicado y tres del precómputo. Es el último milestone
 que sustituye código vivo; M4 a M7 son aditivos.
 
-### M4 · Un solo vocabulario — siguiente
+### M4 · Un solo vocabulario — **hecho** (`0060`)
 
-`scripts/gen-graph-catalog.ts` lee `graph_node_types` y `graph_rel_types` de la
-base y escribe `src/lib/domain/graph/catalog.generated.ts`, junto a
-`pnpm gen:types`. Desaparecen: la unión `GraphNodeType` escrita a mano, los
-colores duplicados en `NODE_STYLES`, el `Set` de `impact.ts` que reimplementa
-`is_dependency`, y `TIPOS_NATIVOS` que reimplementa `is_projected`.
+`scripts/gen-graph-catalog.mjs` lee los tres catálogos de la base y escribe
+`src/lib/domain/graph/catalog.generated.ts`. Se ejecuta solo dentro de
+`pnpm gen:types:local`, así que quien ya regeneraba los tipos tras una
+migración no tiene que aprender nada nuevo.
 
-Se añade `route_template` a `graph_sources` — la pantalla donde vive cada
-entidad—, que hoy es un `Record` incompleto en `NodeInspector.tsx` (le faltan
-`task_files` y `logbook`, así que los nodos de tipo Documento y Decisión no
-tienen enlace a «abrir donde vive»). Con la ruta en el registro, los enlaces
-«ver en el grafo» pendientes desde 0054 salen de la misma fila.
+**La línea que se trazó, y conviene no moverla sin pensarlo: la base es dueña
+de las PALABRAS y de la SEMÁNTICA; TypeScript es dueño de la GEOMETRÍA.** A la
+base bajan el nombre, la etiqueta, el plural, el color, `is_projected`,
+`is_dependency`, `reversed`, `is_symmetric` y la ruta — todo lo que una
+consulta, un informe o la IA podrían querer. En TypeScript se quedan el radio
+del círculo, el grosor del trazo y si la línea va discontinua: eso no lo va a
+leer nadie desde SQL, y meterlo en Postgres sería guardar píxeles.
 
-**Cero dependencias npm nuevas.** D-008 intacto.
+Esa frontera se sostiene sola porque los `Record` de geometría van indexados
+por la unión generada: **añadir un tipo de nodo con un INSERT rompe la
+compilación** hasta que alguien diga de qué tamaño se dibuja, que es justo la
+pregunta que hay que contestar.
 
-### M5 · Cobertura: dinero, tiempo y conocimiento
+Desaparecen, derivadas: la unión `GraphNodeType` (18 literales), `GraphRelType`
+(14), los colores de `NODE_STYLES`, el `PLURAL` de `cluster.ts`, el `Set`
+`ROMPEN` de `impact.ts` que reimplementaba `is_dependency`, el `REL_TYPES` de
+las Server Actions y `TIPOS_NATIVOS`, que reimplementaba `is_projected`.
 
-Con M1 a M4 puestos, esto es una migración de filas de registro. Candidatas por
-orden de valor —tienen `id uuid` y `user_id`, así que pasan el validador—:
-`debts`, `savings_goals`, `financial_goals`, `accounts`, `liabilities`,
-`occupations`, `daily_plans`, `knowledge_items`, `memory_items`,
-`family_members`, y con `workspace_id`: `notebooks`, `folders`.
+`route_template` en `graph_sources` sustituye al `Record` de `NodeInspector.tsx`
+**y le añade las dos entradas que le faltaban**: hasta ahora un nodo de tipo
+Documento o Decisión se veía en el mapa y no tenía enlace para abrirse. Llevaba
+así desde 0054 y no daba error ninguno.
 
-Más filas nuevas en `graph_node_types`, que es un INSERT.
+**Cero dependencias npm nuevas** (D-008): el generador habla con la base por
+`psql` si está en el PATH y por `docker exec` si no. El archivo generado va
+commiteado —el job `build` de CI no tiene base de datos— y el job `db`, que sí
+la tiene, comprueba con `--check` que no se haya quedado atrás.
 
-Lo que desbloquea: «¿qué proyecto me está costando dinero?», «¿qué hábito
-sostiene esta meta y cuánto tiempo le dedico?». Hoy son incontestables porque
-las entidades no están en el mismo grafo.
+### M5 · Cobertura: el dinero y los cuadernos — **hecho** (`0061`)
 
-### M6 · Superficie de recuperación
+Seis fuentes nuevas y tres reglas de arista, casi todo en filas: **Money OS**
+(`accounts`, `debts`, `savings_goals`, `financial_goals`, `liabilities`) y
+`notebooks`. Cinco tipos de nodo nuevos, que son un INSERT.
 
-`graph_nodes.search_text` y `content_hash`, mantenidos por el mismo proyector a
-partir de un `search_fields` nuevo del registro. Un RPC `graph_context()` para
-la IA. Y `TABLAS_CONSULTABLES` pasa a leer del registro, con una prueba unitaria
-que falla si las dos descripciones dejan de coincidir.
+La vista Dinero enseñaba inversiones, presupuestos y activos — el patrimonio
+sin las cuentas ni las deudas. Ahora enseña el dinero. Y una nota deja de
+colgar del espacio: cuelga de su cuaderno, y el cuaderno del espacio, que es la
+jerarquía real. 0054 lo había dejado escrito como limitación («no hay nodo de
+Cuaderno, así que la nota cuelga directamente del espacio»).
 
-Aquí es donde las tres proyecciones universales se vuelven una. **Es el
-milestone con más superficie de privacidad del plan** y necesita su propia
-revisión: el filtro de dominios de `src/lib/insights/context.ts` es hoy un solo
-archivo auditable de una sentada, y esa propiedad no se puede perder.
+**La lista se recortó respecto a lo planeado, y cada exclusión tiene motivo:**
 
-`search_text` **no es un `tsvector`**: D-118 rechazó a conciencia un quinto
-índice de texto sobre los mismos títulos, y esa decisión sigue en pie. Es texto
-plano, para que un futuro proceso de *embeddings* tenga una sola columna que
-leer.
+| Fuera | Por qué |
+|---|---|
+| El tiempo (`occupations`, `daily_plans`, `reminders`) | Se ofreció y **se pospuso el 2026-09-10**. No se reabre por cuenta propia. |
+| `knowledge_items` | Es privada y su `project_id` apunta a proyectos de espacios compartidos, así que su única arista está prohibida por la frontera (D-120) — igual que la bitácora. Sería un nodo isla en una vista donde no pega. |
+| `folders` | Un proyecto ya pertenece a su espacio, y una segunda regla `belongs_to` sobre la misma fila se pisaría con la primera. Agrupar en el tablero no es una relación del dominio. |
+| `family_members` | Puede guardar el nombre de un menor y eso es una decisión legal abierta (OD-016). No se proyecta de pasada. |
+| `journal_entries`, `food_entries`, `ai_chat_messages`, `net_worth_snapshots` | Son EVENTOS, no cosas a las que nadie se refiera. Proyectarlos haría crecer el grafo sin hacerlo más útil. |
+
+**El diseño de M4 hizo su trabajo durante este milestone**: al insertar los
+cinco tipos nuevos, `pnpm typecheck` falló nombrando exactamente los cinco que
+no tenían radio, y la prueba del candado de colores se puso en rojo por la
+misma razón. De qué tamaño se dibuja y de qué color se contestan a la vez, o no
+se contesta ninguna.
+
+**Y la ampliación destapó dos fallos latentes en la maquinaria de M2**, los dos
+inofensivos hasta que alguien declarara la regla adecuada — ver D-149.
+
+### M6 · El grafo como contexto y herramienta de la IA — **hecho** (`0062`)
+
+Redefinido el 2026-09-13 (D-150). No se fusiona `TABLAS_CONSULTABLES` con el
+registro ni se añaden `search_text`/`content_hash`: la IA lee el grafo como
+**hechos de cadena** (`graph_cadenas[_de]` → `facts/chains.ts`) y como la
+herramienta `explorar_grafo`. Las sugerencias de arista entran en la cola única
+(`coach_proposals`, D-151) y se aceptan por `graph_aceptar_arista` (D-153). El
+riesgo 6 se cierra por diseño: el filtro de la IA sigue en un solo archivo.
 
 ### M7 · Analítica
 
-`graph_degree()`, `graph_stats()` sobre el grafo ya materializado: nodos más
-conectados, componentes, huérfanos, cuellos de botella. Alimenta los detectores
-deterministas que el contrato de `graph_suggestions` espera.
+Reducido a lo que llega a una persona: los detectores de `graph_detectar_de`
+(0062) —lo suelto que no apoya ninguna meta y las tareas casi duplicadas—.
+`graph_degree()`/`graph_stats()` quedan sin plan hasta que un consumidor los pida.
 
 ### M8 · *Embeddings* — **no se implementa**
 
-La costura queda documentada y ninguna línea escrita:
-`graph_node_embeddings(node_id, model, embedding, content_hash)`, poblada por un
-proceso externo que lee los nodos cuyo `content_hash` cambió desde la última
-pasada. Requiere declarar `pgvector`, que sería la segunda extensión del
-repositorio, y una decisión de producto sobre qué proveedor calcula los
-vectores y qué sale del sistema para ello — la misma conversación que
-`docs/SECURITY.md` ya tiene abierta sobre la IA.
+**Retirado de la hoja de ruta** (2026-09-13). No hay un problema de recuperación
+medido que lo justifique; se reabre solo con uno.
 
 ---
 
@@ -354,7 +378,7 @@ vectores y qué sale del sistema para ello — la misma conversación que
 | 4 | **Crecimiento de `graph_nodes`.** El objetivo de D-117 son 100.000 nodos. | `enabled` por fuente permite apagar una sin migración. M5 mide el conteo antes y después. | pendiente de M5 |
 | 5 | **Deriva entre registro y triggers.** | `graph_registry_diff()` y la assertion nº 1 de `0028`, que corre en CI en cada PR. | mitigado en M1 |
 | 5b | **Deriva entre las reglas de arista y las aristas vivas.** | `graph_edges_deriva()` compara el conjunto que las reglas derivan contra el que hay, y la assertion nº 1 de `0029` lo exige vacío en cada PR. Además, la nº 2 comprueba que las siete funciones sigan siendo generadas y nadie las haya editado a mano. | mitigado en M2 |
-| 6 | **Pérdida de auditabilidad del filtro de IA (M6).** Hoy el filtro de dominios cabe en un archivo. | M6 no fusiona sin conservar esa propiedad; se revisa aparte antes de implementarlo. | abierto |
+| 6 | **Pérdida de auditabilidad del filtro de IA (M6).** Hoy el filtro de dominios cabe en un archivo. | M6 no fusiona sin conservar esa propiedad; se revisa aparte antes de implementarlo. | cerrado en M6 (D-150) |
 | 7 | **El backfill reescribe tablas enteras.** `update … set etiqueta = etiqueta` toca todas las filas y recalcula los `tsvector` generados de 0039. | Es coste de mantenimiento, no de operación normal. En tablas grandes, por lotes y con `lock_timeout`. Documentado en la propia función. | aceptado |
 
 ---
@@ -418,15 +442,45 @@ aditivos.
   `graph_edges_of` apenas estaban cubiertas, y son las que la pantalla usa por
   debajo. El total del repositorio pasa de 267 a 284.
 
+**M4, medido:**
+
+- Dos columnas nuevas (`graph_node_types.label_plural`, `graph_sources.route_template`)
+  con su CHECK cada una, un script de 150 líneas y un archivo generado.
+- **El primer milestone que toca `src/`**: 6 archivos, todos para BORRAR una
+  copia y leer del catálogo. Ni un cambio de comportamiento buscado, salvo el
+  enlace que antes no salía.
+- 9 pruebas unitarias nuevas (938 en total) y 6 assertions pgTAP nuevas (290).
+- Una regresión evitada por el camino: el CHECK nuevo de `route_template` dejaba
+  dos `throws_ok` de `0028` pasando por el motivo equivocado —saltaban por la
+  ruta, no por lo que decían comprobar—. Se arreglaron los INSERT de prueba.
+
+**M5, medido:**
+
+- 6 fuentes (de 14 a 20), 5 tipos de nodo (de 18 a 23), 3 reglas de arista (de
+  11 a 13, una de ellas cambiada de destino).
+- La migración instala triggers sobre seis tablas **frías** — ninguna es
+  `tasks`—, así que el `ACCESS EXCLUSIVE` que D-139 evitaba en 0057 aquí sí se
+  paga, y es barato.
+- En `src/` solo geometría y vistas: cinco radios en `theme.ts` y dos listas de
+  `nodeTypes` en `views.ts`. Ni una línea de lógica.
+- 1 prueba unitaria nueva (939) y 9 assertions pgTAP nuevas (299).
+- Dos suites anteriores hubo que corregirlas porque este milestone las
+  invalidó de verdad: `0028` usaba `debts` como tabla de pega y ahora es una
+  fuente real, y `0029` afirmaba que una nota cuelga del espacio.
+
 **Del plan completo, estimado:**
 
 - `graph_nodes` pasaría de 14 a ~26 tipos de entidad proyectados en M5. Con los
   volúmenes de una persona real eso es del orden de miles de nodos, no de
   cientos de miles: el techo de 100.000 de D-117 sigue lejos.
-- Ya desaparecieron: siete funciones de arista a medida (M2) y seis copias del
-  predicado de permiso más tres del precómputo (M3). Quedan por desaparecer
-  cuatro copias del vocabulario de tipos y dos reimplementaciones de metadatos
-  del catálogo (M4).
+- Ya desaparecieron: siete funciones de arista a medida (M2), seis copias del
+  predicado de permiso más tres del precómputo (M3), y las cuatro copias del
+  vocabulario de tipos más las dos reimplementaciones de metadatos del catálogo
+  (M4). Del inventario de duplicación que abrió este documento no queda nada
+  pendiente: unificar las tres proyecciones universales era la última pieza, y
+  D-150 (13-sep-2026) decidió no hacerlo — la IA entra por hechos de cadena y
+  la herramienta `explorar_grafo` (M6, `0062`), no por fusionar
+  `TABLAS_CONSULTABLES` con el registro.
 - La amplificación de escritura crece en las tablas que se añadan, y en ninguna
   de las que ya se escriben mucho: `tasks` y `projects` ya están proyectadas y
   M5 no las toca.

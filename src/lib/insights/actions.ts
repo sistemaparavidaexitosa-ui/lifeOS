@@ -7,6 +7,7 @@ import { getSessionUser } from "@/lib/data/session";
 import { todayForUser } from "@/lib/data/profile";
 import { loadFacts } from "./facts-loader";
 import { allowedDomains, buildContext, type Scope } from "./context";
+import { loadChainFacts } from "./graph-context";
 import { recommend } from "@/lib/ai/recommend";
 import { GEMINI_MODEL } from "@/lib/ai/gemini-provider";
 import { recommendationFingerprint } from "@/lib/domain/insights/fingerprint.ts";
@@ -105,6 +106,8 @@ export async function analyze(scope: Scope): Promise<AnalyzeResult> {
       end: (profile?.activity_window_end ?? "18:00").slice(0, 5)
     }
   });
+
+  facts.push(...(await loadChainFacts(supabase, facts, permitidos, { modo: "sesion" })));
 
   const context = buildContext({
     scope,
