@@ -21,7 +21,10 @@ type Admin = ReturnType<typeof createAdminClient>;
  * `upsert` con `ignoreDuplicates` sobre `(user_id, fingerprint)`: lo que ya se
  * propuso —aceptado, pendiente o descartado— no vuelve.
  *
- * NUNCA LANZA. Devuelve cuántas entraron en la cola.
+ * NUNCA LANZA. Devuelve cuántas entraron en la cola DE VERDAD: con
+ * `ignoreDuplicates`, PostgREST solo devuelve en `.select()` las filas que
+ * insertó, así que las que ya existían de un día anterior no cuentan aquí ni
+ * en el `audit_log` que las registra.
  */
 export async function proponerAristas(entrada: {
   supabase: Admin;
@@ -82,10 +85,11 @@ export async function proponerAristas(entrada: {
       }));
 
     if (!filas.length) return 0;
-    const { error: insertErr } = await supabase
+    const { data: insertadas, error: insertErr } = await supabase
       .from("coach_proposals")
-      .upsert(filas, { onConflict: "user_id,fingerprint", ignoreDuplicates: true });
-    return insertErr ? 0 : filas.length;
+      .upsert(filas, { onConflict: "user_id,fingerprint", ignoreDuplicates: true })
+      .select("id");
+    return insertErr ? 0 : (insertadas?.length ?? 0);
   } catch {
     return 0;
   }
