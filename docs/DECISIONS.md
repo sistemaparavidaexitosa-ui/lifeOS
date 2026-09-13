@@ -2633,9 +2633,19 @@ implementa:
   TODO rol, `service_role` incluido — solo se alcanzan desde dentro de una
   función `security definer`, nunca por RPC directa. Las suites 0033 y 0035 lo
   vigilan.
-- **D-153 · `origin = 'ai'` entra por una sola puerta.** `graph_edges_insert`
-  sigue admitiendo solo `user`. `graph_aceptar_arista` comprueba propiedad,
-  estado, visibilidad y frontera en la transacción que escribe, y devuelve
+- **D-153 · `origin = 'ai'` entra por una sola puerta, y esa puerta no es un
+  privilegio nuevo.** `graph_edges_insert` sigue admitiendo solo `user`: la
+  única función que escribe `ai` es `graph_aceptar_arista`, y solo sobre una
+  fila de `coach_proposals` PROPIA, de `tipo = 'arista'` y todavía `pending`.
+  Nada obliga a que esa fila haya salido de `graph_detectar_de` — las
+  políticas de 0053 dejan a cualquiera insertar o actualizar sus propias
+  `coach_proposals` — así que alguien podría escribirse una a mano y llamar a
+  la función igual. No es una escalada de privilegio: `graph_aceptar_arista`
+  vuelve a comprobar `graph_nodo_visible` y `graph_misma_audiencia` (BR-012)
+  en la misma transacción, así que solo puede enlazar nodos que quien llama YA
+  VE y que ya podría unir él mismo con `origin = 'user'`. Lo único que cambia
+  es la procedencia que queda escrita: `origin = 'ai'` significa «propuesta
+  aceptada», no «el modelo decidió esto sin que nadie mirara». Devuelve
   `frontera`/`no_visible` en vez de lanzar para poder dejar la propuesta
-  `fallida`. El modelo nunca ve un uuid: elige índices de listas que salieron de
-  `graph_detectar_de`.
+  `fallida` sin deshacer también el cambio de estado. El modelo, aparte, nunca
+  ve un uuid: elige índices de listas que salieron de `graph_detectar_de`.
