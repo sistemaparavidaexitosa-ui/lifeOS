@@ -211,3 +211,142 @@ comment on function public.graph_cadenas_de(uuid, uuid[], integer) is
   'A qué pertenece y qué apoya cada entidad (belongs_to, child_of, supports, en el sentido guardado), para un usuario dado. Solo service_role: el coach corre sin sesión. Ver 0062 y D-152.';
 comment on function public.graph_cadenas(uuid[], integer) is
   'graph_cadenas_de para la sesión actual. Es la que usan el chat y analyze.';
+
+
+-- =============================================================================
+-- 3) UNA SOLA COLA DE PROPUESTAS
+--
+-- `coach_proposals` crece en vez de nacer otra tabla (criterio de D-143: los
+-- nombres heredados se quedan). Lo que cambia:
+--
+--   · `message_id` puede ser nulo: una sugerencia del grafo no sale de un turno
+--     de chat. El CHECK de abajo lo sigue exigiendo cuando el origen es el coach.
+--   · `fingerprint` único por usuario, como `recommendations` (0027). Único EN
+--     CUALQUIER ESTADO a propósito: descartar una sugerencia tiene que
+--     significar «no me la vuelvas a proponer».
+--   · `aplicando` es el reclamo atómico que le faltaba a `acceptProposal`: dos
+--     clics a la vez podían crear la cosa dos veces. `fallida` es el final de
+--     una propuesta que no se puede cumplir (la frontera, un nodo que ya no está).
+-- =============================================================================
+
+alter table public.coach_proposals alter column message_id drop not null;
+
+alter table public.coach_proposals
+  add column if not exists origen text not null default 'coach',
+  add column if not exists fact_ids text[] not null default '{}',
+  add column if not exists fingerprint text;
+
+alter table public.coach_proposals
+  add constraint coach_proposals_origen_check
+    check (origen in ('coach', 'chat', 'analisis', 'grafo', 'mision')),
+  add constraint coach_proposals_coach_con_mensaje
+    check (origen <> 'coach' or message_id is not null);
+
+alter table public.coach_proposals drop constraint if exists coach_proposals_tipo_check;
+alter table public.coach_proposals add constraint coach_proposals_tipo_check
+  check (tipo in ('tarea', 'bloque', 'rutina', 'estructura', 'meta', 'arista'));
+
+alter table public.coach_proposals drop constraint if exists coach_proposals_status_check;
+alter table public.coach_proposals add constraint coach_proposals_status_check
+  check (status in ('pending', 'aplicando', 'accepted', 'fallida', 'dismissed'));
+
+create unique index if not exists idx_coach_proposals_fingerprint
+  on public.coach_proposals (user_id, fingerprint);
+
+comment on column public.coach_proposals.origen is
+  'De dónde salió: coach (turno diario), chat, analisis, grafo (detectores de 0062) o mision (fase E). Ver 0062.';
+comment on column public.coach_proposals.fingerprint is
+  'Huella estable de la sugerencia. Única por usuario en cualquier estado: una descartada no vuelve. Ver 0062.';
+
+
+-- =============================================================================
+-- 4) LA ÚNICA PUERTA DE `origin = 'ai'`
+--
+-- La política `graph_edges_insert` sigue admitiendo solo `origin = 'user'`.
+-- Esta función es security definer y hace, en UNA transacción, las cuatro
+-- comprobaciones que un botón no puede garantizar:
+--
+--   1. La propuesta es de quien llama, es una arista y está pendiente
+--      (`for update`: dos clics a la vez no pasan los dos).
+--   2. La relación es de las que se pueden sugerir.
+--   3. Quien llama ve los dos nodos (`graph_nodo_visible`, la regla de siempre).
+--   4. Los dos nodos tienen la misma audiencia (`graph_misma_audiencia`, BR-012).
+--
+-- 3 y 4 devuelven un código en vez de lanzar, y dejan la propuesta `fallida`:
+-- lanzar desharía también el cambio de estado, y el botón quedaría pendiente
+-- para siempre. El trigger de tenant sigue ahí debajo como red.
+-- =============================================================================
+
+create or replace function public.graph_aceptar_arista(p_proposal uuid)
+returns text
+language plpgsql
+volatile
+security definer
+set search_path = public
+set row_security = off
+as $fn$
+declare
+  v_uid  uuid := auth.uid();
+  v_p    public.coach_proposals%rowtype;
+  v_rel  text;
+  v_src  public.graph_nodes%rowtype;
+  v_dst  public.graph_nodes%rowtype;
+  v_ws   uuid[];
+  v_proj uuid[];
+  v_conf numeric;
+begin
+  if v_uid is null then
+    raise exception 'Hay que iniciar sesión.' using errcode = '42501';
+  end if;
+
+  select * into v_p
+  from public.coach_proposals
+  where id = p_proposal and user_id = v_uid and tipo = 'arista' and status = 'pending'
+  for update;
+
+  if v_p.id is null then
+    raise exception 'Esa propuesta ya no está o ya se resolvió.' using errcode = 'P0002';
+  end if;
+
+  v_rel := v_p.payload ->> 'rel';
+  if v_rel is null or v_rel not in ('supports', 'related_to', 'duplicates') then
+    raise exception 'Esa relación no se puede proponer.' using errcode = '22023';
+  end if;
+
+  select * into v_src from public.graph_nodes
+   where entity_id = (v_p.payload ->> 'source')::uuid and archived_at is null;
+  select * into v_dst from public.graph_nodes
+   where entity_id = (v_p.payload ->> 'target')::uuid and archived_at is null;
+
+  v_ws   := public.graph_acceso_espacios_de(v_uid);
+  v_proj := public.graph_acceso_proyectos_de(v_uid);
+
+  if v_src.id is null or v_dst.id is null
+     or not public.graph_nodo_visible(v_src.scope, v_src.user_id, v_src.workspace_id, v_src.project_id, v_uid, v_ws, v_proj)
+     or not public.graph_nodo_visible(v_dst.scope, v_dst.user_id, v_dst.workspace_id, v_dst.project_id, v_uid, v_ws, v_proj)
+  then
+    update public.coach_proposals set status = 'fallida', resolved_at = now() where id = v_p.id;
+    return 'no_visible';
+  end if;
+
+  if not public.graph_misma_audiencia(v_src, v_dst) then
+    update public.coach_proposals set status = 'fallida', resolved_at = now() where id = v_p.id;
+    return 'frontera';
+  end if;
+
+  v_conf := least(greatest(coalesce(nullif(v_p.payload ->> 'confianza', '')::numeric, 0.6), 0), 1);
+
+  insert into public.graph_edges (source_id, rel_type, target_id, origin, created_by, confidence)
+  values (v_src.id, v_rel, v_dst.id, 'ai', v_uid, v_conf)
+  on conflict (source_id, rel_type, target_id) do nothing;
+
+  update public.coach_proposals set status = 'accepted', resolved_at = now() where id = v_p.id;
+  return 'creada';
+end;
+$fn$;
+
+revoke all on function public.graph_aceptar_arista(uuid) from public, anon;
+grant execute on function public.graph_aceptar_arista(uuid) to authenticated;
+
+comment on function public.graph_aceptar_arista(uuid) is
+  'Convierte una propuesta de arista PENDIENTE y PROPIA en una arista origin = ai. La única puerta de ai: graph_edges_insert sigue admitiendo solo user. Devuelve creada | frontera | no_visible. Ver 0062.';
