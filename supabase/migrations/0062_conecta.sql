@@ -350,3 +350,110 @@ grant execute on function public.graph_aceptar_arista(uuid) to authenticated;
 
 comment on function public.graph_aceptar_arista(uuid) is
   'Convierte una propuesta de arista PENDIENTE y PROPIA en una arista origin = ai. La única puerta de ai: graph_edges_insert sigue admitiendo solo user. Devuelve creada | frontera | no_visible. Ver 0062.';
+
+
+-- =============================================================================
+-- 5) LOS DETECTORES: EL AGENTE `graph_suggestions` QUE 0054 DEJÓ ESCRITO
+--
+-- Deterministas y baratos. El modelo NO busca conexiones: elige entre las que
+-- esto encontró. Dos patrones, y los dos acotados:
+--
+--   · sin_meta: lo tuyo que no apoya nada (hábitos, y proyectos de TU espacio
+--     personal —los únicos que BR-012 deja unir a una meta—) × tus metas
+--     activas. Producto cruzado de 10 × 10 como mucho; decidir cuál con cuál
+--     es trabajo de lenguaje, y ese sí es del modelo.
+--   · posible_duplicado: tareas abiertas del mismo proyecto visible con nombres
+--     casi iguales (trigramas > 0,8). No necesita modelo.
+--
+-- Una tarea «abierta» es la que no está Completed ni Cancelled, leído del
+-- `metadata` del nodo, que ya lo lleva desde 0054.
+-- =============================================================================
+
+create or replace function public.graph_detectar_de(p_uid uuid)
+returns table (
+  patron text,
+  source_entity_id uuid, source_label text, source_table text,
+  target_entity_id uuid, target_label text, target_table text,
+  rel_type text, similitud real
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+set row_security = off
+set statement_timeout = '5s'
+as $fn$
+#variable_conflict use_column
+declare
+  v_ws         uuid[];
+  v_proj       uuid[];
+  v_personales uuid[];
+begin
+  if p_uid is null then
+    raise exception 'Hace falta un usuario.' using errcode = '42501';
+  end if;
+
+  v_ws   := public.graph_acceso_espacios_de(p_uid);
+  v_proj := public.graph_acceso_proyectos_de(p_uid);
+  select coalesce(array_agg(w.id), '{}') into v_personales
+  from public.workspaces w
+  where w.owner_id = p_uid and w.is_personal;
+
+  return query
+  with metas as (
+    select n.entity_id, n.label, n.entity_table
+    from public.graph_nodes n
+    join public.personal_goals g on g.id = n.entity_id
+    where n.node_type = 'goal' and n.scope = 'user' and n.user_id = p_uid
+      and n.archived_at is null and g.status = 'Activa'
+    order by n.updated_at desc
+    limit 10
+  ),
+  sueltos as (
+    select n.entity_id, n.label, n.entity_table
+    from public.graph_nodes n
+    where n.archived_at is null
+      and ((n.node_type = 'habit' and n.scope = 'user' and n.user_id = p_uid)
+        or (n.node_type = 'project' and n.scope = 'workspace' and n.workspace_id = any (v_personales)))
+      and not exists (
+        select 1 from public.graph_edges e
+        where e.source_id = n.id and e.rel_type = 'supports'
+      )
+    order by n.updated_at desc
+    limit 10
+  ),
+  duplicados as (
+    select a.entity_id as a_id, a.label as a_label, b.entity_id as b_id, b.label as b_label,
+           extensions.similarity(a.label, b.label) as sim
+    from public.graph_nodes a
+    join public.graph_nodes b
+      on b.project_id = a.project_id and b.node_type = 'task' and a.id < b.id
+    where a.node_type = 'task'
+      and a.archived_at is null and b.archived_at is null
+      and coalesce(a.metadata ->> 'status', '') not in ('Completed', 'Cancelled')
+      and coalesce(b.metadata ->> 'status', '') not in ('Completed', 'Cancelled')
+      and public.graph_nodo_visible(a.scope, a.user_id, a.workspace_id, a.project_id, p_uid, v_ws, v_proj)
+      and extensions.similarity(a.label, b.label) > 0.8
+      and not exists (
+        select 1 from public.graph_edges e
+        where e.rel_type = 'duplicates'
+          and ((e.source_id = a.id and e.target_id = b.id) or (e.source_id = b.id and e.target_id = a.id))
+      )
+    order by sim desc
+    limit 10
+  )
+  select 'sin_meta'::text, s.entity_id, s.label, s.entity_table,
+         m.entity_id, m.label, m.entity_table, 'supports'::text, null::real
+  from sueltos s cross join metas m
+  union all
+  select 'posible_duplicado'::text, d.a_id, d.a_label, 'tasks'::text,
+         d.b_id, d.b_label, 'tasks'::text, 'duplicates'::text, d.sim
+  from duplicados d;
+end;
+$fn$;
+
+revoke all on function public.graph_detectar_de(uuid) from public, anon, authenticated;
+grant execute on function public.graph_detectar_de(uuid) to service_role;
+
+comment on function public.graph_detectar_de(uuid) is
+  'Candidatas de arista para un usuario: sin_meta (hábitos y proyectos personales sueltos × metas activas) y posible_duplicado (tareas abiertas casi iguales). Solo service_role. El modelo elige entre estas; nunca inventa. Ver 0062.';

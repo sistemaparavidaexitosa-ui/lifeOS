@@ -26,7 +26,7 @@ import { upsertPersonalGoal } from "@/app/(app)/development/goals/actions";
 
 export interface CoachProposalRow {
   id: string;
-  messageId: string;
+  messageId: string | null;
   tipo: string;
   titulo: string;
   detalle: string;

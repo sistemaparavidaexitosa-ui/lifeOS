@@ -546,8 +546,11 @@ export type Database = {
         Row: {
           created_at: string
           detalle: string
+          fact_ids: string[]
+          fingerprint: string | null
           id: string
-          message_id: string
+          message_id: string | null
+          origen: string
           payload: Json
           resolved_at: string | null
           status: string
@@ -558,8 +561,11 @@ export type Database = {
         Insert: {
           created_at?: string
           detalle?: string
+          fact_ids?: string[]
+          fingerprint?: string | null
           id?: string
-          message_id: string
+          message_id?: string | null
+          origen?: string
           payload?: Json
           resolved_at?: string | null
           status?: string
@@ -570,8 +576,11 @@ export type Database = {
         Update: {
           created_at?: string
           detalle?: string
+          fact_ids?: string[]
+          fingerprint?: string | null
           id?: string
-          message_id?: string
+          message_id?: string | null
+          origen?: string
           payload?: Json
           resolved_at?: string | null
           status?: string
@@ -3108,7 +3117,10 @@ export type Database = {
         Returns: string
       }
       graph_acceso_espacios: { Args: never; Returns: string[] }
+      graph_acceso_espacios_de: { Args: { p_uid: string }; Returns: string[] }
       graph_acceso_proyectos: { Args: never; Returns: string[] }
+      graph_acceso_proyectos_de: { Args: { p_uid: string }; Returns: string[] }
+      graph_aceptar_arista: { Args: { p_proposal: string }; Returns: string }
       graph_all: {
         Args: { p_limit?: number; p_node_types?: string[]; p_scope?: string }
         Returns: {
@@ -3131,6 +3143,34 @@ export type Database = {
         Args: { p_entity_table: string }
         Returns: number
       }
+      graph_cadenas: {
+        Args: { p_entity_ids: string[]; p_max_depth?: number }
+        Returns: {
+          depth: number
+          entity_id: string
+          entity_table: string
+          label: string
+          node_id: string
+          node_type: string
+          parent_id: string
+          root_entity_id: string
+          via_rel: string
+        }[]
+      }
+      graph_cadenas_de: {
+        Args: { p_entity_ids: string[]; p_max_depth?: number; p_uid: string }
+        Returns: {
+          depth: number
+          entity_id: string
+          entity_table: string
+          label: string
+          node_id: string
+          node_type: string
+          parent_id: string
+          root_entity_id: string
+          via_rel: string
+        }[]
+      }
       graph_check_integrity: {
         Args: never
         Returns: {
@@ -3138,6 +3178,20 @@ export type Database = {
           rel_type: string
           source_id: string
           target_id: string
+        }[]
+      }
+      graph_detectar_de: {
+        Args: { p_uid: string }
+        Returns: {
+          patron: string
+          rel_type: string
+          similitud: number
+          source_entity_id: string
+          source_label: string
+          source_table: string
+          target_entity_id: string
+          target_label: string
+          target_table: string
         }[]
       }
       graph_edges_ddl: { Args: { p_source_table: string }; Returns: string }
@@ -3937,12 +3991,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3966,11 +4020,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3991,11 +4045,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -4016,11 +4070,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -4033,11 +4087,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
