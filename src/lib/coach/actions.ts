@@ -114,13 +114,24 @@ async function aceptarArista(
   userId: string,
   id: string,
   p: PropuestaSaneada
-): Promise<ActionResult> {
+): Promise<ActionResult & { resuelta?: boolean }> {
   const { data, error } = await supabase.rpc("graph_aceptar_arista", { p_proposal: id });
   if (error) return actionFailed(error);
+  // `frontera` y `no_visible` dejan la propuesta en `fallida` DENTRO de
+  // `graph_aceptar_arista` (0062): la fila ya no está pendiente en la base,
+  // así que `resuelta: true` le dice al rail que la retire de la lista aunque
+  // la respuesta no sea `ok` — sin esto, el botón sigue ahí para una propuesta
+  // que un segundo clic solo puede volver a fallar igual.
   if (data === "frontera") {
-    return { ok: false, reason: "No se puede: uno de los dos es tuyo y el otro vive en un espacio compartido." };
+    return {
+      ok: false,
+      resuelta: true,
+      reason: "No se puede: uno de los dos es tuyo y el otro vive en un espacio compartido."
+    };
   }
-  if (data === "no_visible") return { ok: false, reason: "Uno de los dos ya no existe o ya no lo ves." };
+  if (data === "no_visible") {
+    return { ok: false, resuelta: true, reason: "Uno de los dos ya no existe o ya no lo ves." };
+  }
 
   await supabase.from("audit_log").insert({
     user_id: userId,
@@ -133,7 +144,10 @@ async function aceptarArista(
   return actionOk;
 }
 
-export async function acceptProposal(id: string, workspaceId: string | null): Promise<ActionResult & { href?: string }> {
+export async function acceptProposal(
+  id: string,
+  workspaceId: string | null
+): Promise<ActionResult & { href?: string; resuelta?: boolean }> {
   const parsed = z.string().uuid().safeParse(id);
   if (!parsed.success) return { ok: false, reason: "Esa propuesta no existe." };
 
@@ -217,11 +231,15 @@ export async function dismissProposal(id: string): Promise<ActionResult> {
   if (!parsed.success) return { ok: false, reason: "Esa propuesta no existe." };
 
   const { supabase, user } = await requireUser();
+  // Solo desde `pending` o `fallida`: sin este filtro, una pestaña vieja podía
+  // descartar una propuesta que otra pestaña acaba de aceptar (`accepted`) o
+  // que `acceptProposal` tiene reclamada en `aplicando` a mitad de escribir.
   const { error } = await supabase
     .from("coach_proposals")
     .update({ status: "dismissed", resolved_at: new Date().toISOString() })
     .eq("id", parsed.data)
-    .eq("user_id", user.id);
+    .eq("user_id", user.id)
+    .in("status", ["pending", "fallida"]);
   if (error) return actionFailed(error);
 
   revalidatePath("/home");

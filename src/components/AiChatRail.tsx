@@ -173,6 +173,12 @@ export default function AiChatRail({
       const result = await acceptProposal(p.id, workspaceId);
       if (!result.ok) {
         setError(result.reason ?? "No se pudo crear.");
+        // `resuelta` significa que la propuesta ya quedó `fallida` en la base
+        // (la frontera o un nodo que ya no se ve, ver `graph_aceptar_arista`):
+        // la tarjeta se retira igual que si se hubiera aceptado, porque un
+        // segundo clic solo puede volver a fallar por lo mismo. La razón se
+        // enseña igual, con el aviso de error de arriba.
+        if (result.resuelta) setPropuestas((prev) => prev.filter((x) => x.id !== p.id));
         return;
       }
       setPropuestas((prev) => prev.filter((x) => x.id !== p.id));
