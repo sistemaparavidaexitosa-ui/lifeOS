@@ -55,6 +55,20 @@ export function candidatosAutorizados(
   return candidatos.filter((c) => ok(c.sourceTable) && ok(c.targetTable));
 }
 
+/**
+ * Lo que ya se propuso —pendiente, aceptado, fallido o descartado— no vuelve a
+ * ocupar un slot del día ni a costarle una llamada al modelo a `elegirMetas`.
+ * `huellasExistentes` sale de `coach_proposals` (huellas con el prefijo
+ * `arista:`), leídas UNA vez por usuario antes de agrupar ni de llamar al
+ * modelo: es justo lo que evita repetir el trabajo, no solo el resultado.
+ */
+export function sinPropuestasPrevias(
+  candidatos: readonly Candidato[],
+  huellasExistentes: ReadonlySet<string>
+): Candidato[] {
+  return candidatos.filter((c) => !huellasExistentes.has(huellaArista(c.relType, c.sourceEntityId, c.targetEntityId)));
+}
+
 export function agruparSinMeta(candidatos: readonly Candidato[]): { sueltos: Item[]; metas: Item[] } {
   const sueltos = new Map<string, Item>();
   const metas = new Map<string, Item>();

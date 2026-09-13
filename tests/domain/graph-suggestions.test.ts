@@ -5,7 +5,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  agruparSinMeta, candidatosAutorizados, huellaArista, propuestaDeArista, validarElegidas, type Candidato
+  agruparSinMeta, candidatosAutorizados, huellaArista, propuestaDeArista, sinPropuestasPrevias, validarElegidas,
+  type Candidato
 } from "../../src/lib/domain/graph/suggestions.ts";
 import type { Domain } from "../../src/lib/domain/insights/types.ts";
 
@@ -52,6 +53,16 @@ test("validarElegidas: descarta índices fuera de rango, repetidos y lo que sobr
   ]);
   assert.equal(validarElegidas(bruto, 2, 1, 1).length, 1);
   assert.deepStrictEqual(validarElegidas("basura", 2, 1), []);
+});
+
+test("sinPropuestasPrevias: lo que ya tiene huella en la cola no vuelve a salir", () => {
+  const huellas = new Set([huellaArista("supports", H, G)]);
+  assert.deepStrictEqual(sinPropuestasPrevias([habitoMeta, proyectoMeta, duplicado], huellas), [proyectoMeta, duplicado]);
+  // Simétrica: la huella guardada en un orden apaga la candidata en el otro.
+  const huellasSimetricas = new Set([huellaArista("duplicates", T2, T1)]);
+  assert.deepStrictEqual(sinPropuestasPrevias([duplicado], huellasSimetricas), []);
+  // Sin huellas previas, nada se descarta.
+  assert.deepStrictEqual(sinPropuestasPrevias([habitoMeta, duplicado], new Set()), [habitoMeta, duplicado]);
 });
 
 test("propuestaDeArista: produce una propuesta ya saneada, lista para la cola", () => {

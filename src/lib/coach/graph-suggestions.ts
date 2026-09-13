@@ -4,7 +4,8 @@ import type { createAdminClient } from "@/lib/supabase/admin";
 import { dominioDeTabla } from "@/lib/insights/context";
 import { elegirMetas } from "@/lib/ai/suggest-edges";
 import {
-  agruparSinMeta, candidatosAutorizados, huellaArista, propuestaDeArista, MAX_ARISTAS_POR_DIA, type Candidato
+  agruparSinMeta, candidatosAutorizados, huellaArista, propuestaDeArista, sinPropuestasPrevias,
+  MAX_ARISTAS_POR_DIA, type Candidato
 } from "@/lib/domain/graph/suggestions.ts";
 import type { Domain } from "@/lib/domain/insights/types.ts";
 
@@ -18,13 +19,23 @@ type Admin = ReturnType<typeof createAdminClient>;
  * modelo pasa antes por `candidatosAutorizados`: un hábito no viaja si el
  * usuario apagó Hábitos, aunque el detector lo haya encontrado.
  *
- * `upsert` con `ignoreDuplicates` sobre `(user_id, fingerprint)`: lo que ya se
- * propuso —aceptado, pendiente o descartado— no vuelve.
+ * LO QUE YA SE PROPUSO NO VUELVE, Y NO LE CUESTA UNA LLAMADA AL MODELO.
+ * `graph_detectar_de` redescubre cada mañana los mismos pares mientras sigan
+ * dándose las condiciones (el hábito sigue sin meta, las tareas siguen
+ * pareciéndose): sin filtrarlos ANTES de agrupar y de llamar a `elegirMetas`,
+ * ocupaban los `MAX_ARISTAS_POR_DIA` slots con basura ya vista y encima
+ * pagaban una llamada al modelo por nada, porque el `upsert` de abajo las iba
+ * a descartar igual. `sinPropuestasPrevias` (dominio puro) los saca con las
+ * huellas ya en `coach_proposals` —cualquier estado, no solo `pending`—, leídas
+ * una vez por pasada.
+ *
+ * El `upsert` con `ignoreDuplicates` sobre `(user_id, fingerprint)` se queda
+ * como red de seguridad para la carrera entre leer las huellas y escribir.
  *
  * NUNCA LANZA. Devuelve cuántas entraron en la cola DE VERDAD: con
  * `ignoreDuplicates`, PostgREST solo devuelve en `.select()` las filas que
- * insertó, así que las que ya existían de un día anterior no cuentan aquí ni
- * en el `audit_log` que las registra.
+ * insertó, así que las que ya existían no cuentan aquí ni en el `audit_log`
+ * que las registra.
  */
 export async function proponerAristas(entrada: {
   supabase: Admin;
@@ -36,7 +47,7 @@ export async function proponerAristas(entrada: {
     const { data, error } = await supabase.rpc("graph_detectar_de", { p_uid: userId });
     if (error || !data?.length) return 0;
 
-    const candidatos = candidatosAutorizados(
+    const autorizadas = candidatosAutorizados(
       data.map(
         (r): Candidato => ({
           patron: r.patron as Candidato["patron"],
@@ -54,22 +65,39 @@ export async function proponerAristas(entrada: {
       dominioDeTabla
     );
 
+    // Las huellas ya en la cola, en cualquier estado: lo que ya se propuso no
+    // vuelve a ocupar un slot ni a pagar la llamada al modelo de más abajo.
+    const { data: existentes } = await supabase
+      .from("coach_proposals")
+      .select("fingerprint")
+      .eq("user_id", userId)
+      .like("fingerprint", "arista:%");
+    const huellasExistentes = new Set(
+      (existentes ?? []).map((e) => e.fingerprint).filter((f): f is string => f !== null)
+    );
+    const candidatos = sinPropuestasPrevias(autorizadas, huellasExistentes);
+
     const duplicados = candidatos
       .filter((c) => c.patron === "posible_duplicado")
       .map((c) => ({ c, p: propuestaDeArista(c, "Tienen casi el mismo nombre en el mismo proyecto.") }));
 
-    const sinMeta = candidatos.filter((c) => c.patron === "sin_meta");
-    const { sueltos, metas } = agruparSinMeta(sinMeta);
-    const elegidas = await elegirMetas({ sueltos, metas });
-    const emparejadas = elegidas
-      .map((e) => {
-        const suelto = sueltos[e.suelto];
-        const meta = metas[e.meta];
-        if (!suelto || !meta) return null;
-        const c = sinMeta.find((x) => x.sourceEntityId === suelto.entityId && x.targetEntityId === meta.entityId);
-        return c ? { c, p: propuestaDeArista(c, e.porque) } : null;
-      })
-      .filter((x): x is { c: Candidato; p: ReturnType<typeof propuestaDeArista> } => x !== null);
+    // Si los duplicados nuevos ya llenan el cupo del día, ni vale la pena
+    // agrupar `sin_meta` ni llamar al modelo: nada de lo que elija cabría.
+    let emparejadas: { c: Candidato; p: ReturnType<typeof propuestaDeArista> }[] = [];
+    if (duplicados.length < MAX_ARISTAS_POR_DIA) {
+      const sinMeta = candidatos.filter((c) => c.patron === "sin_meta");
+      const { sueltos, metas } = agruparSinMeta(sinMeta);
+      const elegidas = await elegirMetas({ sueltos, metas });
+      emparejadas = elegidas
+        .map((e) => {
+          const suelto = sueltos[e.suelto];
+          const meta = metas[e.meta];
+          if (!suelto || !meta) return null;
+          const c = sinMeta.find((x) => x.sourceEntityId === suelto.entityId && x.targetEntityId === meta.entityId);
+          return c ? { c, p: propuestaDeArista(c, e.porque) } : null;
+        })
+        .filter((x): x is { c: Candidato; p: ReturnType<typeof propuestaDeArista> } => x !== null);
+    }
 
     const filas = [...duplicados, ...emparejadas]
       .filter((x) => x.p !== null)
