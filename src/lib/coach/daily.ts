@@ -11,6 +11,7 @@ import type { Domain } from "@/lib/domain/insights/types.ts";
 import type { MemoryItemLike, MemoryScope } from "@/lib/domain/insights/memory.ts";
 import { generarMensajeCoach } from "./generar";
 import { overridesDelCoach } from "./facts";
+import { proponerAristas } from "./graph-suggestions";
 
 /**
  * UN MENSAJE DIARIO, DE PRINCIPIO A FIN.
@@ -139,6 +140,11 @@ export async function generarYGuardarMensajeDiario(entrada: EntradaCoach): Promi
     );
   }
 
+  // Por la mañana y solo entonces: una vez al día basta para no llenar el rail.
+  // Va DESPUÉS de guardar el turno, igual que las propuestas del coach: si el
+  // mensaje no se guardó, ya se salió arriba y no llega aquí.
+  const aristas = momento === "morning" ? await proponerAristas({ supabase, userId, autorizados: permitidos }) : 0;
+
   // El rastro, con lo mismo que registra un turno de chat más el momento. Sin
   // él, «el coach no me escribió» y «el coach escribió y el push no salió» se
   // ven igual desde fuera.
@@ -150,6 +156,7 @@ export async function generarYGuardarMensajeDiario(entrada: EntradaCoach): Promi
       domains: context.domains,
       facts: context.facts.length,
       propuestas: propuestas.length,
+      aristas,
       busquedas: caja.busquedas(),
       dedupeKey: claveDelCoach(momento, today)
     }
