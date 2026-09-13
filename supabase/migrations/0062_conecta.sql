@@ -113,13 +113,22 @@ comment on function public.graph_acceso_proyectos_de(uuid) is
 -- error que confirme que existe.
 -- =============================================================================
 
+-- `root_label` es columna nueva en un `RETURNS TABLE`: hace falta soltar la
+-- función antes de poder recrearla con otra firma (`create or replace` no
+-- puede cambiar las columnas de salida). Sin esto, una cadena que cita varias
+-- tareas por el mismo hecho (`facts/chains.ts`) solo tenía el nombre del HECHO
+-- para las tres, y una cadena de la tarea T2 en el proyecto Q se leía como si
+-- T1 —la que nombraba el hecho— estuviera bajo Q.
+drop function if exists public.graph_cadenas_de(uuid, uuid[], integer);
+drop function if exists public.graph_cadenas(uuid[], integer);
+
 create or replace function public.graph_cadenas_de(
   p_uid        uuid,
   p_entity_ids uuid[],
   p_max_depth  integer default 4
 )
 returns table (
-  root_entity_id uuid, node_id uuid, parent_id uuid, via_rel text, depth integer,
+  root_entity_id uuid, root_label text, node_id uuid, parent_id uuid, via_rel text, depth integer,
   label text, node_type text, entity_table text, entity_id uuid
 )
 language plpgsql
@@ -148,18 +157,18 @@ begin
 
   return query
   with recursive raices as (
-    select n.id, n.entity_id
+    select n.id, n.entity_id, n.label
     from public.graph_nodes n
     where n.entity_id = any (v_ids)
       and n.archived_at is null
       and public.graph_nodo_visible(n.scope, n.user_id, n.workspace_id, n.project_id,
                                     p_uid, v_ws, v_proj)
   ),
-  camino (root_entity_id, node_id, parent_id, via_rel, depth, visitados) as (
-    select r.entity_id, r.id, null::uuid, null::text, 0, array[r.id]
+  camino (root_entity_id, root_label, node_id, parent_id, via_rel, depth, visitados) as (
+    select r.entity_id, r.label, r.id, null::uuid, null::text, 0, array[r.id]
     from raices r
     union all
-    select c.root_entity_id, n.id, c.node_id, e.rel_type, c.depth + 1, c.visitados || n.id
+    select c.root_entity_id, c.root_label, n.id, c.node_id, e.rel_type, c.depth + 1, c.visitados || n.id
     from camino c
     join public.graph_edges e
       on e.source_id = c.node_id
@@ -172,7 +181,7 @@ begin
       and public.graph_nodo_visible(n.scope, n.user_id, n.workspace_id, n.project_id,
                                     p_uid, v_ws, v_proj)
   )
-  select c.root_entity_id, c.node_id, c.parent_id, c.via_rel, c.depth,
+  select c.root_entity_id, c.root_label, c.node_id, c.parent_id, c.via_rel, c.depth,
          n.label, n.node_type, n.entity_table, n.entity_id
   from camino c
   join public.graph_nodes n on n.id = c.node_id
@@ -186,7 +195,7 @@ create or replace function public.graph_cadenas(
   p_max_depth  integer default 4
 )
 returns table (
-  root_entity_id uuid, node_id uuid, parent_id uuid, via_rel text, depth integer,
+  root_entity_id uuid, root_label text, node_id uuid, parent_id uuid, via_rel text, depth integer,
   label text, node_type text, entity_table text, entity_id uuid
 )
 language plpgsql
@@ -433,6 +442,12 @@ begin
       and coalesce(a.metadata ->> 'status', '') not in ('Completed', 'Cancelled')
       and coalesce(b.metadata ->> 'status', '') not in ('Completed', 'Cancelled')
       and public.graph_nodo_visible(a.scope, a.user_id, a.workspace_id, a.project_id, p_uid, v_ws, v_proj)
+      -- Mismo `project_id` en el join no basta de red: sin este segundo
+      -- chequeo, un `b` visible solo por casualidad de datos (o si el join de
+      -- arriba cambia algún día) se coló con la sola comprobación de `a`.
+      -- Barata porque `b.project_id = a.project_id` ya visible por `a` casi
+      -- siempre implica lo mismo para `b`; aquí solo por si no.
+      and public.graph_nodo_visible(b.scope, b.user_id, b.workspace_id, b.project_id, p_uid, v_ws, v_proj)
       and extensions.similarity(a.label, b.label) > 0.8
       and not exists (
         select 1 from public.graph_edges e
@@ -457,3 +472,87 @@ grant execute on function public.graph_detectar_de(uuid) to service_role;
 
 comment on function public.graph_detectar_de(uuid) is
   'Candidatas de arista para un usuario: sin_meta (hábitos y proyectos personales sueltos × metas activas) y posible_duplicado (tareas abiertas casi iguales). Solo service_role. El modelo elige entre estas; nunca inventa. Ver 0062.';
+
+
+-- =============================================================================
+-- CÓMO SE REVIERTE
+--
+-- DESPLIEGUE: esta migración va ANTES que el código que la usa, nunca después.
+-- `acceptProposal` reclama una arista con `status = 'aplicando'`, y ese estado
+-- no existe en el CHECK de antes de 0062: si el código llega primero, cada
+-- intento de aceptar CUALQUIER propuesta —no solo aristas— revienta el CHECK,
+-- la transacción se deshace entera y el usuario ve «esa propuesta ya se
+-- resolvió» sin que se haya resuelto nada. Ver la entrada de Fase C en
+-- `docs/CHECKS.md`.
+--
+-- REVERTIR, en este orden — hay datos de por medio y el orden importa:
+--
+--   1) `coach_proposals`: primero las filas que el `origen`/estado de 0062
+--      dejarían huérfanas o inválidas para el CHECK viejo.
+--        delete from public.coach_proposals where tipo = 'arista';
+--        delete from public.coach_proposals where status in ('aplicando', 'fallida');
+--        -- Lo que quede con message_id nulo (origen 'grafo' o 'mision', que
+--        -- 0062 dejó existir sin turno) no pasaría el NOT NULL de más abajo:
+--        delete from public.coach_proposals where message_id is null;
+--
+--   2) Los CHECK y el NOT NULL de antes de 0062:
+--        alter table public.coach_proposals drop constraint if exists coach_proposals_tipo_check;
+--        alter table public.coach_proposals add constraint coach_proposals_tipo_check
+--          check (tipo in ('tarea', 'bloque', 'rutina', 'estructura', 'meta'));
+--        alter table public.coach_proposals drop constraint if exists coach_proposals_status_check;
+--        alter table public.coach_proposals add constraint coach_proposals_status_check
+--          check (status in ('pending', 'accepted', 'dismissed'));
+--        alter table public.coach_proposals alter column message_id set not null;
+--
+--   3) Índice, constraints y columnas nuevas, y las funciones de este archivo:
+--        drop index if exists public.idx_coach_proposals_fingerprint;
+--        alter table public.coach_proposals drop constraint if exists coach_proposals_coach_con_mensaje;
+--        alter table public.coach_proposals drop constraint if exists coach_proposals_origen_check;
+--        alter table public.coach_proposals drop column if exists fingerprint;
+--        alter table public.coach_proposals drop column if exists fact_ids;
+--        alter table public.coach_proposals drop column if exists origen;
+--        drop function if exists public.graph_detectar_de(uuid);
+--        drop function if exists public.graph_aceptar_arista(uuid);
+--        drop function if exists public.graph_cadenas(uuid[], integer);
+--        drop function if exists public.graph_cadenas_de(uuid, uuid[], integer);
+--
+--   4) Las variantes por uid del precómputo de permiso NO tienen antes: 0059
+--      ya las dejó sin argumento y esta migración solo les puso una copia por
+--      uid delante. Basta con devolver las de siempre a llevar la condición
+--      ellas mismas — el cuerpo literal de 0059 §1 — y soltar las `_de`:
+--        create or replace function public.graph_acceso_espacios()
+--        returns uuid[] language sql stable security definer
+--        set search_path = public set row_security = off
+--        as $$
+--          select coalesce(array_agg(distinct w.id), '{}')
+--          from public.workspaces w
+--          where auth.uid() is not null
+--            and (w.owner_id = auth.uid()
+--              or exists (
+--                select 1 from public.memberships m
+--                where m.workspace_id = w.id and m.user_id = auth.uid()
+--                  and m.status = 'Active' and m.role <> 'Guest'
+--              ));
+--        $$;
+--        create or replace function public.graph_acceso_proyectos()
+--        returns uuid[] language sql stable security definer
+--        set search_path = public set row_security = off
+--        as $$
+--          select coalesce(array_agg(distinct ps.project_id), '{}')
+--          from public.project_shares ps
+--          join public.memberships m
+--            on m.workspace_id = ps.workspace_id and m.user_id = auth.uid()
+--           and m.status = 'Active' and m.role = 'Guest';
+--        $$;
+--        drop function if exists public.graph_acceso_espacios_de(uuid);
+--        drop function if exists public.graph_acceso_proyectos_de(uuid);
+--
+--   5) Las aristas `origin = 'ai'` que `graph_aceptar_arista` haya creado: son
+--      válidas bajo la política de 0054 (que solo exige `user`) — la política
+--      nunca admitió escribir `ai` desde el cliente, y esta función tampoco
+--      existe ya tras el paso 3 — así que DEJARLAS es seguro. Si se prefiere
+--      borrarlas por higiene, es una decisión de producto, no de integridad:
+--        -- delete from public.graph_edges where origin = 'ai';
+--
+-- Y regenerar `catalog.generated.ts` y `src/types/database.types.ts`.
+-- =============================================================================

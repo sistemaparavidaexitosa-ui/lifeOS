@@ -9,11 +9,22 @@
 // LA REGLA DE PRIVACIDAD DE ESTE ARCHIVO: una cadena atraviesa tablas de varios
 // dominios, y sale solo si TODOS están autorizados. Una tabla sin dominio en la
 // lista blanca corta la cadena: no se adivina.
+//
+// POR QUÉ SE FUNDE POR (HECHO, META): un hecho como `execution.overdue` puede
+// citar varias tareas a la vez, y el `label` del hecho nombra la situación, no
+// una tarea en concreto. Antes, cada raíz producía SU cadena con el mismo
+// `hecho.label`, así que la cadena de la tarea T2 —en el proyecto Q— se leía
+// como si T1, la que de hecho nombra el `label`, viviera en Q. Ahora cada
+// cadena nombra su propia raíz con `nombrarRaiz`, y las raíces que llegan al
+// mismo hecho y a la misma meta se funden en UN hecho de cadena, no uno por
+// raíz casi idéntico.
 
 import { clampWeight, type Domain, type Fact } from "../types.ts";
 
 export interface FilaCadena {
   rootEntityId: string;
+  /** El nombre de la raíz, no el de un nodo intermedio. Ver `nombrarRaiz`. */
+  rootLabel: string;
   nodeId: string;
   parentId: string | null;
   viaRel: string;
@@ -60,6 +71,26 @@ export interface EntradaCadenas {
   dominioDeTabla: (tabla: string) => Domain | null;
 }
 
+/** Cuántas raíces como mucho se nombran en el `label` de una cadena fundida. */
+const MAX_RAICES_EN_LABEL = 3;
+
+/** El nombre de una raíz, con SU propio camino — nunca el de otra raíz del mismo grupo. */
+function nombrarRaiz(rootLabel: string, camino: readonly FilaCadena[]): string {
+  const intermedios = camino.slice(0, -1).map((paso) => `«${paso.label}»`);
+  return intermedios.length ? `«${rootLabel}» (vía ${intermedios.join(" → ")})` : `«${rootLabel}»`;
+}
+
+interface Alcance {
+  hecho: Fact;
+  domain: Domain;
+  metaEntityId: string;
+  metaLabel: string;
+  raiz: string;
+  rootLabel: string;
+  camino: FilaCadena[];
+  weight: number;
+}
+
 export function chainFacts(entrada: EntradaCadenas): Fact[] {
   const { facts, filas, autorizados, dominioDeTabla } = entrada;
 
@@ -81,11 +112,15 @@ export function chainFacts(entrada: EntradaCadenas): Fact[] {
     porRaiz.set(fila.rootEntityId, nodos);
   }
 
-  const salida: Fact[] = [];
   const autorizado = (tabla: string) => {
     const d = dominioDeTabla(tabla);
     return d !== null && autorizados.includes(d) ? d : null;
   };
+
+  // Un alcance por (raíz, meta) — TODAVÍA sin fundir. La fusión es el paso de
+  // abajo, y depende de qué hecho sostiene cada raíz, así que primero hace
+  // falta calcularlos todos.
+  const alcances: Alcance[] = [];
 
   for (const [raiz, nodos] of porRaiz) {
     const hecho = hechoDeRaiz.get(raiz);
@@ -105,20 +140,64 @@ export function chainFacts(entrada: EntradaCadenas): Fact[] {
       const dominioMeta = autorizado(meta.entityTable);
       if (!dominioMeta || camino.some((paso) => autorizado(paso.entityTable) === null)) continue;
 
-      const intermedios = camino.slice(0, -1).map((paso) => `«${paso.label}»`);
-      const via = intermedios.length ? ` a través de ${intermedios.join(" → ")}` : " directamente";
-
-      salida.push({
-        id: `chain.${meta.entityId}.${raiz}`,
+      alcances.push({
+        hecho,
         domain: dominioMeta,
-        label: `${hecho.label} — y eso toca la meta «${meta.label}»${via}.`,
-        weight: clampWeight(hecho.weight * DECAIMIENTO ** (meta.depth - 1)),
-        refs: [
-          ...hecho.refs.filter((r) => r.id === raiz),
-          ...camino.map((paso) => ({ table: paso.entityTable, id: paso.entityId }))
-        ]
+        metaEntityId: meta.entityId,
+        metaLabel: meta.label,
+        raiz,
+        rootLabel: meta.rootLabel,
+        camino,
+        weight: clampWeight(hecho.weight * DECAIMIENTO ** (meta.depth - 1))
       });
     }
+  }
+
+  // La fusión: mismo hecho y misma meta es UNA observación, aunque la citen
+  // varias raíces. `hecho.id` y no el objeto, porque dos `Fact` con el mismo
+  // id no deberían darse, pero comparar por valor es más barato que confiar
+  // en identidad de referencia.
+  const grupos = new Map<string, Alcance[]>();
+  for (const a of alcances) {
+    const clave = `${a.hecho.id}::${a.metaEntityId}`;
+    const lista = grupos.get(clave) ?? [];
+    lista.push(a);
+    grupos.set(clave, lista);
+  }
+
+  const salida: Fact[] = [];
+  for (const grupo of grupos.values()) {
+    // Por si el mismo (raíz, meta) llegara dos veces — no debería, pero una
+    // raíz repetida en el label sería peor que una cadena de menos.
+    const porRaizUnica = new Map<string, Alcance>();
+    for (const a of grupo) if (!porRaizUnica.has(a.raiz)) porRaizUnica.set(a.raiz, a);
+    const items = [...porRaizUnica.values()];
+    // `grupos` solo tiene entradas con al menos un `Alcance` (se crean al
+    // empujar el primero), así que `items` nunca está vacío aquí.
+    const primero = items[0];
+    if (!primero) continue;
+
+    const nombres = items.slice(0, MAX_RAICES_EN_LABEL).map((a) => nombrarRaiz(a.rootLabel, a.camino));
+    const sujetos = nombres.length > 1 ? `${nombres.slice(0, -1).join(", ")} y ${nombres.at(-1)}` : nombres[0];
+    const sobran = items.length - MAX_RAICES_EN_LABEL;
+    const extra = sobran > 0 ? ` y ${sobran} más` : "";
+    const verbo = items.length > 1 ? "tocan" : "toca";
+
+    const refsCrudas = [
+      ...primero.hecho.refs.filter((r) => porRaizUnica.has(r.id)),
+      ...items.flatMap((a) => a.camino.map((paso) => ({ table: paso.entityTable, id: paso.entityId })))
+    ];
+    // La meta y los intermedios compartidos aparecen en el camino de cada
+    // raíz del grupo: sin este `Map`, saldrían tantas veces como raíces.
+    const refs = [...new Map(refsCrudas.map((r) => [`${r.table}:${r.id}`, r])).values()];
+
+    salida.push({
+      id: `chain.${primero.metaEntityId}.${primero.hecho.id}`,
+      domain: primero.domain,
+      label: `${sujetos}${extra} (${primero.hecho.label}) ${verbo} la meta «${primero.metaLabel}».`,
+      weight: Math.max(...items.map((a) => a.weight)),
+      refs
+    });
   }
 
   return salida.sort((a, b) => b.weight - a.weight).slice(0, MAX_CADENAS);

@@ -8,7 +8,7 @@
 -- que las versiones sin argumento sigan contestando lo mismo que antes.
 
 begin;
-select plan(13);
+select plan(14);
 
 insert into auth.users (id, instance_id, aud, role, email) values
   ('d1111111-1111-4111-8111-111111111111', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'cad-duena@test.local'),
@@ -120,6 +120,12 @@ select is(
     where node_type = 'goal'),
   'supports',
   'El hábito llega a la meta por supports, a profundidad 1'
+);
+select is(
+  (select root_label from public.graph_cadenas(array['d1bb0000-0000-4000-8000-000000000001'::uuid])
+    where node_type = 'goal'),
+  'Firmar el local',
+  'root_label lleva el nombre de la raíz (la tarea), no el de un nodo intermedio como el proyecto'
 );
 select is(
   (select count(*)::int from public.graph_cadenas(array['d1bb0000-0000-4000-8000-000000000001'::uuid])

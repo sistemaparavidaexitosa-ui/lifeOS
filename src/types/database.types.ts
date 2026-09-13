@@ -3154,6 +3154,7 @@ export type Database = {
           node_type: string
           parent_id: string
           root_entity_id: string
+          root_label: string
           via_rel: string
         }[]
       }
@@ -3168,6 +3169,7 @@ export type Database = {
           node_type: string
           parent_id: string
           root_entity_id: string
+          root_label: string
           via_rel: string
         }[]
       }

@@ -44,6 +44,7 @@ export async function loadChainFacts(
 
     const filas: FilaCadena[] = data.map((r) => ({
       rootEntityId: r.root_entity_id,
+      rootLabel: r.root_label,
       nodeId: r.node_id,
       parentId: r.parent_id,
       viaRel: r.via_rel,
