@@ -1491,6 +1491,18 @@ sobre la pila local de Supabase.
   alcance de esta entrada es typecheck + pruebas, por instrucción explícita de
   la tarea.
 
+### Orden de despliegue: la migración 0062 va ANTES que el código
+
+Nunca al revés. `acceptProposal` (`src/lib/coach/actions.ts`) reclama una
+propuesta poniendo `status = 'aplicando'`, y ese estado no existe en el CHECK
+de `coach_proposals` de antes de 0062. Si el código de esta fase se despliega
+antes de correr la migración, cada intento de aceptar CUALQUIER propuesta —no
+solo una arista, cualquiera— revienta el CHECK a mitad de la transacción, que
+se deshace entera, y quien pulsó el botón ve «esa propuesta ya se resolvió»
+sin que nada se haya resuelto. Ver el bloque «CÓMO SE REVIERTE» al final de
+`supabase/migrations/0062_conecta.sql` para el camino de vuelta, con el orden
+en que hay que tocar las cosas porque hay datos de por medio.
+
 ### Dos límites que se aceptaron a conciencia, no que se pasaron por alto
 
 - Una propuesta que quede en `aplicando` porque el proceso muere entre el
