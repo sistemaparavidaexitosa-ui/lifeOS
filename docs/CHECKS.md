@@ -1465,3 +1465,37 @@ No es mantenimiento cosmético: este milestone las contradijo.
 - ⚠️ **NO DESPLEGADO todavía a la nube** en el momento de escribir esto.
 - ⚠️ **NO MEDIDO: el efecto de seis triggers más.** Son tablas frías —ninguna
   se escribe como `tasks`—, pero no se ha medido.
+
+## Grafo Universal — Milestone 6: el grafo como contexto y herramienta de la IA (0062), 13-sep-2026
+
+Rama `feat/sistema-cognitivo`. Verificación corrida en la máquina del owner,
+sobre la pila local de Supabase.
+
+| Ítem | Estado | Evidencia |
+|---|---|---|
+| `supabase migration up --local` (0062) | ✅ EJECUTADO OK | `supabase migration list --local` lista `0062` aplicada |
+| `pnpm typecheck` | ✅ EJECUTADO OK | `tsc --noEmit` sin salida |
+| `pnpm test:unit` | ✅ EJECUTADO OK | **958 pruebas, 0 fallos** |
+| `pnpm db:test` | ✅ EJECUTADO OK | **Files=36, Tests=332, Result: PASS** (33 nuevas: 13 en `0033`, 11 en `0034`, 9 en `0035`) |
+
+### Lo que NO se ejecutó
+
+- ⚠️ **NO DESPLEGADO todavía a la nube.** `0062` está aplicada solo en local;
+  no se corrió contra el proyecto Supabase remoto.
+- ⚠️ **NO EJECUTADO: verificación en navegador** (Task 10 de esta feature, aún
+  pendiente al momento de escribir esto). Lo de este milestone —el chat citando
+  cadenas del grafo, `explorar_grafo`, la propuesta de arista en el rail y las
+  sugerencias matutinas del coach— no se ha visto correr con `pnpm build &&
+  pnpm start` en un navegador real.
+- ⚠️ **NO EJECUTADO: `pnpm lint` ni `pnpm build`** en esta verificación; el
+  alcance de esta entrada es typecheck + pruebas, por instrucción explícita de
+  la tarea.
+
+### Dos límites que se aceptaron a conciencia, no que se pasaron por alto
+
+- Una propuesta que quede en `aplicando` porque el proceso muere entre el
+  reclamo (`acceptProposal`) y su reversión desaparece del rail sin que nada la
+  recoja — no hay barrido todavía. Se aplaza a la fase E (misiones).
+- El camino del coach matutino puede hacer una segunda llamada al modelo
+  (sugerencias del grafo, además del turno normal) dentro del presupuesto de
+  60s / 5 usuarios del dispatcher. Aceptado; se revisa en la fase A.

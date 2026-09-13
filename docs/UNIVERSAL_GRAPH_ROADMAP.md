@@ -1,10 +1,12 @@
 # UNIVERSAL GRAPH — hoja de ruta
 
-> **Estado al 12-sep-2026.** Los milestones 1 a 5 están implementados
-> (migraciones `0057` a `0061`, con las pruebas `0028` a `0032` en
-> `supabase/tests/`). Los milestones 6 a 8 son diseño acordado, no código. Este documento es el
-> plan de implementación; `docs/DECISIONS.md` (D-138…D-141) guarda las
-> decisiones ya tomadas y `docs/CHECKS.md` lo que se ejecutó de verdad.
+> **Estado al 13-sep-2026.** Los milestones 1 a 6 están implementados
+> (migraciones `0057` a `0062`, con las pruebas `0028` a `0035` en
+> `supabase/tests/`). M6 se redefinió el 13-sep-2026 (D-150): no unifica
+> `TABLAS_CONSULTABLES` con el registro. M7 sigue sin implementar y M8 se
+> retiró de la hoja de ruta (D-150). Este documento es el
+> plan de implementación; `docs/DECISIONS.md` (D-138…D-141, D-150…D-153) guarda
+> las decisiones ya tomadas y `docs/CHECKS.md` lo que se ejecutó de verdad.
 
 ---
 
@@ -184,17 +186,18 @@ divergir de la proyección porque *es* la proyección.
 
 Lo que el diseño deja listo sin implementarlo:
 
-- **Búsqueda semántica y *embeddings*** — `search_text` y `content_hash` en
-  `graph_nodes` (M6). El `content_hash` es lo que hace barato a M8: sin él, el
-  día que haya *embeddings* hay que recalcularlo todo en cada pasada para saber
-  qué cambió.
-- **Recuperación para IA** — `graph_context()` (M6), un punto único que sustituye
-  a `TABLAS_CONSULTABLES` como descripción de qué entidades existen.
+- **Búsqueda semántica y *embeddings*** — retirado (D-150, 2026-09-13): M6 no
+  añade `search_text` ni `content_hash`, y M8 se retira de la hoja de ruta sin
+  haberlos necesitado.
+- **Recuperación para IA** — redefinido (D-150): M6 no crea `graph_context()` ni
+  sustituye a `TABLAS_CONSULTABLES`; la IA lee el grafo como hechos de cadena y
+  como la herramienta `explorar_grafo`, con la lista blanca intacta.
 - **Análisis de dependencias e impacto** — ya existe (`graph_impact`), y se
   amplía solo con cobertura.
-- **Recomendadores** — el contrato de `graph_suggestions` quedó fijado en 0054 y
-  sigue sin implementar; con `graph_edge_rules` los detectores deterministas
-  pasan a poder escribirse sobre el registro en vez de tabla a tabla.
+- **Recomendadores** — el contrato de `graph_suggestions` de 0054 se resolvió
+  distinto en M6 (0062): entran en la cola única `coach_proposals` (D-151), y
+  los detectores deterministas son `graph_detectar_de`, sobre el registro y no
+  tabla a tabla.
 - **Analítica de grafos** — M7, sobre el grafo ya materializado.
 
 **No se implementan *embeddings* ni se declara `pgvector`.**
@@ -343,38 +346,25 @@ se contesta ninguna.
 **Y la ampliación destapó dos fallos latentes en la maquinaria de M2**, los dos
 inofensivos hasta que alguien declarara la regla adecuada — ver D-149.
 
-### M6 · Superficie de recuperación — siguiente
+### M6 · El grafo como contexto y herramienta de la IA — **hecho** (`0062`)
 
-`graph_nodes.search_text` y `content_hash`, mantenidos por el mismo proyector a
-partir de un `search_fields` nuevo del registro. Un RPC `graph_context()` para
-la IA. Y `TABLAS_CONSULTABLES` pasa a leer del registro, con una prueba unitaria
-que falla si las dos descripciones dejan de coincidir.
-
-Aquí es donde las tres proyecciones universales se vuelven una. **Es el
-milestone con más superficie de privacidad del plan** y necesita su propia
-revisión: el filtro de dominios de `src/lib/insights/context.ts` es hoy un solo
-archivo auditable de una sentada, y esa propiedad no se puede perder.
-
-`search_text` **no es un `tsvector`**: D-118 rechazó a conciencia un quinto
-índice de texto sobre los mismos títulos, y esa decisión sigue en pie. Es texto
-plano, para que un futuro proceso de *embeddings* tenga una sola columna que
-leer.
+Redefinido el 2026-09-13 (D-150). No se fusiona `TABLAS_CONSULTABLES` con el
+registro ni se añaden `search_text`/`content_hash`: la IA lee el grafo como
+**hechos de cadena** (`graph_cadenas[_de]` → `facts/chains.ts`) y como la
+herramienta `explorar_grafo`. Las sugerencias de arista entran en la cola única
+(`coach_proposals`, D-151) y se aceptan por `graph_aceptar_arista` (D-153). El
+riesgo 6 se cierra por diseño: el filtro de la IA sigue en un solo archivo.
 
 ### M7 · Analítica
 
-`graph_degree()`, `graph_stats()` sobre el grafo ya materializado: nodos más
-conectados, componentes, huérfanos, cuellos de botella. Alimenta los detectores
-deterministas que el contrato de `graph_suggestions` espera.
+Reducido a lo que llega a una persona: los detectores de `graph_detectar_de`
+(0062) —lo suelto que no apoya ninguna meta y las tareas casi duplicadas—.
+`graph_degree()`/`graph_stats()` quedan sin plan hasta que un consumidor los pida.
 
 ### M8 · *Embeddings* — **no se implementa**
 
-La costura queda documentada y ninguna línea escrita:
-`graph_node_embeddings(node_id, model, embedding, content_hash)`, poblada por un
-proceso externo que lee los nodos cuyo `content_hash` cambió desde la última
-pasada. Requiere declarar `pgvector`, que sería la segunda extensión del
-repositorio, y una decisión de producto sobre qué proveedor calcula los
-vectores y qué sale del sistema para ello — la misma conversación que
-`docs/SECURITY.md` ya tiene abierta sobre la IA.
+**Retirado de la hoja de ruta** (2026-09-13). No hay un problema de recuperación
+medido que lo justifique; se reabre solo con uno.
 
 ---
 
@@ -388,7 +378,7 @@ vectores y qué sale del sistema para ello — la misma conversación que
 | 4 | **Crecimiento de `graph_nodes`.** El objetivo de D-117 son 100.000 nodos. | `enabled` por fuente permite apagar una sin migración. M5 mide el conteo antes y después. | pendiente de M5 |
 | 5 | **Deriva entre registro y triggers.** | `graph_registry_diff()` y la assertion nº 1 de `0028`, que corre en CI en cada PR. | mitigado en M1 |
 | 5b | **Deriva entre las reglas de arista y las aristas vivas.** | `graph_edges_deriva()` compara el conjunto que las reglas derivan contra el que hay, y la assertion nº 1 de `0029` lo exige vacío en cada PR. Además, la nº 2 comprueba que las siete funciones sigan siendo generadas y nadie las haya editado a mano. | mitigado en M2 |
-| 6 | **Pérdida de auditabilidad del filtro de IA (M6).** Hoy el filtro de dominios cabe en un archivo. | M6 no fusiona sin conservar esa propiedad; se revisa aparte antes de implementarlo. | abierto |
+| 6 | **Pérdida de auditabilidad del filtro de IA (M6).** Hoy el filtro de dominios cabe en un archivo. | M6 no fusiona sin conservar esa propiedad; se revisa aparte antes de implementarlo. | cerrado en M6 (D-150) |
 | 7 | **El backfill reescribe tablas enteras.** `update … set etiqueta = etiqueta` toca todas las filas y recalcula los `tsvector` generados de 0039. | Es coste de mantenimiento, no de operación normal. En tablas grandes, por lotes y con `lock_timeout`. Documentado en la propia función. | aceptado |
 
 ---

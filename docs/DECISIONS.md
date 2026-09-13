@@ -2606,3 +2606,32 @@ implementa:
   Lo que esto deja como método: un milestone de cobertura no es solo cobertura.
   Es la primera vez que la maquinaria se usa con formas que no se escribieron
   pensando en ella, y hay que presupuestar que aparezca algo.
+
+- **D-150 · El grafo es contexto y herramienta de la IA, no su única vía de
+  recuperación.** Un plan externo proponía hacer de `graph_context()` la única
+  puerta de la IA y proyectar todas las tablas. Se rechazó por dos razones
+  escritas en el propio plan: dejaba los eventos fuera del grafo (D-148), que
+  es justo de donde salen los hechos; y cambiaba la RLS de la herramienta
+  `consultar` por un predicado a mano. Lo que se hizo (0062): las cadenas del
+  grafo entran como HECHOS (`facts/chains.ts`) y como una HERRAMIENTA más
+  (`explorar_grafo`), y `TABLAS_CONSULTABLES` sigue mandando. Una prueba
+  unitaria obliga a que toda fuente del grafo tenga dominio en la lista blanca
+  o un motivo escrito para no tenerlo.
+- **D-151 · Una sola cola de propuestas, y crece `coach_proposals`.** Las
+  sugerencias del grafo no estrenan tabla (0054 hablaba de `graph_suggestions`):
+  entran en la cola que ya tenía botón, rail y dispatcher, con `origen`,
+  `fingerprint` único en cualquier estado —descartar es «no me lo vuelvas a
+  proponer»— y los estados `aplicando` y `fallida`. `aplicando` arregla una
+  carrera real de `acceptProposal`: dos clics a la vez creaban la cosa dos veces.
+- **D-152 · Las funciones `_de(p_uid)` solo las ejecuta `service_role`.** El
+  coach corre sin sesión y necesita el grafo. En vez de copiar el precómputo de
+  permiso, se parametrizó (`graph_acceso_*_de`) y las versiones de siempre
+  delegan en él: sigue habiendo una sola copia de la condición. Toda función
+  que recibe el usuario como argumento y camina con `row_security = off` se
+  revoca a `anon` y `authenticated`; las suites 0033 y 0035 lo vigilan.
+- **D-153 · `origin = 'ai'` entra por una sola puerta.** `graph_edges_insert`
+  sigue admitiendo solo `user`. `graph_aceptar_arista` comprueba propiedad,
+  estado, visibilidad y frontera en la transacción que escribe, y devuelve
+  `frontera`/`no_visible` en vez de lanzar para poder dejar la propuesta
+  `fallida`. El modelo nunca ve un uuid: elige índices de listas que salieron de
+  `graph_detectar_de`.
