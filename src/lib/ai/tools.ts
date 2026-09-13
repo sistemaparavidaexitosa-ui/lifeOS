@@ -1,8 +1,9 @@
 import "server-only";
 import { generateGroundedText, type FunctionDeclaration, type GeminiSchema } from "./gemini-provider";
 import { loadFacts, type Db, type FactsOverrides, type ProfileBits } from "@/lib/insights/facts-loader";
-import { tablaConsultable, TABLAS_CONSULTABLES } from "@/lib/insights/context";
+import { tablaConsultable, TABLAS_CONSULTABLES, dominioDeTabla } from "@/lib/insights/context";
 import { idDeFila, limiteConsulta, ventanaConsulta } from "@/lib/domain/ai/tools.ts";
+import { nodosParaModelo, type NodoCrudo } from "@/lib/domain/ai/graph-tool.ts";
 import type { Domain } from "@/lib/domain/insights/types.ts";
 
 /**
@@ -81,6 +82,18 @@ const ESQUEMA_BUSQUEDA: GeminiSchema = {
   propertyOrdering: ["consulta"]
 };
 
+const ESQUEMA_GRAFO: GeminiSchema = {
+  type: "OBJECT",
+  properties: {
+    consulta: {
+      type: "STRING",
+      description: "El nombre, o parte del nombre, de algo del usuario: un proyecto, una tarea, una meta, un hábito, una cuenta."
+    }
+  },
+  required: ["consulta"],
+  propertyOrdering: ["consulta"]
+};
+
 const ESQUEMA_CONSULTA: GeminiSchema = {
   type: "OBJECT",
   properties: {
@@ -133,12 +146,18 @@ export function crearCajaDeHerramientas(opciones: OpcionesCaja): CajaDeHerramien
       parameters: ESQUEMA_CONSULTA
     },
     {
+      name: "explorar_grafo",
+      description:
+        "Busca algo del usuario por su nombre y devuelve a qué pertenece y qué apoya: la cadena hacia arriba hasta sus metas. Úsala en preguntas de relaciones —«¿para qué sirve este proyecto?», «¿qué metas dependen de esto?», «¿qué pasa si abandono este hábito?»—. Cita los nodos por su id.",
+      parameters: ESQUEMA_GRAFO
+    },
+    {
       name: "buscar_en_internet",
       description:
         "Busca en Google y devuelve un resumen con sus fuentes. Úsala cuando la respuesta dependa de algo que NO está en la vida del usuario: un método, un dato del mundo, un precio de referencia, una noticia. No la uses para lo que ya puedes consultar en sus tablas.",
       parameters: ESQUEMA_BUSQUEDA
     }
-  ].filter((d) => !(opciones.sinConsultarFilas && d.name === "consultar"));
+  ].filter((d) => !(opciones.sinConsultarFilas && (d.name === "consultar" || d.name === "explorar_grafo")));
 
   async function leerHechos(args: Record<string, unknown>) {
     const pedidos = Array.isArray(args.dominios) ? (args.dominios as string[]) : [];
@@ -209,6 +228,53 @@ export function crearCajaDeHerramientas(opciones: OpcionesCaja): CajaDeHerramien
   }
 
   /**
+   * EL GRAFO, COMO HERRAMIENTA. Solo con sesión, por lo mismo que `consultar`:
+   * `graph_search` filtra con la RLS de `graph_nodes`, y en el coach —cliente
+   * de servicio, sin RLS— no filtraría nada. Por eso comparte con `consultar`
+   * la segunda barrera de `sinConsultarFilas`.
+   */
+  async function explorarGrafo(args: Record<string, unknown>) {
+    if (opciones.sinConsultarFilas) return { error: "Esa herramienta no está disponible ahora." };
+    const consulta = String(args.consulta ?? "").trim();
+    if (consulta.length < 2) return { error: "Dime qué buscar, con al menos dos letras." };
+
+    const { data: hallados, error } = await opciones.supabase.rpc("graph_search", { p_query: consulta, p_limit: 5 });
+    if (error) return { error: "No se pudo buscar en el grafo." };
+
+    const raices = (hallados ?? [])
+      .filter((h) => {
+        const d = dominioDeTabla(h.entity_table);
+        return d !== null && opciones.autorizados.includes(d);
+      })
+      .slice(0, 3);
+    if (!raices.length) return { nodos: [], nota: "No encontré nada con ese nombre entre lo que puedo ver." };
+
+    const { data: filas } = await opciones.supabase.rpc("graph_cadenas", {
+      p_entity_ids: raices.map((r) => r.entity_id),
+      p_max_depth: 4
+    });
+
+    const crudos: NodoCrudo[] = [
+      ...raices.map((r) => ({ entityTable: r.entity_table, entityId: r.entity_id, nodeType: r.node_type, label: r.label, profundidad: 0 })),
+      ...(filas ?? []).map((f) => ({
+        entityTable: f.entity_table,
+        entityId: f.entity_id,
+        nodeType: f.node_type,
+        label: f.label,
+        relacion: f.via_rel,
+        profundidad: f.depth
+      }))
+    ];
+
+    const nodos = nodosParaModelo(crudos, opciones.autorizados, dominioDeTabla);
+    for (const n of nodos) entregados.add(n.id);
+    return {
+      nodos,
+      nota: "profundidad 0 es lo que buscaste; 1, 2… es a qué pertenece o qué apoya (relacion). Cita los nodos por su id en factIds."
+    };
+  }
+
+  /**
    * LA ÚNICA COSA QUE SALE HACIA UN TERCERO DISTINTO DEL MODELO.
    *
    * Por eso se cuenta (`busquedas`) y se registra la consulta: el rastro de
@@ -244,6 +310,7 @@ export function crearCajaDeHerramientas(opciones: OpcionesCaja): CajaDeHerramien
       try {
         if (name === "leer_hechos") return await leerHechos(args);
         if (name === "consultar") return await consultar(args);
+        if (name === "explorar_grafo") return await explorarGrafo(args);
         if (name === "buscar_en_internet") return await buscar(args);
         return { error: "Esa herramienta no existe." };
       } catch {
