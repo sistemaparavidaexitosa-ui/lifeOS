@@ -2623,12 +2623,16 @@ implementa:
   `fingerprint` único en cualquier estado —descartar es «no me lo vuelvas a
   proponer»— y los estados `aplicando` y `fallida`. `aplicando` arregla una
   carrera real de `acceptProposal`: dos clics a la vez creaban la cosa dos veces.
-- **D-152 · Las funciones `_de(p_uid)` solo las ejecuta `service_role`.** El
-  coach corre sin sesión y necesita el grafo. En vez de copiar el precómputo de
-  permiso, se parametrizó (`graph_acceso_*_de`) y las versiones de siempre
-  delegan en él: sigue habiendo una sola copia de la condición. Toda función
-  que recibe el usuario como argumento y camina con `row_security = off` se
-  revoca a `anon` y `authenticated`; las suites 0033 y 0035 lo vigilan.
+- **D-152 · Las funciones `_de(p_uid)` que caminan el grafo solo las ejecuta
+  `service_role`.** El coach corre sin sesión y necesita el grafo:
+  `graph_cadenas_de` y `graph_detectar_de` quedan revocadas a `anon` y
+  `authenticated`, y solo `service_role` las ejecuta. En vez de copiar el
+  precómputo de permiso, se parametrizó (`graph_acceso_espacios_de`,
+  `graph_acceso_proyectos_de`) y las versiones de siempre delegan en él: sigue
+  habiendo una sola copia de la condición. Esos dos ayudantes se revocan de
+  TODO rol, `service_role` incluido — solo se alcanzan desde dentro de una
+  función `security definer`, nunca por RPC directa. Las suites 0033 y 0035 lo
+  vigilan.
 - **D-153 · `origin = 'ai'` entra por una sola puerta.** `graph_edges_insert`
   sigue admitiendo solo `user`. `graph_aceptar_arista` comprueba propiedad,
   estado, visibilidad y frontera en la transacción que escribe, y devuelve

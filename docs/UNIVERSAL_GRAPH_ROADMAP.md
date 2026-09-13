@@ -156,7 +156,7 @@ Cuatro capas, de las que tres ya existían:
 | 0 · **Catálogo** | `graph_node_types`, `graph_rel_types` — el vocabulario, con metadatos por tipo | existía |
 | 1 · **Registro** | `graph_sources`, `graph_edge_rules` — cómo una tabla de negocio se convierte en nodos y aristas | **M1, hecho** |
 | 2 · **Núcleo** | proyectores genéricos, `graph_system_edges`, RPC de recorrido, frontera de privacidad | existía; M1 le añadió instalador, backfill y detección de deriva derivados de la capa 1 |
-| 3 · **Consumidores** | el lienzo (existe); recuperación de IA, buscador y analítica (M6, M7) | uno de tres |
+| 3 · **Consumidores** | el lienzo (existe); recuperación de IA como hechos de cadena y la herramienta `explorar_grafo` (M6, **hecho**, `0062`); analítica (M7, pendiente). El buscador queda aparte: D-150 decidió no unificarlo con el registro. | dos de tres |
 
 ### 3.1 La decisión que lo sostiene
 
@@ -477,7 +477,10 @@ aditivos.
   predicado de permiso más tres del precómputo (M3), y las cuatro copias del
   vocabulario de tipos más las dos reimplementaciones de metadatos del catálogo
   (M4). Del inventario de duplicación que abrió este documento no queda nada
-  pendiente salvo unificar las tres proyecciones universales, que es M6.
+  pendiente: unificar las tres proyecciones universales era la última pieza, y
+  D-150 (13-sep-2026) decidió no hacerlo — la IA entra por hechos de cadena y
+  la herramienta `explorar_grafo` (M6, `0062`), no por fusionar
+  `TABLAS_CONSULTABLES` con el registro.
 - La amplificación de escritura crece en las tablas que se añadan, y en ninguna
   de las que ya se escriben mucho: `tasks` y `projects` ya están proyectadas y
   M5 no las toca.
