@@ -241,15 +241,17 @@ export default function AiChatRail({
             }}
           >
             <div className="text-xs" style={{ color: "var(--muted)" }}>
-              {p.tipo === "bloque"
-                ? "Propongo agendar esto"
-                : p.tipo === "rutina"
-                  ? "Propongo esta rutina"
-                  : p.tipo === "meta"
-                    ? "Propongo esta meta"
-                    : p.tipo === "estructura"
-                      ? "Este proyecto necesita estructura"
-                      : "Propongo esta tarea"}
+              {p.tipo === "arista"
+                ? "Propongo conectar esto en tu mapa"
+                : p.tipo === "bloque"
+                  ? "Propongo agendar esto"
+                  : p.tipo === "rutina"
+                    ? "Propongo esta rutina"
+                    : p.tipo === "meta"
+                      ? "Propongo esta meta"
+                      : p.tipo === "estructura"
+                        ? "Este proyecto necesita estructura"
+                        : "Propongo esta tarea"}
             </div>
             <div className="text-sm" style={{ fontWeight: 700, margin: "3px 0 2px" }}>
               {p.titulo}
@@ -265,11 +267,16 @@ export default function AiChatRail({
                 disabled={pending || (p.tipo === "tarea" && !workspaceId)}
                 onClick={() => aceptarPropuesta(p)}
               >
-                {p.tipo === "estructura" ? "Ir al proyecto" : "Crear"}
+                {p.tipo === "estructura" ? "Ir al proyecto" : p.tipo === "arista" ? "Conectar" : "Crear"}
               </button>
               <button className="btn-ghost btn-sm" disabled={pending} onClick={() => descartarPropuesta(p)}>
                 Descartar
               </button>
+              {p.tipo === "arista" && p.payload.source && (
+                <a className="btn-ghost btn-sm" href={`/graph?entity=${p.payload.source}`}>
+                  Ver en el grafo
+                </a>
+              )}
             </div>
           </div>
         ))}

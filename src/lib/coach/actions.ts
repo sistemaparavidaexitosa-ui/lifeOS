@@ -95,7 +95,42 @@ async function ejecutar(p: PropuestaSaneada, workspaceId: string | null): Promis
 
     case "estructura":
       return { ...actionOk, href: `/execution?project=${p.payload.projectId}` };
+
+    case "arista":
+      // No pasa por aquí: `acceptProposal` la manda a `aceptarArista`, que
+      // reclama y escribe en una sola transacción de base.
+      return { ok: false, reason: "Esa propuesta se acepta de otra forma." };
   }
+}
+
+/**
+ * Una arista no tiene Server Action de siempre a la que llamar: `createGraphEdge`
+ * escribe `origin = 'user'` y la política no admite otra cosa. La puerta es
+ * `graph_aceptar_arista` (0062), que comprueba propiedad, estado, visibilidad y
+ * frontera en la misma transacción en la que escribe.
+ */
+async function aceptarArista(
+  supabase: Awaited<ReturnType<typeof requireUser>>["supabase"],
+  userId: string,
+  id: string,
+  p: PropuestaSaneada
+): Promise<ActionResult> {
+  const { data, error } = await supabase.rpc("graph_aceptar_arista", { p_proposal: id });
+  if (error) return actionFailed(error);
+  if (data === "frontera") {
+    return { ok: false, reason: "No se puede: uno de los dos es tuyo y el otro vive en un espacio compartido." };
+  }
+  if (data === "no_visible") return { ok: false, reason: "Uno de los dos ya no existe o ya no lo ves." };
+
+  await supabase.from("audit_log").insert({
+    user_id: userId,
+    action: "graph.edge.accept_ai",
+    object: id,
+    meta: { rel: p.payload.rel }
+  });
+  revalidatePath("/graph");
+  revalidatePath("/home");
+  return actionOk;
 }
 
 export async function acceptProposal(id: string, workspaceId: string | null): Promise<ActionResult & { href?: string }> {
@@ -127,15 +162,40 @@ export async function acceptProposal(id: string, workspaceId: string | null): Pr
   });
   if (!limpia) return { ok: false, reason: "Esa propuesta no se puede crear tal como quedó guardada." };
 
-  const resultado = await ejecutar(limpia, workspaceId);
-  // Solo se marca aceptada si de verdad se creó. Si la acción falló, la
-  // propuesta sigue pendiente y el botón se puede volver a pulsar.
-  if (!resultado.ok) return resultado;
+  if (limpia.tipo === "arista") return aceptarArista(supabase, user.id, parsed.data, limpia);
+
+  // EL RECLAMO. Antes se comprobaba `status === 'pending'` y se actualizaba
+  // después, y dos clics a la vez pasaban los dos. Ahora la fila cambia a
+  // `aplicando` solo si seguía pendiente, y solo quien la cambió sigue.
+  const { data: reclamada } = await supabase
+    .from("coach_proposals")
+    .update({ status: "aplicando" })
+    .eq("id", parsed.data)
+    .eq("user_id", user.id)
+    .eq("status", "pending")
+    .select("id")
+    .maybeSingle();
+  if (!reclamada) return { ok: false, reason: "Esa propuesta ya se resolvió." };
+
+  let resultado: ActionResult & { href?: string };
+  try {
+    resultado = await ejecutar(limpia, workspaceId);
+  } catch (e) {
+    // `upsertRoutine` y `upsertPersonalGoal` lanzan en vez de devolver.
+    resultado = { ok: false, reason: e instanceof Error ? e.message : "No se pudo crear." };
+  }
+
+  if (!resultado.ok) {
+    // Vuelve a pendiente: el botón se puede pulsar otra vez.
+    await supabase.from("coach_proposals").update({ status: "pending" }).eq("id", parsed.data).eq("user_id", user.id);
+    return resultado;
+  }
 
   const { error } = await supabase
     .from("coach_proposals")
     .update({ status: "accepted", resolved_at: new Date().toISOString() })
-    .eq("id", parsed.data);
+    .eq("id", parsed.data)
+    .eq("user_id", user.id);
   if (error) return actionFailed(error);
 
   revalidatePath("/home");

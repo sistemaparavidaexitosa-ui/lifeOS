@@ -3,7 +3,12 @@
 // hay botones que fallan al pulsarlos — que es peor que no tenerlos.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { sanearPropuesta, sanearPropuestas, type PropuestaCruda } from "../../src/lib/domain/coach/proposals.ts";
+import {
+  sanearPropuesta,
+  sanearPropuestas,
+  TIPOS_DEL_COACH,
+  type PropuestaCruda
+} from "../../src/lib/domain/coach/proposals.ts";
 
 const PROYECTO = "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
 
@@ -103,4 +108,31 @@ test("sanearPropuestas: se descartan las malas y se conservan las buenas, con to
 
 test("sanearPropuestas: sin propuestas no revienta", () => {
   assert.deepStrictEqual(sanearPropuestas([]), []);
+});
+
+const S = "11111111-1111-4111-8111-111111111111";
+const T = "22222222-2222-4222-8222-222222222222";
+
+test("arista: se guarda con sus dos extremos, la relación y la confianza acotada", () => {
+  const p = sanearPropuesta({
+    tipo: "arista",
+    titulo: "Conectar «Duolingo» con «Aprender francés»",
+    detalle: "El hábito es práctica diaria del idioma.",
+    datos: JSON.stringify({ source: S, target: T, rel: "supports", confianza: 3 })
+  });
+  assert.deepStrictEqual(p?.payload, { source: S, target: T, rel: "supports", confianza: "1" });
+});
+
+test("arista: sin uuids válidos, con los dos extremos iguales o con una relación no sugerible, no sale", () => {
+  const base = { tipo: "arista", titulo: "Conectar", detalle: "" };
+  assert.equal(sanearPropuesta({ ...base, datos: JSON.stringify({ source: "x", target: T, rel: "supports" }) }), null);
+  assert.equal(sanearPropuesta({ ...base, datos: JSON.stringify({ source: S, target: S, rel: "supports" }) }), null);
+  assert.equal(sanearPropuesta({ ...base, datos: JSON.stringify({ source: S, target: T, rel: "depends_on" }) }), null);
+});
+
+test("el coach no puede colar una arista: sanearPropuestas solo deja pasar sus cinco tipos por defecto", () => {
+  const arista = { tipo: "arista", titulo: "Conectar", detalle: "", datos: JSON.stringify({ source: S, target: T, rel: "supports" }) };
+  assert.deepStrictEqual(sanearPropuestas([arista]), []);
+  assert.equal(sanearPropuestas([arista], 2, ["arista"]).length, 1);
+  assert.ok(!TIPOS_DEL_COACH.includes("arista" as never));
 });
