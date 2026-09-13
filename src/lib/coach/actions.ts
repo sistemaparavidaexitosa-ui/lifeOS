@@ -186,16 +186,26 @@ export async function acceptProposal(id: string, workspaceId: string | null): Pr
   }
 
   if (!resultado.ok) {
-    // Vuelve a pendiente: el botón se puede pulsar otra vez.
-    await supabase.from("coach_proposals").update({ status: "pending" }).eq("id", parsed.data).eq("user_id", user.id);
+    // Vuelve a pendiente: el botón se puede pulsar otra vez. Solo si sigue en
+    // `aplicando` — si alguien la descartó en otra pestaña mientras tanto, no
+    // se resucita lo que ya se descartó.
+    await supabase
+      .from("coach_proposals")
+      .update({ status: "pending" })
+      .eq("id", parsed.data)
+      .eq("user_id", user.id)
+      .eq("status", "aplicando");
     return resultado;
   }
 
+  // Mismo resguardo: solo se marca aceptada la fila que este reclamo dejó en
+  // `aplicando`, nunca una que otra pestaña ya movió a `dismissed`.
   const { error } = await supabase
     .from("coach_proposals")
     .update({ status: "accepted", resolved_at: new Date().toISOString() })
     .eq("id", parsed.data)
-    .eq("user_id", user.id);
+    .eq("user_id", user.id)
+    .eq("status", "aplicando");
   if (error) return actionFailed(error);
 
   revalidatePath("/home");
