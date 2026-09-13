@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { crearCajaDeHerramientas } from "@/lib/ai/tools";
 import { loadFacts } from "@/lib/insights/facts-loader";
 import { allowedDomains, buildContext, MAX_FACTS_COACH } from "@/lib/insights/context";
+import { loadChainFacts } from "@/lib/insights/graph-context";
 import { sanearPropuestas } from "@/lib/domain/coach/proposals.ts";
 import { claveDelCoach, type Momento } from "@/lib/domain/coach/schedule.ts";
 import type { Domain } from "@/lib/domain/insights/types.ts";
@@ -78,6 +79,9 @@ export async function generarYGuardarMensajeDiario(entrada: EntradaCoach): Promi
   };
 
   const facts = await loadFacts(supabase, userId, permitidos, today, perfil, overrides);
+
+  // Sin sesión: la variante `_de`, que solo el cliente de servicio puede llamar.
+  facts.push(...(await loadChainFacts(supabase, facts, permitidos, { modo: "servicio", userId })));
 
   const context = buildContext({
     scope: "global",

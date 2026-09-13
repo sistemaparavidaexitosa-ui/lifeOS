@@ -19,6 +19,7 @@ import { todayLocal } from "@/lib/data/dates";
 import { getUserTimeZone } from "@/lib/data/profile";
 import { loadFacts, type Db } from "@/lib/insights/facts-loader";
 import { allowedDomains, buildContext } from "@/lib/insights/context";
+import { loadChainFacts } from "@/lib/insights/graph-context";
 import { chatReply } from "@/lib/ai/chat";
 import { crearCajaDeHerramientas } from "@/lib/ai/tools";
 import { recortarHistorial, sanitizeProposedMemory, type ChatMessageLike } from "@/lib/domain/ai/chat.ts";
@@ -157,6 +158,11 @@ export async function sendChatMessage(text: string): Promise<SendResult> {
         }
       })
     : [];
+
+  // Las cadenas del grafo van DESPUÉS de los hechos porque salen de ellos: se
+  // recorre hacia arriba desde lo que los sustenta. Van con la sesión, así que
+  // la regla de visibilidad es la de siempre.
+  if (facts.length) facts.push(...(await loadChainFacts(supabase, facts, permitidos, { modo: "sesion" })));
 
   const context = buildContext({
     scope: "global",
