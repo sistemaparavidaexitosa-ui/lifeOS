@@ -1477,19 +1477,20 @@ sobre la pila local de Supabase.
 | `pnpm typecheck` | ✅ EJECUTADO OK | `tsc --noEmit` sin salida |
 | `pnpm test:unit` | ✅ EJECUTADO OK | **958 pruebas, 0 fallos** |
 | `pnpm db:test` | ✅ EJECUTADO OK | **Files=36, Tests=332, Result: PASS** (33 nuevas: 13 en `0033`, 11 en `0034`, 9 en `0035`) |
+| Tras la revisión final (6 commits de arreglos) | ✅ EJECUTADO OK | `pnpm test:unit` **960/960**, `pnpm db:test` **Files=36, Tests=333, PASS**, `pnpm lint` limpio, `pnpm build` OK |
+| E2E por script contra la pila local, usuario desechable | ✅ EJECUTADO OK | **19/19**: cadena tarea → proyecto → meta, detector `sin_meta`, `graph_aceptar_arista` crea `origin = 'ai'` y el reintento da P0002, insert `ai` directo rechazado por RLS, `_de` rechazadas a `authenticated`; usuario borrado al terminar |
+| `supabase db push` (nube) | ✅ EJECUTADO OK, 13-sep-2026 | `--dry-run` listó `0061` y `0062` (la `0060` ya estaba); el push aplicó las dos sin error. El código de esta rama todavía NO está desplegado |
 
 ### Lo que NO se ejecutó
 
-- ⚠️ **NO DESPLEGADO todavía a la nube.** `0062` está aplicada solo en local;
-  no se corrió contra el proyecto Supabase remoto.
-- ⚠️ **NO EJECUTADO: verificación en navegador** (Task 10 de esta feature, aún
-  pendiente al momento de escribir esto). Lo de este milestone —el chat citando
-  cadenas del grafo, `explorar_grafo`, la propuesta de arista en el rail y las
-  sugerencias matutinas del coach— no se ha visto correr con `pnpm build &&
-  pnpm start` en un navegador real.
-- ⚠️ **NO EJECUTADO: `pnpm lint` ni `pnpm build`** en esta verificación; el
-  alcance de esta entrada es typecheck + pruebas, por instrucción explícita de
-  la tarea.
+- ⚠️ **NO EJECUTADO: verificación con el modelo y en navegador.** No había
+  `GEMINI_API_KEY` ni `PUSH_DISPATCH_SECRET` en `.env.local`. Sin ver: el chat
+  llamando de verdad a `explorar_grafo`, el despacho matutino dejando
+  `ai.graph.suggestions` en `audit_log`, y los botones «Conectar» / «Ver en el
+  grafo» del rail.
+- ⚠️ **NO EJECUTADO: reproducir `0062` desde cero en local.** Se aplicó por
+  secciones durante el desarrollo; su primera ejecución completa de principio a
+  fin fue el `db push` a la nube, que terminó sin error.
 
 ### Orden de despliegue: la migración 0062 va ANTES que el código
 
@@ -1508,6 +1509,8 @@ en que hay que tocar las cosas porque hay datos de por medio.
 - Una propuesta que quede en `aplicando` porque el proceso muere entre el
   reclamo (`acceptProposal`) y su reversión desaparece del rail sin que nada la
   recoja — no hay barrido todavía. Se aplaza a la fase E (misiones).
-- El camino del coach matutino puede hacer una segunda llamada al modelo
-  (sugerencias del grafo, además del turno normal) dentro del presupuesto de
-  60s / 5 usuarios del dispatcher. Aceptado; se revisa en la fase A.
+- Las sugerencias del grafo hacen una segunda llamada al modelo por la mañana.
+  Tras la revisión final corren DESPUÉS de que `notifySystem` deja el dedupe del
+  coach y solo si quedan menos de `PRESUPUESTO_ARISTAS_MS` usados, así que un
+  corte ya no puede repetir el mensaje; como mucho se pierde la sugerencia de ese
+  día. Se revisa en la fase A.
