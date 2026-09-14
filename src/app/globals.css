@@ -3305,6 +3305,12 @@ textarea:focus {
 .ai-rail {
   display: flex;
   flex-direction: column;
+  /* ANCHO DEFINIDO, no el de su contenido. El rail es la columna `auto` del
+     grid de AppShell y <main> lleva `min-w-0`: sin un ancho aquí, la columna
+     crecía hasta el max-content de la línea más larga —el texto de bienvenida,
+     o una URL en una respuesta— y dejaba el `1fr` del contenido en 0px. Pasaba
+     en todas las páginas, en cuanto el rail estaba abierto. */
+  width: 360px;
   min-height: 0;
   border-left: 1px solid var(--line);
   background: var(--surface);

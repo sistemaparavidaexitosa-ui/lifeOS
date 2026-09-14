@@ -1115,10 +1115,21 @@ Visto de paso, **no causado por este cambio** (reproducido igual sobre `HEAD`):
 
 - **React #418** (desajuste de hidratación) al abrir una nota, también con el
   navegador en la zona horaria del servidor. `/home` no lo da. Sin investigar.
-- **A ≥1280px el rail de IA se come el contenido** (`/home` incluido): es la
+- **A ≥1280px el rail de IA se comía el contenido** (`/home` incluido): es la
   columna `auto` de `xl:grid-cols-[272px_1fr_auto]` en `AppShell.tsx`, y
-  `.ai-rail` no tiene ancho, así que su texto de bienvenida lo estira hasta dejar
-  `1fr` en 0. Plegándolo, todo se ve bien.
+  `.ai-rail` no tenía ancho, así que su texto de bienvenida lo estiraba hasta
+  dejar `1fr` en 0. **Arreglado en el commit siguiente** (ver abajo).
+
+#### El rail de IA con ancho propio (14-sep-2026)
+
+`.ai-rail { width: 360px }`, la medida que ya documentaba la cabecera de esa
+sección. Existía desde `d004984`; no se veía con el rail plegado (cookie).
+
+| Qué | Resultado |
+|-----|-----------|
+| Rail abierto, con una URL de 700 caracteres dentro, en `/home`, `/execution` y `/notebooks` a 1280, 1600 y 1920px | Antes: **FALLÓ** en los 9 (`main` = 0px, rail = ancho entero). Después: ✅ los 9, rail 360px, `main` 648/968/1288px, sin scroll horizontal |
+| Plegar, recargar y volver a abrir | ✅ franja de 45px, sigue plegado tras recargar, reabre a 360px |
+| 390px | ✅ sin rail, burbuja visible, `main` a ancho completo |
 
 **Las 16 filas originales siguen sin ejecutarse salvo las anotadas.** El editor compila, pasa las
 pruebas de dominio y construye, pero **nadie lo ha abierto en un teléfono**.
