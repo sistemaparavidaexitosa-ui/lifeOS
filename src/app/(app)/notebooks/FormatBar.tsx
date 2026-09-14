@@ -1,15 +1,15 @@
 "use client";
-// La barra «Aa»: estilo de bloque, marcas, listas, tabla, enlace y deshacer.
+// La barra «Aa»: estilo de bloque, marcas, listas y deshacer.
 //
-// POR QUÉ VA ABAJO, SI D-040 DICE QUE LAS ACCIONES VAN ARRIBA
-// D-040 puso las acciones arriba porque «una barra fija abajo pelea con el
-// teclado y con la barra de gestos», y sigue siendo cierto para guardar,
-// borrar y volver. La barra de FORMATO es otra cosa: actúa sobre la selección
-// y tiene que estar donde está el pulgar. Es una excepción acotada, no la
-// derogación de D-040.
-import { useEffect, useState, type MouseEvent } from "react";
+// VA ARRIBA, PEGADA BAJO LA BARRA SUPERIOR (D-154)
+// Estuvo abajo, anclada sobre el teclado leyendo `visualViewport` (D-113). Tres
+// arreglos seguidos no consiguieron que dejara de flotar: en iOS las medidas del
+// viewport cambian con la barra de direcciones y llegan tarde con el teclado, y
+// cada evento la recolocaba. Ahora es `position: sticky` en el flujo de la
+// página —el patrón de `.ex-toolbar`—: no mide nada, así que no puede derivar.
+// Y arriba ya cumple D-040 sin excepciones.
+import { useState, type MouseEvent } from "react";
 import type { BlockStyle, MarcaInline } from "@/lib/domain/notes/edit.ts";
-import { bordeInferiorVisual } from "@/lib/dom/anclaje-teclado.ts";
 
 export interface FormatBarProps {
   estilo: BlockStyle;
@@ -20,67 +20,6 @@ export interface FormatBarProps {
   onRehacer: () => void;
   puedeDeshacer: boolean;
   puedeRehacer: boolean;
-}
-
-/**
- * Coordenada Y donde debe quedar el borde inferior de la barra, o `null` si el
- * navegador no expone `visualViewport` (entonces vale un `bottom: 0` normal).
- *
- * POR QUÉ NO SE USA `bottom`
- * En Safari de iOS el teclado NO encoge el viewport de layout, y `bottom` se
- * mide contra ése: la barra quedaba anclada por DEBAJO del teclado, invisible.
- * Y al hacer scroll el viewport visual se desliza sobre el de layout, así que
- * además parecía derivar. Los dos síntomas eran el mismo error de coordenadas.
- *
- * Se ancla a `top: 0` y se desplaza con `transform`, todo en coordenadas de
- * layout. La aritmética vive en `anclaje-teclado.ts`, probada aparte.
- */
-function useBordeVisual(): { borde: number | null; medidas: Medidas | null } {
-  const [borde, setBorde] = useState<number | null>(null);
-  const [medidas, setMedidas] = useState<Medidas | null>(null);
-
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-
-    function medir() {
-      if (!vv) return;
-      const m = {
-        iH: Math.round(window.innerHeight),
-        vvH: Math.round(vv.height),
-        oT: Math.round(vv.offsetTop),
-        sY: Math.round(window.scrollY)
-      };
-      setMedidas(m);
-      setBorde(
-        bordeInferiorVisual({
-          innerHeight: window.innerHeight,
-          vvHeight: vv.height,
-          vvOffsetTop: vv.offsetTop
-        })
-      );
-    }
-
-    medir();
-    // `scroll` SÍ hace falta: es lo que mantiene la barra pegada al viewport
-    // visual mientras la página se desplaza. Quitarlo fue el error anterior.
-    vv.addEventListener("resize", medir);
-    vv.addEventListener("scroll", medir);
-    return () => {
-      vv.removeEventListener("resize", medir);
-      vv.removeEventListener("scroll", medir);
-    };
-  }, []);
-
-  return { borde, medidas };
-}
-
-/** Lectura en crudo del viewport, sólo para diagnosticar. TEMPORAL. */
-interface Medidas {
-  iH: number;
-  vvH: number;
-  oT: number;
-  sY: number;
 }
 
 const ESTILOS: { valor: BlockStyle; etiqueta: string }[] = [
@@ -117,59 +56,17 @@ export default function FormatBar({
   puedeRehacer
 }: FormatBarProps) {
   const [abierto, setAbierto] = useState(false);
-  const { borde, medidas } = useBordeVisual();
   // Las listas son un eje aparte del estilo de párrafo: dentro de una lista, el
   // menú «Aa» no marcaba NADA porque "bullets" no está entre sus opciones. Se
   // enseña «Cuerpo», que es el estilo de párrafo que la lista lleva debajo.
   const estiloDelMenu: BlockStyle =
     estilo === "bullets" || estilo === "ordered" || estilo === "todo" ? "body" : estilo;
-  // Diagnóstico TEMPORAL de la barra: se activa añadiendo `?bar=1` a la URL.
-  const [diagnostico, setDiagnostico] = useState(false);
-  useEffect(() => {
-    setDiagnostico(new URLSearchParams(window.location.search).get("bar") === "1");
-  }, []);
-
   // Nunca robar el foco al contenteditable: sin esto, la selección se deshace
   // al tocar el botón y no queda nada a lo que aplicar la marca.
   const sinRobarFoco = (e: MouseEvent) => e.preventDefault();
 
   return (
-    <div
-      className="nb-formatbar"
-      // Con medidas: anclada arriba y bajada hasta el borde del viewport
-      // visual. Sin ellas: el `bottom: 0` del CSS.
-      style={
-        borde === null
-          ? undefined
-          : { top: 0, bottom: "auto", transform: `translateY(calc(${borde}px - 100%))` }
-      }
-      role="toolbar"
-      aria-label="Formato"
-    >
-      {diagnostico && (
-        <div className="nb-formatbar-diag">
-          iH {medidas?.iH ?? "—"} · vvH {medidas?.vvH ?? "—"} · oT {medidas?.oT ?? "—"} · sY{" "}
-          {medidas?.sY ?? "—"} · borde {borde ?? "—"}
-        </div>
-      )}
-      {abierto && (
-        <div className="nb-formatbar-menu">
-          {ESTILOS.map((e) => (
-            <button
-              key={e.valor}
-              type="button"
-              className={`nb-fb-estilo${estiloDelMenu === e.valor ? " activo" : ""}`}
-              onMouseDown={sinRobarFoco}
-              onClick={() => {
-                onEstilo(e.valor);
-                setAbierto(false);
-              }}
-            >
-              {e.etiqueta}
-            </button>
-          ))}
-        </div>
-      )}
+    <div className="nb-formatbar" role="toolbar" aria-label="Formato">
       <div className="nb-formatbar-fila">
         <button
           type="button"
@@ -230,6 +127,26 @@ export default function FormatBar({
           ↪︎
         </button>
       </div>
+      {/* Desplegable bajo la fila, fuera del flujo (ver .nb-formatbar-menu): abrirlo
+          no debe mover los botones que se acaban de tocar. */}
+      {abierto && (
+        <div className="nb-formatbar-menu">
+          {ESTILOS.map((e) => (
+            <button
+              key={e.valor}
+              type="button"
+              className={`nb-fb-estilo${estiloDelMenu === e.valor ? " activo" : ""}`}
+              onMouseDown={sinRobarFoco}
+              onClick={() => {
+                onEstilo(e.valor);
+                setAbierto(false);
+              }}
+            >
+              {e.etiqueta}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

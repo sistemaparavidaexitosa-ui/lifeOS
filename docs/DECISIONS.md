@@ -2087,7 +2087,7 @@ implementa:
   primera vez que se guarde una nota vieja, el texto se normaliza (`* viñeta`
   sale como `- viñeta`) sin cambiar su contenido.
 
-- **D-113 · La barra de formato va abajo; las acciones siguen arriba.** D-040
+- **D-113 · La barra de formato va abajo; las acciones siguen arriba.** *(Sustituida por D-154.)* D-040
   puso las acciones arriba porque «una barra fija abajo pelea con el teclado y
   con la barra de gestos», y sigue siendo cierto para guardar, borrar y volver.
   La barra de FORMATO es otra cosa: actúa sobre la selección y tiene que estar
@@ -2649,3 +2649,17 @@ implementa:
   `frontera`/`no_visible` en vez de lanzar para poder dejar la propuesta
   `fallida` sin deshacer también el cambio de estado. El modelo, aparte, nunca
   ve un uuid: elige índices de listas que salieron de `graph_detectar_de`.
+
+- **D-154 · La barra de formato sube y se pega arriba; D-113 queda
+  sustituida.** Anclarla sobre el teclado con `visualViewport` falló tres
+  veces seguidas (`0ae38b4`, `31c8c5d`, `3195da8`), y las tres por lo mismo:
+  en Safari de iOS las medidas del viewport cambian con la barra de
+  direcciones y llegan tarde con el teclado, así que cada evento recolocaba la
+  barra y seguía flotando. Un cuarto ajuste a la fórmula habría fallado igual.
+  Ahora es `position: sticky` bajo la barra superior, en el flujo de la
+  página, con el patrón de `.ex-toolbar`: no mide nada, así que no puede
+  derivar. Se pierde tenerla junto al pulgar y se gana que esté siempre en el
+  mismo sitio, que es lo que el usuario pidió («que no sea flotante, que quede
+  fijo»). Arriba ya cumple D-040 sin excepción. Se borraron
+  `anclaje-teclado.ts`, su prueba y `--z-formatbar`: la barra usa
+  `--z-toolbar` y ya no compite con `.ai-fab`.

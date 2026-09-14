@@ -948,7 +948,7 @@ el resultado real, nunca con el previsto.
 | 6 | Backspace al inicio funde con el bloque anterior sin perder ítems | NO EJECUTADO |
 | 7 | Seleccionar y tocar B pone negrita sin perder la selección | NO EJECUTADO |
 | 8 | Marcar una casilla no hace saltar el teclado | NO EJECUTADO |
-| 9 | La barra de formato queda ENCIMA del teclado | **FALLÓ** → corregido, sin reverificar |
+| 9 | La barra de formato queda ENCIMA del teclado | **FALLÓ** → sustituida por D-154: la barra va arriba, pegada |
 | 10 | Tab recorre las celdas de una tabla; en la última crea fila | NO EJECUTADO |
 | 11 | Una tabla ancha scrollea sola, sin mover la nota de lado | NO EJECUTADO |
 | 12 | Pegar desde una web deja el texto y pierde el estilo | NO EJECUTADO |
@@ -958,7 +958,7 @@ el resultado real, nunca con el previsto.
 | 16 | Con rol Viewer no aparece ningún `contenteditable` | NO EJECUTADO |
 
 | 17 | En una nota NUEVA se puede escribir el cuerpo, no sólo el título | **FALLÓ** → corregido, con prueba |
-| 18 | La barra de formato no se tapa con el botón flotante de la IA | **FALLÓ** → corregido, sin reverificar |
+| 18 | La barra de formato no se tapa con el botón flotante de la IA | Ya no aplica (D-154): la barra está arriba |
 
 #### Lo que encontró el primer uso real en un teléfono (6-sep-2026)
 
@@ -1092,6 +1092,33 @@ un `bottom: 0` normal.
 - **Fuera los botones de tabla y enlace**, a petición del uso real. El dialecto
   sigue entendiendo ambos: una tabla escrita a mano o una URL pegada se siguen
   parseando y pintando. Sólo desaparecen de la barra.
+
+#### D-154: la barra sube y se pega arriba; casillas propias (14-sep-2026)
+
+Tres arreglos seguidos del anclaje al teclado no la dejaron quieta, así que se
+cambió el diseño en vez de la fórmula: `position: sticky` bajo la barra superior.
+Verificado con `pnpm build && pnpm start` y Chromium headless contra la pila local,
+con un usuario desechable (borrado al terminar), a 390px en claro y a 1280px en
+oscuro:
+
+| Qué | Resultado |
+|-----|-----------|
+| `pnpm typecheck`, `pnpm lint`, `pnpm test:unit` | ✅ limpio; **954/954** (6 menos: las de `anclaje-teclado`, borrado) |
+| La barra es `sticky` y no se mueve al hacer scroll | ✅ `top` = 66px en los 6 pasos de rueda, en los dos anchos |
+| Seleccionar y tocar B aplica negrita sin perder la selección | ✅ |
+| Abrir «Aa» no mueve la fila de botones | **FALLÓ** a 1280px (saltaba 71px: el menú metía altura y el scroll anchoring desplazaba la página) → menú absoluto fuera del flujo → ✅ 0px en los dos |
+| Casilla de 20×20 centrada en la primera línea | ✅ desfase 0px en las tres, también en una tarea de tres líneas |
+| Marcar una casilla la tacha EN EL EDITOR | ✅ `line-through` (antes la regla sólo miraba el `<span>` de lectura) |
+| Probado en un iPhone de verdad | ⚠️ NO EJECUTADO |
+
+Visto de paso, **no causado por este cambio** (reproducido igual sobre `HEAD`):
+
+- **React #418** (desajuste de hidratación) al abrir una nota, también con el
+  navegador en la zona horaria del servidor. `/home` no lo da. Sin investigar.
+- **A ≥1280px el rail de IA se come el contenido** (`/home` incluido): es la
+  columna `auto` de `xl:grid-cols-[272px_1fr_auto]` en `AppShell.tsx`, y
+  `.ai-rail` no tiene ancho, así que su texto de bienvenida lo estira hasta dejar
+  `1fr` en 0. Plegándolo, todo se ve bien.
 
 **Las 16 filas originales siguen sin ejecutarse salvo las anotadas.** El editor compila, pasa las
 pruebas de dominio y construye, pero **nadie lo ha abierto en un teléfono**.

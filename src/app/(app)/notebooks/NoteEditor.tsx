@@ -9,9 +9,8 @@
 //     foco y —lo más importante— cuando la pestaña deja de verse. En iOS,
 //     bloquear el teléfono o cambiar de app puede congelar o descartar la
 //     página: sin ese último anzuelo se pierde justo lo último escrito.
-//  3. Las ACCIONES van arriba. La barra de FORMATO va abajo, anclada sobre el
-//     teclado: actúa sobre la selección y tiene que estar donde está el pulgar.
-//     Excepción acotada a D-040, no su derogación.
+//  3. Las ACCIONES van arriba, y la barra de FORMATO también: pegada bajo la
+//     barra superior mientras dura el documento (D-154, que sustituye a D-113).
 //
 // EL VOLCADO ANTES DE GUARDAR
 // El bloque enfocado es un contenteditable NO controlado, así que el modelo va
@@ -380,6 +379,18 @@ export default function NoteEditor({
 
         {canWrite ? (
           <div ref={docRef}>
+            {!enConflicto && (
+              <FormatBar
+                estilo={bloqueActual ? styleOf(bloqueActual) : "body"}
+                marcasActivas={marcasActivas}
+                onEstilo={aplicarEstilo}
+                onMarca={aplicarMarca}
+                onDeshacer={deshacer}
+                onRehacer={rehacer}
+                puedeDeshacer={profundidad.atras > 0}
+                puedeRehacer={profundidad.adelante > 0}
+              />
+            )}
             <input
               className="nb-title-input"
               value={title}
@@ -402,18 +413,6 @@ export default function NoteEditor({
               onCursor={setCursor}
               onChange={(siguientes, cur) => cambiar(siguientes, cur)}
             />
-            {!enConflicto && (
-              <FormatBar
-                estilo={bloqueActual ? styleOf(bloqueActual) : "body"}
-                marcasActivas={marcasActivas}
-                onEstilo={aplicarEstilo}
-                onMarca={aplicarMarca}
-                onDeshacer={deshacer}
-                onRehacer={rehacer}
-                puedeDeshacer={profundidad.atras > 0}
-                puedeRehacer={profundidad.adelante > 0}
-              />
-            )}
           </div>
         ) : (
           <article className="nb-read">
