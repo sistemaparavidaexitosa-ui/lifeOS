@@ -2651,7 +2651,7 @@ implementa:
   ve un uuid: elige índices de listas que salieron de `graph_detectar_de`.
 
 - **D-154 · La barra de formato sube y se pega arriba; D-113 queda
-  sustituida.** Anclarla sobre el teclado con `visualViewport` falló tres
+  sustituida.** *(Sustituida por D-155.)* Anclarla sobre el teclado con `visualViewport` falló tres
   veces seguidas (`0ae38b4`, `31c8c5d`, `3195da8`), y las tres por lo mismo:
   en Safari de iOS las medidas del viewport cambian con la barra de
   direcciones y llegan tarde con el teclado, así que cada evento recolocaba la
@@ -2663,3 +2663,20 @@ implementa:
   fijo»). Arriba ya cumple D-040 sin excepción. Se borraron
   `anclaje-teclado.ts`, su prueba y `--z-formatbar`: la barra usa
   `--z-toolbar` y ya no compite con `.ai-fab`.
+
+- **D-155 · La barra de formato va debajo de la línea donde se escribe; D-154
+  queda sustituida.** Pegada arriba desaparecía en cuanto se abría el teclado
+  del iPhone: Safari desplaza el viewport visual por dentro del de layout, y lo
+  que va fijo o pegado a un borde se queda fuera de la vista. Con D-113 (abajo)
+  y D-154 (arriba) ya son cuatro intentos medidos contra la pantalla, así que se
+  deja de medirla. La barra va en el flujo del documento, en un hueco que la
+  línea enfocada reserva debajo (`.nb-line.con-barra`, 60px), y su `top` es la
+  resta de dos cajas que se mueven juntas (`posicionBarra`). Lo único que iOS
+  garantiza visible con el teclado abierto es la línea del cursor, y la barra
+  va pegada a ella. Se eligió **debajo** entre tres opciones que se le
+  plantearon al usuario: encima tapaba la línea anterior y chocaba con el menú
+  nativo de iOS sobre la selección; sin barra con el teclado obligaba a bajarlo
+  cada vez. Costes aceptados: al tocar una línea más abajo el texto sube 60px,
+  y escribiendo pegado al teclado la barra queda debajo de él hasta subir la
+  nota. «Aa» cambia la fila por los estilos en vez de abrir un desplegable, que
+  también habría quedado bajo el teclado.

@@ -289,7 +289,12 @@ export function splitBlock(block: Block, itemIndex: number, offset: number): [Bl
       return [
         {
           kind: "todo",
-          items: [...block.items.slice(0, itemIndex), { done: false, content: izquierda }]
+          // La mitad de la izquierda ES la tarea original: conserva su palomita.
+          // Sólo el ítem nuevo nace sin marcar.
+          items: [
+            ...block.items.slice(0, itemIndex),
+            { done: block.items[itemIndex]?.done ?? false, content: izquierda }
+          ]
         },
         {
           kind: "todo",
@@ -322,6 +327,36 @@ export function splitBlock(block: Block, itemIndex: number, offset: number): [Bl
         { ...block, content: derecha }
       ];
   }
+}
+
+/**
+ * Enter, tal y como lo aplica el editor: qué bloques sustituyen al original y
+ * dónde queda el cursor, relativo a ellos.
+ *
+ * En una lista NO se devuelven los dos bloques de `splitBlock`: se juntan en
+ * una sola lista con un ítem más. El editor ponía el cursor en el ítem
+ * `n + 1` de la primera mitad, que no existía, así que el foco se quedaba en la
+ * línea de arriba y lo que se escribía después caía allí.
+ */
+export function partirConEnter(
+  block: Block,
+  itemIndex: number,
+  offset: number
+): { bloques: Block[]; destino: { bloque: number; item: number } } {
+  const [a, b] = splitBlock(block, itemIndex, offset);
+  if (a.kind === "todo" && b.kind === "todo") {
+    return {
+      bloques: [{ kind: "todo", items: [...a.items, ...b.items] }],
+      destino: { bloque: 0, item: itemIndex + 1 }
+    };
+  }
+  if ((a.kind === "bullets" || a.kind === "ordered") && b.kind === a.kind) {
+    return {
+      bloques: [{ kind: a.kind, items: [...a.items, ...b.items] }],
+      destino: { bloque: 0, item: itemIndex + 1 }
+    };
+  }
+  return { bloques: [a, b], destino: { bloque: 1, item: 0 } };
 }
 
 /**

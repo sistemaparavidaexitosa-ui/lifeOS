@@ -3462,18 +3462,42 @@ textarea:focus {
 }
 
 /* ── Editor de notas: barra de formato ───────────────────────────────────── */
-/* Pegada bajo la barra superior, en el flujo de la página: el mismo patrón que
-   .ex-toolbar (D-154). No mide el viewport, así que no puede derivar con el
-   teclado ni con la barra de direcciones de Safari. */
+/* Debajo de la línea donde se escribe, en el hueco que ella reserva
+   (.con-barra), en coordenadas del documento (D-155). NoteEditor calcula `top`
+   restando dos cajas que se mueven juntas, así que ni el scroll, ni el teclado
+   del iPhone, ni la barra de direcciones la mueven. `sticky` (D-154)
+   desaparecía en cuanto se abría el teclado. */
+.nb-doc-wrap {
+  position: relative;
+}
 .nb-formatbar {
-  position: sticky;
-  top: calc(var(--topbar-total) + 6px);
+  --nb-alto-barra: 48px;
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--nb-alto-barra);
+  box-sizing: border-box;
   z-index: var(--z-toolbar);
-  margin-bottom: 8px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r2);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow);
+  transition: top 120ms ease-out;
+}
+.nb-formatbar.oculta {
+  visibility: hidden;
+  pointer-events: none;
+  transition: none;
+}
+/* El hueco: alto de la barra (48px) más 6px de respiro a cada lado. Empuja el
+   texto de abajo en vez de taparlo. */
+.nb-doc .nb-line.con-barra {
+  margin-bottom: 60px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nb-formatbar {
+    transition: none;
+  }
 }
 .nb-formatbar-fila {
   display: flex;
@@ -3510,29 +3534,18 @@ textarea:focus {
   flex: none;
 }
 .nb-fb-spacer { flex: 1 1 auto; }
-/* Desplegable FUERA del flujo. Metido en el flujo, abrirlo hacía la barra más
-   alta y el scroll anchoring del navegador desplazaba la página: la fila que se
-   acababa de tocar saltaba 71px si la barra aún no estaba pegada. */
-.nb-formatbar-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  min-width: 200px;
-  display: flex;
-  flex-direction: column;
-  padding: 4px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r2);
-  box-shadow: var(--shadow);
-}
+/* Los estilos de «Aa» sustituyen a la fila de botones, a la misma altura: un
+   desplegable colgando debajo quedaba tapado por el teclado. */
 .nb-fb-estilo {
+  flex: none;
+  height: 34px;
   border-radius: 8px;
-  padding: 10px 14px;
-  text-align: left;
+  padding: 0 12px;
   border: 0;
   background: transparent;
   color: var(--fg);
+  font-size: 15px;
+  white-space: nowrap;
 }
 .nb-fb-estilo.activo {
   background: var(--surface-2, rgba(127, 127, 127, 0.16));
