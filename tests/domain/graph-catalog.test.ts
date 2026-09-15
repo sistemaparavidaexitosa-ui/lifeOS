@@ -30,7 +30,7 @@ test("cada tipo tiene el color que le toca, y no entra ninguno sin decidirlo", (
     workspace: "--accent", project: "--c-purple", task: "--c-purple",
     person: "--c-pink", document: "--c-blue", note: "--c-blue",
     decision: "--c-blue", meeting: "--c-pink", goal: "--c-orange",
-    routine: "--c-orange", habit: "--c-orange", book: "--c-orange",
+    routine: "--c-orange", habit: "--c-orange", book: "--c-orange", identity_trait: "--c-orange",
     investment: "--c-green", budget: "--c-green", asset: "--c-green",
     ai_conversation: "--c-teal", risk: "--danger", custom: "--muted",
     // 0061 · el dinero y los cuadernos
