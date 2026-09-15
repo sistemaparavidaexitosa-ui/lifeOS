@@ -6,7 +6,7 @@
 // El estado vive arriba (NoteEditor) porque la pila de deshacer y el
 // autoguardado lo necesitan. Aquí sólo se calculan bloques nuevos y se avisa,
 // junto con dónde debe quedar el cursor.
-import type { KeyboardEvent, MouseEvent } from "react";
+import { useRef, type KeyboardEvent, type MouseEvent } from "react";
 import EditableLine from "./EditableLine";
 import type { Block, Inline } from "@/lib/domain/notes/markup.ts";
 import {
@@ -18,6 +18,15 @@ import {
   toggleTodo,
   type BlockStyle
 } from "@/lib/domain/notes/edit.ts";
+import {
+  alinearClaves,
+  clavesTrasEnter,
+  clavesTrasFundirBloques,
+  clavesTrasFundirLinea,
+  clavesTrasSalirDeLista,
+  type Claves
+} from "@/lib/domain/notes/claves.ts";
+import { offsetDelCursor } from "@/lib/dom/linea-dom.ts";
 
 /** Dónde está el cursor: qué bloque, qué línea dentro de él, y qué tramo.
  *
@@ -40,8 +49,6 @@ export interface NoteDocProps {
   cursor: Cursor;
   onCursor: (cursor: Cursor) => void;
   readOnly?: boolean;
-  /** La barra de formato se está enseñando: la línea del cursor le reserva hueco debajo. */
-  conBarra?: boolean;
 }
 
 // Lo que convierte un bloque al vuelo mientras escribes. De aquí sale la
@@ -122,9 +129,21 @@ function quitarFila(t: Extract<Block, { kind: "table" }>, indice: number): Block
   return { kind: "table", head: t.head, rows: t.rows.filter((_, i) => i !== indice) };
 }
 
-export default function NoteDoc({ blocks, onChange, cursor, onCursor, readOnly, conBarra }: NoteDocProps) {
+export default function NoteDoc({ blocks, onChange, cursor, onCursor, readOnly }: NoteDocProps) {
   /** Cursor que el MODELO impone: sube `seq` para que EditableLine lo aplique. */
   const mover = (c: Omit<Cursor, "seq">): Cursor => ({ ...c, seq: cursor.seq + 1 });
+
+  // CLAVES ESTABLES (D-157). Enter y Backspace dejan el cursor en una línea que
+  // conserva la clave —y por tanto el nodo— de la línea donde se pulsó, así que
+  // el foco no tiene que saltar a otro contenteditable: el iPhone no lo seguía y
+  // escribía en la línea de arriba. Se alinean en cada render porque un deshacer
+  // o un cambio de estilo también cambian `blocks`; ahí se conservan por
+  // posición, como hacían las claves por índice.
+  const contador = useRef(0);
+  const nueva = () => `l${++contador.current}`;
+  const clavesRef = useRef<Claves>({ bloques: [], items: [] });
+  clavesRef.current = alinearClaves(clavesRef.current, blocks, nueva);
+  const claves = clavesRef.current;
 
   function reemplazar(indice: number, nuevos: Block[], cur: Cursor) {
     onChange([...blocks.slice(0, indice), ...nuevos, ...blocks.slice(indice + 1)], cur);
@@ -167,6 +186,10 @@ export default function NoteDoc({ blocks, onChange, cursor, onCursor, readOnly, 
   function alPulsar(e: KeyboardEvent<HTMLDivElement>, bi: number, ii: number) {
     const bloque = blocks[bi];
     if (!bloque || readOnly) return;
+    // Dónde está el cursor se lee del DOM, no de `cursor`: el modelo se entera
+    // por `selectionchange`, que llega DESPUÉS, y tras tocar o escribir deprisa
+    // puede ir una tecla por detrás. Partir por un offset viejo corta mal.
+    const aqui = offsetDelCursor(e.currentTarget);
     const lineas = textoDeBloque(bloque);
     const linea = lineas[ii] ?? [];
     const largo = plainLength(linea);
@@ -198,6 +221,7 @@ export default function NoteDoc({ blocks, onChange, cursor, onCursor, readOnly, 
       if (enLista && largo === 0 && lineas.length > 1) {
         const sinItem = quitarLinea(bloque, ii);
         const nuevos = sinItem ? [sinItem, PARRAFO_VACIO()] : [PARRAFO_VACIO()];
+        clavesRef.current = clavesTrasSalirDeLista(claves, bi, ii, sinItem !== null, nueva);
         reemplazar(bi, nuevos, mover({
           block: bi + (sinItem ? 1 : 0),
           item: 0,
@@ -207,7 +231,8 @@ export default function NoteDoc({ blocks, onChange, cursor, onCursor, readOnly, 
         return;
       }
 
-      const { bloques, destino } = partirConEnter(bloque, ii, cursor.start);
+      const { bloques, destino } = partirConEnter(bloque, ii, aqui.start);
+      clavesRef.current = clavesTrasEnter(claves, bi, ii, bloque, bloques, nueva);
       reemplazar(bi, bloques, mover({
         block: bi + destino.bloque,
         item: destino.item,
@@ -217,7 +242,7 @@ export default function NoteDoc({ blocks, onChange, cursor, onCursor, readOnly, 
       return;
     }
 
-    if (e.key === "Backspace" && cursor.start === 0 && cursor.end === 0) {
+    if (e.key === "Backspace" && aqui.start === 0 && aqui.end === 0) {
       // Dentro del bloque: funde con la línea anterior del mismo bloque.
       if (ii > 0) {
         e.preventDefault();
@@ -225,6 +250,7 @@ export default function NoteDoc({ blocks, onChange, cursor, onCursor, readOnly, 
         const fundida = [...anterior, ...linea];
         const sinLinea = quitarLinea(bloque, ii);
         if (sinLinea) {
+          clavesRef.current = clavesTrasFundirLinea(claves, bi, ii);
           reemplazar(bi, [conLinea(sinLinea, ii - 1, fundida)], mover({
             block: bi,
             item: ii - 1,
@@ -255,11 +281,12 @@ export default function NoteDoc({ blocks, onChange, cursor, onCursor, readOnly, 
         onCursor(destino);
         return;
       }
+      clavesRef.current = clavesTrasFundirBloques(claves, bi, bloque, fundido);
       onChange([...blocks.slice(0, bi - 1), ...fundido, ...blocks.slice(bi + 1)], destino);
       return;
     }
 
-    if (e.key === "ArrowUp" && cursor.start === 0) {
+    if (e.key === "ArrowUp" && aqui.start === 0) {
       if (ii > 0) {
         e.preventDefault();
         onCursor(mover({ block: bi, item: ii - 1, start: 0, end: 0 }));
@@ -272,7 +299,7 @@ export default function NoteDoc({ blocks, onChange, cursor, onCursor, readOnly, 
       return;
     }
 
-    if (e.key === "ArrowDown" && cursor.start === largo) {
+    if (e.key === "ArrowDown" && aqui.start === largo) {
       if (ii < lineas.length - 1) {
         e.preventDefault();
         onCursor(mover({ block: bi, item: ii + 1, start: 0, end: 0 }));
@@ -289,12 +316,12 @@ export default function NoteDoc({ blocks, onChange, cursor, onCursor, readOnly, 
     <div className="nb-doc nb-prose">
       {blocks.map((bloque, bi) => (
         <BloqueEditable
-          key={bi}
+          key={claves.bloques[bi]}
+          clavesLineas={claves.items[bi] ?? []}
           bloque={bloque}
           indice={bi}
           cursor={cursor}
           readOnly={readOnly}
-          conBarra={conBarra}
           onEscribir={alEscribir}
           onPulsar={alPulsar}
           onSelect={(ii, start, end) => onCursor({ ...cursor, block: bi, item: ii, start, end })}
@@ -308,10 +335,10 @@ export default function NoteDoc({ blocks, onChange, cursor, onCursor, readOnly, 
 
 function BloqueEditable({
   bloque,
+  clavesLineas,
   indice,
   cursor,
   readOnly,
-  conBarra,
   onEscribir,
   onPulsar,
   onSelect,
@@ -319,10 +346,11 @@ function BloqueEditable({
   onTabla
 }: {
   bloque: Block;
+  /** Clave de cada ítem de lista: el `<li>` del cursor sobrevive a Enter y Backspace. */
+  clavesLineas: string[];
   indice: number;
   cursor: Cursor;
   readOnly?: boolean;
-  conBarra?: boolean;
   onEscribir: (bi: number, ii: number, content: Inline[], caret: number) => void;
   onPulsar: (e: KeyboardEvent<HTMLDivElement>, bi: number, ii: number) => void;
   onSelect: (ii: number, start: number, end: number) => void;
@@ -333,8 +361,7 @@ function BloqueEditable({
 
   const linea = (content: Inline[], ii: number, className: string, placeholder?: string) => (
     <EditableLine
-      key={ii}
-      className={`nb-line ${className}${conBarra && enfocado(ii) ? " con-barra" : ""}`.trim()}
+      className={`nb-line ${className}`.trim()}
       content={content}
       readOnly={readOnly}
       placeholder={placeholder}
@@ -367,7 +394,7 @@ function BloqueEditable({
       return (
         <ul>
           {bloque.items.map((it, i) => (
-            <li key={i}>{linea(it, i, "")}</li>
+            <li key={clavesLineas[i] ?? i}>{linea(it, i, "")}</li>
           ))}
         </ul>
       );
@@ -375,7 +402,7 @@ function BloqueEditable({
       return (
         <ol>
           {bloque.items.map((it, i) => (
-            <li key={i}>{linea(it, i, "")}</li>
+            <li key={clavesLineas[i] ?? i}>{linea(it, i, "")}</li>
           ))}
         </ol>
       );
@@ -383,7 +410,7 @@ function BloqueEditable({
       return (
         <ul className="nb-todo">
           {bloque.items.map((it, i) => (
-            <li key={i} className={it.done ? "hecha" : undefined}>
+            <li key={clavesLineas[i] ?? i} className={it.done ? "hecha" : undefined}>
               {/* Fuera del contenteditable: marcar no es escribir, y así no roba
                   el foco ni hace saltar el teclado. */}
               <input

@@ -2665,7 +2665,7 @@ implementa:
   `--z-toolbar` y ya no compite con `.ai-fab`.
 
 - **D-155 · La barra de formato va debajo de la línea donde se escribe; D-154
-  queda sustituida.** Pegada arriba desaparecía en cuanto se abría el teclado
+  queda sustituida.** *(Sustituida por D-156.)* Pegada arriba desaparecía en cuanto se abría el teclado
   del iPhone: Safari desplaza el viewport visual por dentro del de layout, y lo
   que va fijo o pegado a un borde se queda fuera de la vista. Con D-113 (abajo)
   y D-154 (arriba) ya son cuatro intentos medidos contra la pantalla, así que se
@@ -2680,3 +2680,30 @@ implementa:
   y escribiendo pegado al teclado la barra queda debajo de él hasta subir la
   nota. «Aa» cambia la fila por los estilos en vez de abrir un desplegable, que
   también habría quedado bajo el teclado.
+
+- **D-156 · El editor de notas no tiene barra de formato; D-155 queda
+  sustituida.** Cinco diseños fallaron en el iPhone: tres sobre el teclado
+  (D-113), uno pegado arriba (D-154) y uno debajo de la línea (D-155), que el
+  usuario probó y descartó («no es funcional debajo del texto»). Con el teclado
+  de iOS abierto no hay un sitio para una barra web que esté siempre a la vista,
+  no tape texto y no salte. El formato queda en dos vías que ya existían:
+  los atajos al empezar una línea (`# `, `## `, `- `, `[ ] `, `1. `, `> `) y el
+  menú nativo de la selección (Formato → B/I/U en iOS, ⌘B/⌘I en escritorio),
+  cuyo `<b>`, `<i>` y `<u>` ya entiende `leerDom`. Se pierden los botones de
+  tachado, monoespaciado y deshacer. El tachado y el monoespaciado se siguen
+  leyendo si ya están en la nota, y ⌘Z sigue funcionando. Se borraron
+  `FormatBar.tsx`, `barra-formato.ts` y su prueba.
+
+- **D-157 · La selección llega por `selectionchange`, y Enter/Backspace no
+  mueven el foco.** `onSelect` de React se dispara también en el `keydown` si la
+  selección cambió desde su último aviso, en el mismo lote que Enter y con el
+  cursor de antes, y pisaba el que Enter acababa de poner: la línea nueva
+  aparecía y el foco se quedaba arriba. `EditableLine` escucha ahora el
+  `selectionchange` nativo, que llega con Enter ya aplicado, y `alPulsar` lee el
+  offset del DOM. Como defensa añadida, los bloques y los ítems de lista tienen
+  **claves estables** (`src/lib/domain/notes/claves.ts`): la línea donde queda el
+  cursor conserva la clave de la línea donde se pulsó, así que React conserva el
+  nodo enfocado y el cursor se recoloca dentro de él, sin pasar el foco a otro
+  contenteditable. Donde cambia la etiqueta (un encabezado que abre un párrafo,
+  salir de una lista) React crea otro nodo igualmente, y ahí el foco se sigue
+  moviendo.

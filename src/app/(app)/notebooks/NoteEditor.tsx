@@ -9,10 +9,10 @@
 //     foco y —lo más importante— cuando la pestaña deja de verse. En iOS,
 //     bloquear el teléfono o cambiar de app puede congelar o descartar la
 //     página: sin ese último anzuelo se pierde justo lo último escrito.
-//  3. Las ACCIONES van arriba. La barra de FORMATO va debajo de la línea donde
-//     escribes, en un hueco que esa línea reserva y en coordenadas del
-//     documento (D-155, que sustituye a D-154): con el teclado abierto, nada
-//     que se mida contra la pantalla se queda a la vista en iOS.
+//  3. Las ACCIONES van arriba. NO hay barra de formato (D-156): cinco diseños
+//     fallaron en el iPhone con el teclado abierto. El formato sale de los
+//     atajos al escribir (`# `, `- `, `[ ] `…) y del menú nativo de la
+//     selección, cuyas <b>, <i> y <u> ya entiende `leerDom`.
 //
 // EL VOLCADO ANTES DE GUARDAR
 // El bloque enfocado es un contenteditable NO controlado, así que el modelo va
@@ -25,28 +25,15 @@
 // `saveNote` guarda con `where version = $esperada`; si alguien se adelantó, la
 // acción NO pisa su texto y devuelve quién fue. Entonces el documento se pone
 // en solo lectura: lo que hay en pantalla sigue siendo tuyo y se puede copiar.
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { deleteNote, saveNote } from "./actions";
 import { noteDisplayTitle, serializeNote, type Block } from "@/lib/domain/notes/markup.ts";
-import {
-  applyMark,
-  bloquesEditables,
-  estiloAlternado,
-  hasMark,
-  marcasEn,
-  setBlockStyle,
-  styleOf,
-  textoDeBloque,
-  type BlockStyle,
-  type MarcaInline
-} from "@/lib/domain/notes/edit.ts";
+import { bloquesEditables } from "@/lib/domain/notes/edit.ts";
 import NoteDoc, { conLinea, type Cursor } from "./NoteDoc";
 import { leerDom } from "@/lib/dom/linea-dom.ts";
-import { posicionBarra } from "@/lib/dom/barra-formato.ts";
 import NoteBody from "./NoteBody";
-import FormatBar from "./FormatBar";
 import { fdatetime } from "@/lib/format";
 
 const RETARDO_MS = 1200;
@@ -73,8 +60,6 @@ export interface EditableNote {
   updatedByName: string;
   updatedAt: string;
 }
-
-const MARCAS_POSIBLES: MarcaInline[] = ["bold", "italic", "underline", "strike", "code"];
 
 export default function NoteEditor({
   note,
@@ -110,8 +95,6 @@ export default function NoteEditor({
   // nota mientras escribías», siendo Fulano tú.
   const guardandoRef = useRef(false);
   const docRef = useRef<HTMLDivElement | null>(null);
-  // `null` mientras no se escribe en el cuerpo: la barra no se enseña.
-  const [topBarra, setTopBarra] = useState<number | null>(null);
 
   useEffect(() => {
     blocksRef.current = blocks;
@@ -127,7 +110,6 @@ export default function NoteEditor({
   const pasado = useRef<Instantanea[]>([]);
   const futuro = useRef<Instantanea[]>([]);
   const ultimoApunte = useRef(0);
-  const [profundidad, setProfundidad] = useState({ atras: 0, adelante: 0 });
 
   const apuntar = useCallback((anteriores: Block[], anteriorCursor: Cursor) => {
     const ahora = Date.now();
@@ -142,7 +124,6 @@ export default function NoteEditor({
       -MAX_HISTORIA
     );
     futuro.current = [];
-    setProfundidad({ atras: pasado.current.length, adelante: 0 });
   }, []);
 
   // ── Guardado ───────────────────────────────────────────────────────────
@@ -273,7 +254,6 @@ export default function NoteEditor({
     cursorRef.current = destino;
     setBlocks(previa.blocks);
     setCursor(destino);
-    setProfundidad({ atras: pasado.current.length, adelante: futuro.current.length });
     programar();
   }, [programar]);
 
@@ -287,7 +267,6 @@ export default function NoteEditor({
     cursorRef.current = destino;
     setBlocks(siguiente.blocks);
     setCursor(destino);
-    setProfundidad({ atras: pasado.current.length, adelante: futuro.current.length });
     programar();
   }, [programar]);
 
@@ -301,90 +280,6 @@ export default function NoteEditor({
     document.addEventListener("keydown", alPulsar);
     return () => document.removeEventListener("keydown", alPulsar);
   }, [deshacer, rehacer]);
-
-  // ── Dónde va la barra (D-155) ──────────────────────────────────────────
-  // Debajo de la línea donde se escribe, en el hueco que ella misma reserva
-  // (`.con-barra`). Se mide la distancia entre la línea y el contenedor, nunca
-  // contra la pantalla: así ni el teclado ni la barra de direcciones de Safari
-  // la pueden mover.
-  const recolocarBarra = useCallback(() => {
-    const doc = docRef.current;
-    if (!doc) return;
-    const activo = doc.ownerDocument.activeElement;
-    if (!(activo instanceof HTMLElement) || !doc.contains(activo) || !activo.matches(".nb-doc .nb-line")) {
-      setTopBarra(null);
-      return;
-    }
-    // La línea del MODELO manda sobre la del foco: tras un Enter, este efecto
-    // corre antes de que el foco llegue a la línea nueva, y medir la vieja haría
-    // saltar la barra un instante.
-    const linea = doc.querySelector<HTMLElement>(".nb-doc .nb-line.con-barra") ?? activo;
-    setTopBarra(posicionBarra(linea.getBoundingClientRect(), doc.getBoundingClientRect()));
-  }, []);
-
-  useEffect(() => {
-    const doc = docRef.current;
-    if (!doc) return;
-    // Al pasar de una línea a otra hay un `focusout` antes del `focusin`: se
-    // decide en el siguiente cuadro para no hacer parpadear la barra.
-    let cuadro = 0;
-    const alMoverFoco = () => {
-      cancelAnimationFrame(cuadro);
-      cuadro = requestAnimationFrame(recolocarBarra);
-    };
-    doc.addEventListener("focusin", alMoverFoco);
-    doc.addEventListener("focusout", alMoverFoco);
-    // Una línea de arriba que crece al escribir, o girar el teléfono, empuja la
-    // línea enfocada sin mover el foco.
-    const observador = new ResizeObserver(alMoverFoco);
-    observador.observe(doc);
-    return () => {
-      cancelAnimationFrame(cuadro);
-      doc.removeEventListener("focusin", alMoverFoco);
-      doc.removeEventListener("focusout", alMoverFoco);
-      observador.disconnect();
-    };
-  }, [recolocarBarra]);
-
-  // Enter, Backspace o un cambio de estilo mueven la línea sin que el foco
-  // tenga por qué cambiar.
-  useLayoutEffect(() => {
-    recolocarBarra();
-  }, [blocks, cursor, recolocarBarra]);
-
-  // ── Acciones de la barra ───────────────────────────────────────────────
-  const bloqueActual = blocks[cursor.block];
-
-  const marcasActivas = useMemo<MarcaInline[]>(() => {
-    if (!bloqueActual) return [];
-    const linea = textoDeBloque(bloqueActual)[cursor.item] ?? [];
-    // Sin selección se mira la marca EN el cursor: dentro de una negrita, «B»
-    // sale encendido, como en el iPhone. Antes la barra sólo se encendía con
-    // una selección viva y parecía que los botones no reflejaban nada.
-    if (cursor.start === cursor.end) return marcasEn(linea, cursor.start);
-    return MARCAS_POSIBLES.filter((m) => hasMark(linea, cursor.start, cursor.end, m));
-  }, [bloqueActual, cursor]);
-
-  function aplicarMarca(marca: MarcaInline) {
-    if (!bloqueActual || cursor.start === cursor.end) return;
-    const linea = textoDeBloque(bloqueActual)[cursor.item] ?? [];
-    const marcada = applyMark(linea, cursor.start, cursor.end, marca);
-    cambiar(
-      blocks.map((b, i) => (i === cursor.block ? conLinea(b, cursor.item, marcada) : b)),
-      { ...cursor, seq: cursor.seq + 1 }
-    );
-  }
-
-  function aplicarEstilo(estiloNuevo: BlockStyle) {
-    if (!bloqueActual) return;
-    // Tocar el estilo ya activo lo quita, como en el iPhone.
-    const destino = estiloAlternado(styleOf(bloqueActual), estiloNuevo);
-    cambiar(
-      blocks.map((b, i) => (i === cursor.block ? setBlockStyle(bloqueActual, destino) : b)),
-      { block: cursor.block, item: 0, start: 0, end: 0, seq: cursor.seq + 1 }
-    );
-  }
-
 
   const cuerpo = serializeNote(blocks);
   const encabezado = noteDisplayTitle(title, cuerpo);
@@ -433,20 +328,7 @@ export default function NoteEditor({
         )}
 
         {canWrite ? (
-          <div ref={docRef} className="nb-doc-wrap">
-            {!enConflicto && (
-              <FormatBar
-                top={topBarra}
-                estilo={bloqueActual ? styleOf(bloqueActual) : "body"}
-                marcasActivas={marcasActivas}
-                onEstilo={aplicarEstilo}
-                onMarca={aplicarMarca}
-                onDeshacer={deshacer}
-                onRehacer={rehacer}
-                puedeDeshacer={profundidad.atras > 0}
-                puedeRehacer={profundidad.adelante > 0}
-              />
-            )}
+          <div ref={docRef}>
             <input
               className="nb-title-input"
               value={title}
@@ -466,7 +348,6 @@ export default function NoteEditor({
               blocks={blocks}
               cursor={cursor}
               readOnly={enConflicto}
-              conBarra={topBarra !== null && !enConflicto}
               onCursor={setCursor}
               onChange={(siguientes, cur) => cambiar(siguientes, cur)}
             />
