@@ -2,6 +2,8 @@
 
 **Fecha:** 2026-09-13 · **Estado:** diseño aprobado. Cada fase lleva su plan en `docs/superpowers/plans/`.
 
+> **Nota 2026-09-15:** los números de migración de las fases A, E y L (`0063`–`0065`) eran provisionales. El diseño de identidad y analítica (`2026-09-15-identidad-y-analitica-design.md`) se construye antes y ocupa los siguientes; cada fase de este spec toma el número libre cuando se construya. Su F5 implementa además el tramo de hábitos de A1 y A3.
+
 ## Contexto
 
 LifeOS ya tiene las piezas de un motor de inteligencia, pero trabajan por separado:
