@@ -11,6 +11,7 @@ import WeeklyTrend from "@/components/charts/WeeklyTrend";
 import LifeAreasRadar from "@/components/charts/LifeAreasRadar";
 import MonthlyHeatmap from "@/components/charts/MonthlyHeatmap";
 import StreakTimeline from "@/components/charts/StreakTimeline";
+import IdentityEvolution from "@/components/charts/IdentityEvolution";
 import { diaCorto, pct, puntos } from "@/components/charts/format";
 import RangePicker from "./RangePicker";
 import HabitTable from "./HabitTable";
@@ -66,6 +67,12 @@ export default async function RoutinesAnalyticsPage({ searchParams }: { searchPa
       )}
 
       <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 160px), 1fr))" }}>
+        <MetricCard
+          label="Identity Score"
+          value={d.identity.score === null ? "—" : `${d.identity.score}`}
+          delta={d.identity.delta7 === null ? undefined : { text: `${puntos(d.identity.delta7)} vs. hace una semana`, good: signo(d.identity.delta7) }}
+          hint="Alineación de tus acciones con quien quieres ser"
+        />
         <MetricCard label="Días sólidos" value={`${d.solidStreak}`} hint="Seguidos con 80 % o más de lo que tocaba" />
         <MetricCard label="Hoy" value={pct(d.periods.day)} hint={d.periods.day === null ? "Aún no registras nada hoy" : "De lo que ya registraste"} />
         <MetricCard
@@ -110,6 +117,20 @@ export default async function RoutinesAnalyticsPage({ searchParams }: { searchPa
           <WeeklyTrend data={d.weeks} />
         </ChartCard>
       </div>
+
+      <ChartCard
+        title="Evolución de tu identidad"
+        subtitle="Identity Score de cada noche; el último punto es hoy"
+        table={{ head: ["Día", "Identity Score"], rows: d.identity.history.map((h) => [diaCorto(h.date), h.score]) }}
+      >
+        {d.identity.history.length >= 2 ? (
+          <IdentityEvolution data={d.identity.history} />
+        ) : (
+          <p className="text-sm" style={{ color: "var(--muted)" }}>
+            Cada noche se guarda una foto de tu Identity Score. Con dos o más, aquí verás hacia dónde vas.
+          </p>
+        )}
+      </ChartCard>
 
       <ChartCard title="Mapa de calor" subtitle="Cada casilla es un día; más oscuro, más cumplido">
         <MonthlyHeatmap months={d.heatmap} />

@@ -117,7 +117,7 @@ async function tareasDe(supabase: Admin, userId: string): Promise<MyTaskRow[]> {
  * ninguno: `growthFacts` está preparado para no afirmar el avance cuando no lo
  * sabe (`pct: null`), y esto es lo que hace que esa rama importe.
  */
-async function fuentesDe(supabase: Admin, userId: string): Promise<SourceSnapshot> {
+export async function fuentesDe(supabase: Admin, userId: string): Promise<SourceSnapshot> {
   const [{ data: books }, { data: fgoals }, { data: sgoals }] = await Promise.all([
     supabase.from("books").select("id, current_page").eq("user_id", userId),
     supabase.from("financial_goals").select("id, current_amount").eq("user_id", userId),

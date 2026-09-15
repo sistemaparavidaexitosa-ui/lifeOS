@@ -202,16 +202,22 @@ export interface HabitRow {
   misses: number;
 }
 
-/** Cumplimiento de 30 días en el que las ranuras de la última semana pesan el doble. */
-function tasaPonderada(s: HabitSeries, todayISO: string): number | null {
+/**
+ * Cumplimiento de 30 días en el que las ranuras de la última semana pesan el
+ * doble. Lo usan la consistencia de cada hábito y el componente «Constancia»
+ * del Identity Score (D-160).
+ */
+export function recencyWeightedRate(series: HabitSeries[], todayISO: string): number | null {
   const reciente = addDaysISO(todayISO, -6);
   let suma = 0;
   let peso = 0;
-  for (const r of slotStates(s, addDaysISO(todayISO, -29), todayISO, todayISO)) {
-    if (!JUZGADO(r)) continue;
-    const w = diffDays(reciente, r.slot.end) >= 0 ? 2 : 1;
-    suma += r.pct * w;
-    peso += w;
+  for (const s of series) {
+    for (const r of slotStates(s, addDaysISO(todayISO, -29), todayISO, todayISO)) {
+      if (!JUZGADO(r)) continue;
+      const w = diffDays(reciente, r.slot.end) >= 0 ? 2 : 1;
+      suma += r.pct * w;
+      peso += w;
+    }
   }
   return peso === 0 ? null : suma / peso;
 }
@@ -226,7 +232,7 @@ function tasaPonderada(s: HabitSeries, todayISO: string): number | null {
 export function habitRows(series: HabitSeries[], rangeFromISO: string, todayISO: string): HabitRow[] {
   return series.map((s) => {
     const rate90 = completionRate([s], addDaysISO(todayISO, -89), todayISO, todayISO);
-    const ponderada = tasaPonderada(s, todayISO);
+    const ponderada = recencyWeightedRate([s], todayISO);
     const rachas = habitStreaks(s, todayISO, addDaysISO(todayISO, -364));
     return {
       habitId: s.habitId,

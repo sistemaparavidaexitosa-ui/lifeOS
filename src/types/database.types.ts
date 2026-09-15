@@ -1422,6 +1422,39 @@ export type Database = {
           },
         ]
       }
+      habit_identity_traits: {
+        Row: {
+          created_at: string
+          habit_id: string
+          trait_id: string
+        }
+        Insert: {
+          created_at?: string
+          habit_id: string
+          trait_id: string
+        }
+        Update: {
+          created_at?: string
+          habit_id?: string
+          trait_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "habit_identity_traits_habit_id_fkey"
+            columns: ["habit_id"]
+            isOneToOne: false
+            referencedRelation: "habits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "habit_identity_traits_trait_id_fkey"
+            columns: ["trait_id"]
+            isOneToOne: false
+            referencedRelation: "identity_traits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       habit_logs: {
         Row: {
           completed_at: string
@@ -1528,6 +1561,126 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      identity_profiles: {
+        Row: {
+          core_values: string[]
+          created_at: string
+          desired_identity: string
+          inspirations: string[]
+          motivational_tone: string
+          updated_at: string
+          user_id: string
+          vision_statement: string
+        }
+        Insert: {
+          core_values?: string[]
+          created_at?: string
+          desired_identity?: string
+          inspirations?: string[]
+          motivational_tone?: string
+          updated_at?: string
+          user_id: string
+          vision_statement?: string
+        }
+        Update: {
+          core_values?: string[]
+          created_at?: string
+          desired_identity?: string
+          inspirations?: string[]
+          motivational_tone?: string
+          updated_at?: string
+          user_id?: string
+          vision_statement?: string
+        }
+        Relationships: []
+      }
+      identity_revisions: {
+        Row: {
+          changed_at: string
+          core_values: string[]
+          desired_identity: string
+          id: string
+          user_id: string
+          vision_statement: string
+        }
+        Insert: {
+          changed_at?: string
+          core_values: string[]
+          desired_identity: string
+          id?: string
+          user_id: string
+          vision_statement: string
+        }
+        Update: {
+          changed_at?: string
+          core_values?: string[]
+          desired_identity?: string
+          id?: string
+          user_id?: string
+          vision_statement?: string
+        }
+        Relationships: []
+      }
+      identity_scores: {
+        Row: {
+          components: Json
+          created_at: string
+          formula_version: number
+          local_date: string
+          score: number
+          user_id: string
+        }
+        Insert: {
+          components?: Json
+          created_at?: string
+          formula_version: number
+          local_date: string
+          score: number
+          user_id: string
+        }
+        Update: {
+          components?: Json
+          created_at?: string
+          formula_version?: number
+          local_date?: string
+          score?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      identity_traits: {
+        Row: {
+          active: boolean
+          area: string
+          created_at: string
+          id: string
+          name: string
+          position: number
+          statement: string
+          user_id: string
+        }
+        Insert: {
+          active?: boolean
+          area?: string
+          created_at?: string
+          id?: string
+          name: string
+          position?: number
+          statement?: string
+          user_id: string
+        }
+        Update: {
+          active?: boolean
+          area?: string
+          created_at?: string
+          id?: string
+          name?: string
+          position?: number
+          statement?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       investments: {
         Row: {

@@ -13,6 +13,9 @@ import {
 import { habitStreaks, slotStates, type HabitLogEntry } from "@/lib/domain/development/habit-analytics.ts";
 import { loadHabitSeries } from "@/lib/data/habit-analytics";
 import DailyCheckinCard from "./DailyCheckinCard";
+import { loadIdentityOverview } from "@/lib/data/identity";
+import IdentityHero from "./identity/IdentityHero";
+import IdentityScoreCard from "./identity/IdentityScoreCard";
 import { CardHeader, ModuleNote, SectionHeader } from "../FormSheet";
 import RoutineForm, { type OccupationLite } from "./RoutineForm";
 import RoutineTemplates from "./RoutineTemplates";
@@ -56,6 +59,8 @@ export default async function RoutinesPage() {
     supabase.from("daily_reflections").select("*").eq("local_date", today).maybeSingle(),
     loadHabitSeries(desdeLogs, today)
   ]);
+  const identidad = await loadIdentityOverview();
+  const traitOptions = (identidad?.traits ?? []).filter((t) => t.active).map((t) => ({ id: t.id, name: t.name, area: t.area }));
 
   const occById = new Map((occupations ?? []).map((o) => [o.id, o]));
   const habitById = new Map((habits ?? []).map((h) => [h.id, h.name]));
@@ -129,6 +134,8 @@ export default async function RoutinesPage() {
             routineId={r.id}
             position={h.position}
             otherHabits={habitOptions}
+            traits={traitOptions}
+            traitIds={identidad?.votesByHabit[h.id] ?? []}
             habit={{
               id: h.id,
               name: h.name,
@@ -211,7 +218,7 @@ export default async function RoutinesPage() {
         <RoutineRunner routineId={routine.id} habits={runnerHabits} today={today} minDate={desdeDetalle} />
 
         <div className="mt-2.5">
-          <HabitForm routineId={routine.id} position={own.length} otherHabits={habitOptions} label="+ Hábito" />
+          <HabitForm routineId={routine.id} position={own.length} otherHabits={habitOptions} traits={traitOptions} label="+ Hábito" />
         </div>
       </Card>
     );
@@ -219,6 +226,13 @@ export default async function RoutinesPage() {
 
   return (
     <div className="flex flex-col gap-3.5">
+      {identidad && (
+        <div className="grid gap-3.5 md:grid-cols-2 items-start">
+          <IdentityHero overview={identidad} />
+          <IdentityScoreCard score={identidad.score} delta7={identidad.delta7} />
+        </div>
+      )}
+
       <ModuleNote>
         Cada hábito vive dentro de una rutina y toca cuando toca ella. El bloque horario sigue viviendo en Autogestión
         del Tiempo: la rutina se ancla a uno que ya existe. Todo esto es privado, sin relación con Workspaces (BR-027).

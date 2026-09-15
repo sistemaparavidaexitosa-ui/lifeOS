@@ -2767,3 +2767,29 @@ implementa:
     su tabla de datos plegada: el tooltip no es la única vía a un valor.
   - **CSP con nonce:** verificado con `pnpm build && pnpm start`. Recharts no
     usa `eval` ni estilos que la política bloquee.
+
+- **D-160 · Identity Score v1: se mide la alineación con la identidad, no las
+  casillas.** Contesta «¿qué tan alineadas están tus acciones diarias con la
+  persona que quieres ser?» con seis componentes de 0 a 100
+  (`src/lib/domain/identity/score.ts`): **votos por tu identidad** (25,
+  cumplimiento de 30 días de los hábitos vinculados a cada rasgo activo, un voto
+  por rasgo para que el rasgo con más hábitos no domine), **constancia** (25,
+  cumplimiento de 30 días con la última semana al doble), **equilibrio de
+  áreas** (15, media por área: un área fuerte no tapa una descuidada), **ritmo
+  de metas** (15, 100 menos lo que cada meta activa con horizonte va por detrás
+  de `goalExpectedPct`), **adherencia a rutinas** (10) y **reflexión** (10, días
+  con check-in, reflexión o aprendizaje en la bitácora, en una ventana que no
+  empieza antes del primer hábito). Un componente sin datos **no vale 0**: no
+  existe y los pesos se renormalizan, así que no definir aún rasgos o metas no
+  castiga. Sin constancia (sin hábitos juzgables) no hay puntuación: un número
+  hecho solo de metas y reflexión no contesta la pregunta. El área de un hábito
+  es la de su rasgo (el primero activo por posición) o, si no vota, la de su
+  categoría. **Foto nocturna:** `identity_scores` guarda una fila por día a las
+  23 h locales, escrita solo por el reloj (`authenticated` no tiene INSERT: una
+  curva de evolución editable no mediría nada), con `components` y
+  `formula_version` para explicar un día pasado con sus propias cifras y no
+  comparar fórmulas distintas. La pantalla y el reloj usan la misma carga,
+  `loadScoreContext`, con filtros explícitos por usuario. Costes aceptados: los
+  pesos son un juicio, no un modelo estadístico, y cambiarlos exige subir
+  `FORMULA_VERSION`; y una noche en que el reloj no pase deja un hueco en la
+  curva en vez de una foto reconstruida al día siguiente.
