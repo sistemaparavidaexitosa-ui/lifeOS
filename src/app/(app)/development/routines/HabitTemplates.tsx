@@ -37,7 +37,7 @@ export default function HabitTemplates({
   templates: HabitTemplate[];
 }) {
   return (
-    <FormSheet label="Plantillas" title="Plantillas de hábitos">
+    <FormSheet label="Plantillas de hábitos" title="Plantillas de hábitos">
       {(close) => <Contenido routines={routines} otherHabits={otherHabits} templates={templates} close={close} />}
     </FormSheet>
   );
