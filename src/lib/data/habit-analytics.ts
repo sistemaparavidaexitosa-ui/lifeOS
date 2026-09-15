@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getUserTimeZone, todayForUser } from "@/lib/data/profile";
 import { addDaysISO, diffDays, todayInTimeZone } from "@/lib/domain/datetime.ts";
 import type { Frequency } from "@/lib/domain/development/routines.ts";
+import { resolveHabitAreas } from "@/lib/domain/identity/score.ts";
+import { loadIdentityOverview } from "@/lib/data/identity";
 import { buildHabitSeries, type HabitSeries } from "@/lib/domain/development/habit-analytics.ts";
 import {
   areaOfCategory,
@@ -105,6 +107,7 @@ export interface HabitDashboard {
   segments: (StreakSegment & { habitName: string })[];
   areas: { area: string; pct: number | null }[];
   rows: DashboardRow[];
+  identity: { score: number | null; delta7: number | null; history: { date: string; score: number }[] };
 }
 
 /** Cuánto histórico se lee: el año del rango más largo, el trimestre de la tasa90 y el mes previo de la tendencia. */
@@ -116,7 +119,11 @@ const VENTANA = 400;
  */
 export async function loadDashboard(rango: Rango): Promise<HabitDashboard> {
   const today = await todayForUser();
-  const [series, meta] = await Promise.all([loadHabitSeries(addDaysISO(today, -VENTANA), today), loadHabitMeta()]);
+  const [series, meta, identidad] = await Promise.all([
+    loadHabitSeries(addDaysISO(today, -VENTANA), today),
+    loadHabitMeta(),
+    loadIdentityOverview()
+  ]);
   const porId = new Map(meta.map((m) => [m.id, m]));
 
   // El rango no empieza antes del primer hábito. Las tasas ya ignoran lo
@@ -167,7 +174,17 @@ export async function loadDashboard(rango: Rango): Promise<HabitDashboard> {
       )
     })),
     segments: streakSegments(series, from, today).map((s) => ({ ...s, habitName: porId.get(s.habitId)?.name ?? "Hábito" })),
-    areas: areaRates(series, (id) => areaOfCategory(porId.get(id)?.category ?? "Otros"), today),
-    rows
+    areas: (() => {
+      // El área la pone el rasgo por el que vota el hábito; sin rasgo, su categoría.
+      const votos = Object.entries(identidad?.votesByHabit ?? {}).flatMap(([habitId, ids]) => ids.map((traitId) => ({ habitId, traitId })));
+      const areaDe = resolveHabitAreas(meta, identidad?.traits ?? [], votos);
+      return areaRates(series, (id) => areaDe[id] ?? areaOfCategory(porId.get(id)?.category ?? "Otros"), today);
+    })(),
+    rows,
+    identity: {
+      score: identidad?.score.score ?? null,
+      delta7: identidad?.delta7 ?? null,
+      history: (identidad?.history ?? []).filter((h) => h.date >= from)
+    }
   };
 }

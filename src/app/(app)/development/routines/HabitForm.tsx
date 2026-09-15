@@ -15,6 +15,13 @@ export interface HabitLite {
   stackAfterHabitId: string | null;
 }
 
+/** Un rasgo de identidad por el que el hábito puede votar (0064). */
+export interface TraitOption {
+  id: string;
+  name: string;
+  area: string;
+}
+
 /** Otros hábitos del usuario: los candidatos sobre los que apilar este. */
 export interface HabitOption {
   id: string;
@@ -40,7 +47,9 @@ export default function HabitForm({
   otherHabits = [],
   prefill,
   label,
-  position = 0
+  position = 0,
+  traits = [],
+  traitIds = []
 }: {
   routineId: string;
   habit?: HabitLite;
@@ -49,6 +58,10 @@ export default function HabitForm({
   label?: string;
   /** Posición por defecto de un hábito nuevo: el final de la rutina. */
   position?: number;
+  /** Rasgos activos de la persona; vacío si aún no definió su identidad. */
+  traits?: TraitOption[];
+  /** Por qué rasgos vota hoy este hábito. */
+  traitIds?: string[];
 }) {
   return (
     <FormSheet
@@ -63,6 +76,8 @@ export default function HabitForm({
           otherHabits={otherHabits}
           prefill={prefill}
           position={position}
+          traits={traits}
+          traitIds={traitIds}
           close={close}
         />
       )}
@@ -76,6 +91,8 @@ export function HabitFields({
   otherHabits,
   prefill,
   position,
+  traits = [],
+  traitIds = [],
   close
 }: {
   routineId: string;
@@ -83,6 +100,8 @@ export function HabitFields({
   otherHabits: HabitOption[];
   prefill?: HabitPrefill;
   position: number;
+  traits?: TraitOption[];
+  traitIds?: string[];
   close: () => void;
 }) {
   const [pending, startTransition] = useTransition();
@@ -194,6 +213,28 @@ export function HabitFields({
           </Field>
         )}
       </div>
+      {/* Hábitos atómicos, cap. 2: cada vez que lo haces votas por quien quieres
+          ser. Solo aparece cuando hay rasgos; el campo oculto le dice a la
+          acción que esta lista SÍ se envió, para que un formulario sin rasgos
+          (una plantilla) no borre los votos que ya existían. */}
+      {traits.length > 0 && (
+        <fieldset className="ah-block">
+          <legend className="text-sm font-bold">¿Por quién vota este hábito?</legend>
+          <input type="hidden" name="traitsPresent" value="1" />
+          <div className="flex flex-wrap gap-2 mt-1">
+            {traits.map((t) => (
+              <label key={t.id} className="chip inline-flex items-center gap-1.5 cursor-pointer" style={{ minHeight: 32 }}>
+                <input type="checkbox" name="traitIds" value={t.id} defaultChecked={traitIds.includes(t.id)} />
+                {t.name}
+              </label>
+            ))}
+          </div>
+          <p className="text-xs" style={{ color: "var(--muted)" }}>
+            Cuenta para el Identity Score y une el hábito con el rasgo en el mapa.
+          </p>
+        </fieldset>
+      )}
+
       {error && (
         <div className="text-xs" style={{ color: "var(--danger)" }}>
           {error}

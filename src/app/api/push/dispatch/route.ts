@@ -14,6 +14,9 @@ import {
 import { claveDelCoach, momentoQueToca, PREFS_POR_DEFECTO } from "@/lib/domain/coach/schedule.ts";
 import { generarYGuardarMensajeDiario } from "@/lib/coach/daily";
 import { proponerAristas } from "@/lib/coach/graph-suggestions";
+import { fuentesDe } from "@/lib/coach/facts";
+import { tocaFotoDeIdentidad } from "@/lib/domain/identity/schedule.ts";
+import { loadScoreContext, scoreOf } from "@/lib/identity/score-inputs";
 
 export const dynamic = "force-dynamic";
 /** Un minuto de techo: el trabajo va por lotes y no debe acercarse al límite. */
@@ -30,7 +33,8 @@ export const maxDuration = 60;
  *   1. recordatorios cuya hora ya pasó,
  *   2. el resumen diario de vencimientos, a la hora local de cada quien,
  *   3. los dos mensajes del coach de vida, también a su hora local (0053),
- *   4. reintentar los avisos que se quedaron sin salir.
+ *   4. la foto nocturna del Identity Score, sin modelo (0064),
+ *   5. reintentar los avisos que se quedaron sin salir.
  *
  * Nunca lanza hacia fuera: devuelve el recuento de lo que hizo. Si un usuario
  * falla, los demás siguen — un perfil con la zona horaria rota no puede dejar
@@ -70,12 +74,13 @@ export async function POST(request: Request) {
   // lento no retrasa recordatorios ni vencimientos, y el reintento de lo que ya
   // estaba en la bandeja sigue corriendo detrás con lo que quede de minuto.
   const coach = await despacharCoach(supabase, ahora, inicio);
+  const identidad = await despacharIdentidad(supabase, ahora, inicio);
   const reintentos = await reintentarPendientes(supabase);
 
   // «creados» y «entregados» se cuentan aparte a propósito: sin ningún
   // dispositivo suscrito se crean avisos que no se entregan, y mezclarlo
   // haría parecer que el reloj no hizo nada.
-  return NextResponse.json({ ok: true, recordatorios, vencimientos, coach, entregados: reintentos });
+  return NextResponse.json({ ok: true, recordatorios, vencimientos, coach, identidad, entregados: reintentos });
 }
 
 /**
@@ -371,6 +376,81 @@ async function despacharCoach(supabase: Admin, ahora: Date, inicio: number): Pro
   }
 
   return enviados;
+}
+
+/**
+ * Fotos por pasada. Cada una son unas diez consultas y ningún modelo; veinte
+ * caben con holgura en lo que el coach deja de minuto.
+ */
+const LOTE_IDENTIDAD = 20;
+/** Más allá de esto se deja el resto para la siguiente pasada: los reintentos van detrás. */
+const PRESUPUESTO_IDENTIDAD_MS = 45_000;
+
+/**
+ * LA FOTO NOCTURNA DEL IDENTITY SCORE (D-160).
+ *
+ * En la última hora del día local de cada persona, calcula su puntuación con
+ * `loadScoreContext` —la MISMA carga que usa la pantalla, en modo servicio— y
+ * la guarda en `identity_scores`. Es lo que dibuja la evolución.
+ *
+ * Idempotente por la clave (user_id, local_date): antes de calcular se mira si
+ * la foto de hoy ya está, así que las doce pasadas de la hora hacen una sola
+ * foto. Sin hábitos no hay puntuación y no se guarda nada.
+ *
+ * No depende de `coach_enabled`: no llama al modelo ni manda avisos, solo
+ * guarda una cifra de la propia persona. Nunca lanza.
+ */
+async function despacharIdentidad(supabase: Admin, ahora: Date, inicio: number): Promise<number> {
+  const { data: perfiles } = await supabase.from("profiles").select("user_id, timezone").limit(1000);
+  if (!perfiles?.length) return 0;
+
+  let fotos = 0;
+  for (const perfil of perfiles) {
+    if (fotos >= LOTE_IDENTIDAD || Date.now() - inicio > PRESUPUESTO_IDENTIDAD_MS) break;
+
+    const zona = perfil.timezone && isValidTimeZone(perfil.timezone) ? perfil.timezone : DEFAULT_TIMEZONE;
+    if (!tocaFotoDeIdentidad(timeInTimeZone(zona, ahora))) continue;
+    const hoy = todayInTimeZone(zona, ahora);
+
+    try {
+      const { data: yaEsta } = await supabase
+        .from("identity_scores")
+        .select("local_date")
+        .eq("user_id", perfil.user_id)
+        .eq("local_date", hoy)
+        .maybeSingle();
+      if (yaEsta) continue;
+
+      const { count } = await supabase.from("habits").select("id", { count: "exact", head: true }).eq("user_id", perfil.user_id);
+      if (!count) continue;
+
+      const ctx = await loadScoreContext({
+        supabase,
+        userId: perfil.user_id,
+        today: hoy,
+        timeZone: zona,
+        modo: "servicio",
+        sources: await fuentesDe(supabase, perfil.user_id)
+      });
+      const score = scoreOf(ctx);
+      if (score.score === null) continue;
+
+      const { error } = await supabase.from("identity_scores").upsert(
+        {
+          user_id: perfil.user_id,
+          local_date: hoy,
+          score: score.score,
+          components: score.components.map((c) => ({ key: c.key, value: c.value, weight: c.weight })),
+          formula_version: score.formulaVersion
+        },
+        { onConflict: "user_id,local_date" }
+      );
+      if (!error) fotos++;
+    } catch {
+      continue;
+    }
+  }
+  return fotos;
 }
 
 /**

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Card, Chip, EmptyState, Progress, Stat } from "@/components/ui";
+import { loadIdentityOverview } from "@/lib/data/identity";
 
 import { todayForUser } from "@/lib/data/profile";
 import { loadSourceSnapshot, loadReadingFocus } from "@/lib/data/development";
@@ -28,6 +29,7 @@ export default async function DevelopmentPage() {
   // ritmo tendría que ir— para no repetir aquí aritmética que vive en el
   // dominio, ni discrepar con lo que Home enseña en la misma sesión.
   const lectura = await loadReadingFocus();
+  const identidad = await loadIdentityOverview();
 
   const [{ data: goals }, { data: krs }, { data: routines }, { data: habits }, { data: logsHoy }] = await Promise.all([
     supabase.from("personal_goals").select("*").eq("status", "Activa").order("created_at"),
@@ -101,6 +103,11 @@ export default async function DevelopmentPage() {
           tarjetas de ancho completo empujaban todo el panel bajo el pliegue.
           Con 132px caben dos incluso en un iPhone SE. */}
       <div className="grid gap-2.5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 132px), 1fr))" }}>
+        {/* El Identity Score va primero: es la pregunta del módulo. Enlaza a
+            Analítica, donde está su evolución y su desglose. */}
+        <Link href="/development/routines/analytics" className="block" style={{ color: "inherit", textDecoration: "none" }}>
+          <Stat label="Identity Score" value={identidad?.score.score ?? "—"} />
+        </Link>
         <Stat label="Metas activas" value={goalRows.length} />
         <Stat label="Metas en riesgo" value={enRiesgo} kind={enRiesgo > 0 ? "bad" : undefined} />
         <Stat label="Rutinas de hoy" value={`${avanceRutinas}%`} kind={avanceRutinas < 50 ? "warn" : undefined} />

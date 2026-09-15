@@ -172,12 +172,29 @@ export async function upsertHabit(routineId: string, id: string | null, formData
     meal: parsed.meal || null
   };
 
+  let habitId = id;
   if (id) {
     const { error } = await supabase.from("habits").update(payload).eq("id", id);
     if (error) throw new Error(describeDbError(error));
   } else {
-    const { error } = await supabase.from("habits").insert({ ...payload, user_id: user.id });
-    if (error) throw new Error(describeDbError(error));
+    const { data, error } = await supabase.from("habits").insert({ ...payload, user_id: user.id }).select("id").single();
+    if (error || !data) throw new Error(describeDbError(error));
+    habitId = data.id;
+  }
+
+  // Votos por rasgos de identidad (0064). Solo si el formulario los traía: uno
+  // sin rasgos —el de plantillas, o el de quien aún no definió su identidad—
+  // no puede dejar al hábito sin los votos que ya tenía.
+  if (formData.get("traitsPresent") && habitId) {
+    const traitIds = z.array(z.string().uuid()).parse(formData.getAll("traitIds").map(String));
+    const { error: delError } = await supabase.from("habit_identity_traits").delete().eq("habit_id", habitId);
+    if (delError) throw new Error(describeDbError(delError));
+    if (traitIds.length) {
+      const { error: insError } = await supabase
+        .from("habit_identity_traits")
+        .insert(traitIds.map((traitId) => ({ habit_id: habitId!, trait_id: traitId })));
+      if (insError) throw new Error(describeDbError(insError));
+    }
   }
 
   // La rutina acaba de cambiar de tamaño: el hábito nuevo la descierra, y el
@@ -185,6 +202,7 @@ export async function upsertHabit(routineId: string, id: string | null, formData
   await sincronizarCierreDeRutina(supabase, routineId, await todayForUser(), { arranca: false });
 
   revalidatePath("/development/routines");
+  revalidatePath("/development/routines/analytics");
   revalidatePath("/development");
   revalidatePath("/home");
 }
