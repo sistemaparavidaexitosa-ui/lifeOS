@@ -761,6 +761,48 @@ export type Database = {
         }
         Relationships: []
       }
+      daily_reflections: {
+        Row: {
+          created_at: string
+          energy: number | null
+          id: string
+          local_date: string
+          mood: number | null
+          reflection: string
+          reflection_prompt: string
+          sleep_hours: number | null
+          updated_at: string
+          user_id: string
+          wins: string
+        }
+        Insert: {
+          created_at?: string
+          energy?: number | null
+          id?: string
+          local_date: string
+          mood?: number | null
+          reflection?: string
+          reflection_prompt?: string
+          sleep_hours?: number | null
+          updated_at?: string
+          user_id: string
+          wins?: string
+        }
+        Update: {
+          created_at?: string
+          energy?: number | null
+          id?: string
+          local_date?: string
+          mood?: number | null
+          reflection?: string
+          reflection_prompt?: string
+          sleep_hours?: number | null
+          updated_at?: string
+          user_id?: string
+          wins?: string
+        }
+        Relationships: []
+      }
       debts: {
         Row: {
           balance: number
@@ -1383,21 +1425,39 @@ export type Database = {
       habit_logs: {
         Row: {
           completed_at: string
+          completion_pct: number
+          energy: number | null
           habit_id: string
           id: string
           log_date: string
+          mood: number | null
+          note: string
+          status: string
+          updated_at: string
         }
         Insert: {
           completed_at?: string
+          completion_pct?: number
+          energy?: number | null
           habit_id: string
           id?: string
           log_date: string
+          mood?: number | null
+          note?: string
+          status?: string
+          updated_at?: string
         }
         Update: {
           completed_at?: string
+          completion_pct?: number
+          energy?: number | null
           habit_id?: string
           id?: string
           log_date?: string
+          mood?: number | null
+          note?: string
+          status?: string
+          updated_at?: string
         }
         Relationships: [
           {
@@ -3348,6 +3408,28 @@ export type Database = {
       graph_system_edges_in: {
         Args: { p_rel: string; p_sources: string[]; p_target: string }
         Returns: undefined
+      }
+      habit_log_series: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          dates: string[]
+          energies: number[]
+          habit_id: string
+          moods: number[]
+          pcts: number[]
+          statuses: string[]
+        }[]
+      }
+      habit_log_series_de: {
+        Args: { p_from: string; p_to: string; p_uid: string }
+        Returns: {
+          dates: string[]
+          energies: number[]
+          habit_id: string
+          moods: number[]
+          pcts: number[]
+          statuses: string[]
+        }[]
       }
       has_notebook_access: { Args: { p_notebook_id: string }; Returns: boolean }
       has_project_access: { Args: { p_project_id: string }; Returns: boolean }
