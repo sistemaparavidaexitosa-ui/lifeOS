@@ -15,11 +15,11 @@ export default function IdentityHero({ overview }: { overview: IdentityOverview 
     return (
       <Card hero>
         <div className="flex flex-col gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+          <span className="text-xs font-semibold uppercase tracking-wide" style={{ opacity: 0.85 }}>
             Tu identidad
           </span>
           <h2 className="text-lg font-bold leading-snug">¿En quién te estás convirtiendo?</h2>
-          <p className="text-sm" style={{ color: "var(--muted)" }}>
+          <p className="text-sm" style={{ opacity: 0.85 }}>
             Los hábitos no se sostienen por la meta: se sostienen por quién crees que eres. Escríbelo, elige tus rasgos y
             cada hábito empezará a contar como un voto por esa persona.
           </p>
@@ -37,7 +37,7 @@ export default function IdentityHero({ overview }: { overview: IdentityOverview 
       <div className="flex flex-col gap-3">
         <div className="flex items-start gap-2">
           <div className="grow min-w-0 flex flex-col gap-1">
-            <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+            <span className="text-xs font-semibold uppercase tracking-wide" style={{ opacity: 0.85 }}>
               Tu identidad
             </span>
             <h2 className="text-lg font-bold leading-snug" style={{ overflowWrap: "anywhere" }}>
@@ -50,7 +50,9 @@ export default function IdentityHero({ overview }: { overview: IdentityOverview 
         {profile.coreValues.length > 0 && (
           <div className="flex flex-wrap gap-1.5" aria-label="Valores">
             {profile.coreValues.map((v) => (
-              <span key={v} className="chip">
+              // Sobre el degradado del acento el chip normal no se lee: fondo
+              // blanco translúcido y texto blanco, como el resto de la tarjeta.
+              <span key={v} className="chip" style={{ background: "rgba(255,255,255,0.18)", color: "#fff" }}>
                 {v}
               </span>
             ))}
@@ -63,7 +65,7 @@ export default function IdentityHero({ overview }: { overview: IdentityOverview 
             <TraitSheet label="+ Rasgo" />
           </div>
           {activos.length === 0 ? (
-            <p className="text-xs" style={{ color: "var(--muted)" }}>
+            <p className="text-xs" style={{ opacity: 0.85 }}>
               Añade dos o tres rasgos («Disciplinado», «Libre financieramente») y vincula tus hábitos a ellos desde
               «Editar» en cada hábito.
             </p>
@@ -75,12 +77,12 @@ export default function IdentityHero({ overview }: { overview: IdentityOverview 
                   <li key={t.id} className="flex items-center gap-2" style={{ opacity: t.active ? 1 : 0.55 }}>
                     <div className="grow min-w-0">
                       <span className="text-sm font-semibold">{t.name}</span>
-                      <span className="text-xs ml-1.5" style={{ color: "var(--muted)" }}>
+                      <span className="text-xs ml-1.5" style={{ opacity: 0.85 }}>
                         {t.area} · {votos} {votos === 1 ? "hábito" : "hábitos"}
                         {!t.active && " · inactivo"}
                       </span>
                       {t.statement && (
-                        <span className="block text-xs" style={{ color: "var(--muted)", overflowWrap: "anywhere" }}>
+                        <span className="block text-xs" style={{ opacity: 0.85, overflowWrap: "anywhere" }}>
                           {t.statement}
                         </span>
                       )}
@@ -92,7 +94,7 @@ export default function IdentityHero({ overview }: { overview: IdentityOverview 
             </ul>
           )}
         </div>
-        <Link href="/development/routines/analytics" className="text-xs font-semibold" style={{ color: "var(--accent-d)" }}>
+        <Link href="/development/routines/analytics" className="text-xs font-semibold underline underline-offset-2" style={{ color: "#fff" }}>
           Ver tu evolución →
         </Link>
       </div>
