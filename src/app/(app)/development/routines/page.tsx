@@ -1,4 +1,6 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
+import InsightSection from "@/components/InsightSection";
 import { createClient } from "@/lib/supabase/server";
 import { Card, Chip, EmptyState, Progress } from "@/components/ui";
 import { addDaysISO } from "@/lib/data/dates";
@@ -301,6 +303,15 @@ export default async function RoutinesPage() {
               : null
           }
         />
+      )}
+
+      {/* Los insights de hábitos: los que deja el análisis de cada noche (F5) y
+          los que se piden con el botón. Va en Suspense para que la consulta no
+          retrase el resto de Hoy. */}
+      {rows.length > 0 && (
+        <Suspense fallback={null}>
+          <InsightSection scope="habits" />
+        </Suspense>
       )}
 
       {otras.length > 0 && (

@@ -140,5 +140,5 @@ export async function fuentesDe(supabase: Admin, userId: string): Promise<Source
  */
 export async function overridesDelCoach(supabase: Admin, userId: string): Promise<FactsOverrides> {
   const [myTasksRows, sources] = await Promise.all([tareasDe(supabase, userId), fuentesDe(supabase, userId)]);
-  return { myTasks: myTasksRows, sources, personalWorkspaceIds: [] };
+  return { myTasks: myTasksRows, sources, personalWorkspaceIds: [], modo: "servicio" };
 }

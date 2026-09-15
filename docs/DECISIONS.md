@@ -2825,3 +2825,27 @@ implementa:
     previo que exigen los privilegios por defecto). «Borrar historial de IA»
     borra los briefs. Las acciones devuelven el brief para pintarlo sin
     depender de la revalidación de la página.
+
+- **D-163 · Insights nocturnos de hábitos: una llamada por noche, y solo si hay
+  algo nuevo.** Cada noche, en la ventana del coach (`coach_enabled`,
+  `coach_night_hour`), el reloj analiza el historial de hábitos con el MISMO
+  núcleo que el botón «Analizar»: `analyze()` se partió en
+  `prepararAnalisis` y `recomendarYGuardar`
+  (`src/lib/insights/generar-recomendaciones.ts`), parametrizados por usuario
+  y modo, con filtros explícitos por `user_id` para el cliente de servicio.
+  Las recomendaciones van a `recommendations` (dominio `habits`) y se leen en
+  Hoy de Rutinas y en el panel de Desarrollo: no hay tabla `ai_insights`.
+  Los hechos nuevos salen de `facts/habit-patterns.ts`, el tramo de hábitos de
+  la fase A3 del sistema cognitivo, que estrena `Fact.kind` (A1): estado por
+  rutina a 90 días, el hábito más omitido, el día de la semana flojo, el hábito
+  que acompaña al resto, y el cumplimiento con poco sueño o poca energía (del
+  check-in de F1), más la caída de la última semana. Umbrales altos a
+  propósito: 6 semanas de datos, 8 días a cada lado y 15 puntos de brecha; las
+  etiquetas hablan de asociación, nunca de causa. **Coste:** la tabla
+  `ai_job_runs` (0066, solo servidor) guarda una fila por trabajo, persona y
+  día, escrita ANTES de llamar al modelo —la clave primaria impide dos
+  intentos simultáneos en las doce pasadas por hora— con la huella de los
+  hechos; si la huella es la de la última ejecución, no se llama. Lote de 3 por
+  pasada y un presupuesto de 30 s, detrás del coach. Costes aceptados: si el
+  análisis falla, esa noche no se reintenta; y quien apaga el coach apaga
+  también estos insights, porque comparten preferencia.
