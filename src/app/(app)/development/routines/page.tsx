@@ -2,7 +2,8 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import InsightSection from "@/components/InsightSection";
 import { createClient } from "@/lib/supabase/server";
-import { Card, Chip, EmptyState, Progress } from "@/components/ui";
+import { Card, Chip, EmptyState, Progress, Stat } from "@/components/ui";
+import { dailyCurve, periodRates, solidDaysStreak } from "@/lib/domain/development/habit-dashboard.ts";
 import { addDaysISO } from "@/lib/data/dates";
 import { todayForUser } from "@/lib/data/profile";
 import {
@@ -20,7 +21,7 @@ import BriefCard from "./brief/BriefCard";
 import BriefGenerator from "./brief/BriefGenerator";
 import IdentityHero from "./identity/IdentityHero";
 import IdentityScoreCard from "./identity/IdentityScoreCard";
-import { CardHeader, ModuleNote, SectionHeader } from "../FormSheet";
+import { CardHeader, ModuleNote } from "../FormSheet";
 import RoutineForm, { type OccupationLite } from "./RoutineForm";
 import RoutineTemplates from "./RoutineTemplates";
 import { listTemplates } from "@/lib/data/templates";
@@ -166,6 +167,11 @@ export default async function RoutinesPage() {
   const hoy = rows.filter((r) => r.due && r.routine.active);
   const otras = rows.filter((r) => !r.due || !r.routine.active);
 
+  // Las tres cifras del día salen de las mismas funciones que Analítica: si
+  // aquí dice 80 % y allí 78 %, el fallo estaría en un solo sitio.
+  const periodos = periodRates(series, today);
+  const diasSolidos = solidDaysStreak(dailyCurve(series, addDaysISO(today, -120), today, today), today);
+
   function renderRoutine(row: (typeof rows)[number], dimmed: boolean) {
     const { routine, occ, progress, fits, adherence, runnerHabits, habits: own } = row;
     return (
@@ -243,32 +249,15 @@ export default async function RoutinesPage() {
       {identidad?.profile &&
         (brief ? <BriefCard initial={brief} traitNames={traitNames} /> : <BriefGenerator traitNames={traitNames} />)}
 
-      <ModuleNote>
-        Cada hábito vive dentro de una rutina y toca cuando toca ella. El bloque horario sigue viviendo en Autogestión
-        del Tiempo: la rutina se ancla a uno que ya existe. Todo esto es privado, sin relación con Workspaces (BR-027).
-      </ModuleNote>
+      {rows.length > 0 && (
+        <div className="grid gap-2.5" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+          <Stat label="Hoy" value={periodos.day === null ? "—" : `${periodos.day}%`} />
+          <Stat label="Días sólidos" value={diasSolidos} />
+          <Stat label="Esta semana" value={periodos.week === null ? "—" : `${periodos.week}%`} />
+        </div>
+      )}
 
-      <SectionHeader
-        action={
-          <span className="flex gap-2">
-            {/* Las dos plantillas bajan su catálogo desde el servidor (0044):
-                esta página ya es un Server Component y lo tiene en la mano. */}
-            <HabitTemplates
-              routines={(routines ?? []).map((r) => ({
-                id: r.id,
-                name: r.name,
-                habitCount: (habits ?? []).filter((h) => h.routine_id === r.id).length
-              }))}
-              otherHabits={habitOptions}
-              templates={await listTemplates("habit")}
-            />
-            <RoutineTemplates occupations={occOptions} templates={await listTemplates("routine")} />
-            <RoutineForm occupations={occOptions} />
-          </span>
-        }
-      >
-        Rutinas de hoy
-      </SectionHeader>
+      <h3 className="font-bold">Rutinas de hoy</h3>
 
       {!rows.length && (
         <Card>
@@ -276,6 +265,12 @@ export default async function RoutinesPage() {
             icon="🔁"
             text="Crea tu primera rutina, o parte de una plantilla: Mañana Milagrosa (S.A.V.E.R.S.) o el Club de las 5 AM (20/20/20). Ánclala a un bloque de tu Autogestión del Tiempo, y sus hábitos llevarán racha desde el primer día."
           />
+          {/* Los botones van aquí y no solo en «Tus rutinas»: sin rutinas, esta
+              tarjeta es lo único que la persona tiene delante. */}
+          <div className="flex flex-wrap justify-center gap-2 mt-3">
+            <RoutineTemplates occupations={occOptions} templates={await listTemplates("routine")} />
+            <RoutineForm occupations={occOptions} />
+          </div>
         </Card>
       )}
 
@@ -314,11 +309,45 @@ export default async function RoutinesPage() {
         </Suspense>
       )}
 
-      {otras.length > 0 && (
-        <>
-          <h3 className="font-bold mt-2">Otras rutinas</h3>
-          {otras.map((r) => renderRoutine(r, true))}
-        </>
+      {/* Gestionar va al final: se usa al montar el sistema, no cada mañana. La
+          cabecera no lleva los botones al lado del título porque en 400px no
+          caben tres y el título acababa partido letra a letra. Sin rutinas no
+          se pinta: la tarjeta vacía de arriba ya lleva sus botones. */}
+      {rows.length > 0 && (
+        <section className="flex flex-col gap-3 mt-2" aria-labelledby="gestionar-rutinas">
+          <div className="flex flex-col gap-2">
+            <h3 id="gestionar-rutinas" className="font-bold">
+              Tus rutinas
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              <RoutineForm occupations={occOptions} />
+              {/* Las dos plantillas bajan su catálogo desde el servidor (0044):
+                  esta página ya es un Server Component y lo tiene en la mano. */}
+              <RoutineTemplates occupations={occOptions} templates={await listTemplates("routine")} />
+              <HabitTemplates
+                routines={(routines ?? []).map((r) => ({
+                  id: r.id,
+                  name: r.name,
+                  habitCount: (habits ?? []).filter((h) => h.routine_id === r.id).length
+                }))}
+                otherHabits={habitOptions}
+                templates={await listTemplates("habit")}
+              />
+            </div>
+          </div>
+          <ModuleNote>
+            Cada hábito vive dentro de una rutina y toca cuando toca ella. El bloque horario sigue viviendo en Autogestión
+            del Tiempo: la rutina se ancla a uno que ya existe. Todo esto es privado, sin relación con Workspaces (BR-027).
+          </ModuleNote>
+          {otras.length > 0 && (
+            <>
+              <h4 className="font-semibold text-sm" style={{ color: "var(--muted)" }}>
+                Hoy no tocan
+              </h4>
+              {otras.map((r) => renderRoutine(r, true))}
+            </>
+          )}
+        </section>
       )}
     </div>
   );

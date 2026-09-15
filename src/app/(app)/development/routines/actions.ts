@@ -239,7 +239,10 @@ export async function deleteHabit(id: string) {
  *
  * Contrato `{ ok, reason }` (D-030): la fila tiene que poder decir qué falló.
  */
-export async function toggleHabitToday(routineId: string, habitId: string): Promise<ActionResult> {
+export async function toggleHabitToday(
+  routineId: string,
+  habitId: string
+): Promise<ActionResult & { entry?: { status: LogStatus; pct: number } | null }> {
   const supabase = await createClient();
   const user = await getSessionUser();
   if (!user) return { ok: false, reason: "Tu sesión expiró. Vuelve a iniciar sesión." };
@@ -285,7 +288,9 @@ export async function toggleHabitToday(routineId: string, habitId: string): Prom
   revalidatePath("/development/routines");
   revalidatePath("/development");
   revalidatePath("/home");
-  return actionOk;
+  // El estado que quedó, para que la casilla lo pinte al instante sin esperar
+  // a que la página vuelva con los datos nuevos.
+  return { ...actionOk, entry: efecto === "delete" ? null : { status: "completed", pct: 100 } };
 }
 
 /**

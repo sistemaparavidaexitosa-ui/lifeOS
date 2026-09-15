@@ -49,8 +49,10 @@ export default function InsightPanel({
 
   return (
     <div className="card" style={{ borderLeft: "3px solid var(--c-teal, var(--accent))" }}>
-      <div className="flex items-center justify-between">
-        <div>
+      {/* En móvil los botones bajan bajo el texto: al lado le dejaban una
+          columna de tres palabras por línea. */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="min-w-0">
           <h4 className="font-bold">Recomendaciones</h4>
           <p className="text-xs" style={{ color: "var(--muted)" }}>
             Se calculan tus cifras aquí y solo se envían al modelo como texto ya resumido, sin nombres de cuentas ni de
@@ -63,7 +65,7 @@ export default function InsightPanel({
               : "Nada sale hasta que lo pidas."}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <Link className="btn-ghost btn-sm" href="/intelligence">
             Ver bandeja
           </Link>

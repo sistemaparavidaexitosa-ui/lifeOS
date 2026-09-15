@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, type ReactNode } from "react";
+import { useEffect, useState, useTransition, type ReactNode } from "react";
 import { toggleHabitToday } from "./actions";
 import FoodSearchForm from "../nutrition/FoodSearchForm";
 import HabitLogSheet from "./HabitLogSheet";
@@ -80,8 +80,15 @@ export default function HabitRow({
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const doneToday = todayEntry?.status === "completed";
-  const c = casilla(todayEntry);
+  // El registro de hoy vive también en estado local: el toque se pinta con lo
+  // que devuelve la acción, sin depender de que la página se vuelva a pedir.
+  // Cuando llegan props nuevas del servidor, mandan ellas.
+  const [entry, setEntry] = useState<HabitLogEntry | null>(todayEntry);
+  useEffect(() => {
+    setEntry(todayEntry);
+  }, [todayEntry?.status, todayEntry?.pct, todayEntry?.note]); // eslint-disable-line react-hooks/exhaustive-deps
+  const doneToday = entry?.status === "completed";
+  const c = casilla(entry);
   const unidad = streakUnit === "semana" ? (streak === 1 ? "semana" : "semanas") : streak === 1 ? "día" : "días";
   const streakChip = (
     <span className={`chip ${streak > 0 ? "ok" : ""}`}>
@@ -105,6 +112,9 @@ export default function HabitRow({
           startTransition(async () => {
             const r = await toggleHabitToday(routineId, habit.id);
             setError(r.ok ? null : r.reason ?? "No se pudo guardar.");
+            if (r.ok && r.entry !== undefined) {
+              setEntry(r.entry ? { date: today, status: r.entry.status, pct: r.entry.pct, note: entry?.note, mood: entry?.mood, energy: entry?.energy } : null);
+            }
           })
         }
         aria-label={c.etiqueta}
@@ -150,9 +160,9 @@ export default function HabitRow({
           <span className="sm:hidden">{streakChip}</span>
           {weekDoneElsewhere && !doneToday && <span className="chip ok">Hecho esta semana</span>}
         </div>
-        {todayEntry?.note && (
+        {entry?.note && (
           <span className="text-xs" style={{ color: "var(--muted)", overflowWrap: "anywhere" }}>
-            «{todayEntry.note}»
+            «{entry.note}»
           </span>
         )}
         {error && (
@@ -163,10 +173,12 @@ export default function HabitRow({
       </div>
 
       <span className="hidden sm:block flex-shrink-0">{streakChip}</span>
-      <span className="flex-shrink-0">
+      {/* En móvil los dos botones van apilados: uno al lado del otro le
+          quitaban al nombre del hábito casi un tercio de la fila. */}
+      <div className="flex flex-col sm:flex-row gap-1.5 flex-shrink-0 items-end">
         <HabitLogSheet habitId={habit.id} habitName={habit.name} today={today} minDate={minDate} recent={recent} />
-      </span>
-      {action && <span className="flex-shrink-0">{action}</span>}
+        {action}
+      </div>
     </div>
   );
 }

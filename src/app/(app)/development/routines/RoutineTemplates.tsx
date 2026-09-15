@@ -34,7 +34,7 @@ export default function RoutineTemplates({
   templates: RoutineTemplate[];
 }) {
   return (
-    <FormSheet label="Plantillas" title="Plantillas de rutinas">
+    <FormSheet label="Plantillas de rutinas" title="Plantillas de rutinas">
       {(close) => <Contenido occupations={occupations} templates={templates} close={close} />}
     </FormSheet>
   );
