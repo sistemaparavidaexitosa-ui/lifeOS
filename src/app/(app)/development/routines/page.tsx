@@ -10,7 +10,9 @@ import {
   routineAdherence,
   type Frequency
 } from "@/lib/domain/development/routines.ts";
-import { habitStreak, habitDoneToday } from "@/lib/domain/habits.ts";
+import { habitStreaks, slotStates, type HabitLogEntry } from "@/lib/domain/development/habit-analytics.ts";
+import { loadHabitSeries } from "@/lib/data/habit-analytics";
+import DailyCheckinCard from "./DailyCheckinCard";
 import { CardHeader, ModuleNote, SectionHeader } from "../FormSheet";
 import RoutineForm, { type OccupationLite } from "./RoutineForm";
 import RoutineTemplates from "./RoutineTemplates";
@@ -28,28 +30,60 @@ export default async function RoutinesPage() {
   // "Hoy" se calcula ANTES de consultar: la ventana de adherencia depende de él.
   const today = await todayForUser();
   const from = addDaysISO(today, -29);
-  // Los registros se piden por ventana y no enteros: `max_rows = 1000` en
-  // config.toml trunca cualquier consulta más larga SIN avisar y en un orden
-  // que nadie fija, así que diez hábitos bastarían para que a los cien días la
-  // pantalla empezara a perder días sueltos —racha mal contada, casilla de hoy
-  // en blanco, y el clic para recuperarla chocando contra el índice único de
-  // (habit_id, log_date)—. 400 días acota cualquier racha que esta pantalla
+  // El histórico llega en arreglos por hábito (`habit_log_series`, 0063): una
+  // consulta normal choca con `max_rows = 1000`, que trunca SIN avisar y en un
+  // orden que nadie fija. 400 días acotan cualquier racha que esta pantalla
   // sepa dibujar.
   const desdeLogs = addDaysISO(today, -399);
+  // La hoja de detalle deja registrar hasta una semana atrás (ver `logHabit`).
+  const desdeDetalle = addDaysISO(today, -7);
 
-  const [{ data: routines }, { data: habits }, { data: occupations }, { data: habitLogs }, { data: runs }] =
-    await Promise.all([
-      supabase.from("routines").select("*").order("position"),
-      supabase.from("habits").select("*").order("position"),
-      supabase.from("occupations").select("id, title, start_time, end_time"),
-      supabase.from("habit_logs").select("habit_id, log_date").gte("log_date", desdeLogs).lte("log_date", today),
-      supabase.from("routine_runs").select("*").gte("local_date", from).lte("local_date", today)
-    ]);
+  const [
+    { data: routines },
+    { data: habits },
+    { data: occupations },
+    { data: runs },
+    { data: notas },
+    { data: checkin },
+    series
+  ] = await Promise.all([
+    supabase.from("routines").select("*").order("position"),
+    supabase.from("habits").select("*").order("position"),
+    supabase.from("occupations").select("id, title, start_time, end_time"),
+    supabase.from("routine_runs").select("*").gte("local_date", from).lte("local_date", today),
+    // Las notas no viajan en la serie: solo hacen falta las de la última semana.
+    supabase.from("habit_logs").select("habit_id, log_date, note").gte("log_date", desdeDetalle).neq("note", ""),
+    supabase.from("daily_reflections").select("*").eq("local_date", today).maybeSingle(),
+    loadHabitSeries(desdeLogs, today)
+  ]);
 
   const occById = new Map((occupations ?? []).map((o) => [o.id, o]));
   const habitById = new Map((habits ?? []).map((h) => [h.id, h.name]));
-  const logs = (habitLogs ?? []).map((l) => ({ habitId: l.habit_id, date: l.log_date }));
-  const doneToday = new Set(logs.filter((l) => l.date === today).map((l) => l.habitId));
+  const seriePorHabito = new Map(series.map((s) => [s.habitId, s]));
+  const notaPorDia = new Map((notas ?? []).map((n) => [`${n.habit_id}:${n.log_date}`, n.note]));
+
+  /** Lo que la fila necesita de la serie: el registro de hoy, la semana y la racha. */
+  function estadoDe(habitId: string) {
+    const s = seriePorHabito.get(habitId);
+    if (!s) {
+      return { todayEntry: null, weekDoneElsewhere: false, streak: { current: 0, unit: "día" as const }, recent: [] };
+    }
+    const recent: HabitLogEntry[] = s.logs
+      .filter((l) => l.date >= desdeDetalle)
+      .map((l) => ({ ...l, note: notaPorDia.get(`${habitId}:${l.date}`) ?? "" }));
+    const todayEntry = recent.find((l) => l.date === today) ?? null;
+    const ranuraActual = slotStates(s, today, today, today)[0];
+    return {
+      todayEntry,
+      weekDoneElsewhere: s.frequency === "Semanal" && ranuraActual?.state === "completed",
+      streak: habitStreaks(s, today, desdeLogs),
+      recent
+    };
+  }
+  const estados = new Map((habits ?? []).map((h) => [h.id, estadoDe(h.id)]));
+  const doneToday = new Set(
+    (habits ?? []).filter((h) => estados.get(h.id)?.todayEntry?.status === "completed").map((h) => h.id)
+  );
 
   const occOptions: OccupationLite[] = (occupations ?? []).map((o) => ({
     id: o.id,
@@ -74,7 +108,9 @@ export default async function RoutinesPage() {
     return {
       routine: r,
       habits: own,
-      runnerHabits: own.map<RunnerHabit>((h) => ({
+      runnerHabits: own.map<RunnerHabit>((h) => {
+        const estado = estados.get(h.id) ?? estadoDe(h.id);
+        return {
         id: h.id,
         name: h.name,
         category: h.category,
@@ -83,8 +119,11 @@ export default async function RoutinesPage() {
         cue: h.cue,
         twoMinVersion: h.two_min_version,
         stackAfterName: h.stack_after_habit_id ? habitById.get(h.stack_after_habit_id) ?? null : null,
-        doneToday: habitDoneToday(h.id, logs, today),
-        streak: habitStreak(h.id, logs, today),
+        todayEntry: estado.todayEntry,
+        weekDoneElsewhere: estado.weekDoneElsewhere,
+        streak: estado.streak.current,
+        streakUnit: estado.streak.unit,
+        recent: estado.recent,
         action: (
           <HabitForm
             routineId={r.id}
@@ -102,7 +141,8 @@ export default async function RoutinesPage() {
             }}
           />
         )
-      })),
+        };
+      }),
       due: routineDueToday(r.frequency as Frequency, today),
       progress: routineProgress(doneIds, habitLikes),
       fits: routineFitsBlock(habitLikes, block),
@@ -168,7 +208,7 @@ export default async function RoutinesPage() {
           <Progress pct={progress.pct} kind={!fits ? "warn" : undefined} />
         </div>
 
-        <RoutineRunner routineId={routine.id} habits={runnerHabits} today={today} />
+        <RoutineRunner routineId={routine.id} habits={runnerHabits} today={today} minDate={desdeDetalle} />
 
         <div className="mt-2.5">
           <HabitForm routineId={routine.id} position={own.length} otherHabits={habitOptions} label="+ Hábito" />
@@ -222,6 +262,24 @@ export default async function RoutinesPage() {
       )}
 
       {hoy.map((r) => renderRoutine(r, false))}
+
+      {rows.length > 0 && (
+        <DailyCheckinCard
+          prompt="¿Qué hiciste hoy que la persona que quieres ser también habría hecho?"
+          initial={
+            checkin
+              ? {
+                  mood: checkin.mood,
+                  energy: checkin.energy,
+                  sleepHours: checkin.sleep_hours,
+                  reflectionPrompt: checkin.reflection_prompt,
+                  reflection: checkin.reflection,
+                  wins: checkin.wins
+                }
+              : null
+          }
+        />
+      )}
 
       {otras.length > 0 && (
         <>

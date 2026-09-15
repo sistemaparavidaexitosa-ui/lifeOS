@@ -6,6 +6,7 @@ import {
   habitStreaks,
   completionRate,
   toggleEffect,
+  buildHabitSeries,
   type HabitSeries,
   type HabitLogEntry
 } from "../../src/lib/domain/development/habit-analytics.ts";
@@ -133,4 +134,28 @@ test("toggleEffect: marcar, desmarcar y convertir en hecho", () => {
   assert.equal(toggleEffect("completed"), "delete");
   assert.equal(toggleEffect("skipped"), "complete");
   assert.equal(toggleEffect("postponed"), "complete");
+});
+
+test("buildHabitSeries: une arreglos paralelos y da serie vacía al hábito sin filas", () => {
+  const series = buildHabitSeries(
+    [
+      { id: "a", frequency: "Diario", createdOn: "2026-09-01" },
+      { id: "b", frequency: "Semanal", createdOn: "2026-09-01" }
+    ],
+    [
+      {
+        habit_id: "a",
+        dates: ["2026-09-13", "2026-09-14"],
+        statuses: ["completed", "skipped"],
+        pcts: [80, 0],
+        moods: [4, null],
+        energies: [null, 2]
+      }
+    ]
+  );
+  assert.deepEqual(series[0]!.logs, [
+    { date: "2026-09-13", status: "completed", pct: 80, mood: 4, energy: null },
+    { date: "2026-09-14", status: "skipped", pct: 0, mood: null, energy: 2 }
+  ]);
+  assert.deepEqual(series[1]!.logs, []);
 });

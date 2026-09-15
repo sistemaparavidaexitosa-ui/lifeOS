@@ -31,6 +31,8 @@ export interface HabitLogEntry {
   pct: number;
   mood?: number | null;
   energy?: number | null;
+  /** Solo viaja cuando la pantalla lo pide: la RPC de series no la trae. */
+  note?: string;
 }
 
 export interface HabitSeries {
@@ -198,4 +200,42 @@ export function completionRate(
 export function toggleEffect(existing: LogStatus | null): "insert" | "delete" | "complete" {
   if (existing === null) return "insert";
   return existing === "completed" ? "delete" : "complete";
+}
+
+/** Una fila de `habit_log_series`: el histórico de un hábito en arreglos paralelos. */
+export interface HabitLogSeriesRow {
+  habit_id: string;
+  dates: string[];
+  statuses: string[];
+  pcts: number[];
+  moods: (number | null)[];
+  energies: (number | null)[];
+}
+
+export interface HabitLike {
+  id: string;
+  frequency: Frequency;
+  createdOn: string;
+}
+
+/**
+ * Junta los hábitos con las filas de la RPC. Un hábito sin registros en el
+ * rango no trae fila, y aun así tiene serie: vacía, que no es lo mismo que no
+ * existir — sus ranuras cuentan como huecos.
+ */
+export function buildHabitSeries(habits: HabitLike[], rows: HabitLogSeriesRow[]): HabitSeries[] {
+  const porHabito = new Map(rows.map((r) => [r.habit_id, r]));
+  return habits.map((h) => {
+    const r = porHabito.get(h.id);
+    const logs: HabitLogEntry[] = r
+      ? r.dates.map((date, i) => ({
+          date,
+          status: r.statuses[i] as LogStatus,
+          pct: r.pcts[i] ?? 0,
+          mood: r.moods[i] ?? null,
+          energy: r.energies[i] ?? null
+        }))
+      : [];
+    return { habitId: h.id, frequency: h.frequency, createdOn: h.createdOn, logs };
+  });
 }
