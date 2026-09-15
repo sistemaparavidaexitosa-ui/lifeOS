@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition, type ReactNode } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import { toggleHabitToday } from "./actions";
 import FoodSearchForm from "../nutrition/FoodSearchForm";
 import type { Meal } from "@/lib/domain/development/nutrition.ts";
@@ -38,6 +38,7 @@ export default function HabitRow({
   action?: ReactNode;
 }) {
   const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
   const streakChip = (
     <span className={`chip ${streak > 0 ? "ok" : ""}`}>
       {streak} día{streak === 1 ? "" : "s"} de racha
@@ -56,7 +57,12 @@ export default function HabitRow({
           color: doneToday ? "#fff" : "inherit"
         }}
         disabled={pending}
-        onClick={() => startTransition(() => toggleHabitToday(routineId, habit.id))}
+        onClick={() =>
+          startTransition(async () => {
+            const r = await toggleHabitToday(routineId, habit.id);
+            setError(r.ok ? null : r.reason ?? "No se pudo guardar.");
+          })
+        }
         aria-label={doneToday ? "Marcar como no cumplido" : "Marcar como cumplido"}
       >
         {doneToday ? "✓" : ""}

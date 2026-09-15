@@ -34,7 +34,7 @@ export default async function DevelopmentPage() {
     supabase.from("key_results").select("*").order("position"),
     supabase.from("routines").select("*").eq("active", true).order("position"),
     supabase.from("habits").select("id, routine_id, duration_min").order("position"),
-    supabase.from("habit_logs").select("habit_id").eq("log_date", today)
+    supabase.from("habit_logs").select("habit_id").eq("log_date", today).eq("status", "completed")
   ]);
 
   const goalRows = (goals ?? [])

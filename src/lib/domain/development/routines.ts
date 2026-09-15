@@ -120,15 +120,3 @@ export function routineRunComplete(habitIds: string[], doneHabitIds: string[]): 
 export function routineRunNeedsWrite(hasRunToday: boolean, complete: boolean): boolean {
   return hasRunToday || complete;
 }
-
-/**
- * Qué hacer con `habit_logs` al tocar la casilla de un hábito.
- *
- * Antes de 0046 el paso y el hábito eran dos registros y desmarcar el paso no
- * borraba la racha: el usuario podía haber cumplido el hábito por otra vía y
- * esta rutina no era dueña de negarlo. Ahora son el mismo registro, así que
- * desmarcar es desmarcar. Es un cambio de conducta, no un descuido.
- */
-export function toggleHabitEffect(alreadyLoggedToday: boolean): "insert" | "delete" {
-  return alreadyLoggedToday ? "delete" : "insert";
-}

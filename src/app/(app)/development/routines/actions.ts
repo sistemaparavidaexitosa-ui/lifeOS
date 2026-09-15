@@ -7,12 +7,14 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionUser, requireUser } from "@/lib/data/session";
 
 import { todayForUser } from "@/lib/data/profile";
-import { toggleHabitEffect, routineRunComplete, routineRunNeedsWrite } from "@/lib/domain/development/routines.ts";
+import { routineRunComplete, routineRunNeedsWrite } from "@/lib/domain/development/routines.ts";
+import { toggleEffect, type LogStatus } from "@/lib/domain/development/habit-analytics.ts";
+import { addDaysISO, diffDays } from "@/lib/domain/datetime.ts";
 import { matchHabitForStep } from "@/lib/domain/development/templates.ts";
 // El catálogo se lee de `template_catalog` (0044) y no de un array del módulo:
 // `getRoutineTemplate` ya no existe.
 import { getTemplate } from "@/lib/data/templates";
-import { describeDbError, type ActionResult } from "@/lib/supabase/errors";
+import { actionFailed, actionOk, describeDbError, type ActionResult } from "@/lib/supabase/errors";
 
 const routineSchema = z.object({
   name: z.string().min(1),
@@ -99,6 +101,9 @@ async function sincronizarCierreDeRutina(
     .from("habit_logs")
     .select("habit_id")
     .eq("log_date", today)
+    // Desde 0063 una fila puede decir «omitido» o «pospuesto»: la rutina solo se
+    // cierra con hábitos HECHOS.
+    .eq("status", "completed")
     .in("habit_id", habitIds.length > 0 ? habitIds : ["00000000-0000-0000-0000-000000000000"]);
 
   const cerrada = routineRunComplete(habitIds, (logsHoy ?? []).map((l) => l.habit_id));
@@ -208,30 +213,44 @@ export async function deleteHabit(id: string) {
  * Marca o desmarca el hábito de hoy, y de paso abre o cierra la ejecución de su
  * rutina.
  *
- * Un solo registro: `habit_logs`. Antes de 0046 había dos —el paso en
- * `routine_runs.completed_step_ids` y el hábito en `habit_logs`— y esta acción
- * tenía que reconciliarlos. Ahora `routine_runs` solo guarda CUÁNDO se cerró la
- * rutina, y quién decide si está cerrada es `routineRunComplete`.
+ * Un solo registro: `habit_logs` (D-094). Desde 0063 la fila de hoy puede
+ * decir «omitido» o «pospuesto», y tocar la casilla entonces no la borra: la
+ * convierte en hecha (`toggleEffect`). Desmarcar un completado sí borra, porque
+ * es corregir un toque y no afirmar que no se hizo — para eso está la hoja de
+ * detalle.
+ *
+ * Contrato `{ ok, reason }` (D-030): la fila tiene que poder decir qué falló.
  */
-export async function toggleHabitToday(routineId: string, habitId: string) {
-  const { supabase, user } = await requireUser();
+export async function toggleHabitToday(routineId: string, habitId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const user = await getSessionUser();
+  if (!user) return { ok: false, reason: "Tu sesión expiró. Vuelve a iniciar sesión." };
 
   const today = await todayForUser();
 
   const { data: log } = await supabase
     .from("habit_logs")
-    .select("id")
+    .select("id, status")
     .eq("habit_id", habitId)
     .eq("log_date", today)
     .maybeSingle();
 
-  if (toggleHabitEffect(Boolean(log)) === "delete") {
+  const efecto = toggleEffect(log ? (log.status as LogStatus) : null);
+
+  if (efecto === "delete") {
     const { error } = await supabase.from("habit_logs").delete().eq("id", log!.id);
-    if (error) throw new Error(describeDbError(error));
+    if (error) return actionFailed(error);
     await supabase.from("audit_log").insert({ user_id: user.id, action: "habit.uncomplete", object: habitId });
+  } else if (efecto === "complete") {
+    const { error } = await supabase
+      .from("habit_logs")
+      .update({ status: "completed", completion_pct: 100 })
+      .eq("id", log!.id);
+    if (error) return actionFailed(error);
+    await supabase.from("audit_log").insert({ user_id: user.id, action: "habit.complete", object: habitId });
   } else {
     const { error } = await supabase.from("habit_logs").insert({ habit_id: habitId, log_date: today });
-    if (error) throw new Error(describeDbError(error));
+    if (error) return actionFailed(error);
     await supabase.from("audit_log").insert({ user_id: user.id, action: "habit.complete", object: habitId });
   }
 
@@ -239,11 +258,102 @@ export async function toggleHabitToday(routineId: string, habitId: string) {
   // estado real y no el que teníamos antes del clic. `arranca: true` porque
   // tocar una casilla SÍ es ejecutar la rutina, y la ejecución del día se abre
   // aunque queden hábitos por marcar.
-  await sincronizarCierreDeRutina(supabase, routineId, today, { arranca: true });
+  try {
+    await sincronizarCierreDeRutina(supabase, routineId, today, { arranca: true });
+  } catch (e) {
+    return { ok: false, reason: e instanceof Error ? e.message : "No se pudo cerrar la rutina." };
+  }
 
   revalidatePath("/development/routines");
   revalidatePath("/development");
   revalidatePath("/home");
+  return actionOk;
+}
+
+/**
+ * Cuántos días atrás se puede registrar. Una semana cubre «anoche no lo
+ * apunté» y el repaso del domingo; más atrás ya no es memoria, es reconstruir,
+ * y un histórico reconstruido a mano enseña rachas que nadie vivió.
+ */
+const DIAS_ATRAS_REGISTRABLES = 7;
+
+const logSchema = z.object({
+  habitId: z.string().uuid(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha no válida"),
+  status: z.enum(["completed", "skipped", "postponed"]),
+  completionPct: z.coerce.number().int().min(0).max(100),
+  note: z.string().max(500, "La nota admite hasta 500 caracteres").default(""),
+  mood: z.coerce.number().int().min(1).max(5).nullable().default(null),
+  energy: z.coerce.number().int().min(1).max(5).nullable().default(null)
+});
+
+export type LogHabitInput = z.input<typeof logSchema>;
+
+/**
+ * Registrar un hábito con detalle: estado, porcentaje, nota, ánimo y energía,
+ * hoy o hasta una semana atrás.
+ *
+ * Es un upsert sobre (habit_id, log_date): el registro del día se corrige, no
+ * se acumula. El porcentaje se normaliza aquí y no se confía en el cliente,
+ * porque la base rechaza un «omitido al 50 %» con un 23514 que no le dice
+ * nada a nadie.
+ */
+export async function logHabit(input: LogHabitInput): Promise<ActionResult> {
+  const parsed = logSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, reason: parsed.error.issues[0]?.message ?? "Datos no válidos." };
+  const v = parsed.data;
+
+  const supabase = await createClient();
+  const user = await getSessionUser();
+  if (!user) return { ok: false, reason: "Tu sesión expiró. Vuelve a iniciar sesión." };
+
+  const today = await todayForUser();
+  if (diffDays(v.date, today) < 0) return { ok: false, reason: "No se puede registrar un día que aún no llega." };
+  if (diffDays(addDaysISO(today, -DIAS_ATRAS_REGISTRABLES), v.date) < 0) {
+    return { ok: false, reason: `Solo se puede registrar hasta ${DIAS_ATRAS_REGISTRABLES} días atrás.` };
+  }
+
+  const { data: habit } = await supabase.from("habits").select("routine_id").eq("id", v.habitId).maybeSingle();
+  if (!habit) return { ok: false, reason: "Ese hábito ya no existe." };
+
+  const completionPct = v.status === "completed" ? Math.max(1, v.completionPct) : 0;
+
+  const { error } = await supabase.from("habit_logs").upsert(
+    {
+      habit_id: v.habitId,
+      log_date: v.date,
+      status: v.status,
+      completion_pct: completionPct,
+      note: v.note.trim(),
+      mood: v.mood,
+      energy: v.energy
+    },
+    { onConflict: "habit_id,log_date" }
+  );
+  if (error) return actionFailed(error);
+
+  await supabase.from("audit_log").insert({
+    user_id: user.id,
+    action: "habit.log",
+    object: v.habitId,
+    meta: { date: v.date, status: v.status, completion_pct: completionPct }
+  });
+
+  // Solo la ejecución de HOY se sincroniza: `sincronizarCierreDeRutina` escribe
+  // la hora de cierre con `now()`, y aplicado a un día pasado inventaría que la
+  // rutina de hace tres días se cerró hace un minuto.
+  if (v.date === today && habit.routine_id) {
+    try {
+      await sincronizarCierreDeRutina(supabase, habit.routine_id, today, { arranca: true });
+    } catch (e) {
+      return { ok: false, reason: e instanceof Error ? e.message : "No se pudo cerrar la rutina." };
+    }
+  }
+
+  revalidatePath("/development/routines");
+  revalidatePath("/development");
+  revalidatePath("/home");
+  return actionOk;
 }
 
 /**

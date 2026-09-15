@@ -235,6 +235,10 @@ export async function updateFoodEntry(id: string, formData: FormData): Promise<A
  * El `habit_logs` se inserta con `ignoreDuplicates`: la fila puede existir ya
  * —el usuario marcó el hábito antes de registrar la comida— y ahí no hay nada
  * que corregir. El índice único de (habit_id, log_date) hace el resto.
+ *
+ * Desde 0063 esa fila puede decir «omitido» o «pospuesto». Registrar la comida
+ * demuestra lo contrario, así que se pasa a hecho; un completado parcial se
+ * deja como está, porque la persona ya dijo cuánto hizo.
  */
 export async function logMealFromRoutine(
   habitId: string,
@@ -255,6 +259,14 @@ export async function logMealFromRoutine(
     .from("habit_logs")
     .upsert({ habit_id: habitId, log_date: hoy }, { onConflict: "habit_id,log_date", ignoreDuplicates: true });
   if (error) return actionFailed(error);
+
+  const { error: estadoError } = await supabase
+    .from("habit_logs")
+    .update({ status: "completed", completion_pct: 100 })
+    .eq("habit_id", habitId)
+    .eq("log_date", hoy)
+    .neq("status", "completed");
+  if (estadoError) return actionFailed(estadoError);
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "habit.complete", object: habitId });
 
