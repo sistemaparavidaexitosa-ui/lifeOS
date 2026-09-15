@@ -2793,3 +2793,35 @@ implementa:
   pesos son un juicio, no un modelo estadístico, y cambiarlos exige subir
   `FORMULA_VERSION`; y una noche en que el reloj no pase deja un hueco en la
   curva en vez de una foto reconstruida al día siguiente.
+
+- **D-161 · El brief de identidad es contenido, no una acción; sus citas nunca
+  se atribuyen.** Cada día la IA escribe un brief (`identity_briefs`, 0065):
+  cinco afirmaciones, una visualización de 2 a 4 minutos, un recordatorio de
+  identidad, una pregunta para el check-in y una cita. No escribe nada en el
+  resto del sistema, así que no pasa por la aprobación de D-089. Lo que sí se
+  exige, y se comprueba en código puro (`src/lib/domain/identity/brief.ts`) y
+  no solo en el prompt:
+  - **Originalidad de las citas.** Se inspiran en principios de Hill, Goddard,
+    Clear y Sharma elegidos por la persona, pero una cita que nombra a un autor
+    o termina con una raya y un nombre se descarta (queda `quote = null`) y la
+    pantalla la marca como «frase original inspirada en…». Reproducir frases
+    reales, además de riesgo de derechos, sería el texto genérico que el
+    producto promete no dar.
+  - **Sin repetición y sin embeddings.** Las afirmaciones se comparan con las
+    de los últimos 30 días por Jaccard de palabras significativas (umbral 0,6).
+    Un reintento como mucho, con los problemas escritos en el prompt; si el
+    segundo intento se sostiene con defectos menores se acepta.
+  - **Memoria sin escribir memoria.** El brief de mañana lee los de los últimos
+    días y sus reacciones («me resuena / no»), la última revisión de identidad
+    y las reflexiones; no crea `memory_items` (D-096).
+  - **Texto de la persona como no confiable.** Identidad, visión, rasgos,
+    reflexiones y aprendizajes viajan entre `<<<` y `>>>`, y el sistema ordena
+    no seguir instrucciones que aparezcan dentro.
+  - **Privacidad y coste.** Exige `habits` y `growth` encendidos en
+    `ai_domains`; va por `buildContext`. Se genera bajo demanda al abrir Hoy
+    (no en el reloj), con un tope de tres intentos al día contado en
+    `audit_log` —que la persona no puede borrar—, incluidos los fallidos. La
+    persona solo puede actualizar `reactions` (GRANT por columna, con el REVOKE
+    previo que exigen los privilegios por defecto). «Borrar historial de IA»
+    borra los briefs. Las acciones devuelven el brief para pintarlo sin
+    depender de la revalidación de la página.

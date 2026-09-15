@@ -5,6 +5,7 @@ import { Card } from "@/components/ui";
 import { reactToBriefItem, regenerateTodayBrief } from "@/lib/identity/brief-actions";
 import type { BriefView, Reaccion } from "@/lib/identity/brief-view";
 import VisualizationPlayer from "./VisualizationPlayer";
+import { IconThumbDown, IconThumbUp } from "@/components/icons";
 
 const PRINCIPIO: Record<string, string> = {
   hill: "Napoleon Hill",
@@ -94,7 +95,7 @@ export default function BriefCard({ initial, traitNames }: { initial: BriefView;
                     style={r === "resuena" ? { background: "color-mix(in srgb, var(--ok) 20%, var(--surface))", color: "var(--text)" } : undefined}
                     title="Me resuena"
                   >
-                    <span aria-hidden="true">👍</span>
+                    <IconThumbUp width={14} height={14} aria-hidden="true" />
                     <span className="sr-only">Me resuena</span>
                   </button>
                   <button
@@ -105,7 +106,7 @@ export default function BriefCard({ initial, traitNames }: { initial: BriefView;
                     style={r === "no_resuena" ? { background: "color-mix(in srgb, var(--danger) 18%, var(--surface))", color: "var(--text)" } : undefined}
                     title="No me resuena"
                   >
-                    <span aria-hidden="true">👎</span>
+                    <IconThumbDown width={14} height={14} aria-hidden="true" />
                     <span className="sr-only">No me resuena</span>
                   </button>
                 </div>

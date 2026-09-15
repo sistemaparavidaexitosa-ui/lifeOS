@@ -66,7 +66,9 @@ async function generarYGuardar(
 ): Promise<Resultado> {
   const hechas = await generacionesDeHoy(supabase, userId, today);
   if (hechas >= MAX_GENERACIONES) {
-    return { ok: false, reason: `Ya generaste ${MAX_GENERACIONES} briefs hoy. Mañana habrá uno nuevo.` };
+    // «Intentos» y no «briefs»: los fallidos también cuentan, y decir «ya
+    // generaste tres» a quien no ha visto ninguno sería mentirle.
+    return { ok: false, reason: `Hoy ya se hicieron los ${MAX_GENERACIONES} intentos de brief que caben en un día. Mañana habrá uno nuevo.` };
   }
 
   const generado = await generarBrief({
