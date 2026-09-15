@@ -70,11 +70,6 @@
   --z-drawer: 50;        /* panel de detalle */
   --z-popover: 60;       /* menús anclados: por encima del drawer */
   --z-nav: 70;           /* menú lateral en móvil: toma la pantalla entera */
-  /* Barra de formato del editor de notas. Tiene que ganarle a .ai-fab, que es
-     `--z-drawer - 2` (48) y vive en la MISMA esquina inferior: con un z-index
-     por debajo, el botón flotante se pintaba encima de ↩︎ ↪︎ y se comía los
-     toques. Queda por debajo del drawer y de los menús anclados. */
-  --z-formatbar: 49;
   /* Capas del Execution Graph. El lienzo va POR DEBAJO de todo el chrome: es
      contenido, aunque ocupe la pantalla entera. El minimapa y el buscador
      flotan sobre él pero siguen por debajo de la barra superior, o taparían el
@@ -2879,15 +2874,61 @@ textarea:focus {
 .nb-prose .nb-todo li {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: 10px;
 }
-.nb-prose .nb-todo li.hecha span {
+/* En lectura la línea es un <span>; en el editor, un <div class="nb-line">.
+   La regla sólo miraba el span, y en el editor una tarea hecha no se tachaba. */
+.nb-prose .nb-todo li.hecha > span,
+.nb-prose .nb-todo li.hecha > .nb-line {
   text-decoration: line-through;
   color: var(--muted);
 }
-.nb-prose .nb-todo input {
-  margin-top: 3px;
+/* Casilla propia: la nativa mide 13px, cambia de cara en cada navegador y
+   quedaba descuadrada con la línea de 16px del editor. Se centra en la PRIMERA
+   línea (alto de línea 1.65 × 16px) para que no baje en tareas de varias. */
+.nb-prose .nb-todo input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
   flex: none;
+  width: 20px;
+  height: 20px;
+  margin: calc((1.65 * 16px - 20px) / 2) 0 0;
+  border: 2px solid var(--muted);
+  border-radius: 6px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+/* Área táctil más grande que la caja, sin mover el layout. */
+.nb-prose .nb-todo input[type="checkbox"]::before {
+  content: "";
+  position: absolute;
+  inset: -8px;
+}
+.nb-prose .nb-todo input[type="checkbox"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+/* La palomita es un borde girado: sigue el color del tema sin un SVG por tema. */
+.nb-prose .nb-todo input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 1px;
+  width: 5px;
+  height: 10px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.nb-prose .nb-todo input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* Sin atenuar: en lectura TODAS están deshabilitadas y se verían apagadas. */
+.nb-prose .nb-todo input[type="checkbox"]:disabled {
+  cursor: default;
 }
 .nb-prose blockquote {
   margin: 10px 0;
@@ -3264,6 +3305,12 @@ textarea:focus {
 .ai-rail {
   display: flex;
   flex-direction: column;
+  /* ANCHO DEFINIDO, no el de su contenido. El rail es la columna `auto` del
+     grid de AppShell y <main> lleva `min-w-0`: sin un ancho aquí, la columna
+     crecía hasta el max-content de la línea más larga —el texto de bienvenida,
+     o una URL en una respuesta— y dejaba el `1fr` del contenido en 0px. Pasaba
+     en todas las páginas, en cuanto el rail estaba abierto. */
+  width: 360px;
   min-height: 0;
   border-left: 1px solid var(--line);
   background: var(--surface);
@@ -3415,22 +3462,18 @@ textarea:focus {
 }
 
 /* ── Editor de notas: barra de formato ───────────────────────────────────── */
+/* Pegada bajo la barra superior, en el flujo de la página: el mismo patrón que
+   .ex-toolbar (D-154). No mide el viewport, así que no puede derivar con el
+   teclado ni con la barra de direcciones de Safari. */
 .nb-formatbar {
-  position: fixed;
-  left: 0;
-  right: 0;
-  /* Reserva: si el navegador no expone visualViewport, esto es lo que queda.
-     Con medidas, el componente pasa a `top: 0` + translateY, porque en iOS el
-     teclado no encoge el viewport de layout y `bottom` deja la barra debajo
-     del teclado. */
-  bottom: 0;
-  /* 40 a pelo era `--z-bulkbar`: un número inventado que chocaba con una capa
-     que ya existía y perdía contra .ai-fab (48). */
-  z-index: var(--z-formatbar);
+  position: sticky;
+  top: calc(var(--topbar-total) + 6px);
+  z-index: var(--z-toolbar);
+  margin-bottom: 8px;
   background: var(--surface);
-  border-top: 1px solid var(--border);
-  /* Sin teclado, la barra descansa sobre la zona de gestos del iPhone. */
-  padding-bottom: env(safe-area-inset-bottom, 0);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  box-shadow: var(--shadow-sm);
 }
 .nb-formatbar-fila {
   display: flex;
@@ -3463,16 +3506,28 @@ textarea:focus {
 .nb-fb-sep {
   width: 1px;
   height: 20px;
-  background: var(--border);
+  background: var(--line);
   flex: none;
 }
 .nb-fb-spacer { flex: 1 1 auto; }
+/* Desplegable FUERA del flujo. Metido en el flujo, abrirlo hacía la barra más
+   alta y el scroll anchoring del navegador desplazaba la página: la fila que se
+   acababa de tocar saltaba 71px si la barra aún no estaba pegada. */
 .nb-formatbar-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 200px;
   display: flex;
   flex-direction: column;
-  border-bottom: 1px solid var(--border);
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  box-shadow: var(--shadow);
 }
 .nb-fb-estilo {
+  border-radius: 8px;
   padding: 10px 14px;
   text-align: left;
   border: 0;
@@ -3482,24 +3537,6 @@ textarea:focus {
 .nb-fb-estilo.activo {
   background: var(--surface-2, rgba(127, 127, 127, 0.16));
 }
-/* El documento deja hueco para la barra: sin esto el último párrafo queda
-   debajo y no se puede escribir en él. */
-.nb-doc {
-  padding-bottom: 96px;
-}
-
-/* Diagnóstico TEMPORAL de la barra de formato (`?bar=1`). Se quita cuando el
-   anclaje al viewport visual quede confirmado en un teléfono. */
-.nb-formatbar-diag {
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  padding: 4px 8px;
-  color: var(--muted);
-  border-bottom: 1px solid var(--border);
-  white-space: nowrap;
-  overflow-x: auto;
-}
-
 /* La línea editable de una casilla es un elemento flex: sin `flex: 1` una línea
    vacía mide 0 de ancho y el cursor no tiene dónde dibujarse — se reportó como
    «se pierde la marca en el puntero de texto cuando hay checkbox». */
