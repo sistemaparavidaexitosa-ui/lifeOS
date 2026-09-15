@@ -34,6 +34,8 @@ export interface EditableLineProps {
   onChange: (content: Inline[], caret: number) => void;
   /** Enter, Backspace y flechas los decide NoteDoc, que es quien ve los bloques. */
   onKey: (e: KeyboardEvent<HTMLDivElement>) => void;
+  /** La selección cambió DENTRO de esta línea. Sale de `selectionchange`, no
+   *  del `onSelect` de React (ver el efecto que lo escucha). */
   onSelect: (start: number, end: number) => void;
   autoFocus?: boolean;
   /** Inicio del tramo a restaurar cuando el modelo lo pide. */
@@ -96,6 +98,30 @@ export default function EditableLine({
     if (autoFocus) ref.current?.focus();
   }, [autoFocus]);
 
+  // SELECCIÓN: `selectionchange` nativo, NO el `onSelect` de React.
+  // `onSelect` también se dispara en el `keydown` si la selección cambió desde
+  // el último aviso —tras escribir o tocar deprisa—, y lo hace en el MISMO lote
+  // que Enter con los datos de ANTES: devolvía el cursor a la línea de arriba y
+  // la línea de arriba se quedaba el foco. Era el «al hacer Enter el cursor no
+  // baja y escribo en la de arriba» del iPhone. `selectionchange` llega cuando
+  // Enter ya se aplicó, así que informa de la línea donde el cursor ESTÁ.
+  const alSeleccionar = useRef(onSelect);
+  useEffect(() => {
+    alSeleccionar.current = onSelect;
+  });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const doc = el.ownerDocument;
+    const alCambiar = () => {
+      if (doc.activeElement !== el) return;
+      const { start, end } = offsetDelCursor(el);
+      alSeleccionar.current(start, end);
+    };
+    doc.addEventListener("selectionchange", alCambiar);
+    return () => doc.removeEventListener("selectionchange", alCambiar);
+  }, []);
+
   const vacio = content.every((p) => !p.text);
 
   function emitir(el: HTMLElement) {
@@ -132,10 +158,6 @@ export default function EditableLine({
         emitir(e.currentTarget);
       }}
       onKeyDown={onKey}
-      onSelect={(e) => {
-        const { start, end } = offsetDelCursor(e.currentTarget);
-        onSelect(start, end);
-      }}
       onPaste={(e) => {
         // Se pega SIEMPRE como texto llano. Dejar que el navegador inserte su
         // HTML y limpiarlo después deja restos distintos en cada navegador.

@@ -948,7 +948,7 @@ el resultado real, nunca con el previsto.
 | 6 | Backspace al inicio funde con el bloque anterior sin perder ítems | NO EJECUTADO |
 | 7 | Seleccionar y tocar B pone negrita sin perder la selección | NO EJECUTADO |
 | 8 | Marcar una casilla no hace saltar el teclado | NO EJECUTADO |
-| 9 | La barra de formato queda ENCIMA del teclado | **FALLÓ** → D-154 (arriba, pegada) **FALLÓ** también → D-155: debajo de la línea donde se escribe |
+| 9 | La barra de formato queda ENCIMA del teclado | **FALLÓ** cinco diseños (D-113, D-154, D-155) → D-156: no hay barra |
 | 10 | Tab recorre las celdas de una tabla; en la última crea fila | NO EJECUTADO |
 | 11 | Una tabla ancha scrollea sola, sin mover la nota de lado | NO EJECUTADO |
 | 12 | Pegar desde una web deja el texto y pierde el estilo | NO EJECUTADO |
@@ -958,7 +958,7 @@ el resultado real, nunca con el previsto.
 | 16 | Con rol Viewer no aparece ningún `contenteditable` | NO EJECUTADO |
 
 | 17 | En una nota NUEVA se puede escribir el cuerpo, no sólo el título | **FALLÓ** → corregido, con prueba |
-| 18 | La barra de formato no se tapa con el botón flotante de la IA | Ya no aplica (D-155): la barra va dentro del texto, no pegada a un borde |
+| 18 | La barra de formato no se tapa con el botón flotante de la IA | Ya no aplica (D-156): no hay barra |
 
 #### Lo que encontró el primer uso real en un teléfono (6-sep-2026)
 
@@ -1180,6 +1180,59 @@ la pantalla—, no en haberlo visto.
 
 Pendiente, anterior a este cambio: Enter en un ítem vacío A MITAD de una lista
 saca el párrafo nuevo DETRÁS de toda la lista, no en ese punto.
+
+#### D-156 y D-157: sin barra, y Enter baja el cursor de verdad (15-sep-2026)
+
+Lo que dijo el iPhone con D-155 en producción: «aún no funciona el cursor en
+línea nueva con Enter» y «oculta el ribbon, no es funcional debajo del texto».
+
+1. **La barra se quita (D-156).** El formato queda en los atajos al escribir y
+   en el menú nativo de la selección.
+2. **Enter: la causa estaba en `onSelect` de React, no en iOS.** React también
+   dispara `onSelect` en el `keydown` cuando la selección cambió desde su último
+   aviso, y lo hace en el MISMO lote que Enter, con el cursor de antes.
+   `onCursor({ ...cursor })` pisaba el cursor que acababa de poner Enter: volvía
+   a la línea de arriba y a su `seq`, así que ninguna línea recibía la orden de
+   enfocarse y el foco se quedaba arriba. Pasa cuando Enter llega antes que el
+   `selectionchange` de la última letra, o sea al escribir seguido, que es lo
+   normal en un teléfono. Encima, Enter cortaba por `cursor.start`, que en ese
+   caso también era viejo.
+
+   Se forzó ese orden por JavaScript (mover la selección y disparar Enter en la
+   misma tarea) y se escribió «Z»:
+
+   | Código | Resultado |
+   |--------|-----------|
+   | Producción (`ac0d7b5`) | **FALLÓ**: `"PriZmer párrafo"` + línea vacía debajo, el síntoma exacto del iPhone |
+   | Con el arreglo | ✅ `"Pri"` / `"Zmer párrafo"` |
+
+   Arreglo, en tres partes:
+   - `EditableLine` escucha `selectionchange` nativo, que llega con Enter ya
+     aplicado, en vez de `onSelect`.
+   - `alPulsar` lee el offset del DOM, no del modelo.
+   - **Claves estables** (`claves.ts`): la línea donde queda el cursor conserva
+     la clave, y con ella el nodo enfocado, de la línea donde se pulsó. Enter y
+     Backspace ya no mueven el foco a otro contenteditable, así que no dependen
+     de cómo trate iOS un `focus()` desde JavaScript.
+
+Verificado con `pnpm build && pnpm start` contra la pila local, usuario
+desechable (borrado al terminar), 390px, Chromium headless y WebKit 26.6. «Mismo
+nodo» = el `activeElement` es el mismo objeto antes y después; «0 focos» = ni un
+`focusin` ni un `focusout`:
+
+| Qué | Chromium | WebKit |
+|-----|----------|--------|
+| `pnpm typecheck`, `pnpm lint`, `pnpm test:unit` | ✅ **968/968** (+10 `claves`, −3 de la barra borrada) | — |
+| Escribir « rápido» y Enter SIN pausa, luego «Abajo» | ✅ mismo nodo, 0 focos, «Abajo» en la línea nueva. Producción: foco movido (2 eventos) | ✅ |
+| Enter al final, a mitad y al inicio de un párrafo | ✅ mismo nodo, 0 focos, texto en su sitio | ✅ |
+| Enter al final de una casilla y escribir | ✅ mismo nodo, 0 focos (antes el `<li>` se conservaba pero `EditableLine` llevaba `key={índice}` y se recreaba) | ✅ |
+| Backspace al inicio de una casilla y de un párrafo: funde y escribe en el punto de unión | ✅ mismo nodo, 0 focos | ✅ |
+| ⌘Z tras todo lo anterior | ✅ vuelve al texto original, sin errores | ✅ |
+| Probado en un iPhone de verdad | ⚠️ NO EJECUTADO | |
+
+Sigue pendiente: Enter en un ítem vacío A MITAD de una lista saca el párrafo
+detrás de toda la lista; y que el menú nativo de iOS (Formato → B/I/U) produzca
+`<b>/<i>/<u>` está deducido del código de `leerDom`, no visto en el teléfono.
 
 **Las 16 filas originales siguen sin ejecutarse salvo las anotadas.** El editor compila, pasa las
 pruebas de dominio y construye, pero **nadie lo ha abierto en un teléfono**.
