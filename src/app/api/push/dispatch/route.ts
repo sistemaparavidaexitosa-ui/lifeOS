@@ -14,6 +14,11 @@ import {
 import { claveDelCoach, momentoQueToca, PREFS_POR_DEFECTO } from "@/lib/domain/coach/schedule.ts";
 import { generarYGuardarMensajeDiario } from "@/lib/coach/daily";
 import { proponerAristas } from "@/lib/coach/graph-suggestions";
+import { fuentesDe } from "@/lib/coach/facts";
+import { tocaFotoDeIdentidad } from "@/lib/domain/identity/schedule.ts";
+import { loadScoreContext, scoreOf } from "@/lib/identity/score-inputs";
+import { huellaDeHechos, prepararAnalisis, recomendarYGuardar } from "@/lib/insights/generar-recomendaciones";
+import { debeAnalizar, JOB_INSIGHTS_HABITOS } from "@/lib/domain/insights/nightly.ts";
 
 export const dynamic = "force-dynamic";
 /** Un minuto de techo: el trabajo va por lotes y no debe acercarse al límite. */
@@ -30,7 +35,9 @@ export const maxDuration = 60;
  *   1. recordatorios cuya hora ya pasó,
  *   2. el resumen diario de vencimientos, a la hora local de cada quien,
  *   3. los dos mensajes del coach de vida, también a su hora local (0053),
- *   4. reintentar los avisos que se quedaron sin salir.
+ *   4. la foto nocturna del Identity Score, sin modelo (0064),
+ *   5. los insights nocturnos de hábitos, con modelo y una vez por noche (0066),
+ *   6. reintentar los avisos que se quedaron sin salir.
  *
  * Nunca lanza hacia fuera: devuelve el recuento de lo que hizo. Si un usuario
  * falla, los demás siguen — un perfil con la zona horaria rota no puede dejar
@@ -70,12 +77,14 @@ export async function POST(request: Request) {
   // lento no retrasa recordatorios ni vencimientos, y el reintento de lo que ya
   // estaba en la bandeja sigue corriendo detrás con lo que quede de minuto.
   const coach = await despacharCoach(supabase, ahora, inicio);
+  const identidad = await despacharIdentidad(supabase, ahora, inicio);
+  const insights = await despacharInsightsHabitos(supabase, ahora, inicio);
   const reintentos = await reintentarPendientes(supabase);
 
   // «creados» y «entregados» se cuentan aparte a propósito: sin ningún
   // dispositivo suscrito se crean avisos que no se entregan, y mezclarlo
   // haría parecer que el reloj no hizo nada.
-  return NextResponse.json({ ok: true, recordatorios, vencimientos, coach, entregados: reintentos });
+  return NextResponse.json({ ok: true, recordatorios, vencimientos, coach, identidad, insights, entregados: reintentos });
 }
 
 /**
@@ -371,6 +380,191 @@ async function despacharCoach(supabase: Admin, ahora: Date, inicio: number): Pro
   }
 
   return enviados;
+}
+
+/**
+ * Fotos por pasada. Cada una son unas diez consultas y ningún modelo; veinte
+ * caben con holgura en lo que el coach deja de minuto.
+ */
+const LOTE_IDENTIDAD = 20;
+/** Más allá de esto se deja el resto para la siguiente pasada: los reintentos van detrás. */
+const PRESUPUESTO_IDENTIDAD_MS = 45_000;
+
+/**
+ * LA FOTO NOCTURNA DEL IDENTITY SCORE (D-160).
+ *
+ * En la última hora del día local de cada persona, calcula su puntuación con
+ * `loadScoreContext` —la MISMA carga que usa la pantalla, en modo servicio— y
+ * la guarda en `identity_scores`. Es lo que dibuja la evolución.
+ *
+ * Idempotente por la clave (user_id, local_date): antes de calcular se mira si
+ * la foto de hoy ya está, así que las doce pasadas de la hora hacen una sola
+ * foto. Sin hábitos no hay puntuación y no se guarda nada.
+ *
+ * No depende de `coach_enabled`: no llama al modelo ni manda avisos, solo
+ * guarda una cifra de la propia persona. Nunca lanza.
+ */
+async function despacharIdentidad(supabase: Admin, ahora: Date, inicio: number): Promise<number> {
+  const { data: perfiles } = await supabase.from("profiles").select("user_id, timezone").limit(1000);
+  if (!perfiles?.length) return 0;
+
+  let fotos = 0;
+  for (const perfil of perfiles) {
+    if (fotos >= LOTE_IDENTIDAD || Date.now() - inicio > PRESUPUESTO_IDENTIDAD_MS) break;
+
+    const zona = perfil.timezone && isValidTimeZone(perfil.timezone) ? perfil.timezone : DEFAULT_TIMEZONE;
+    if (!tocaFotoDeIdentidad(timeInTimeZone(zona, ahora))) continue;
+    const hoy = todayInTimeZone(zona, ahora);
+
+    try {
+      const { data: yaEsta } = await supabase
+        .from("identity_scores")
+        .select("local_date")
+        .eq("user_id", perfil.user_id)
+        .eq("local_date", hoy)
+        .maybeSingle();
+      if (yaEsta) continue;
+
+      const { count } = await supabase.from("habits").select("id", { count: "exact", head: true }).eq("user_id", perfil.user_id);
+      if (!count) continue;
+
+      const ctx = await loadScoreContext({
+        supabase,
+        userId: perfil.user_id,
+        today: hoy,
+        timeZone: zona,
+        modo: "servicio",
+        sources: await fuentesDe(supabase, perfil.user_id)
+      });
+      const score = scoreOf(ctx);
+      if (score.score === null) continue;
+
+      const { error } = await supabase.from("identity_scores").upsert(
+        {
+          user_id: perfil.user_id,
+          local_date: hoy,
+          score: score.score,
+          components: score.components.map((c) => ({ key: c.key, value: c.value, weight: c.weight })),
+          formula_version: score.formulaVersion
+        },
+        { onConflict: "user_id,local_date" }
+      );
+      if (!error) fotos++;
+    } catch {
+      continue;
+    }
+  }
+  return fotos;
+}
+
+/** Análisis por pasada: cada uno es una llamada al modelo de varios segundos. */
+const LOTE_INSIGHTS = 3;
+/** Pasado esto no se empieza otro análisis: los reintentos de la bandeja van detrás. */
+const PRESUPUESTO_INSIGHTS_MS = 30_000;
+
+/**
+ * LOS INSIGHTS NOCTURNOS DE HÁBITOS (D-163).
+ *
+ * En la ventana de la noche del coach (misma preferencia: `coach_enabled` y
+ * `coach_night_hour`), analiza el historial de hábitos con el mismo núcleo que
+ * el botón «Analizar» (`prepararAnalisis` + `recomendarYGuardar`), en modo
+ * servicio. Las recomendaciones caen en `recommendations` con dominio
+ * `habits` y se leen en Hoy de Rutinas y en el panel de Desarrollo.
+ *
+ * Una vez por noche: la fila de `ai_job_runs` se inserta ANTES de llamar al
+ * modelo, y la clave primaria impide que dos pasadas lo hagan a la vez. Y solo
+ * si hay algo nuevo: si la huella de los hechos es la de la última ejecución,
+ * no se llama. Nunca lanza.
+ */
+async function despacharInsightsHabitos(supabase: Admin, ahora: Date, inicio: number): Promise<number> {
+  if (Date.now() - inicio > PRESUPUESTO_INSIGHTS_MS) return 0;
+
+  const [{ data: perfiles }, { data: prefs }] = await Promise.all([
+    supabase.from("profiles").select("user_id, timezone").limit(1000),
+    supabase.from("notification_prefs").select("user_id, coach_enabled, coach_morning_hour, coach_night_hour")
+  ]);
+  if (!perfiles?.length) return 0;
+  const prefsPorUsuario = new Map((prefs ?? []).map((p) => [p.user_id, p]));
+
+  let analizados = 0;
+  for (const perfil of perfiles) {
+    if (analizados >= LOTE_INSIGHTS || Date.now() - inicio > PRESUPUESTO_INSIGHTS_MS) break;
+
+    const zona = perfil.timezone && isValidTimeZone(perfil.timezone) ? perfil.timezone : DEFAULT_TIMEZONE;
+    const fila = prefsPorUsuario.get(perfil.user_id);
+    const momento = momentoQueToca(timeInTimeZone(zona, ahora), {
+      enabled: fila?.coach_enabled ?? PREFS_POR_DEFECTO.enabled,
+      morningHour: fila?.coach_morning_hour ?? PREFS_POR_DEFECTO.morningHour,
+      nightHour: fila?.coach_night_hour ?? PREFS_POR_DEFECTO.nightHour
+    });
+    if (momento !== "night") continue;
+    const hoy = todayInTimeZone(zona, ahora);
+
+    try {
+      const { data: yaCorrio } = await supabase
+        .from("ai_job_runs")
+        .select("local_date")
+        .eq("user_id", perfil.user_id)
+        .eq("job", JOB_INSIGHTS_HABITOS)
+        .eq("local_date", hoy)
+        .maybeSingle();
+      if (yaCorrio) continue;
+
+      const { count } = await supabase.from("habits").select("id", { count: "exact", head: true }).eq("user_id", perfil.user_id);
+      if (!count) continue;
+
+      const preparado = await prepararAnalisis({ supabase, userId: perfil.user_id, scope: "habits", today: hoy, modo: "servicio" });
+      const huella = preparado.ok ? huellaDeHechos(preparado.context) : "";
+
+      // La guarda se escribe ANTES de llamar al modelo. Si otra pasada ganó la
+      // carrera, el insert choca con la clave primaria y esta se retira.
+      const { error: guarda } = await supabase.from("ai_job_runs").insert({
+        user_id: perfil.user_id,
+        job: JOB_INSIGHTS_HABITOS,
+        local_date: hoy,
+        facts_hash: huella,
+        outcome: preparado.ok ? "en_curso" : preparado.reason.slice(0, 200)
+      });
+      if (guarda || !preparado.ok) continue;
+
+      const { data: anterior } = await supabase
+        .from("ai_job_runs")
+        .select("facts_hash")
+        .eq("user_id", perfil.user_id)
+        .eq("job", JOB_INSIGHTS_HABITOS)
+        .lt("local_date", hoy)
+        // Solo cuenta como «ya analizado» una noche que terminó bien: si ayer
+        // falló (cuota, red), la misma huella hoy SÍ se vuelve a intentar.
+        .like("outcome", "hecho%")
+        .order("local_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const decision = debeAnalizar(preparado.context.facts.length, huella, anterior?.facts_hash ?? null);
+      if (decision !== "analizar") {
+        await supabase.from("ai_job_runs").update({ outcome: decision }).eq("user_id", perfil.user_id).eq("job", JOB_INSIGHTS_HABITOS).eq("local_date", hoy);
+        continue;
+      }
+
+      const resultado = await recomendarYGuardar({
+        supabase,
+        userId: perfil.user_id,
+        scope: "habits",
+        context: preparado.context,
+        origen: "nocturno"
+      });
+      await supabase
+        .from("ai_job_runs")
+        .update({ outcome: resultado.ok ? `hecho:${resultado.created}` : `fallido:${(resultado.reason ?? "").slice(0, 180)}` })
+        .eq("user_id", perfil.user_id)
+        .eq("job", JOB_INSIGHTS_HABITOS)
+        .eq("local_date", hoy);
+      analizados++;
+    } catch {
+      continue;
+    }
+  }
+  return analizados;
 }
 
 /**

@@ -142,10 +142,23 @@ export function goalAtRisk(
   todayISO: string,
   thresholdPoints = 20
 ): boolean {
+  if (diffDays(startISO, horizonISO) <= 0) return pct < 100; // horizonte vencido o inválido
+  if (diffDays(startISO, todayISO) <= 0) return false;
+  return goalExpectedPct(startISO, horizonISO, todayISO) - pct > thresholdPoints;
+}
+
+/**
+ * Qué porcentaje del camino debería llevar recorrido una meta hoy, si avanzara
+ * a ritmo constante entre su inicio y su horizonte. 0 antes de empezar, 100 al
+ * llegar al horizonte o con un horizonte inválido.
+ *
+ * Es la vara de `goalAtRisk` y del componente «Avance de metas» del Identity
+ * Score (D-160): una sola definición de «ritmo esperado».
+ */
+export function goalExpectedPct(startISO: string, horizonISO: string, todayISO: string): number {
   const total = diffDays(startISO, horizonISO);
-  if (total <= 0) return pct < 100; // horizonte vencido o inválido
+  if (total <= 0) return 100;
   const elapsed = diffDays(startISO, todayISO);
-  if (elapsed <= 0) return false;
-  const expectedPct = Math.min(100, (elapsed / total) * 100);
-  return expectedPct - pct > thresholdPoints;
+  if (elapsed <= 0) return 0;
+  return Math.min(100, (elapsed / total) * 100);
 }

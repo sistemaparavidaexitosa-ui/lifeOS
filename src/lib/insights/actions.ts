@@ -5,16 +5,12 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/data/session";
 
 import { todayForUser } from "@/lib/data/profile";
-import { loadFacts } from "./facts-loader";
-import { allowedDomains, buildContext, type Scope } from "./context";
-import { loadChainFacts } from "./graph-context";
-import { recommend } from "@/lib/ai/recommend";
-import { GEMINI_MODEL } from "@/lib/ai/gemini-provider";
-import { recommendationFingerprint } from "@/lib/domain/insights/fingerprint.ts";
-import { canTransition, REJECTION_STATUSES, type RecommendationStatus } from "@/lib/domain/insights/states.ts";
+import type { Scope } from "./context";
+import { prepararAnalisis, recomendarYGuardar, type AnalyzeResult } from "./generar-recomendaciones";
+import { canTransition, type RecommendationStatus } from "@/lib/domain/insights/states.ts";
 import { DOMAIN_LABEL, type Domain } from "@/lib/domain/insights/types.ts";
-import { MEMORY_SCOPES, type MemoryItemLike, type MemoryOrigin, type MemoryScope } from "@/lib/domain/insights/memory.ts";
-import { actionFailed, describeDbError, type ActionResult } from "@/lib/supabase/errors";
+import { MEMORY_SCOPES, type MemoryOrigin } from "@/lib/domain/insights/memory.ts";
+import { actionFailed, type ActionResult } from "@/lib/supabase/errors";
 
 /**
  * Intelligence OS — el análisis lo dispara el usuario y es informativo.
@@ -31,12 +27,7 @@ import { actionFailed, describeDbError, type ActionResult } from "@/lib/supabase
  * `activity` va aparte y NO entra en `global`: habla del equipo, no del usuario
  * (ver allowedDomains en context.ts).
  */
-export interface AnalyzeResult {
-  ok: boolean;
-  created: number;
-  /** Mensaje para la UI: por qué no hubo recomendaciones, si no las hubo. */
-  reason?: string;
-}
+export type { AnalyzeResult } from "./generar-recomendaciones";
 
 /**
  * Dónde vive el panel de cada ámbito, para revalidar la ruta que de verdad hay
@@ -61,164 +52,18 @@ export async function analyze(scope: Scope): Promise<AnalyzeResult> {
   const user = await getSessionUser();
   if (!user) return { ok: false, created: 0, reason: "No autenticado" };
 
-  const today = await todayForUser();
+  const preparado = await prepararAnalisis({ supabase, userId: user.id, scope, today: await todayForUser(), modo: "sesion" });
+  if (!preparado.ok) return { ok: false, created: 0, reason: preparado.reason };
 
-  const [{ data: profile }, { data: rejected }, { data: memory }] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("quincenal_income, ai_domains, activity_window_start, activity_window_end")
-      .eq("user_id", user.id)
-      .single(),
-    supabase
-      .from("recommendations")
-      .select("status, text")
-      .in("status", REJECTION_STATUSES)
-      .order("created_at", { ascending: false })
-      .limit(20),
-    supabase.from("memory_items").select("*").order("created_at", { ascending: false })
-  ]);
+  const resultado = await recomendarYGuardar({ supabase, userId: user.id, scope, context: preparado.context, origen: "manual" });
 
-  // Opt-in por dominio (§4.2). Vacío por defecto: nada sale hacia el modelo
-  // hasta que el usuario lo encienda en Configuración.
-  const enabledDomains = (profile?.ai_domains ?? []) as Domain[];
-
-  // Corte TEMPRANO, antes de cargar nada del dominio. `buildContext` volvería a
-  // filtrar de todas formas, pero para entonces las cifras ya se habrían leído.
-  // Con el opt-in, no preguntar es parte de la promesa: si el usuario no
-  // autorizó este ámbito, sus tablas ni se tocan.
-  const permitidos = allowedDomains(scope).filter((d) => enabledDomains.includes(d));
-  if (!permitidos.length) {
-    const apagados = allowedDomains(scope).map((d) => DOMAIN_LABEL[d]);
-    return {
-      ok: false,
-      created: 0,
-      reason:
-        apagados.length === 1
-          ? `${apagados[0]} está apagado para el análisis. Enciéndelo en Configuración si quieres que sus cifras se envíen al modelo.`
-          : `Ninguno de los dominios de este ámbito (${apagados.join(", ")}) está encendido. Actívalos en Configuración si quieres que sus cifras se envíen al modelo.`
-    };
+  if (resultado.ok) {
+    revalidatePath(SCOPE_PATH[scope]);
+    // Los insights de hábitos también se leen en Hoy de Rutinas (F5).
+    if (scope === "habits") revalidatePath("/development/routines");
+    revalidatePath("/intelligence");
   }
-
-  const facts = await loadFacts(supabase, user.id, permitidos, today, {
-    quincenalIncome: profile?.quincenal_income ?? 0,
-    window: {
-      start: (profile?.activity_window_start ?? "08:00").slice(0, 5),
-      end: (profile?.activity_window_end ?? "18:00").slice(0, 5)
-    }
-  });
-
-  facts.push(...(await loadChainFacts(supabase, facts, permitidos, { modo: "sesion" })));
-
-  const context = buildContext({
-    scope,
-    facts,
-    previousRejections: (rejected ?? []).map((r) => ({ status: r.status, text: r.text })),
-    enabledDomains,
-    todayISO: today,
-    memory: (memory ?? []).map(
-      (m): MemoryItemLike => ({
-        id: m.id,
-        scope: m.scope as MemoryScope,
-        origin: m.origin as MemoryItemLike["origin"],
-        text: m.text,
-        validUntil: m.valid_until
-      })
-    )
-  });
-
-  // Red de seguridad: el corte temprano ya cubrió este caso, pero `context.ts`
-  // es el único sitio donde el filtro de privacidad manda (D-027) y si algún día
-  // decide dejar la lista vacía por otro motivo, aquí se para igual.
-  if (!context.domains.length) {
-    return {
-      ok: false,
-      created: 0,
-      reason: "Ningún dominio de este ámbito está autorizado para el análisis. Revísalo en Configuración."
-    };
-  }
-
-  const result = await recommend(context);
-
-  await supabase.from("audit_log").insert({
-    user_id: user.id,
-    action: "ai.analyze",
-    object: scope,
-    meta: {
-      scope,
-      domains: context.domains,
-      factCount: context.facts.length,
-      model: result.model ?? GEMINI_MODEL,
-      created: result.recommendations.length,
-      dropped: result.dropped.length
-    }
-  });
-
-  if (!result.ok) return { ok: false, created: 0, reason: result.reason };
-  if (!result.recommendations.length) {
-    return { ok: true, created: 0, reason: result.reason ?? "El análisis no encontró nada que valga la pena reportar." };
-  }
-
-  // Deduplicación (§5.2). Se consulta primero en vez de hacer upsert porque el
-  // índice único es parcial y porque las dos ramas no hacen lo mismo:
-  //  - una viva (Presented) con la misma huella se REFRESCA con el texto nuevo;
-  //  - una silenciada (Suppressed) se SALTA. El usuario dijo que no la quiere
-  //    ver; volver a insertarla con otro texto sería burlar esa decisión.
-  const conHuella = result.recommendations.map((r) => ({ ...r, fingerprint: recommendationFingerprint(r.type, r.factIds) }));
-  const { data: existentes } = await supabase
-    .from("recommendations")
-    .select("id, fingerprint, status")
-    .in("fingerprint", conHuella.map((r) => r.fingerprint))
-    .in("status", ["Presented", "Suppressed"]);
-
-  const porHuella = new Map((existentes ?? []).map((e) => [e.fingerprint, e]));
-  const nuevas = conHuella.filter((r) => !porHuella.has(r.fingerprint));
-  const refrescables = conHuella.filter((r) => porHuella.get(r.fingerprint)?.status === "Presented");
-
-  for (const r of refrescables) {
-    await supabase
-      .from("recommendations")
-      .update({
-        text: r.text,
-        confidence: r.confidence,
-        impact: r.impact,
-        evidence: r.factIds,
-        assumptions: r.assumptions
-      })
-      .eq("id", porHuella.get(r.fingerprint)!.id);
-  }
-
-  const rows = nuevas.map((r) => ({
-    user_id: user.id,
-    type: r.type,
-    text: r.text,
-    confidence: r.confidence,
-    domain: scope,
-    evidence: r.factIds,
-    assumptions: r.assumptions,
-    // Fase 1 es informativa: sin acciones aplicables todavía (§8 del spec).
-    actions: [],
-    requires_confirmation: false,
-    impact: r.impact,
-    status: "Presented",
-    fingerprint: r.fingerprint
-  }));
-
-  if (rows.length) {
-    const { error } = await supabase.from("recommendations").insert(rows);
-    if (error) return { ok: false, created: 0, reason: describeDbError(error) };
-  }
-
-  revalidatePath(SCOPE_PATH[scope]);
-  revalidatePath("/intelligence");
-  if (rows.length) return { ok: true, created: rows.length };
-  return {
-    ok: true,
-    created: 0,
-    reason:
-      refrescables.length > 0
-        ? "Nada nuevo: las recomendaciones que ya tenías se actualizaron con las cifras de hoy."
-        : "Nada nuevo: el motor solo repitió lo que ya habías silenciado."
-  };
+  return resultado;
 }
 
 /**
@@ -361,6 +206,10 @@ export async function clearAiHistory(): Promise<void> {
   // turno que las explicaba con `on delete cascade` (0053). Se dice aquí porque
   // desde este archivo no se ve, y alguien podría añadir el delete que sobra.
   await supabase.from("ai_chat_messages").delete().eq("user_id", user.id);
+  // Los briefs de identidad (0065) son lo que la IA escribió sobre quién quiere
+  // ser la persona: la promesa del botón los incluye. El tope diario sigue
+  // contándose en audit_log, que no se borra.
+  await supabase.from("identity_briefs").delete().eq("user_id", user.id);
   await supabase.from("audit_log").insert({ user_id: user.id, action: "ai.clear.history", object: "" });
   revalidatePath("/intelligence");
   revalidatePath("/money");

@@ -155,9 +155,17 @@ export const TABLAS_CONSULTABLES = {
 
   // --------------------------------------------------------------- hábitos
   habits: { domain: "habits", fecha: "created_at", select: "id, name, category, routine_id, duration_min, position, created_at" },
-  habit_logs: { domain: "habits", fecha: "log_date", select: "id, habit_id, log_date" },
+  habit_logs: { domain: "habits", fecha: "log_date", select: "id, habit_id, log_date, status, completion_pct, note, mood, energy" },
   routines: { domain: "habits", fecha: "created_at", select: "id, name, frequency, identity, active, occupation_id, created_at" },
   routine_runs: { domain: "habits", fecha: "local_date", select: "id, routine_id, local_date, completed_at" },
+  // Identidad (0064). El perfil y los rasgos son de `growth`, como las metas: dicen
+  // quién quieres ser. Los votos y la puntuación miden hábitos, y van con ellos.
+  identity_profiles: { domain: "growth", fecha: "updated_at", select: "desired_identity, vision_statement, core_values, motivational_tone, inspirations, updated_at" },
+  identity_traits: { domain: "growth", fecha: "created_at", select: "id, name, statement, area, active, position, created_at" },
+  habit_identity_traits: { domain: "habits", fecha: "created_at", select: "habit_id, trait_id, created_at" },
+  identity_scores: { domain: "habits", fecha: "local_date", select: "local_date, score, components, formula_version" },
+  // El check-in del día es reflexión personal, no un hábito: vive en `growth` (0063).
+  daily_reflections: { domain: "growth", fecha: "local_date", select: "id, local_date, mood, energy, sleep_hours, reflection_prompt, reflection, wins" },
 
   // ---------------------------------------------------------------- tiempo
   occupations: { domain: "time", fecha: "created_at", select: "id, title, category, start_time, end_time, days, occ_date, recurring, created_at" },

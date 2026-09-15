@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import HabitRow from "./HabitRow";
+import type { HabitLogEntry } from "@/lib/domain/development/habit-analytics.ts";
 
 export interface RunnerHabit {
   id: string;
@@ -13,8 +14,14 @@ export interface RunnerHabit {
   cue: string;
   twoMinVersion: string;
   stackAfterName: string | null;
-  doneToday: boolean;
+  /** El registro de hoy en cualquier estado (0063), o `null`. */
+  todayEntry: HabitLogEntry | null;
+  /** Hábito semanal cumplido otro día de esta semana. */
+  weekDoneElsewhere: boolean;
   streak: number;
+  streakUnit: "día" | "semana";
+  /** Registros de la última semana, para la hoja de detalle. */
+  recent: HabitLogEntry[];
   /** Botón de edición del hábito; llega ya renderizado desde el servidor. */
   action?: ReactNode;
 }
@@ -31,11 +38,14 @@ export interface RunnerHabit {
 export default function RoutineRunner({
   routineId,
   habits,
-  today
+  today,
+  minDate
 }: {
   routineId: string;
   habits: RunnerHabit[];
   today: string;
+  /** Primer día que se puede registrar con detalle. */
+  minDate: string;
 }) {
   if (!habits.length) {
     return (
@@ -61,8 +71,13 @@ export default function RoutineRunner({
             stackAfterName: h.stackAfterName,
             meal: h.meal
           }}
-          doneToday={h.doneToday}
+          todayEntry={h.todayEntry}
+          weekDoneElsewhere={h.weekDoneElsewhere}
           streak={h.streak}
+          streakUnit={h.streakUnit}
+          today={today}
+          minDate={minDate}
+          recent={h.recent}
           action={h.action}
         />
       ))}

@@ -24,6 +24,8 @@ import { moneyFacts, type BudgetLineLike } from "@/lib/domain/insights/facts/mon
 import { timeFacts } from "@/lib/domain/insights/facts/time.ts";
 import { executionFacts } from "@/lib/domain/insights/facts/execution.ts";
 import { habitsFacts, type HabitFrequency } from "@/lib/domain/insights/facts/habits.ts";
+import { habitPatternsFacts } from "@/lib/domain/insights/facts/habit-patterns.ts";
+import { buildHabitSeries } from "@/lib/domain/development/habit-analytics.ts";
 import { debtFacts } from "@/lib/domain/insights/facts/debt.ts";
 import { activityFacts, type UnreadMentionLike } from "@/lib/domain/insights/facts/activity.ts";
 import { nutritionFacts } from "@/lib/domain/insights/facts/nutrition.ts";
@@ -84,6 +86,12 @@ export interface FactsOverrides {
   myTasks?: MyTaskRow[];
   sources?: SourceSnapshot;
   personalWorkspaceIds?: string[];
+  /**
+   * Sin sesión el histórico de hábitos se lee con `habit_log_series_de`, que
+   * solo puede ejecutar el servidor (0063). Con sesión, con `habit_log_series`
+   * y la RLS puesta.
+   */
+  modo?: "sesion" | "servicio";
 }
 
 export async function loadFacts(
@@ -208,14 +216,54 @@ async function loadDomainFacts(
 
       // Desde 0046 el hábito NO tiene frecuencia ni bloque horario propios: los
       // pone la rutina de la que cuelga, que es el único sitio donde se dicen.
-      const [{ data: habits }, { data: logs }, { data: routines }, { data: runs }] = await Promise.all([
-        supabase.from("habits").select("id, name, routine_id, routines(frequency)").eq("user_id", userId),
-        supabase.from("habit_logs").select("habit_id, log_date, habits!inner(user_id)").eq("habits.user_id", userId).gte("log_date", desdeLogs).lte("log_date", today),
+      // Los patrones (tendencias y correlaciones) necesitan 12 semanas; se leen
+      // en arreglos para no chocar con `max_rows`.
+      const desdePatrones = addDaysISO(today, -90);
+      const serieRpc =
+        overrides.modo === "servicio"
+          ? supabase.rpc("habit_log_series_de", { p_uid: userId, p_from: desdePatrones, p_to: today })
+          : supabase.rpc("habit_log_series", { p_from: desdePatrones, p_to: today });
+
+      const [{ data: habits }, { data: logs }, { data: routines }, { data: runs }, { data: filasSerie }, { data: checkins }] = await Promise.all([
+        supabase.from("habits").select("id, name, routine_id, created_at, routines(frequency)").eq("user_id", userId),
+        supabase.from("habit_logs").select("habit_id, log_date, habits!inner(user_id)").eq("habits.user_id", userId).eq("status", "completed").gte("log_date", desdeLogs).lte("log_date", today),
         supabase.from("routines").select("id, name, occupation_id, habits(id)").eq("user_id", userId),
-        supabase.from("routine_runs").select("routine_id, local_date, routines!inner(user_id)").eq("routines.user_id", userId)
+        supabase.from("routine_runs").select("routine_id, local_date, routines!inner(user_id)").eq("routines.user_id", userId),
+        serieRpc,
+        supabase
+          .from("daily_reflections")
+          .select("id, local_date, mood, energy, sleep_hours")
+          .eq("user_id", userId)
+          .gte("local_date", desdePatrones)
+          .lte("local_date", today)
       ]);
 
-      return habitsFacts(
+      // `created_at` va a fecha en UTC y no en la zona del perfil: aquí no se
+      // tiene la zona, y un día de diferencia en la fecha de creación no mueve
+      // una ventana de 12 semanas.
+      const series = buildHabitSeries(
+        (habits ?? []).map((h) => ({
+          id: h.id,
+          frequency: (h.routines?.frequency ?? "Diario") as HabitFrequency,
+          createdOn: h.created_at.slice(0, 10)
+        })),
+        filasSerie ?? []
+      );
+      const patrones = habitPatternsFacts({
+        today,
+        habits: (habits ?? []).map((h) => ({ id: h.id, name: h.name, routineId: h.routine_id })),
+        routines: (routines ?? []).map((r) => ({ id: r.id, name: r.name })),
+        series,
+        checkins: (checkins ?? []).map((c) => ({
+          id: c.id,
+          date: c.local_date,
+          mood: c.mood,
+          energy: c.energy,
+          sleepHours: c.sleep_hours === null ? null : Number(c.sleep_hours)
+        }))
+      });
+
+      return [...patrones, ...habitsFacts(
         {
           habits: (habits ?? []).map((h) => ({
             id: h.id,
@@ -233,7 +281,7 @@ async function loadDomainFacts(
           routineRuns: (runs ?? []).map((r) => ({ routineId: r.routine_id, date: r.local_date }))
         },
         today
-      );
+      )];
     }
 
     case "nutrition": {

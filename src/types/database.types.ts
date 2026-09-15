@@ -91,6 +91,33 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_job_runs: {
+        Row: {
+          created_at: string
+          facts_hash: string
+          job: string
+          local_date: string
+          outcome: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          facts_hash?: string
+          job: string
+          local_date: string
+          outcome?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          facts_hash?: string
+          job?: string
+          local_date?: string
+          outcome?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       assets: {
         Row: {
           as_of: string
@@ -761,6 +788,48 @@ export type Database = {
         }
         Relationships: []
       }
+      daily_reflections: {
+        Row: {
+          created_at: string
+          energy: number | null
+          id: string
+          local_date: string
+          mood: number | null
+          reflection: string
+          reflection_prompt: string
+          sleep_hours: number | null
+          updated_at: string
+          user_id: string
+          wins: string
+        }
+        Insert: {
+          created_at?: string
+          energy?: number | null
+          id?: string
+          local_date: string
+          mood?: number | null
+          reflection?: string
+          reflection_prompt?: string
+          sleep_hours?: number | null
+          updated_at?: string
+          user_id: string
+          wins?: string
+        }
+        Update: {
+          created_at?: string
+          energy?: number | null
+          id?: string
+          local_date?: string
+          mood?: number | null
+          reflection?: string
+          reflection_prompt?: string
+          sleep_hours?: number | null
+          updated_at?: string
+          user_id?: string
+          wins?: string
+        }
+        Relationships: []
+      }
       debts: {
         Row: {
           balance: number
@@ -1380,24 +1449,75 @@ export type Database = {
           },
         ]
       }
+      habit_identity_traits: {
+        Row: {
+          created_at: string
+          habit_id: string
+          trait_id: string
+        }
+        Insert: {
+          created_at?: string
+          habit_id: string
+          trait_id: string
+        }
+        Update: {
+          created_at?: string
+          habit_id?: string
+          trait_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "habit_identity_traits_habit_id_fkey"
+            columns: ["habit_id"]
+            isOneToOne: false
+            referencedRelation: "habits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "habit_identity_traits_trait_id_fkey"
+            columns: ["trait_id"]
+            isOneToOne: false
+            referencedRelation: "identity_traits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       habit_logs: {
         Row: {
           completed_at: string
+          completion_pct: number
+          energy: number | null
           habit_id: string
           id: string
           log_date: string
+          mood: number | null
+          note: string
+          status: string
+          updated_at: string
         }
         Insert: {
           completed_at?: string
+          completion_pct?: number
+          energy?: number | null
           habit_id: string
           id?: string
           log_date: string
+          mood?: number | null
+          note?: string
+          status?: string
+          updated_at?: string
         }
         Update: {
           completed_at?: string
+          completion_pct?: number
+          energy?: number | null
           habit_id?: string
           id?: string
           log_date?: string
+          mood?: number | null
+          note?: string
+          status?: string
+          updated_at?: string
         }
         Relationships: [
           {
@@ -1468,6 +1588,180 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      identity_briefs: {
+        Row: {
+          affirmations: Json
+          created_at: string
+          fact_ids: string[]
+          generation: number
+          id: string
+          identity_reminder: string
+          local_date: string
+          model: string
+          prompt_version: number
+          quote: Json | null
+          reactions: Json
+          reflection_question: string
+          updated_at: string
+          user_id: string
+          visualization: Json
+        }
+        Insert: {
+          affirmations: Json
+          created_at?: string
+          fact_ids?: string[]
+          generation?: number
+          id?: string
+          identity_reminder: string
+          local_date: string
+          model?: string
+          prompt_version: number
+          quote?: Json | null
+          reactions?: Json
+          reflection_question: string
+          updated_at?: string
+          user_id: string
+          visualization: Json
+        }
+        Update: {
+          affirmations?: Json
+          created_at?: string
+          fact_ids?: string[]
+          generation?: number
+          id?: string
+          identity_reminder?: string
+          local_date?: string
+          model?: string
+          prompt_version?: number
+          quote?: Json | null
+          reactions?: Json
+          reflection_question?: string
+          updated_at?: string
+          user_id?: string
+          visualization?: Json
+        }
+        Relationships: []
+      }
+      identity_profiles: {
+        Row: {
+          core_values: string[]
+          created_at: string
+          desired_identity: string
+          inspirations: string[]
+          motivational_tone: string
+          updated_at: string
+          user_id: string
+          vision_statement: string
+        }
+        Insert: {
+          core_values?: string[]
+          created_at?: string
+          desired_identity?: string
+          inspirations?: string[]
+          motivational_tone?: string
+          updated_at?: string
+          user_id: string
+          vision_statement?: string
+        }
+        Update: {
+          core_values?: string[]
+          created_at?: string
+          desired_identity?: string
+          inspirations?: string[]
+          motivational_tone?: string
+          updated_at?: string
+          user_id?: string
+          vision_statement?: string
+        }
+        Relationships: []
+      }
+      identity_revisions: {
+        Row: {
+          changed_at: string
+          core_values: string[]
+          desired_identity: string
+          id: string
+          user_id: string
+          vision_statement: string
+        }
+        Insert: {
+          changed_at?: string
+          core_values: string[]
+          desired_identity: string
+          id?: string
+          user_id: string
+          vision_statement: string
+        }
+        Update: {
+          changed_at?: string
+          core_values?: string[]
+          desired_identity?: string
+          id?: string
+          user_id?: string
+          vision_statement?: string
+        }
+        Relationships: []
+      }
+      identity_scores: {
+        Row: {
+          components: Json
+          created_at: string
+          formula_version: number
+          local_date: string
+          score: number
+          user_id: string
+        }
+        Insert: {
+          components?: Json
+          created_at?: string
+          formula_version: number
+          local_date: string
+          score: number
+          user_id: string
+        }
+        Update: {
+          components?: Json
+          created_at?: string
+          formula_version?: number
+          local_date?: string
+          score?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      identity_traits: {
+        Row: {
+          active: boolean
+          area: string
+          created_at: string
+          id: string
+          name: string
+          position: number
+          statement: string
+          user_id: string
+        }
+        Insert: {
+          active?: boolean
+          area?: string
+          created_at?: string
+          id?: string
+          name: string
+          position?: number
+          statement?: string
+          user_id: string
+        }
+        Update: {
+          active?: boolean
+          area?: string
+          created_at?: string
+          id?: string
+          name?: string
+          position?: number
+          statement?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       investments: {
         Row: {
@@ -3348,6 +3642,28 @@ export type Database = {
       graph_system_edges_in: {
         Args: { p_rel: string; p_sources: string[]; p_target: string }
         Returns: undefined
+      }
+      habit_log_series: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          dates: string[]
+          energies: number[]
+          habit_id: string
+          moods: number[]
+          pcts: number[]
+          statuses: string[]
+        }[]
+      }
+      habit_log_series_de: {
+        Args: { p_from: string; p_to: string; p_uid: string }
+        Returns: {
+          dates: string[]
+          energies: number[]
+          habit_id: string
+          moods: number[]
+          pcts: number[]
+          statuses: string[]
+        }[]
       }
       has_notebook_access: { Args: { p_notebook_id: string }; Returns: boolean }
       has_project_access: { Args: { p_project_id: string }; Returns: boolean }

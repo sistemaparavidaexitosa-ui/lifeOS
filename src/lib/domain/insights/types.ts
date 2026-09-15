@@ -22,6 +22,14 @@ export interface Fact {
   weight: number;
   /** Filas reales que lo sustentan. Sirve para auditar de dónde salió cada hecho. */
   refs: { table: string; id: string }[];
+  /**
+   * Qué clase de hecho es (sistema cognitivo, fase A1). Opcional y compatible
+   * hacia atrás: los extractores anteriores no lo ponen. Una `correlacion`
+   * obliga a hablar de asociación, nunca de causa.
+   */
+  kind?: "estado" | "tendencia" | "pronostico" | "correlacion";
+  /** Fecha a la que se refiere un pronóstico. */
+  horizonte?: string;
 }
 
 /** Acota a 0-1 sin sorpresas: NaN y ±Infinity caen en los extremos. */

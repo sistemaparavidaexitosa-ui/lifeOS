@@ -41,6 +41,7 @@ const RADIO: Record<GraphNodeType, number> = {
   decision: 12,
   meeting: 12,
   goal: 20,
+  identity_trait: 15,
   routine: 16,
   habit: 11,
   book: 12,

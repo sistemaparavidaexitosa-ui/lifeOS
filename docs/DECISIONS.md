@@ -2707,3 +2707,145 @@ implementa:
   contenteditable. Donde cambia la etiqueta (un encabezado que abre un párrafo,
   salir de una lista) React crea otro nodo igualmente, y ahí el foco se sigue
   moviendo.
+
+- **D-159 · Un registro de hábito dice qué pasó, y la racha se cuenta por
+  ranura.** Hasta 0063 una fila de `habit_logs` solo significaba «hecho» y no
+  hacerlo no dejaba rastro. Ahora hay tres estados: `completed` (con
+  `completion_pct` de 1 a 100, porque un parcial sigue siendo un voto),
+  `skipped` (cuenta en contra y corta la racha) y `postponed` («sin
+  oportunidad»: ni cuenta ni corta, la idea que el plan del scorecard del
+  2026-08-24 llamó así y nunca llegó a construirse). Un check ata estado y
+  porcentaje para que nadie tenga que decidir qué significa un «omitido al
+  50 %». Las rachas y porcentajes se leen de **ranuras**
+  (`src/lib/domain/development/habit-analytics.ts`): un día en las rutinas
+  diarias, entre semana y de fin de semana; una semana ISO en las semanales,
+  porque «una vez por semana» se cumple el miércoles igual que el lunes. Con
+  eso se corrigen dos fallos visibles de `habitStreak`: hoy sin marcar ya no
+  pone la racha a cero (la ranura de hoy queda `pending`) y un hábito semanal
+  ya no se queda en 1. Tocar la casilla de un omitido o pospuesto lo convierte
+  en hecho; desmarcar un completado sigue borrando, porque es corregir un
+  toque. Quien lea «¿se hizo?» filtra `status = 'completed'`: el cierre de
+  rutina, el avance de resultados clave, los hechos de la IA y los paneles ya
+  lo hacen. `habitStreak` queda solo para `habitsFacts`, que se rehace en la
+  fase de insights nocturnos. Costes aceptados: la frecuencia es la actual de
+  la rutina, así que cambiarla reescribe la historia; y los registros con
+  detalle solo llegan hasta siete días atrás.
+
+- **D-162 · La analítica de hábitos se calcula, no se guarda.** No hay tablas
+  `habit_statistics` ni `streaks`. Son datos derivados del registro, y
+  guardarlos obligaría a un proceso que los mantenga al día y abriría la puerta
+  a que un número de la pantalla contradiga al registro que tiene al lado —el
+  mismo problema que D-094 cerró entre `routine_runs` y `habit_logs`—. El
+  histórico se lee con `habit_log_series`, que devuelve **una fila por hábito
+  con arreglos**: `max_rows = 1000` corta en silencio una consulta normal, y un
+  año de diez hábitos son 3.650 filas. Toda la aritmética vive en
+  `habit-analytics.ts`, probada con `node --test`. La RPC tiene su `_de` para
+  el reloj sin sesión, revocada a `authenticated` (D-152). Si algún día el
+  cálculo pesa demasiado, lo que se añade es una caché con fecha de validez, no
+  una segunda verdad.
+
+- **D-158 · Recharts para la Analítica de Rutinas: se rompe D-008 a
+  propósito.** El usuario la pidió por nombre al encargar el rediseño de
+  Rutinas, y se le planteó la alternativa de SVG propio (coherente con D-008 y
+  con el lienzo de D-117). Eligió Recharts. Lo que se acota para que el coste
+  sea pequeño y visible:
+  - **Versiones exactas** (`recharts` 3.10.1, `react-is` 19.1.2, que Recharts
+    pide como par). Recharts 3 declara compatibilidad con React 19, y el
+    `ERESOLVE` que frenó otras librerías en D-114 no aparece.
+  - **Solo en una ruta.** Hoy y Analítica son rutas distintas
+    (`/development/routines` y `/development/routines/analytics`), así que los
+    ~128 kB de Recharts se descargan únicamente al abrir Analítica. Hoy, la
+    pantalla de cada mañana, pesa lo mismo que antes.
+  - **Solo donde aporta.** Curva, tendencia semanal y radar van con Recharts.
+    El heatmap mensual y la línea de rachas son rejillas CSS pintadas en el
+    servidor: Recharts no tiene calendario ni barras de rango con varios tramos
+    por fila, y forzarlo habría costado más código que hacerlo a mano.
+  - **Color del tema.** Las marcas leen `--chart-1` y la rejilla
+    `--chart-grid`. En claro `--chart-1` es el acento; en oscuro es #7f7ff7,
+    porque el acento oscuro (#8b8bff) quedaba fuera de la banda de
+    luminosidad para marcas en el verificador de paleta. Cada gráfica tiene
+    su tabla de datos plegada: el tooltip no es la única vía a un valor.
+  - **CSP con nonce:** verificado con `pnpm build && pnpm start`. Recharts no
+    usa `eval` ni estilos que la política bloquee.
+
+- **D-160 · Identity Score v1: se mide la alineación con la identidad, no las
+  casillas.** Contesta «¿qué tan alineadas están tus acciones diarias con la
+  persona que quieres ser?» con seis componentes de 0 a 100
+  (`src/lib/domain/identity/score.ts`): **votos por tu identidad** (25,
+  cumplimiento de 30 días de los hábitos vinculados a cada rasgo activo, un voto
+  por rasgo para que el rasgo con más hábitos no domine), **constancia** (25,
+  cumplimiento de 30 días con la última semana al doble), **equilibrio de
+  áreas** (15, media por área: un área fuerte no tapa una descuidada), **ritmo
+  de metas** (15, 100 menos lo que cada meta activa con horizonte va por detrás
+  de `goalExpectedPct`), **adherencia a rutinas** (10) y **reflexión** (10, días
+  con check-in, reflexión o aprendizaje en la bitácora, en una ventana que no
+  empieza antes del primer hábito). Un componente sin datos **no vale 0**: no
+  existe y los pesos se renormalizan, así que no definir aún rasgos o metas no
+  castiga. Sin constancia (sin hábitos juzgables) no hay puntuación: un número
+  hecho solo de metas y reflexión no contesta la pregunta. El área de un hábito
+  es la de su rasgo (el primero activo por posición) o, si no vota, la de su
+  categoría. **Foto nocturna:** `identity_scores` guarda una fila por día a las
+  23 h locales, escrita solo por el reloj (`authenticated` no tiene INSERT: una
+  curva de evolución editable no mediría nada), con `components` y
+  `formula_version` para explicar un día pasado con sus propias cifras y no
+  comparar fórmulas distintas. La pantalla y el reloj usan la misma carga,
+  `loadScoreContext`, con filtros explícitos por usuario. Costes aceptados: los
+  pesos son un juicio, no un modelo estadístico, y cambiarlos exige subir
+  `FORMULA_VERSION`; y una noche en que el reloj no pase deja un hueco en la
+  curva en vez de una foto reconstruida al día siguiente.
+
+- **D-161 · El brief de identidad es contenido, no una acción; sus citas nunca
+  se atribuyen.** Cada día la IA escribe un brief (`identity_briefs`, 0065):
+  cinco afirmaciones, una visualización de 2 a 4 minutos, un recordatorio de
+  identidad, una pregunta para el check-in y una cita. No escribe nada en el
+  resto del sistema, así que no pasa por la aprobación de D-089. Lo que sí se
+  exige, y se comprueba en código puro (`src/lib/domain/identity/brief.ts`) y
+  no solo en el prompt:
+  - **Originalidad de las citas.** Se inspiran en principios de Hill, Goddard,
+    Clear y Sharma elegidos por la persona, pero una cita que nombra a un autor
+    o termina con una raya y un nombre se descarta (queda `quote = null`) y la
+    pantalla la marca como «frase original inspirada en…». Reproducir frases
+    reales, además de riesgo de derechos, sería el texto genérico que el
+    producto promete no dar.
+  - **Sin repetición y sin embeddings.** Las afirmaciones se comparan con las
+    de los últimos 30 días por Jaccard de palabras significativas (umbral 0,6).
+    Un reintento como mucho, con los problemas escritos en el prompt; si el
+    segundo intento se sostiene con defectos menores se acepta.
+  - **Memoria sin escribir memoria.** El brief de mañana lee los de los últimos
+    días y sus reacciones («me resuena / no»), la última revisión de identidad
+    y las reflexiones; no crea `memory_items` (D-096).
+  - **Texto de la persona como no confiable.** Identidad, visión, rasgos,
+    reflexiones y aprendizajes viajan entre `<<<` y `>>>`, y el sistema ordena
+    no seguir instrucciones que aparezcan dentro.
+  - **Privacidad y coste.** Exige `habits` y `growth` encendidos en
+    `ai_domains`; va por `buildContext`. Se genera bajo demanda al abrir Hoy
+    (no en el reloj), con un tope de tres intentos al día contado en
+    `audit_log` —que la persona no puede borrar—, incluidos los fallidos. La
+    persona solo puede actualizar `reactions` (GRANT por columna, con el REVOKE
+    previo que exigen los privilegios por defecto). «Borrar historial de IA»
+    borra los briefs. Las acciones devuelven el brief para pintarlo sin
+    depender de la revalidación de la página.
+
+- **D-163 · Insights nocturnos de hábitos: una llamada por noche, y solo si hay
+  algo nuevo.** Cada noche, en la ventana del coach (`coach_enabled`,
+  `coach_night_hour`), el reloj analiza el historial de hábitos con el MISMO
+  núcleo que el botón «Analizar»: `analyze()` se partió en
+  `prepararAnalisis` y `recomendarYGuardar`
+  (`src/lib/insights/generar-recomendaciones.ts`), parametrizados por usuario
+  y modo, con filtros explícitos por `user_id` para el cliente de servicio.
+  Las recomendaciones van a `recommendations` (dominio `habits`) y se leen en
+  Hoy de Rutinas y en el panel de Desarrollo: no hay tabla `ai_insights`.
+  Los hechos nuevos salen de `facts/habit-patterns.ts`, el tramo de hábitos de
+  la fase A3 del sistema cognitivo, que estrena `Fact.kind` (A1): estado por
+  rutina a 90 días, el hábito más omitido, el día de la semana flojo, el hábito
+  que acompaña al resto, y el cumplimiento con poco sueño o poca energía (del
+  check-in de F1), más la caída de la última semana. Umbrales altos a
+  propósito: 6 semanas de datos, 8 días a cada lado y 15 puntos de brecha; las
+  etiquetas hablan de asociación, nunca de causa. **Coste:** la tabla
+  `ai_job_runs` (0066, solo servidor) guarda una fila por trabajo, persona y
+  día, escrita ANTES de llamar al modelo —la clave primaria impide dos
+  intentos simultáneos en las doce pasadas por hora— con la huella de los
+  hechos; si la huella es la de la última ejecución, no se llama. Lote de 3 por
+  pasada y un presupuesto de 30 s, detrás del coach. Costes aceptados: si el
+  análisis falla, esa noche no se reintenta; y quien apaga el coach apaga
+  también estos insights, porque comparten preferencia.

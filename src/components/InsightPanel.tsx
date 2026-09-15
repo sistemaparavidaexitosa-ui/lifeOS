@@ -22,9 +22,10 @@ export interface RecommendationLite {
  * embebe en /money y todo lo que muestra es informativo: no hay acciones
  * aplicables todavía, solo descartar o silenciar.
  *
- * El análisis lo dispara SIEMPRE el usuario con el botón. Eso es lo que hace
- * de este clic el consentimiento: mientras no se toque, ningún dato sale del
- * servidor. El texto de abajo dice exactamente qué se envía.
+ * El análisis lo dispara el usuario con el botón, con UNA excepción desde F5:
+ * los hábitos se analizan también cada noche desde el reloj si el coach está
+ * encendido (D-163). El consentimiento ahí es la preferencia del coach y el
+ * opt-in por dominio, y el texto de abajo lo dice en ese ámbito.
  */
 export default function InsightPanel({
   scope,
@@ -48,15 +49,23 @@ export default function InsightPanel({
 
   return (
     <div className="card" style={{ borderLeft: "3px solid var(--c-teal, var(--accent))" }}>
-      <div className="flex items-center justify-between">
-        <div>
+      {/* En móvil los botones bajan bajo el texto: al lado le dejaban una
+          columna de tres palabras por línea. */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="min-w-0">
           <h4 className="font-bold">Recomendaciones</h4>
           <p className="text-xs" style={{ color: "var(--muted)" }}>
             Se calculan tus cifras aquí y solo se envían al modelo como texto ya resumido, sin nombres de cuentas ni de
-            personas. Nada sale hasta que lo pidas.
+            personas.{" "}
+            {/* Desde F5 los hábitos también se analizan cada noche (D-163): la
+                promesa de «nada sale hasta que lo pidas» dejaría de ser cierta
+                justo aquí, así que se dice qué pasa y dónde se apaga. */}
+            {scope === "habits"
+              ? "Cada noche, si el coach está encendido, se analizan tus hábitos cuando hay algo nuevo; se apaga en Configuración."
+              : "Nada sale hasta que lo pidas."}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <Link className="btn-ghost btn-sm" href="/intelligence">
             Ver bandeja
           </Link>
