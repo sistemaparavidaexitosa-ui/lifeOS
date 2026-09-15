@@ -1,13 +1,16 @@
 "use client";
 // La barra «Aa»: estilo de bloque, marcas, listas y deshacer.
 //
-// VA ARRIBA, PEGADA BAJO LA BARRA SUPERIOR (D-154)
-// Estuvo abajo, anclada sobre el teclado leyendo `visualViewport` (D-113). Tres
-// arreglos seguidos no consiguieron que dejara de flotar: en iOS las medidas del
-// viewport cambian con la barra de direcciones y llegan tarde con el teclado, y
-// cada evento la recolocaba. Ahora es `position: sticky` en el flujo de la
-// página —el patrón de `.ex-toolbar`—: no mide nada, así que no puede derivar.
-// Y arriba ya cumple D-040 sin excepciones.
+// VA DEBAJO DE LA LÍNEA DONDE ESCRIBES (D-155)
+// Cuatro diseños atados a la PANTALLA fallaron en el iPhone: tres anclándola
+// sobre el teclado (D-113) y uno pegándola arriba con `sticky` (D-154), que
+// desaparecía en cuanto se abría el teclado. Ahora NoteEditor la coloca en el
+// hueco que la línea enfocada reserva debajo, en coordenadas del documento
+// (src/lib/dom/barra-formato.ts): viaja con el texto y no tapa nada.
+//
+// «Aa» NO ABRE UN DESPLEGABLE
+// Cambia la fila de botones por la de estilos, a la misma altura. Un menú que
+// cuelga debajo acababa tapado por el teclado justo cuando la línea está abajo.
 import { useState, type MouseEvent } from "react";
 import type { BlockStyle, MarcaInline } from "@/lib/domain/notes/edit.ts";
 
@@ -20,6 +23,8 @@ export interface FormatBarProps {
   onRehacer: () => void;
   puedeDeshacer: boolean;
   puedeRehacer: boolean;
+  /** Distancia desde arriba del documento. `null` = no se está escribiendo en el cuerpo. */
+  top: number | null;
 }
 
 const ESTILOS: { valor: BlockStyle; etiqueta: string }[] = [
@@ -53,7 +58,8 @@ export default function FormatBar({
   onDeshacer,
   onRehacer,
   puedeDeshacer,
-  puedeRehacer
+  puedeRehacer,
+  top
 }: FormatBarProps) {
   const [abierto, setAbierto] = useState(false);
   // Las listas son un eje aparte del estilo de párrafo: dentro de una lista, el
@@ -66,71 +72,26 @@ export default function FormatBar({
   const sinRobarFoco = (e: MouseEvent) => e.preventDefault();
 
   return (
-    <div className="nb-formatbar" role="toolbar" aria-label="Formato">
-      <div className="nb-formatbar-fila">
-        <button
-          type="button"
-          className={`nb-fb${abierto ? " activo" : ""}`}
-          onMouseDown={sinRobarFoco}
-          onClick={() => setAbierto((v) => !v)}
-          aria-expanded={abierto}
-          title="Estilo"
-        >
-          Aa
-        </button>
-        <span className="nb-fb-sep" />
-        {MARCAS.map((m) => (
+    <div
+      className={`nb-formatbar${top === null ? " oculta" : ""}`}
+      style={{ top: top ?? 0 }}
+      role="toolbar"
+      aria-label="Formato"
+      aria-hidden={top === null}
+    >
+      {abierto ? (
+        <div className="nb-formatbar-fila">
           <button
-            key={m.valor}
             type="button"
-            title={m.titulo}
-            className={`nb-fb nb-fb-${m.valor}${marcasActivas.includes(m.valor) ? " activo" : ""}`}
-            aria-pressed={marcasActivas.includes(m.valor)}
+            className="nb-fb activo"
             onMouseDown={sinRobarFoco}
-            onClick={() => onMarca(m.valor)}
+            onClick={() => setAbierto(false)}
+            aria-expanded
+            title="Cerrar estilos"
           >
-            {m.etiqueta}
+            Aa
           </button>
-        ))}
-        <span className="nb-fb-sep" />
-        {LISTAS.map((l) => (
-          <button
-            key={l.valor}
-            type="button"
-            title={l.titulo}
-            className={`nb-fb${estilo === l.valor ? " activo" : ""}`}
-            onMouseDown={sinRobarFoco}
-            onClick={() => onEstilo(l.valor)}
-          >
-            {l.etiqueta}
-          </button>
-        ))}
-        <span className="nb-fb-spacer" />
-        <button
-          type="button"
-          className="nb-fb"
-          title="Deshacer"
-          disabled={!puedeDeshacer}
-          onMouseDown={sinRobarFoco}
-          onClick={onDeshacer}
-        >
-          ↩︎
-        </button>
-        <button
-          type="button"
-          className="nb-fb"
-          title="Rehacer"
-          disabled={!puedeRehacer}
-          onMouseDown={sinRobarFoco}
-          onClick={onRehacer}
-        >
-          ↪︎
-        </button>
-      </div>
-      {/* Desplegable bajo la fila, fuera del flujo (ver .nb-formatbar-menu): abrirlo
-          no debe mover los botones que se acaban de tocar. */}
-      {abierto && (
-        <div className="nb-formatbar-menu">
+          <span className="nb-fb-sep" />
           {ESTILOS.map((e) => (
             <button
               key={e.valor}
@@ -145,6 +106,67 @@ export default function FormatBar({
               {e.etiqueta}
             </button>
           ))}
+        </div>
+      ) : (
+        <div className="nb-formatbar-fila">
+          <button
+            type="button"
+            className="nb-fb"
+            onMouseDown={sinRobarFoco}
+            onClick={() => setAbierto(true)}
+            aria-expanded={false}
+            title="Estilo"
+          >
+            Aa
+          </button>
+          <span className="nb-fb-sep" />
+          {MARCAS.map((m) => (
+            <button
+              key={m.valor}
+              type="button"
+              title={m.titulo}
+              className={`nb-fb nb-fb-${m.valor}${marcasActivas.includes(m.valor) ? " activo" : ""}`}
+              aria-pressed={marcasActivas.includes(m.valor)}
+              onMouseDown={sinRobarFoco}
+              onClick={() => onMarca(m.valor)}
+            >
+              {m.etiqueta}
+            </button>
+          ))}
+          <span className="nb-fb-sep" />
+          {LISTAS.map((l) => (
+            <button
+              key={l.valor}
+              type="button"
+              title={l.titulo}
+              className={`nb-fb${estilo === l.valor ? " activo" : ""}`}
+              onMouseDown={sinRobarFoco}
+              onClick={() => onEstilo(l.valor)}
+            >
+              {l.etiqueta}
+            </button>
+          ))}
+          <span className="nb-fb-spacer" />
+          <button
+            type="button"
+            className="nb-fb"
+            title="Deshacer"
+            disabled={!puedeDeshacer}
+            onMouseDown={sinRobarFoco}
+            onClick={onDeshacer}
+          >
+            ↩︎
+          </button>
+          <button
+            type="button"
+            className="nb-fb"
+            title="Rehacer"
+            disabled={!puedeRehacer}
+            onMouseDown={sinRobarFoco}
+            onClick={onRehacer}
+          >
+            ↪︎
+          </button>
         </div>
       )}
     </div>

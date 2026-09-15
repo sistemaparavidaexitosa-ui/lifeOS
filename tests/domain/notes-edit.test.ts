@@ -10,6 +10,7 @@ import {
   setBlockStyle,
   toggleTodo,
   splitBlock,
+  partirConEnter,
   mergeBlocks,
   bloquesEditables,
   estiloAlternado,
@@ -189,7 +190,7 @@ test("splitBlock: Enter a mitad de una negrita conserva la marca en las dos mita
   assert.deepStrictEqual(b, { kind: "paragraph", content: [{ kind: "bold", text: "def" }] });
 });
 
-test("splitBlock: Enter dentro de una lista crea otro ítem, no otro bloque", () => {
+test("splitBlock: dentro de una lista devuelve las dos mitades (partirConEnter las junta)", () => {
   const lista: Block = { kind: "bullets", items: [texto("uno"), texto("dos")] };
   const [a, b] = splitBlock(lista, 0, 1);
   assert.deepStrictEqual(a, { kind: "bullets", items: [texto("u")] });
@@ -214,6 +215,55 @@ test("splitBlock: Enter en una tabla la deja intacta y abre un párrafo detrás"
   const [a, b] = splitBlock(tabla, 0, 0);
   assert.deepStrictEqual(a, tabla);
   assert.deepStrictEqual(b, parrafo(""));
+});
+
+// El editor NO usa splitBlock tal cual para Enter: una lista partida en dos
+// bloques dejaba el cursor apuntando a un ítem que no existía, el foco se quedaba
+// en la línea de arriba y lo que se escribía caía allí («LecheComprar pan»).
+test("partirConEnter: en una lista de casillas deja UNA lista y el cursor en el ítem nuevo", () => {
+  const lista: Block = {
+    kind: "todo",
+    items: [
+      { done: true, content: texto("Comprar pan") },
+      { done: false, content: texto("Tarea corta") }
+    ]
+  };
+  assert.deepStrictEqual(partirConEnter(lista, 0, 11), {
+    bloques: [
+      {
+        kind: "todo",
+        items: [
+          { done: true, content: texto("Comprar pan") },
+          { done: false, content: texto("") },
+          { done: false, content: texto("Tarea corta") }
+        ]
+      }
+    ],
+    destino: { bloque: 0, item: 1 }
+  });
+});
+
+test("partirConEnter: a mitad de una viñeta parte el ítem dentro de la misma lista", () => {
+  const lista: Block = { kind: "bullets", items: [texto("uno"), texto("dos")] };
+  assert.deepStrictEqual(partirConEnter(lista, 0, 1), {
+    bloques: [{ kind: "bullets", items: [texto("u"), texto("no"), texto("dos")] }],
+    destino: { bloque: 0, item: 1 }
+  });
+});
+
+test("partirConEnter: en una lista numerada, el último ítem abre otro al final", () => {
+  const lista: Block = { kind: "ordered", items: [texto("uno"), texto("dos")] };
+  assert.deepStrictEqual(partirConEnter(lista, 1, 3), {
+    bloques: [{ kind: "ordered", items: [texto("uno"), texto("dos"), texto("")] }],
+    destino: { bloque: 0, item: 2 }
+  });
+});
+
+test("partirConEnter: un párrafo sí se parte en dos bloques y el cursor baja al segundo", () => {
+  assert.deepStrictEqual(partirConEnter(parrafo("holamundo"), 0, 4), {
+    bloques: [parrafo("hola"), parrafo("mundo")],
+    destino: { bloque: 1, item: 0 }
+  });
 });
 
 test("mergeBlocks: Backspace al inicio funde dos párrafos", () => {

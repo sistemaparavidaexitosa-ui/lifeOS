@@ -12,8 +12,8 @@ import type { Block, Inline } from "@/lib/domain/notes/markup.ts";
 import {
   mergeBlocks,
   plainLength,
+  partirConEnter,
   setBlockStyle,
-  splitBlock,
   textoDeBloque,
   toggleTodo,
   type BlockStyle
@@ -40,6 +40,8 @@ export interface NoteDocProps {
   cursor: Cursor;
   onCursor: (cursor: Cursor) => void;
   readOnly?: boolean;
+  /** La barra de formato se está enseñando: la línea del cursor le reserva hueco debajo. */
+  conBarra?: boolean;
 }
 
 // Lo que convierte un bloque al vuelo mientras escribes. De aquí sale la
@@ -120,7 +122,7 @@ function quitarFila(t: Extract<Block, { kind: "table" }>, indice: number): Block
   return { kind: "table", head: t.head, rows: t.rows.filter((_, i) => i !== indice) };
 }
 
-export default function NoteDoc({ blocks, onChange, cursor, onCursor, readOnly }: NoteDocProps) {
+export default function NoteDoc({ blocks, onChange, cursor, onCursor, readOnly, conBarra }: NoteDocProps) {
   /** Cursor que el MODELO impone: sube `seq` para que EditableLine lo aplique. */
   const mover = (c: Omit<Cursor, "seq">): Cursor => ({ ...c, seq: cursor.seq + 1 });
 
@@ -205,10 +207,10 @@ export default function NoteDoc({ blocks, onChange, cursor, onCursor, readOnly }
         return;
       }
 
-      const [a, b] = splitBlock(bloque, ii, cursor.start);
-      reemplazar(bi, [a, b], mover({
-        block: enLista ? bi : bi + 1,
-        item: enLista ? textoDeBloque(a).length : 0,
+      const { bloques, destino } = partirConEnter(bloque, ii, cursor.start);
+      reemplazar(bi, bloques, mover({
+        block: bi + destino.bloque,
+        item: destino.item,
         start: 0,
         end: 0
       }));
@@ -292,6 +294,7 @@ export default function NoteDoc({ blocks, onChange, cursor, onCursor, readOnly }
           indice={bi}
           cursor={cursor}
           readOnly={readOnly}
+          conBarra={conBarra}
           onEscribir={alEscribir}
           onPulsar={alPulsar}
           onSelect={(ii, start, end) => onCursor({ ...cursor, block: bi, item: ii, start, end })}
@@ -308,6 +311,7 @@ function BloqueEditable({
   indice,
   cursor,
   readOnly,
+  conBarra,
   onEscribir,
   onPulsar,
   onSelect,
@@ -318,6 +322,7 @@ function BloqueEditable({
   indice: number;
   cursor: Cursor;
   readOnly?: boolean;
+  conBarra?: boolean;
   onEscribir: (bi: number, ii: number, content: Inline[], caret: number) => void;
   onPulsar: (e: KeyboardEvent<HTMLDivElement>, bi: number, ii: number) => void;
   onSelect: (ii: number, start: number, end: number) => void;
@@ -329,7 +334,7 @@ function BloqueEditable({
   const linea = (content: Inline[], ii: number, className: string, placeholder?: string) => (
     <EditableLine
       key={ii}
-      className={`nb-line ${className}`.trim()}
+      className={`nb-line ${className}${conBarra && enfocado(ii) ? " con-barra" : ""}`.trim()}
       content={content}
       readOnly={readOnly}
       placeholder={placeholder}

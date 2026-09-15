@@ -948,7 +948,7 @@ el resultado real, nunca con el previsto.
 | 6 | Backspace al inicio funde con el bloque anterior sin perder ítems | NO EJECUTADO |
 | 7 | Seleccionar y tocar B pone negrita sin perder la selección | NO EJECUTADO |
 | 8 | Marcar una casilla no hace saltar el teclado | NO EJECUTADO |
-| 9 | La barra de formato queda ENCIMA del teclado | **FALLÓ** → sustituida por D-154: la barra va arriba, pegada |
+| 9 | La barra de formato queda ENCIMA del teclado | **FALLÓ** → D-154 (arriba, pegada) **FALLÓ** también → D-155: debajo de la línea donde se escribe |
 | 10 | Tab recorre las celdas de una tabla; en la última crea fila | NO EJECUTADO |
 | 11 | Una tabla ancha scrollea sola, sin mover la nota de lado | NO EJECUTADO |
 | 12 | Pegar desde una web deja el texto y pierde el estilo | NO EJECUTADO |
@@ -958,7 +958,7 @@ el resultado real, nunca con el previsto.
 | 16 | Con rol Viewer no aparece ningún `contenteditable` | NO EJECUTADO |
 
 | 17 | En una nota NUEVA se puede escribir el cuerpo, no sólo el título | **FALLÓ** → corregido, con prueba |
-| 18 | La barra de formato no se tapa con el botón flotante de la IA | Ya no aplica (D-154): la barra está arriba |
+| 18 | La barra de formato no se tapa con el botón flotante de la IA | Ya no aplica (D-155): la barra va dentro del texto, no pegada a un borde |
 
 #### Lo que encontró el primer uso real en un teléfono (6-sep-2026)
 
@@ -1130,6 +1130,56 @@ sección. Existía desde `d004984`; no se veía con el rail plegado (cookie).
 | Rail abierto, con una URL de 700 caracteres dentro, en `/home`, `/execution` y `/notebooks` a 1280, 1600 y 1920px | Antes: **FALLÓ** en los 9 (`main` = 0px, rail = ancho entero). Después: ✅ los 9, rail 360px, `main` 648/968/1288px, sin scroll horizontal |
 | Plegar, recargar y volver a abrir | ✅ franja de 45px, sigue plegado tras recargar, reabre a 360px |
 | 390px | ✅ sin rail, burbuja visible, `main` a ancho completo |
+
+#### D-155: la barra va debajo de la línea; Enter en listas (15-sep-2026)
+
+Lo que encontró el iPhone con D-154 ya en producción:
+
+1. **«Se desaparece el ribbon al editar el texto».** Con el teclado abierto,
+   Safari no encoge el viewport de layout: desplaza el visual por dentro de él,
+   y al bajar por la nota lo pegado arriba (`sticky` o `fixed`) se queda fuera
+   de la vista. Es el mismo mecanismo que tumbó D-113 desde el otro borde: nada
+   medido contra la pantalla sobrevive al teclado. Ahora la barra va **debajo de
+   la línea donde se escribe**, en un hueco de 60px que esa línea reserva
+   (`.nb-line.con-barra`), y `top` sale de restar dos cajas del documento
+   (`src/lib/dom/barra-formato.ts`, con prueba). Debajo y no encima porque
+   encima tapaba la línea anterior —la prueba en navegador no pudo tocarla— y
+   chocaba con el menú de iOS que sale sobre la selección. Lo eligió el usuario
+   sabiendo el coste: si escribe pegado al teclado, la barra queda bajo él hasta
+   subir un poco la nota.
+2. **«Al hacer Enter no se mueve el puntero a la siguiente línea».** Aparecía
+   la línea nueva, el cursor se quedaba arriba y lo escrito caía en la línea de
+   arriba. **No era cosa del iPhone:** se reproduce igual en Chromium y en
+   WebKit, siempre dentro de una lista. `splitBlock` parte la lista en dos
+   bloques, pero `NoteDoc` ponía el cursor en el ítem `n + 1` del primero, que no
+   existía: ninguna línea recibía el foco. `partirConEnter` las junta en una
+   sola lista con un ítem más y dice dónde queda el cursor.
+3. **Visto de paso, con prueba:** Enter en una casilla MARCADA le quitaba la
+   palomita (`splitBlock` creaba las dos mitades con `done: false`).
+
+Verificado con `pnpm build && pnpm start` contra la pila local, con un usuario
+desechable (borrado al terminar), a 390px, en Chromium headless y en **WebKit
+26.6** (Playwright; el motor de Safari, no un iPhone):
+
+| Qué | Chromium | WebKit |
+|-----|----------|--------|
+| `pnpm typecheck`, `pnpm lint`, `pnpm test:unit` | ✅ **961/961** (+4 `partirConEnter`, +3 `posicionBarra`) | — |
+| Enter al final de una casilla y escribir «Leche»: va al ítem nuevo | Antes: **FALLÓ** («LecheComprar pan»). Después: ✅ | ✅ |
+| La casilla marcada conserva la palomita tras Enter; la nueva nace sin marcar | ✅ | ✅ |
+| Enter en un ítem vacío sale de la lista y se escribe en el párrafo nuevo | ✅ | ✅ |
+| Enter al final de un párrafo y escribir: va a la línea nueva | ✅ | ✅ |
+| La barra queda a 6px bajo la línea enfocada, también tras Enter y tras hacer scroll | ✅ | ✅ |
+| Seleccionar y tocar B aplica negrita sin perder la selección | ✅ | ✅ |
+| «Aa» cambia la fila por los estilos a la misma altura (48px) y aplica «Encabezado» | ✅ | ✅ |
+| Con el foco en el título, la barra no se ve | ✅ | ✅ |
+| Probado en un iPhone de verdad | ⚠️ NO EJECUTADO | |
+
+**Límite honesto:** ninguna herramienta de aquí abre el teclado de iOS. Que la
+barra siga a la vista con el teclado abierto se apoya en el mecanismo —no mide
+la pantalla—, no en haberlo visto.
+
+Pendiente, anterior a este cambio: Enter en un ítem vacío A MITAD de una lista
+saca el párrafo nuevo DETRÁS de toda la lista, no en ese punto.
 
 **Las 16 filas originales siguen sin ejecutarse salvo las anotadas.** El editor compila, pasa las
 pruebas de dominio y construye, pero **nadie lo ha abierto en un teléfono**.
