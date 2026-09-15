@@ -265,6 +265,12 @@ export default async function RoutinesPage() {
             icon="🔁"
             text="Crea tu primera rutina, o parte de una plantilla: Mañana Milagrosa (S.A.V.E.R.S.) o el Club de las 5 AM (20/20/20). Ánclala a un bloque de tu Autogestión del Tiempo, y sus hábitos llevarán racha desde el primer día."
           />
+          {/* Los botones van aquí y no solo en «Tus rutinas»: sin rutinas, esta
+              tarjeta es lo único que la persona tiene delante. */}
+          <div className="flex flex-wrap justify-center gap-2 mt-3">
+            <RoutineTemplates occupations={occOptions} templates={await listTemplates("routine")} />
+            <RoutineForm occupations={occOptions} />
+          </div>
         </Card>
       )}
 
@@ -305,41 +311,44 @@ export default async function RoutinesPage() {
 
       {/* Gestionar va al final: se usa al montar el sistema, no cada mañana. La
           cabecera no lleva los botones al lado del título porque en 400px no
-          caben tres y el título acababa partido letra a letra. */}
-      <section className="flex flex-col gap-3 mt-2" aria-labelledby="gestionar-rutinas">
-        <div className="flex flex-col gap-2">
-          <h3 id="gestionar-rutinas" className="font-bold">
-            Tus rutinas
-          </h3>
-          <div className="flex flex-wrap gap-2">
-            <RoutineForm occupations={occOptions} />
-            {/* Las dos plantillas bajan su catálogo desde el servidor (0044):
-                esta página ya es un Server Component y lo tiene en la mano. */}
-            <RoutineTemplates occupations={occOptions} templates={await listTemplates("routine")} />
-            <HabitTemplates
-              routines={(routines ?? []).map((r) => ({
-                id: r.id,
-                name: r.name,
-                habitCount: (habits ?? []).filter((h) => h.routine_id === r.id).length
-              }))}
-              otherHabits={habitOptions}
-              templates={await listTemplates("habit")}
-            />
+          caben tres y el título acababa partido letra a letra. Sin rutinas no
+          se pinta: la tarjeta vacía de arriba ya lleva sus botones. */}
+      {rows.length > 0 && (
+        <section className="flex flex-col gap-3 mt-2" aria-labelledby="gestionar-rutinas">
+          <div className="flex flex-col gap-2">
+            <h3 id="gestionar-rutinas" className="font-bold">
+              Tus rutinas
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              <RoutineForm occupations={occOptions} />
+              {/* Las dos plantillas bajan su catálogo desde el servidor (0044):
+                  esta página ya es un Server Component y lo tiene en la mano. */}
+              <RoutineTemplates occupations={occOptions} templates={await listTemplates("routine")} />
+              <HabitTemplates
+                routines={(routines ?? []).map((r) => ({
+                  id: r.id,
+                  name: r.name,
+                  habitCount: (habits ?? []).filter((h) => h.routine_id === r.id).length
+                }))}
+                otherHabits={habitOptions}
+                templates={await listTemplates("habit")}
+              />
+            </div>
           </div>
-        </div>
-        <ModuleNote>
-          Cada hábito vive dentro de una rutina y toca cuando toca ella. El bloque horario sigue viviendo en Autogestión
-          del Tiempo: la rutina se ancla a uno que ya existe. Todo esto es privado, sin relación con Workspaces (BR-027).
-        </ModuleNote>
-        {otras.length > 0 && (
-          <>
-            <h4 className="font-semibold text-sm" style={{ color: "var(--muted)" }}>
-              Hoy no tocan
-            </h4>
-            {otras.map((r) => renderRoutine(r, true))}
-          </>
-        )}
-      </section>
+          <ModuleNote>
+            Cada hábito vive dentro de una rutina y toca cuando toca ella. El bloque horario sigue viviendo en Autogestión
+            del Tiempo: la rutina se ancla a uno que ya existe. Todo esto es privado, sin relación con Workspaces (BR-027).
+          </ModuleNote>
+          {otras.length > 0 && (
+            <>
+              <h4 className="font-semibold text-sm" style={{ color: "var(--muted)" }}>
+                Hoy no tocan
+              </h4>
+              {otras.map((r) => renderRoutine(r, true))}
+            </>
+          )}
+        </section>
+      )}
     </div>
   );
 }

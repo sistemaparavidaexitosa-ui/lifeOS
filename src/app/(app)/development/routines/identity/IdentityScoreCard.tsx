@@ -51,22 +51,26 @@ export default function IdentityScoreCard({ score, delta7 }: { score: IdentitySc
         </div>
       </div>
 
-      <ul className="flex flex-col gap-2 mt-4">
-        {score.components.map((c) => (
-          <li key={c.key} className="flex flex-col gap-1" title={c.help}>
-            <div className="flex justify-between gap-2 text-xs">
-              <span className="font-semibold">
-                {c.label}
-                <span className="font-normal ml-1" style={{ color: "var(--muted)" }}>
-                  · peso {c.weight}
+      {/* Sin puntuación no se enseña el desglose: seis «sin datos» seguidos no
+          explican nada a quien aún no tiene hábitos. */}
+      {valor !== null && (
+        <ul className="flex flex-col gap-2 mt-4">
+          {score.components.map((c) => (
+            <li key={c.key} className="flex flex-col gap-1" title={c.help}>
+              <div className="flex justify-between gap-2 text-xs">
+                <span className="font-semibold">
+                  {c.label}
+                  <span className="font-normal ml-1" style={{ color: "var(--muted)" }}>
+                    · peso {c.weight}
+                  </span>
                 </span>
-              </span>
-              <span style={{ color: "var(--muted)" }}>{c.value === null ? "sin datos" : `${c.value}`}</span>
-            </div>
-            {c.value !== null && <Progress pct={c.value} />}
-          </li>
-        ))}
-      </ul>
+                <span style={{ color: "var(--muted)" }}>{c.value === null ? "sin datos" : `${c.value}`}</span>
+              </div>
+              {c.value !== null && <Progress pct={c.value} />}
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   );
 }
