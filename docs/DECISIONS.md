@@ -2707,3 +2707,39 @@ implementa:
   contenteditable. Donde cambia la etiqueta (un encabezado que abre un párrafo,
   salir de una lista) React crea otro nodo igualmente, y ahí el foco se sigue
   moviendo.
+
+- **D-159 · Un registro de hábito dice qué pasó, y la racha se cuenta por
+  ranura.** Hasta 0063 una fila de `habit_logs` solo significaba «hecho» y no
+  hacerlo no dejaba rastro. Ahora hay tres estados: `completed` (con
+  `completion_pct` de 1 a 100, porque un parcial sigue siendo un voto),
+  `skipped` (cuenta en contra y corta la racha) y `postponed` («sin
+  oportunidad»: ni cuenta ni corta, la idea que el plan del scorecard del
+  2026-08-24 llamó así y nunca llegó a construirse). Un check ata estado y
+  porcentaje para que nadie tenga que decidir qué significa un «omitido al
+  50 %». Las rachas y porcentajes se leen de **ranuras**
+  (`src/lib/domain/development/habit-analytics.ts`): un día en las rutinas
+  diarias, entre semana y de fin de semana; una semana ISO en las semanales,
+  porque «una vez por semana» se cumple el miércoles igual que el lunes. Con
+  eso se corrigen dos fallos visibles de `habitStreak`: hoy sin marcar ya no
+  pone la racha a cero (la ranura de hoy queda `pending`) y un hábito semanal
+  ya no se queda en 1. Tocar la casilla de un omitido o pospuesto lo convierte
+  en hecho; desmarcar un completado sigue borrando, porque es corregir un
+  toque. Quien lea «¿se hizo?» filtra `status = 'completed'`: el cierre de
+  rutina, el avance de resultados clave, los hechos de la IA y los paneles ya
+  lo hacen. `habitStreak` queda solo para `habitsFacts`, que se rehace en la
+  fase de insights nocturnos. Costes aceptados: la frecuencia es la actual de
+  la rutina, así que cambiarla reescribe la historia; y los registros con
+  detalle solo llegan hasta siete días atrás.
+
+- **D-162 · La analítica de hábitos se calcula, no se guarda.** No hay tablas
+  `habit_statistics` ni `streaks`. Son datos derivados del registro, y
+  guardarlos obligaría a un proceso que los mantenga al día y abriría la puerta
+  a que un número de la pantalla contradiga al registro que tiene al lado —el
+  mismo problema que D-094 cerró entre `routine_runs` y `habit_logs`—. El
+  histórico se lee con `habit_log_series`, que devuelve **una fila por hábito
+  con arreglos**: `max_rows = 1000` corta en silencio una consulta normal, y un
+  año de diez hábitos son 3.650 filas. Toda la aritmética vive en
+  `habit-analytics.ts`, probada con `node --test`. La RPC tiene su `_de` para
+  el reloj sin sesión, revocada a `authenticated` (D-152). Si algún día el
+  cálculo pesa demasiado, lo que se añade es una caché con fecha de validez, no
+  una segunda verdad.

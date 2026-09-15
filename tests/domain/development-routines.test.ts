@@ -7,8 +7,7 @@ import {
   routineFitsBlock,
   routineAdherence,
   routineRunComplete,
-  routineRunNeedsWrite,
-  toggleHabitEffect
+  routineRunNeedsWrite
 } from "../../src/lib/domain/development/routines.ts";
 
 // 2026-08-22 es sábado; 2026-08-24 es lunes; 2026-08-26 es miércoles.
@@ -102,10 +101,3 @@ test("routineRunNeedsWrite: sin ejecución hoy, solo se escribe si la rutina que
   assert.strictEqual(routineRunNeedsWrite(false, true), true);
 });
 
-test("toggleHabitEffect: marcar inserta, desmarcar borra", () => {
-  // La fusión cambia una conducta deliberada del modelo viejo: cuando el paso
-  // y el hábito eran dos registros, desmarcar el paso NO borraba la racha.
-  // Ahora son el mismo registro, así que desmarcar es desmarcar.
-  assert.strictEqual(toggleHabitEffect(false), "insert");
-  assert.strictEqual(toggleHabitEffect(true), "delete");
-});

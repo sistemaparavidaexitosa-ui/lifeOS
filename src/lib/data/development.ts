@@ -71,7 +71,8 @@ export const loadSourceSnapshot = cache(async (): Promise<SourceSnapshot> => {
     { data: pesos }
   ] = await Promise.all([
     supabase.from("habits").select("id"),
-    supabase.from("habit_logs").select("habit_id, log_date").gte("log_date", from).lte("log_date", today),
+    // Solo lo HECHO cuenta para el avance de un resultado clave (0063).
+    supabase.from("habit_logs").select("habit_id, log_date").eq("status", "completed").gte("log_date", from).lte("log_date", today),
     // PROYECTO PERSONAL ya no es "sin workspace" (workspace_id es NOT NULL
     // desde 0030): es "en un workspace personal". Sin este cambio la consulta
     // no fallaba — devolvía cero filas, y el avance de los resultados clave

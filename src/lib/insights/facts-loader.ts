@@ -210,7 +210,7 @@ async function loadDomainFacts(
       // pone la rutina de la que cuelga, que es el único sitio donde se dicen.
       const [{ data: habits }, { data: logs }, { data: routines }, { data: runs }] = await Promise.all([
         supabase.from("habits").select("id, name, routine_id, routines(frequency)").eq("user_id", userId),
-        supabase.from("habit_logs").select("habit_id, log_date, habits!inner(user_id)").eq("habits.user_id", userId).gte("log_date", desdeLogs).lte("log_date", today),
+        supabase.from("habit_logs").select("habit_id, log_date, habits!inner(user_id)").eq("habits.user_id", userId).eq("status", "completed").gte("log_date", desdeLogs).lte("log_date", today),
         supabase.from("routines").select("id, name, occupation_id, habits(id)").eq("user_id", userId),
         supabase.from("routine_runs").select("routine_id, local_date, routines!inner(user_id)").eq("routines.user_id", userId)
       ]);

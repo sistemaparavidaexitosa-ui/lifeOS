@@ -11,6 +11,12 @@ function addDaysISO(iso: string, n: number): string {
 /**
  * FR-HAB-002: racha de días consecutivos terminando en `todayISO` (inclusive
  * si hoy ya se marcó cumplido).
+ *
+ * LEGADO. La pantalla de rutinas ya cuenta rachas por ranura con
+ * `habitStreaks` (development/habit-analytics.ts, D-159), que no se corta por
+ * no haber marcado hoy y cuenta semanas en los hábitos semanales. Esta queda
+ * solo para `habitsFacts`, que la llama a propósito desde anteayer; se migra
+ * cuando la fase de insights nocturnos rehaga esos hechos.
  */
 export function habitStreak(habitId: string, logs: HabitLogLike[], todayISO: string): number {
   const dates = new Set(logs.filter((l) => l.habitId === habitId).map((l) => l.date));
@@ -21,8 +27,4 @@ export function habitStreak(habitId: string, logs: HabitLogLike[], todayISO: str
     cursor = addDaysISO(cursor, -1);
   }
   return streak;
-}
-
-export function habitDoneToday(habitId: string, logs: HabitLogLike[], todayISO: string): boolean {
-  return logs.some((l) => l.habitId === habitId && l.date === todayISO);
 }
