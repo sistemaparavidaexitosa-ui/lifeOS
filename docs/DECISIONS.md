@@ -2743,3 +2743,27 @@ implementa:
   el reloj sin sesión, revocada a `authenticated` (D-152). Si algún día el
   cálculo pesa demasiado, lo que se añade es una caché con fecha de validez, no
   una segunda verdad.
+
+- **D-158 · Recharts para la Analítica de Rutinas: se rompe D-008 a
+  propósito.** El usuario la pidió por nombre al encargar el rediseño de
+  Rutinas, y se le planteó la alternativa de SVG propio (coherente con D-008 y
+  con el lienzo de D-117). Eligió Recharts. Lo que se acota para que el coste
+  sea pequeño y visible:
+  - **Versiones exactas** (`recharts` 3.10.1, `react-is` 19.1.2, que Recharts
+    pide como par). Recharts 3 declara compatibilidad con React 19, y el
+    `ERESOLVE` que frenó otras librerías en D-114 no aparece.
+  - **Solo en una ruta.** Hoy y Analítica son rutas distintas
+    (`/development/routines` y `/development/routines/analytics`), así que los
+    ~128 kB de Recharts se descargan únicamente al abrir Analítica. Hoy, la
+    pantalla de cada mañana, pesa lo mismo que antes.
+  - **Solo donde aporta.** Curva, tendencia semanal y radar van con Recharts.
+    El heatmap mensual y la línea de rachas son rejillas CSS pintadas en el
+    servidor: Recharts no tiene calendario ni barras de rango con varios tramos
+    por fila, y forzarlo habría costado más código que hacerlo a mano.
+  - **Color del tema.** Las marcas leen `--chart-1` y la rejilla
+    `--chart-grid`. En claro `--chart-1` es el acento; en oscuro es #7f7ff7,
+    porque el acento oscuro (#8b8bff) quedaba fuera de la banda de
+    luminosidad para marcas en el verificador de paleta. Cada gráfica tiene
+    su tabla de datos plegada: el tooltip no es la única vía a un valor.
+  - **CSP con nonce:** verificado con `pnpm build && pnpm start`. Recharts no
+    usa `eval` ni estilos que la política bloquee.
