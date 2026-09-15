@@ -91,6 +91,33 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_job_runs: {
+        Row: {
+          created_at: string
+          facts_hash: string
+          job: string
+          local_date: string
+          outcome: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          facts_hash?: string
+          job: string
+          local_date: string
+          outcome?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          facts_hash?: string
+          job?: string
+          local_date?: string
+          outcome?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       assets: {
         Row: {
           as_of: string

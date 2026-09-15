@@ -17,6 +17,8 @@ import { proponerAristas } from "@/lib/coach/graph-suggestions";
 import { fuentesDe } from "@/lib/coach/facts";
 import { tocaFotoDeIdentidad } from "@/lib/domain/identity/schedule.ts";
 import { loadScoreContext, scoreOf } from "@/lib/identity/score-inputs";
+import { huellaDeHechos, prepararAnalisis, recomendarYGuardar } from "@/lib/insights/generar-recomendaciones";
+import { debeAnalizar, JOB_INSIGHTS_HABITOS } from "@/lib/domain/insights/nightly.ts";
 
 export const dynamic = "force-dynamic";
 /** Un minuto de techo: el trabajo va por lotes y no debe acercarse al límite. */
@@ -34,7 +36,8 @@ export const maxDuration = 60;
  *   2. el resumen diario de vencimientos, a la hora local de cada quien,
  *   3. los dos mensajes del coach de vida, también a su hora local (0053),
  *   4. la foto nocturna del Identity Score, sin modelo (0064),
- *   5. reintentar los avisos que se quedaron sin salir.
+ *   5. los insights nocturnos de hábitos, con modelo y una vez por noche (0066),
+ *   6. reintentar los avisos que se quedaron sin salir.
  *
  * Nunca lanza hacia fuera: devuelve el recuento de lo que hizo. Si un usuario
  * falla, los demás siguen — un perfil con la zona horaria rota no puede dejar
@@ -75,12 +78,13 @@ export async function POST(request: Request) {
   // estaba en la bandeja sigue corriendo detrás con lo que quede de minuto.
   const coach = await despacharCoach(supabase, ahora, inicio);
   const identidad = await despacharIdentidad(supabase, ahora, inicio);
+  const insights = await despacharInsightsHabitos(supabase, ahora, inicio);
   const reintentos = await reintentarPendientes(supabase);
 
   // «creados» y «entregados» se cuentan aparte a propósito: sin ningún
   // dispositivo suscrito se crean avisos que no se entregan, y mezclarlo
   // haría parecer que el reloj no hizo nada.
-  return NextResponse.json({ ok: true, recordatorios, vencimientos, coach, identidad, entregados: reintentos });
+  return NextResponse.json({ ok: true, recordatorios, vencimientos, coach, identidad, insights, entregados: reintentos });
 }
 
 /**
@@ -451,6 +455,113 @@ async function despacharIdentidad(supabase: Admin, ahora: Date, inicio: number):
     }
   }
   return fotos;
+}
+
+/** Análisis por pasada: cada uno es una llamada al modelo de varios segundos. */
+const LOTE_INSIGHTS = 3;
+/** Pasado esto no se empieza otro análisis: los reintentos de la bandeja van detrás. */
+const PRESUPUESTO_INSIGHTS_MS = 30_000;
+
+/**
+ * LOS INSIGHTS NOCTURNOS DE HÁBITOS (D-163).
+ *
+ * En la ventana de la noche del coach (misma preferencia: `coach_enabled` y
+ * `coach_night_hour`), analiza el historial de hábitos con el mismo núcleo que
+ * el botón «Analizar» (`prepararAnalisis` + `recomendarYGuardar`), en modo
+ * servicio. Las recomendaciones caen en `recommendations` con dominio
+ * `habits` y se leen en Hoy de Rutinas y en el panel de Desarrollo.
+ *
+ * Una vez por noche: la fila de `ai_job_runs` se inserta ANTES de llamar al
+ * modelo, y la clave primaria impide que dos pasadas lo hagan a la vez. Y solo
+ * si hay algo nuevo: si la huella de los hechos es la de la última ejecución,
+ * no se llama. Nunca lanza.
+ */
+async function despacharInsightsHabitos(supabase: Admin, ahora: Date, inicio: number): Promise<number> {
+  if (Date.now() - inicio > PRESUPUESTO_INSIGHTS_MS) return 0;
+
+  const [{ data: perfiles }, { data: prefs }] = await Promise.all([
+    supabase.from("profiles").select("user_id, timezone").limit(1000),
+    supabase.from("notification_prefs").select("user_id, coach_enabled, coach_morning_hour, coach_night_hour")
+  ]);
+  if (!perfiles?.length) return 0;
+  const prefsPorUsuario = new Map((prefs ?? []).map((p) => [p.user_id, p]));
+
+  let analizados = 0;
+  for (const perfil of perfiles) {
+    if (analizados >= LOTE_INSIGHTS || Date.now() - inicio > PRESUPUESTO_INSIGHTS_MS) break;
+
+    const zona = perfil.timezone && isValidTimeZone(perfil.timezone) ? perfil.timezone : DEFAULT_TIMEZONE;
+    const fila = prefsPorUsuario.get(perfil.user_id);
+    const momento = momentoQueToca(timeInTimeZone(zona, ahora), {
+      enabled: fila?.coach_enabled ?? PREFS_POR_DEFECTO.enabled,
+      morningHour: fila?.coach_morning_hour ?? PREFS_POR_DEFECTO.morningHour,
+      nightHour: fila?.coach_night_hour ?? PREFS_POR_DEFECTO.nightHour
+    });
+    if (momento !== "night") continue;
+    const hoy = todayInTimeZone(zona, ahora);
+
+    try {
+      const { data: yaCorrio } = await supabase
+        .from("ai_job_runs")
+        .select("local_date")
+        .eq("user_id", perfil.user_id)
+        .eq("job", JOB_INSIGHTS_HABITOS)
+        .eq("local_date", hoy)
+        .maybeSingle();
+      if (yaCorrio) continue;
+
+      const { count } = await supabase.from("habits").select("id", { count: "exact", head: true }).eq("user_id", perfil.user_id);
+      if (!count) continue;
+
+      const preparado = await prepararAnalisis({ supabase, userId: perfil.user_id, scope: "habits", today: hoy, modo: "servicio" });
+      const huella = preparado.ok ? huellaDeHechos(preparado.context) : "";
+
+      // La guarda se escribe ANTES de llamar al modelo. Si otra pasada ganó la
+      // carrera, el insert choca con la clave primaria y esta se retira.
+      const { error: guarda } = await supabase.from("ai_job_runs").insert({
+        user_id: perfil.user_id,
+        job: JOB_INSIGHTS_HABITOS,
+        local_date: hoy,
+        facts_hash: huella,
+        outcome: preparado.ok ? "en_curso" : preparado.reason.slice(0, 200)
+      });
+      if (guarda || !preparado.ok) continue;
+
+      const { data: anterior } = await supabase
+        .from("ai_job_runs")
+        .select("facts_hash")
+        .eq("user_id", perfil.user_id)
+        .eq("job", JOB_INSIGHTS_HABITOS)
+        .lt("local_date", hoy)
+        .order("local_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const decision = debeAnalizar(preparado.context.facts.length, huella, anterior?.facts_hash ?? null);
+      if (decision !== "analizar") {
+        await supabase.from("ai_job_runs").update({ outcome: decision }).eq("user_id", perfil.user_id).eq("job", JOB_INSIGHTS_HABITOS).eq("local_date", hoy);
+        continue;
+      }
+
+      const resultado = await recomendarYGuardar({
+        supabase,
+        userId: perfil.user_id,
+        scope: "habits",
+        context: preparado.context,
+        origen: "nocturno"
+      });
+      await supabase
+        .from("ai_job_runs")
+        .update({ outcome: resultado.ok ? `hecho:${resultado.created}` : `fallido:${(resultado.reason ?? "").slice(0, 180)}` })
+        .eq("user_id", perfil.user_id)
+        .eq("job", JOB_INSIGHTS_HABITOS)
+        .eq("local_date", hoy);
+      analizados++;
+    } catch {
+      continue;
+    }
+  }
+  return analizados;
 }
 
 /**
