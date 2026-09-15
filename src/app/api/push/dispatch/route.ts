@@ -533,6 +533,9 @@ async function despacharInsightsHabitos(supabase: Admin, ahora: Date, inicio: nu
         .eq("user_id", perfil.user_id)
         .eq("job", JOB_INSIGHTS_HABITOS)
         .lt("local_date", hoy)
+        // Solo cuenta como «ya analizado» una noche que terminó bien: si ayer
+        // falló (cuota, red), la misma huella hoy SÍ se vuelve a intentar.
+        .like("outcome", "hecho%")
         .order("local_date", { ascending: false })
         .limit(1)
         .maybeSingle();
