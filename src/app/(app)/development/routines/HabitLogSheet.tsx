@@ -49,7 +49,15 @@ export default function HabitLogSheet({
   recent: HabitLogEntry[];
 }) {
   return (
-    <FormSheet label="…" title={`Registrar · ${habitName}`}>
+    <FormSheet
+      label={
+        <>
+          <span aria-hidden="true">…</span>
+          <span className="sr-only">Registrar {habitName} con detalle</span>
+        </>
+      }
+      title={`Registrar · ${habitName}`}
+    >
       {(close) => <Campos habitId={habitId} today={today} minDate={minDate} recent={recent} close={close} />}
     </FormSheet>
   );
