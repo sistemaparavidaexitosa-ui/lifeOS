@@ -46,6 +46,13 @@
   --st-cancelled-bg: #eceef7;
 
   --line: rgba(20, 20, 43, 0.08);
+  /* Gráficas (Analítica de Rutinas, D-158). Una sola serie por gráfica, así que
+     basta un tono: el acento, validado con el verificador de paleta de la
+     skill dataviz contra `--surface` en cada modo (banda de luminosidad,
+     croma y contraste ≥ 3:1). La rejilla es un trazo un paso fuera de la
+     superficie, nunca discontinuo. */
+  --chart-1: #6161ff;
+  --chart-grid: rgba(20, 20, 43, 0.07);
   --shadow: 0 16px 44px rgba(40, 40, 110, 0.12);
   --shadow-sm: 0 4px 14px rgba(40, 40, 110, 0.08);
   --r: 20px;
@@ -109,6 +116,10 @@ html[data-theme="dark"] {
   --st-cancelled-bg: rgba(132, 137, 173, 0.16);
 
   --line: rgba(255, 255, 255, 0.08);
+  /* En oscuro el acento (#8b8bff) queda por encima de la banda de
+     luminosidad para marcas; #7f7ff7 es el paso más cercano que la cumple. */
+  --chart-1: #7f7ff7;
+  --chart-grid: rgba(255, 255, 255, 0.07);
   --shadow: 0 20px 55px rgba(0, 0, 0, 0.5);
   --shadow-sm: 0 6px 18px rgba(0, 0, 0, 0.35);
 }
@@ -3837,4 +3848,61 @@ textarea:focus {
    solo. El lienzo lo consulta para saltar directo al resultado. */
 @media (prefers-reduced-motion: reduce) {
   .gr-canvas { transition: none; }
+}
+
+/* ============================================================================
+   Analítica de Rutinas (F2). Las gráficas de Recharts leen color de las
+   variables del tema; aquí solo va lo que Recharts no deja en props.
+   ========================================================================== */
+.chart-tooltip {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--text);
+}
+.chart-tooltip b {
+  font-size: 14px;
+}
+.chart-tooltip .key {
+  display: inline-block;
+  width: 12px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--chart-1);
+  vertical-align: middle;
+  margin-right: 6px;
+}
+.chart-data summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+}
+.chart-data table {
+  width: 100%;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  border-collapse: collapse;
+}
+.chart-data th,
+.chart-data td {
+  text-align: left;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line);
+}
+.heat-cell {
+  aspect-ratio: 1;
+  border-radius: 4px;
+  min-width: 0;
+}
+.heat-cell:hover,
+.heat-cell:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 1px;
+}
+.recharts-wrapper:focus,
+.recharts-surface:focus {
+  outline: none;
 }

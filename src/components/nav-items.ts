@@ -46,6 +46,9 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/development", label: "Panel", group: "Personal Development OS", icon: "development", color: "var(--c-orange)" },
   { href: "/development/goals", label: "Metas Personales", group: "Personal Development OS", icon: "personalGoals", color: "var(--c-orange)" },
   { href: "/development/routines", label: "Rutinas y Hábitos", group: "Personal Development OS", icon: "routines", color: "var(--c-orange)" },
+  // La pestaña Analítica de Rutinas (F2) vive en su propia ruta para que
+  // Recharts solo se descargue ahí; la entrada existe para el título.
+  { href: "/development/routines/analytics", label: "Rutinas y Hábitos", group: "Personal Development OS", icon: "routines", color: "var(--c-orange)", hidden: true },
   // "Hábitos" ya no es una entrada: desde 0046 un hábito no existe fuera de su
   // rutina, así que una pantalla propia solo podía enseñar una lista sin el
   // contexto que la hace legible. /development/habits sobrevive como redirect.
