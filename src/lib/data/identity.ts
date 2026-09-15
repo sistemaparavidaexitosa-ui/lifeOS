@@ -8,6 +8,7 @@ import { loadSourceSnapshot } from "@/lib/data/development";
 import { addDaysISO } from "@/lib/domain/datetime.ts";
 import type { IdentityScore } from "@/lib/domain/identity/score.ts";
 import { loadScoreContext, scoreOf, type TraitRow } from "@/lib/identity/score-inputs";
+import { briefDeFila, type BriefView } from "@/lib/identity/brief-view";
 
 export interface IdentityProfileLite {
   desiredIdentity: string;
@@ -31,6 +32,20 @@ export interface IdentityOverview {
   /** Identidades escritas en las rutinas, para sugerir rasgos al empezar. */
   routineIdentities: string[];
 }
+
+/** El brief de identidad de hoy, si ya se generó. */
+export const loadTodayBrief = cache(async (): Promise<BriefView | null> => {
+  const user = await getSessionUser();
+  if (!user) return null;
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("identity_briefs")
+    .select("*")
+    .eq("user_id", user.id)
+    .eq("local_date", await todayForUser())
+    .maybeSingle();
+  return data ? briefDeFila(data) : null;
+});
 
 /**
  * La identidad de la persona que mira la pantalla: perfil, rasgos, votos, la

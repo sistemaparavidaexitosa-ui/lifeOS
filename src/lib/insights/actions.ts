@@ -361,6 +361,10 @@ export async function clearAiHistory(): Promise<void> {
   // turno que las explicaba con `on delete cascade` (0053). Se dice aquí porque
   // desde este archivo no se ve, y alguien podría añadir el delete que sobra.
   await supabase.from("ai_chat_messages").delete().eq("user_id", user.id);
+  // Los briefs de identidad (0065) son lo que la IA escribió sobre quién quiere
+  // ser la persona: la promesa del botón los incluye. El tope diario sigue
+  // contándose en audit_log, que no se borra.
+  await supabase.from("identity_briefs").delete().eq("user_id", user.id);
   await supabase.from("audit_log").insert({ user_id: user.id, action: "ai.clear.history", object: "" });
   revalidatePath("/intelligence");
   revalidatePath("/money");
