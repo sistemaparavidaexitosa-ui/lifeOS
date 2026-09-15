@@ -21,6 +21,8 @@ export interface TraitRow {
 
 export interface ScoreContext {
   inputs: ScoreInputs;
+  /** Metas activas con su avance, en el mismo orden que `inputs.goals`. */
+  goals: { id: string; title: string; area: string; progressPct: number }[];
   habits: { id: string; name: string; category: string }[];
   traits: TraitRow[];
   series: HabitSeries[];
@@ -73,7 +75,7 @@ export async function loadScoreContext(opts: {
     supabase.from("routines").select("id, frequency, active").eq("user_id", userId),
     supabase.from("identity_traits").select("id, name, statement, area, position, active").eq("user_id", userId).order("position"),
     supabase.from("habit_identity_traits").select("habit_id, trait_id, habits!inner(user_id)").eq("habits.user_id", userId),
-    supabase.from("personal_goals").select("id, created_at, horizon").eq("user_id", userId).eq("status", "Activa"),
+    supabase.from("personal_goals").select("id, title, area, created_at, horizon").eq("user_id", userId).eq("status", "Activa"),
     supabase
       .from("routine_runs")
       .select("routine_id, local_date, routines!inner(user_id)")
@@ -153,7 +155,13 @@ export async function loadScoreContext(opts: {
     ]
   };
 
-  return { inputs, habits: (habits ?? []).map((h) => ({ id: h.id, name: h.name, category: h.category })), traits: rasgos, series };
+  return {
+    inputs,
+    goals: (goals ?? []).map((g, i) => ({ id: g.id, title: g.title, area: g.area, progressPct: inputs.goals[i]!.progressPct })),
+    habits: (habits ?? []).map((h) => ({ id: h.id, name: h.name, category: h.category })),
+    traits: rasgos,
+    series
+  };
 }
 
 export function scoreOf(ctx: ScoreContext): IdentityScore {

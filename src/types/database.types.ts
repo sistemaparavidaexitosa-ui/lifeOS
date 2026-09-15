@@ -1562,6 +1562,60 @@ export type Database = {
           },
         ]
       }
+      identity_briefs: {
+        Row: {
+          affirmations: Json
+          created_at: string
+          fact_ids: string[]
+          generation: number
+          id: string
+          identity_reminder: string
+          local_date: string
+          model: string
+          prompt_version: number
+          quote: Json | null
+          reactions: Json
+          reflection_question: string
+          updated_at: string
+          user_id: string
+          visualization: Json
+        }
+        Insert: {
+          affirmations: Json
+          created_at?: string
+          fact_ids?: string[]
+          generation?: number
+          id?: string
+          identity_reminder: string
+          local_date: string
+          model?: string
+          prompt_version: number
+          quote?: Json | null
+          reactions?: Json
+          reflection_question: string
+          updated_at?: string
+          user_id: string
+          visualization: Json
+        }
+        Update: {
+          affirmations?: Json
+          created_at?: string
+          fact_ids?: string[]
+          generation?: number
+          id?: string
+          identity_reminder?: string
+          local_date?: string
+          model?: string
+          prompt_version?: number
+          quote?: Json | null
+          reactions?: Json
+          reflection_question?: string
+          updated_at?: string
+          user_id?: string
+          visualization?: Json
+        }
+        Relationships: []
+      }
       identity_profiles: {
         Row: {
           core_values: string[]

@@ -13,7 +13,9 @@ import {
 import { habitStreaks, slotStates, type HabitLogEntry } from "@/lib/domain/development/habit-analytics.ts";
 import { loadHabitSeries } from "@/lib/data/habit-analytics";
 import DailyCheckinCard from "./DailyCheckinCard";
-import { loadIdentityOverview } from "@/lib/data/identity";
+import { loadIdentityOverview, loadTodayBrief } from "@/lib/data/identity";
+import BriefCard from "./brief/BriefCard";
+import BriefGenerator from "./brief/BriefGenerator";
 import IdentityHero from "./identity/IdentityHero";
 import IdentityScoreCard from "./identity/IdentityScoreCard";
 import { CardHeader, ModuleNote, SectionHeader } from "../FormSheet";
@@ -59,7 +61,8 @@ export default async function RoutinesPage() {
     supabase.from("daily_reflections").select("*").eq("local_date", today).maybeSingle(),
     loadHabitSeries(desdeLogs, today)
   ]);
-  const identidad = await loadIdentityOverview();
+  const [identidad, brief] = await Promise.all([loadIdentityOverview(), loadTodayBrief()]);
+  const traitNames = Object.fromEntries((identidad?.traits ?? []).map((t) => [t.id, t.name]));
   const traitOptions = (identidad?.traits ?? []).filter((t) => t.active).map((t) => ({ id: t.id, name: t.name, area: t.area }));
 
   const occById = new Map((occupations ?? []).map((o) => [o.id, o]));
@@ -233,6 +236,11 @@ export default async function RoutinesPage() {
         </div>
       )}
 
+      {/* El brief solo se pide con una identidad escrita: sin ella no hay de
+          qué escribir, y la tarjeta de arriba ya invita a definirla. */}
+      {identidad?.profile &&
+        (brief ? <BriefCard initial={brief} traitNames={traitNames} /> : <BriefGenerator traitNames={traitNames} />)}
+
       <ModuleNote>
         Cada hábito vive dentro de una rutina y toca cuando toca ella. El bloque horario sigue viviendo en Autogestión
         del Tiempo: la rutina se ancla a uno que ya existe. Todo esto es privado, sin relación con Workspaces (BR-027).
@@ -279,7 +287,7 @@ export default async function RoutinesPage() {
 
       {rows.length > 0 && (
         <DailyCheckinCard
-          prompt="¿Qué hiciste hoy que la persona que quieres ser también habría hecho?"
+          prompt={brief?.reflectionQuestion ?? "¿Qué hiciste hoy que la persona que quieres ser también habría hecho?"}
           initial={
             checkin
               ? {

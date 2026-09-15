@@ -109,6 +109,14 @@ export const CHAT_BUDGET: Budget = { maxOutputTokens: 3000, thinkingBudget: 128 
 export const COACH_BUDGET: Budget = { maxOutputTokens: 4000, thinkingBudget: 2048 };
 
 /**
+ * El brief de identidad del día (F4). La salida es más larga que el mensaje
+ * del coach —cinco afirmaciones, una visualización con pasos, una cita— pero
+ * la decisión es más acotada: no elige entre ocho dominios, escribe para una
+ * identidad que ya viene dicha. Por eso menos pensamiento y el mismo techo.
+ */
+export const BRIEF_BUDGET: Budget = { maxOutputTokens: 4000, thinkingBudget: 1024 };
+
+/**
  * Ni un modelo lento puede dejar un botón girando para siempre. Mismo criterio
  * que `AUTH_DEADLINE_MS` en el middleware.
  */
