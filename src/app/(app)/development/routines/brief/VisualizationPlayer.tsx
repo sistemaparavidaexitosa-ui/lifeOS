@@ -55,10 +55,20 @@ export default function VisualizationPlayer({ visualization }: { visualization: 
 
   const actual = pasos[paso]!;
   const avance = actual.seconds ? ((actual.seconds - restante) / actual.seconds) * 100 : 100;
+
+  // CUÁNTO FALTA EN TOTAL, y no solo del paso. Con cuatro pasos, «Paso 2 de 4»
+  // bastaba para hacerse una idea. Con nueve, saber que quedan doce segundos
+  // del paso actual no dice nada sobre si esto acaba pronto o dentro de cuatro
+  // minutos — y esa incertidumbre es justo lo que saca a alguien de una
+  // visualización.
+  const restanteTotal = restante + pasos.slice(paso + 1).reduce((s, p) => s + p.seconds, 0);
+  const minutos = Math.floor(restanteTotal / 60);
+  const segundos = restanteTotal % 60;
+
   return (
     <div className="flex flex-col gap-3" aria-live="polite">
       <span className="text-xs font-semibold" style={{ color: "var(--muted)" }}>
-        Paso {paso + 1} de {pasos.length} · {restante} s
+        Paso {paso + 1} de {pasos.length} · quedan {minutos}:{String(segundos).padStart(2, "0")}
       </span>
       <p className="text-base leading-relaxed">{actual.text}</p>
       <div className="progress" aria-hidden="true">
