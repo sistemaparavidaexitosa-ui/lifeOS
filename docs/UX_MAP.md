@@ -5,6 +5,12 @@ mock). **Ninguna** de esas rutas de `localStorage` se portó: cada vista de
 esta tabla lee de Supabase vía Server Component y cada acción invoca una
 Server Action real que escribe en Postgres (guardrail NO-MOCK, F8).
 
+>**Laboratorio UX (fuera de esta tabla):** `/ai-os` es un prototipo
+>experimental de dirección de producto ("LifeOS AI Operating System") con datos
+>simulados. No lee ni escribe nada: vive en `public/ai-os.html` y no comparte
+>código con ninguna vista de abajo. Ver
+>`docs/superpowers/specs/2026-09-17-ai-os-prototipo-ux-design.md`.
+
 | Vista HTML | Ruta Next.js | Componente principal | Fuente de datos (Supabase) | Acción real / endpoint |
 |---|---|---|---|---|
 | Onboarding | `/onboarding` | `onboarding-form.tsx` | `profiles`, `consents` | `completeOnboarding` (Server Action) |

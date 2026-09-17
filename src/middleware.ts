@@ -51,6 +51,42 @@ const AUTH_TIMED_OUT = Symbol("auth-deadline");
  * sus propias dependencias sin necesidad de listar cada host.
  */
 export async function middleware(request: NextRequest) {
+  // ──────────────────────────────────────────────────────────────────────────
+  // LABORATORIO UX: /ai-os (ver src/app/ai-os/page.tsx).
+  //
+  // Sale ANTES que todo lo demás, y a propósito. Dos razones, ninguna
+  // opcional:
+  //   1. No hay sesión que comprobar: el prototipo es 100% mock, no lee ni un
+  //      dato del usuario. Pasar por `getUser()` le costaría un viaje de red a
+  //      Supabase a una página que no lo necesita.
+  //   2. La CSP de abajo lleva nonce + `strict-dynamic`, que BLOQUEA los
+  //      scripts inline de un HTML estático. Con ella, el prototipo sería una
+  //      pantalla en blanco sin ningún error visible.
+  //
+  // Lo que se le aplica en su lugar es una CSP propia, cerrada al origen:
+  // sin `connect-src` no puede llamar a ninguna API, y sin hosts de terceros
+  // no puede cargar nada de fuera. Es un archivo sin datos y sin red.
+  //
+  // Cubre `/ai-os` (la página que redirige) y `/ai-os.html` (el prototipo).
+  if (request.nextUrl.pathname.startsWith("/ai-os")) {
+    const lab = NextResponse.next();
+    lab.headers.set(
+      "Content-Security-Policy",
+      [
+        "default-src 'self'",
+        "script-src 'self' 'unsafe-inline'",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data:",
+        "font-src 'self' data:",
+        "connect-src 'none'",
+        "frame-ancestors 'none'",
+        "base-uri 'self'",
+        "form-action 'self'"
+      ].join("; ")
+    );
+    return lab;
+  }
+
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
 
   const supabaseHost = (() => {
