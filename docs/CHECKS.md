@@ -1737,8 +1737,33 @@ Todas las filas de prueba se borraron al terminar (0 briefs, 0 filas de estilo).
   códigos correctos, pero la Server Action necesita una sesión de navegador y no
   se ha ejercitado de punta a punta. Es el paso 5 de la verificación del plan y
   queda pendiente de un recorrido manual.
-- **El bucle nocturno de medición no ha corrido.** `despacharEstilo` está
+- **El bucle nocturno de MEDICIÓN no ha corrido.** `despacharEstilo` está
   escrito y tipado, y `medirDia` está probado, pero no se ha ejecutado contra el
   reloj real: hace falta un brief de ayer y pasar por la ventana de las 23:00
   locales.
-- **No hay despliegue del contenedor.** El `Dockerfile` no se ha construido.
+
+### Generación de madrugada — SÍ ejecutada contra el reloj real (18-sep-2026)
+
+Se puso la zona horaria de un usuario de desarrollo en `America/Adak` para caer
+dentro de la ventana de las 04:00 y se llamó a `/api/push/dispatch` de verdad:
+
+- **Agente dormido** (URL a un puerto muerto): `briefs: 0` y **ninguna fila en
+  `ai_job_runs`**. No se gasta el intento del día, que es el punto entero de la
+  guarda.
+- **Agente despierto** (uvicorn en pie, sin llave de Gemini): `ai_job_runs` →
+  `identity.brief → fallido`, y `audit_log` → `origen: nocturno · fuente: ts ·
+  motivo: http-5xx · ok: false`. Es decir: pidió al agente, el agente devolvió
+  503, se clasificó como fallo suyo, cayó al respaldo y lo registró honestamente.
+- **Cuatro pasadas seguidas del reloj → UN solo intento.** La persona conserva
+  2 de sus 3 generaciones manuales.
+
+Zona horaria restaurada y filas de prueba borradas al terminar.
+- **No hay despliegue real.** El `Dockerfile` SÍ se ha construido y probado en
+  local (18-sep-2026): la imagen levanta, respeta `$PORT` como hace Render
+  —se comprobó con `PORT=10000`, `/health` → 200— y cierra con `SIGTERM` en
+  896 ms dejando `Finished server process [1]`, o sea con uvicorn como PID 1.
+  Lo que no se ha hecho es desplegarla en Render ni conectarla a Vercel.
+- **La migración 0067 NO está en la nube.** `supabase migration list --linked`
+  la da como `local: 0067, remote: <vacío>`. Hasta que se haga `pnpm db:push`,
+  cualquier despliegue del PR tiene el brief roto: `loadContextoDelBrief`
+  consulta `identity_brief_style`, que allí todavía no existe.

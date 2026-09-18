@@ -123,11 +123,13 @@ export async function generarManifestacion(opts: {
   today: string;
   timeZone: string;
   sources: SourceSnapshot;
+  /** «sesion» cuando lo pide la persona; «servicio» cuando lo escribe el reloj. */
+  modo?: "sesion" | "servicio";
 }): Promise<ResultadoManifestacion> {
-  const { supabase, userId, today, timeZone, sources } = opts;
+  const { supabase, userId, today, timeZone, sources, modo = "sesion" } = opts;
 
   const [cargado, delAgente] = await Promise.all([
-    loadContextoDelBrief({ supabase, userId, today, timeZone, sources, modo: "sesion" }),
+    loadContextoDelBrief({ supabase, userId, today, timeZone, sources, modo }),
     llamarAlAgente(userId, today, timeZone)
   ]);
 
@@ -207,4 +209,38 @@ export async function generarManifestacion(opts: {
       }
     }
   };
+}
+
+export type EstadoDelAgente = "despierto" | "durmiendo" | "sin-agente";
+
+/**
+ * ¿Está el agente en pie?
+ *
+ * EXISTE POR UN MOTIVO MUY CONCRETO: los servicios gestionados baratos apagan el
+ * contenedor tras unos minutos sin tráfico y tardan cerca de un MINUTO en
+ * volver. El presupuesto que le da esta app son veinte segundos, pensados para
+ * alguien que espera mirando un botón. Las dos cifras son incompatibles, y
+ * subir el plazo no es la solución: nadie mira un botón durante un minuto.
+ *
+ * La solución es no pedirle nada a un agente dormido. El reloj de la madrugada
+ * llama primero a `/health` —que es barato y no pide secreto— y solo genera si
+ * contesta. Si no contesta, la propia llamada ya empezó a despertarlo y la
+ * siguiente pasada, cinco minutos después, lo encontrará listo. La hora entera
+ * da doce oportunidades.
+ *
+ * NUNCA LANZA. «No sé» y «está dormido» se tratan igual, porque la acción es la
+ * misma: esperar a la siguiente pasada.
+ */
+export async function despertarAgente(timeoutMs = 5_000): Promise<EstadoDelAgente> {
+  const url = manifestationAgentUrl();
+  // Sin agente NO es un problema: significa que escribirá el respaldo, que no
+  // se duerme ni tarda en arrancar. Se puede generar ya.
+  if (!url) return "sin-agente";
+
+  try {
+    const respuesta = await fetch(`${url}/health`, { signal: AbortSignal.timeout(timeoutMs) });
+    return respuesta.ok ? "despierto" : "durmiendo";
+  } catch {
+    return "durmiendo";
+  }
 }

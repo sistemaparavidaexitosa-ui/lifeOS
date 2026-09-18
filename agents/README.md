@@ -99,19 +99,52 @@ Ver `.env.example`. Los dos secretos son distintos porque protegen direcciones
 opuestas: `AGENT_INBOUND_SECRET` es el que este servicio exige a quien le llama,
 y `LIFEOS_AGENT_SECRET` el que presenta a LifeOS para pedir el contexto.
 
-## Despliegue
+## Despliegue (Render)
 
-Contenedor de vida larga (Fly.io, Railway, Render), no función serverless: este
-salto ya está en medio de una cadena que alguien espera con un botón pulsado, y
-un arranque en frío aquí se nota.
+Contenedor de vida larga, **no** función serverless: este salto ya está en medio
+de una cadena que alguien espera con un botón pulsado, y un arranque en frío aquí
+se nota. Por eso tampoco va en Vercel junto al resto de la app.
+
+El blueprint está en `render.yaml`, en esta carpeta.
+
+1. En Render: **Blueprints → New Blueprint Instance**, apuntando a este repo y a
+   `agents/render.yaml`.
+2. Render pedirá los cuatro valores marcados `sync: false`:
+   `GEMINI_API_KEY`, `LIFEOS_BASE_URL` (el dominio de **producción** de LifeOS,
+   no el de un preview), `LIFEOS_AGENT_SECRET` y `AGENT_INBOUND_SECRET`.
+3. Cuando esté verde: `curl https://<tu-servicio>.onrender.com/health`
+4. En Vercel, añade `MANIFESTATION_AGENT_URL` y `MANIFESTATION_AGENT_SECRET`
+   (este último con el mismo valor que `AGENT_INBOUND_SECRET`) y **redespliega**:
+   Vercel no aplica variables nuevas a despliegues ya construidos.
+
+⚠️ **No uses el plan `free`.** Render apaga un servicio gratuito tras 15 minutos
+sin tráfico y tarda cerca de un minuto en volver; el presupuesto que le da LifeOS
+son 20 segundos. El primer brief de cada mañana —justo el que importa— agotaría
+el plazo siempre y lo escribiría el respaldo. El agente parecería no funcionar
+estando perfectamente sano: simplemente nunca llegaría a tiempo.
+
+**Con la generación de madrugada, el plan `free` vuelve a ser viable.** El reloj
+de `/api/push/dispatch` escribe el brief a las 04:00 locales, cuando no hay nadie
+esperando, así que el minuto de arranque deja de importar: por la mañana abrir Hoy
+solo lee una fila que ya está.
+
+El reloj no le pide nada a un contenedor dormido. Primero llama a `/health` —que
+es barato y no pide secreto— y solo genera si contesta; si no, esa misma llamada
+ya empezó a despertarlo y la siguiente pasada, cinco minutos después, lo encuentra
+listo. La hora entera da doce oportunidades.
+
+Aun así, en `free` el botón «Otro» sigue siendo síncrono y se comería el arranque
+si el contenedor llevaba rato quieto. Con `starter` no pasa ninguna de las dos
+cosas.
+
+En local:
 
 ```bash
 docker build -t manifestation-architect .
 docker run -p 8080:8080 --env-file .env manifestation-architect
 ```
 
-En LifeOS hay que poner `MANIFESTATION_AGENT_URL` y
-`MANIFESTATION_AGENT_SECRET`. Sin ellas el producto funciona entero con el
+Sin `MANIFESTATION_AGENT_URL` en LifeOS el producto funciona entero con el
 respaldo, que es exactamente lo que debe pasar.
 
 ## Lo que este servicio NO hace, y no es un olvido

@@ -1,0 +1,71 @@
+# Blueprint de Render para el Arquitecto de Manifestación (D-164).
+#
+# Se apunta a este archivo desde Render → Blueprints → New Blueprint Instance.
+# El repo es el de LifeOS entero, pero el contexto de build es solo `agents/`:
+# la imagen no necesita ni ve el código de Next.
+#
+# POR QUÉ `virginia`. Vercel despliega esta app en `iad1` (vercel.json), que es
+# el norte de Virginia. La topología ya paga dos saltos de red extra por cada
+# brief —la app llama al agente, y el agente vuelve a llamar a la app para pedir
+# el contexto—, así que poner el agente en el mismo lado del continente ahorra
+# el único coste que aquí se puede ahorrar sin cambiar el diseño. En Oregón,
+# esos dos saltos cruzan Estados Unidos cuatro veces.
+services:
+  - name: lifeos-manifestation
+    type: web
+    runtime: docker
+    region: virginia
+    # LEE ESTO ANTES DE BAJARLO A `free`:
+    #
+    # El plan gratuito de Render apaga el servicio tras 15 minutos sin tráfico y
+    # tarda CERCA DE UN MINUTO en volver. El presupuesto que le da LifeOS son 20
+    # segundos (`MANIFESTATION_AGENT_TIMEOUT_MS`), así que el primer brief de
+    # cada mañana —que es justo el que importa— agotaría el plazo SIEMPRE y lo
+    # escribiría el respaldo en TypeScript. El agente parecería no funcionar, y
+    # estaría funcionando: simplemente nunca llega a tiempo.
+    #
+    # `starter` no se duerme. Es la diferencia entre que esto sirva o no.
+    plan: starter
+    dockerfilePath: ./agents/Dockerfile
+    dockerContext: ./agents
+    # Render lo consulta para decidir si el despliegue está sano. Es la ruta que
+    # NO pide secreto, a propósito: si lo pidiera, un secreto mal puesto se vería
+    # como un contenedor muerto.
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      # Los cuatro que hay que escribir a mano en el panel. `sync: false` es lo
+      # que impide que un secreto acabe en el repositorio.
+      - key: GEMINI_API_KEY
+        sync: false
+      # El dominio de PRODUCCIÓN de LifeOS, no el de un preview: la URL de un
+      # preview cambia con cada commit y este valor caducaría en el siguiente.
+      - key: LIFEOS_BASE_URL
+        sync: false
+      # El mismo valor que `MANIFESTATION_AGENT_SECRET` en Vercel.
+      - key: LIFEOS_AGENT_SECRET
+        sync: false
+      # El que este servicio EXIGE a quien le llama. Puede coincidir con el
+      # anterior; se declara aparte porque protege la dirección contraria.
+      - key: AGENT_INBOUND_SECRET
+        sync: false
+
+      - key: GEMINI_MODEL
+        value: gemini-3.6-flash
+      # Más que el presupuesto de TypeScript (4000): aquí se piden hasta veinte
+      # afirmaciones, cinco minutos de escena, mantra y acción. Con 4000 la
+      # respuesta se cortaría a media llave.
+      - key: AGENT_MAX_OUTPUT_TOKENS
+        value: "8000"
+      - key: AGENT_THINKING_BUDGET
+        value: "2048"
+      # Por debajo del plazo que da LifeOS, para que el agente falle ANTES de que
+      # el otro lado se canse y al respaldo le quede tiempo de escribir.
+      - key: AGENT_TIMEOUT_S
+        value: "45"
+      - key: LIFEOS_TIMEOUT_S
+        value: "10"
+      - key: AGENT_VERSION
+        value: "1.0.0"
+      - key: LOG_LEVEL
+        value: INFO
