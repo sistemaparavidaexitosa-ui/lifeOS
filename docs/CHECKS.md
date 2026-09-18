@@ -1741,4 +1741,12 @@ Todas las filas de prueba se borraron al terminar (0 briefs, 0 filas de estilo).
   escrito y tipado, y `medirDia` está probado, pero no se ha ejecutado contra el
   reloj real: hace falta un brief de ayer y pasar por la ventana de las 23:00
   locales.
-- **No hay despliegue del contenedor.** El `Dockerfile` no se ha construido.
+- **No hay despliegue real.** El `Dockerfile` SÍ se ha construido y probado en
+  local (18-sep-2026): la imagen levanta, respeta `$PORT` como hace Render
+  —se comprobó con `PORT=10000`, `/health` → 200— y cierra con `SIGTERM` en
+  896 ms dejando `Finished server process [1]`, o sea con uvicorn como PID 1.
+  Lo que no se ha hecho es desplegarla en Render ni conectarla a Vercel.
+- **La migración 0067 NO está en la nube.** `supabase migration list --linked`
+  la da como `local: 0067, remote: <vacío>`. Hasta que se haga `pnpm db:push`,
+  cualquier despliegue del PR tiene el brief roto: `loadContextoDelBrief`
+  consulta `identity_brief_style`, que allí todavía no existe.

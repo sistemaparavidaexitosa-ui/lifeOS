@@ -161,6 +161,20 @@ En el servicio Python (`agents/.env`, ver `agents/README.md`) van
 `LIFEOS_BASE_URL`, `LIFEOS_AGENT_SECRET` (el mismo valor de arriba),
 `AGENT_INBOUND_SECRET` y `GEMINI_API_KEY`.
 
+El agente se despliega en **Render** con el blueprint `agents/render.yaml`
+(Blueprints → New Blueprint Instance). No va en Vercel: necesita un contenedor de
+vida larga, y una función serverless reintroduciría un arranque en frío justo en
+el salto que ya duplicó la latencia.
+
+⚠️ **No uses el plan `free` de Render.** Apaga el servicio tras 15 minutos sin
+tráfico y tarda cerca de un minuto en volver, contra un presupuesto de 20
+segundos: el primer brief de cada mañana lo escribiría siempre el respaldo. El
+plan `starter` no se duerme.
+
+⚠️ **`pnpm db:push` ANTES de desplegar el código.** La migración 0067 crea
+`identity_brief_style`, y el contexto del brief la consulta: sin ella, generar un
+brief falla.
+
 ⚠️ **Añádelas una a una, en su campo.** NO uses el importador de `.env` de
 Vercel: su parser quita las comillas dobles del valor, así que un JWK entero
 llega como `{kty:EC,...}` y ya no es JSON. Por eso el script entrega la privada

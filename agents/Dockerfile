@@ -14,6 +14,18 @@ COPY manifestation ./manifestation
 RUN pip install --no-cache-dir .
 
 EXPOSE 8080
+# `${PORT:-8080}` y no un 8080 fijo: Render (y casi cualquier PaaS) inyecta el
+# puerto por entorno y espera que el proceso escuche ahí. Con el puerto cableado
+# el contenedor arranca, responde en local, y el health check del proveedor falla
+# contra un puerto en el que no hay nadie — un fallo que se lee como «la imagen
+# está rota» cuando lo único que pasa es que nadie preguntó.
+#
+# Forma de shell y no exec, porque la exec no expande variables. Pero con `exec`
+# delante: sin él, uvicorn queda como HIJO del shell, el `SIGTERM` de cada
+# despliegue se lo come el shell, y el contenedor muere por el temporizador de
+# gracia en vez de cerrar sus conexiones. Con `exec`, el shell se sustituye a sí
+# mismo por uvicorn, que pasa a ser PID 1 y recibe la señal.
+#
 # Un worker: el trabajo es esperar al modelo, no calcular. Escalar va por
 # instancias, que es lo que sabe hacer el orquestador.
-CMD ["uvicorn", "manifestation.manifestation_router:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]
+CMD exec uvicorn manifestation.manifestation_router:app --host 0.0.0.0 --port ${PORT:-8080} --workers 1

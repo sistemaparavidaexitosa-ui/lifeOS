@@ -99,19 +99,46 @@ Ver `.env.example`. Los dos secretos son distintos porque protegen direcciones
 opuestas: `AGENT_INBOUND_SECRET` es el que este servicio exige a quien le llama,
 y `LIFEOS_AGENT_SECRET` el que presenta a LifeOS para pedir el contexto.
 
-## Despliegue
+## Despliegue (Render)
 
-Contenedor de vida larga (Fly.io, Railway, Render), no función serverless: este
-salto ya está en medio de una cadena que alguien espera con un botón pulsado, y
-un arranque en frío aquí se nota.
+Contenedor de vida larga, **no** función serverless: este salto ya está en medio
+de una cadena que alguien espera con un botón pulsado, y un arranque en frío aquí
+se nota. Por eso tampoco va en Vercel junto al resto de la app.
+
+El blueprint está en `render.yaml`, en esta carpeta.
+
+1. En Render: **Blueprints → New Blueprint Instance**, apuntando a este repo y a
+   `agents/render.yaml`.
+2. Render pedirá los cuatro valores marcados `sync: false`:
+   `GEMINI_API_KEY`, `LIFEOS_BASE_URL` (el dominio de **producción** de LifeOS,
+   no el de un preview), `LIFEOS_AGENT_SECRET` y `AGENT_INBOUND_SECRET`.
+3. Cuando esté verde: `curl https://<tu-servicio>.onrender.com/health`
+4. En Vercel, añade `MANIFESTATION_AGENT_URL` y `MANIFESTATION_AGENT_SECRET`
+   (este último con el mismo valor que `AGENT_INBOUND_SECRET`) y **redespliega**:
+   Vercel no aplica variables nuevas a despliegues ya construidos.
+
+⚠️ **No uses el plan `free`.** Render apaga un servicio gratuito tras 15 minutos
+sin tráfico y tarda cerca de un minuto en volver; el presupuesto que le da LifeOS
+son 20 segundos. El primer brief de cada mañana —justo el que importa— agotaría
+el plazo siempre y lo escribiría el respaldo. El agente parecería no funcionar
+estando perfectamente sano: simplemente nunca llegaría a tiempo.
+
+Si quieres el plan gratuito de todas formas, la salida no es subir el plazo
+—nadie espera un minuto mirando un botón— sino **generar el brief de madrugada**
+en vez de al pulsar: el reloj de `/api/push/dispatch` ya corre cada cinco minutos
+y el endpoint `POST /api/agents/manifestation/brief` existe precisamente para
+ese camino asíncrono. A las cuatro de la mañana, que el contenedor tarde un
+minuto en despertar no se lo nota nadie, y por la mañana el botón solo lee una
+fila que ya está escrita. Eso no está implementado todavía.
+
+En local:
 
 ```bash
 docker build -t manifestation-architect .
 docker run -p 8080:8080 --env-file .env manifestation-architect
 ```
 
-En LifeOS hay que poner `MANIFESTATION_AGENT_URL` y
-`MANIFESTATION_AGENT_SECRET`. Sin ellas el producto funciona entero con el
+Sin `MANIFESTATION_AGENT_URL` en LifeOS el producto funciona entero con el
 respaldo, que es exactamente lo que debe pasar.
 
 ## Lo que este servicio NO hace, y no es un olvido
