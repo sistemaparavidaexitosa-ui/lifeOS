@@ -138,6 +138,29 @@ para desarrollo y en Vercel → Settings → Environment Variables para producci
 | `VAPID_SUBJECT` | `mailto:` o `https:`. Apple rechaza cualquier otra cosa |
 | `PUSH_DISPATCH_SECRET` | Lo único que protege `/api/push/dispatch`. `openssl rand -base64 32` |
 
+### El Arquitecto de Manifestación (D-164) — todas OPCIONALES
+
+Sin ninguna de estas, LifeOS funciona entero: el brief de identidad lo escribe
+el respaldo en TypeScript y la fila lo dice en `identity_briefs.generator`. Se
+ponen solo cuando el servicio de `agents/` está desplegado.
+
+| Variable | Qué es |
+|---|---|
+| `MANIFESTATION_AGENT_URL` | Dónde vive el agente, p. ej. `https://manifestation.fly.dev`. Sin ella no se intenta ni un `fetch` |
+| `MANIFESTATION_AGENT_SECRET` | **Secreto.** `openssl rand -base64 32` |
+| `MANIFESTATION_AGENT_TIMEOUT_MS` | Opcional; 20000 por defecto |
+
+⚠️ **`MANIFESTATION_AGENT_SECRET` NO puede ser el mismo valor que
+`PUSH_DISPATCH_SECRET`.** No es una regla de higiene: son secretos de categorías
+distintas. El de pg_cron dispara trabajo —quien lo tuviera podría adelantar unos
+avisos—; este DEVUELVE el contenido íntimo de cualquier persona cuyo id se pida
+(identidad, visión, reflexiones, hechos). Compartirlos convierte una filtración
+molesta en una filtración grave, y obliga a rotar los dos a la vez.
+
+En el servicio Python (`agents/.env`, ver `agents/README.md`) van
+`LIFEOS_BASE_URL`, `LIFEOS_AGENT_SECRET` (el mismo valor de arriba),
+`AGENT_INBOUND_SECRET` y `GEMINI_API_KEY`.
+
 ⚠️ **Añádelas una a una, en su campo.** NO uses el importador de `.env` de
 Vercel: su parser quita las comillas dobles del valor, así que un JWK entero
 llega como `{kty:EC,...}` y ya no es JSON. Por eso el script entrega la privada

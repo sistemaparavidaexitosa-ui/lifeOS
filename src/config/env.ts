@@ -188,6 +188,60 @@ export function requirePushDispatchSecret(): string {
 }
 
 /**
+ * F11: el secreto del Arquitecto de Manifestación (D-164).
+ *
+ * ES DE OTRA CATEGORÍA QUE `PUSH_DISPATCH_SECRET`, y por eso es OTRA variable
+ * aunque las dos protejan rutas sin sesión. Aquél dispara TRABAJO: quien lo
+ * tuviera podría hacer que se envíen avisos antes de tiempo. Éste devuelve
+ * CONTENIDO: identidad, visión, reflexiones y hechos de cualquier `user_id` que
+ * se pida. Reutilizar el mismo valor convertiría una filtración molesta en una
+ * filtración íntima, y la rotación de uno arrastraría al otro.
+ *
+ * Lo exigen las dos rutas de `/api/agents/manifestation/` y el cliente que
+ * llama al agente. Sin él, el agente no está configurado y todo el módulo cae
+ * al respaldo en TypeScript, que es un camino probado: la persona recibe su
+ * brief igual.
+ */
+export function requireManifestationAgentSecret(): string {
+  const secret = process.env.MANIFESTATION_AGENT_SECRET;
+  if (!secret) {
+    throw new Error(
+      "MANIFESTATION_AGENT_SECRET no está definida. La exigen /api/agents/manifestation/* y el cliente del agente — ver /docs/DEPLOY.md."
+    );
+  }
+  return secret;
+}
+
+/**
+ * Dónde vive el agente, o `null` si no hay agente.
+ *
+ * NO LANZA, al contrario que el resto de este archivo, y es la diferencia que
+ * hace que el respaldo funcione: «no hay agente» es una configuración válida y
+ * frecuente —en local, en una previsualización, mientras el contenedor se
+ * redespliega— y no un error que haya que enseñar. Quien llama ve `null` y
+ * genera en TypeScript sin gastar un `fetch` ni un milisegundo de espera.
+ */
+export function manifestationAgentUrl(): string | null {
+  const url = process.env.MANIFESTATION_AGENT_URL?.trim();
+  if (!url) return null;
+  return url.replace(/\/+$/, "");
+}
+
+/**
+ * Cuánto se espera al agente antes de escribir el brief en casa.
+ *
+ * Veinte segundos, y el número tiene detrás una suma: generar con el modelo ya
+ * tarda de cinco a quince, y el agente añade el viaje de ida y vuelta del
+ * contexto. Por encima de veinte, el respaldo —que necesita sus propios diez—
+ * ya no cabe en el presupuesto de la función y la persona se quedaría sin nada,
+ * que es exactamente lo que el respaldo existe para evitar.
+ */
+export function manifestationAgentTimeoutMs(): number {
+  const crudo = Number(process.env.MANIFESTATION_AGENT_TIMEOUT_MS);
+  return Number.isFinite(crudo) && crudo > 0 ? crudo : 20_000;
+}
+
+/**
  * Lee el JWK completo, la forma antigua de `VAPID_PRIVATE_JWK`.
  *
  * Se conserva para no invalidar las instalaciones que ya lo tienen puesto, pero

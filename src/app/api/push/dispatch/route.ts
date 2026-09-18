@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { timingSafeEqual } from "node:crypto";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { secretoValido } from "@/lib/api/secreto";
 import { requirePushDispatchSecret } from "@/config/env";
 import { notifySystem } from "@/lib/push/notify";
-import { DEFAULT_TIMEZONE, isValidTimeZone, timeInTimeZone, todayInTimeZone } from "@/lib/domain/datetime.ts";
+import { addDaysISO, DEFAULT_TIMEZONE, isValidTimeZone, timeInTimeZone, todayInTimeZone } from "@/lib/domain/datetime.ts";
 import {
   recordatoriosQueTocan,
   resumenDeVencimientos,
@@ -16,6 +16,8 @@ import { generarYGuardarMensajeDiario } from "@/lib/coach/daily";
 import { proponerAristas } from "@/lib/coach/graph-suggestions";
 import { fuentesDe } from "@/lib/coach/facts";
 import { tocaFotoDeIdentidad } from "@/lib/domain/identity/schedule.ts";
+import { medirDia } from "@/lib/domain/identity/estilo.ts";
+import { completionRate } from "@/lib/domain/development/habit-analytics.ts";
 import { loadScoreContext, scoreOf } from "@/lib/identity/score-inputs";
 import { huellaDeHechos, prepararAnalisis, recomendarYGuardar } from "@/lib/insights/generar-recomendaciones";
 import { debeAnalizar, JOB_INSIGHTS_HABITOS } from "@/lib/domain/insights/nightly.ts";
@@ -78,28 +80,14 @@ export async function POST(request: Request) {
   // estaba en la bandeja sigue corriendo detrás con lo que quede de minuto.
   const coach = await despacharCoach(supabase, ahora, inicio);
   const identidad = await despacharIdentidad(supabase, ahora, inicio);
+  const estilo = await despacharEstilo(supabase, ahora, inicio);
   const insights = await despacharInsightsHabitos(supabase, ahora, inicio);
   const reintentos = await reintentarPendientes(supabase);
 
   // «creados» y «entregados» se cuentan aparte a propósito: sin ningún
   // dispositivo suscrito se crean avisos que no se entregan, y mezclarlo
   // haría parecer que el reloj no hizo nada.
-  return NextResponse.json({ ok: true, recordatorios, vencimientos, coach, identidad, insights, entregados: reintentos });
-}
-
-/**
- * Comparación en tiempo constante. Con `===` el tiempo de respuesta filtra
- * cuántos caracteres iniciales acertó quien prueba, y eso convierte un secreto
- * largo en uno que se adivina byte a byte.
- */
-function secretoValido(recibido: string | null, esperado: string): boolean {
-  if (!recibido) return false;
-  const a = Buffer.from(recibido);
-  const b = Buffer.from(esperado);
-  // `timingSafeEqual` exige la misma longitud, y comprobarla antes vuelve a
-  // filtrar información — pero solo la longitud, que no es el secreto.
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
+  return NextResponse.json({ ok: true, recordatorios, vencimientos, coach, identidad, estilo, insights, entregados: reintentos });
 }
 
 type Admin = ReturnType<typeof createAdminClient>;
@@ -606,4 +594,95 @@ async function reintentarPendientes(supabase: Admin): Promise<number> {
   }
 
   return entregados;
+}
+
+/**
+ * LA OTRA MITAD DEL EXPERIMENTO (D-164).
+ *
+ * Cada mañana se guarda CON QUÉ ESTILO se le habló a alguien
+ * (`identity_brief_style`, mitad de arriba). Esto, cada noche, cierra el día y
+ * escribe QUÉ PASÓ: cuánto cumplió, con qué ánimo y energía, qué le resonó y si
+ * hizo la acción concreta que se le propuso.
+ *
+ * Va en la misma ventana que la foto del Identity Score y por el mismo motivo:
+ * las dos necesitan que el día haya terminado de verdad en la zona de esa
+ * persona. Medir a mediodía daría cumplimientos a medias que después se
+ * correlacionarían con el tono del brief, que es la manera más silenciosa de
+ * aprender una mentira.
+ *
+ * NO LLAMA AL MODELO. Es aritmética sobre datos que ya están, así que es barato
+ * y va después del coach y de los insights, que sí gastan cuota.
+ *
+ * Mide el día ANTERIOR, no el de hoy: el brief de hoy todavía tiene por delante
+ * las horas en las que puede pasar algo.
+ */
+async function despacharEstilo(supabase: Admin, ahora: Date, inicio: number): Promise<number> {
+  const { data: perfiles } = await supabase.from("profiles").select("user_id, timezone").limit(1000);
+  if (!perfiles?.length) return 0;
+
+  let medidos = 0;
+  for (const perfil of perfiles) {
+    if (medidos >= LOTE_IDENTIDAD || Date.now() - inicio > PRESUPUESTO_IDENTIDAD_MS) break;
+
+    const zona = perfil.timezone && isValidTimeZone(perfil.timezone) ? perfil.timezone : DEFAULT_TIMEZONE;
+    if (!tocaFotoDeIdentidad(timeInTimeZone(zona, ahora))) continue;
+
+    const hoy = todayInTimeZone(zona, ahora);
+    const ayer = addDaysISO(hoy, -1);
+
+    try {
+      // Solo lo que sigue sin medir. `measured_at` nulo es «el día no cerró»;
+      // una fila ya medida no se vuelve a tocar ni aunque cambien las
+      // reacciones después, porque el experimento era el de ese día.
+      const { data: fila } = await supabase
+        .from("identity_brief_style")
+        .select("brief_id, measured_at")
+        .eq("user_id", perfil.user_id)
+        .eq("local_date", ayer)
+        .is("measured_at", null)
+        .maybeSingle();
+      if (!fila) continue;
+
+      const [{ data: brief }, { data: checkin }, ctx] = await Promise.all([
+        supabase.from("identity_briefs").select("reactions, action_done, daily_action").eq("id", fila.brief_id).maybeSingle(),
+        supabase.from("daily_reflections").select("mood, energy").eq("user_id", perfil.user_id).eq("local_date", ayer).maybeSingle(),
+        loadScoreContext({
+          supabase,
+          userId: perfil.user_id,
+          today: hoy,
+          timeZone: zona,
+          modo: "servicio",
+          sources: await fuentesDe(supabase, perfil.user_id)
+        })
+      ]);
+
+      const resultado = medirDia({
+        completionPct: completionRate(ctx.series, ayer, ayer, hoy),
+        mood: checkin?.mood ?? null,
+        energy: checkin?.energy ?? null,
+        reactions: (brief?.reactions as Record<string, string>) ?? {},
+        // Sin acción propuesta no hay nada que marcar, y `false` mentiría: no
+        // es que no la hiciera, es que no se la pidieron.
+        actionDone: brief?.daily_action ? (brief.action_done ?? false) : null
+      });
+
+      const { error } = await supabase
+        .from("identity_brief_style")
+        .update({
+          measured_at: ahora.toISOString(),
+          completion_pct: resultado.completionPct,
+          mood: resultado.mood,
+          energy: resultado.energy,
+          reaction_score: resultado.reactionScore,
+          action_done: resultado.actionDone,
+          outcome_score: resultado.outcomeScore
+        })
+        .eq("brief_id", fila.brief_id);
+      if (!error) medidos++;
+    } catch {
+      // Un perfil con datos raros no puede dejar sin medir a los demás.
+      continue;
+    }
+  }
+  return medidos;
 }

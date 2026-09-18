@@ -1589,15 +1589,92 @@ export type Database = {
           },
         ]
       }
+      identity_brief_style: {
+        Row: {
+          action_done: boolean | null
+          affirmation_count: number
+          brief_id: string
+          category_mix: string[]
+          completion_pct: number | null
+          created_at: string
+          energy: number | null
+          formula_version: number
+          length_bucket: string
+          local_date: string
+          measured_at: string | null
+          mood: number | null
+          outcome_score: number | null
+          reaction_score: number | null
+          scene_kind: string
+          tone: string
+          user_id: string
+          uses_numbers: boolean
+        }
+        Insert: {
+          action_done?: boolean | null
+          affirmation_count: number
+          brief_id: string
+          category_mix?: string[]
+          completion_pct?: number | null
+          created_at?: string
+          energy?: number | null
+          formula_version?: number
+          length_bucket: string
+          local_date: string
+          measured_at?: string | null
+          mood?: number | null
+          outcome_score?: number | null
+          reaction_score?: number | null
+          scene_kind: string
+          tone: string
+          user_id: string
+          uses_numbers?: boolean
+        }
+        Update: {
+          action_done?: boolean | null
+          affirmation_count?: number
+          brief_id?: string
+          category_mix?: string[]
+          completion_pct?: number | null
+          created_at?: string
+          energy?: number | null
+          formula_version?: number
+          length_bucket?: string
+          local_date?: string
+          measured_at?: string | null
+          mood?: number | null
+          outcome_score?: number | null
+          reaction_score?: number | null
+          scene_kind?: string
+          tone?: string
+          user_id?: string
+          uses_numbers?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "identity_brief_style_brief_id_fkey"
+            columns: ["brief_id"]
+            isOneToOne: true
+            referencedRelation: "identity_briefs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       identity_briefs: {
         Row: {
+          action_done: boolean
           affirmations: Json
+          agent_version: string
           created_at: string
+          daily_action: Json | null
           fact_ids: string[]
+          focus_area: string | null
           generation: number
+          generator: string
           id: string
           identity_reminder: string
           local_date: string
+          mantra: string | null
           model: string
           prompt_version: number
           quote: Json | null
@@ -1608,13 +1685,19 @@ export type Database = {
           visualization: Json
         }
         Insert: {
+          action_done?: boolean
           affirmations: Json
+          agent_version?: string
           created_at?: string
+          daily_action?: Json | null
           fact_ids?: string[]
+          focus_area?: string | null
           generation?: number
+          generator?: string
           id?: string
           identity_reminder: string
           local_date: string
+          mantra?: string | null
           model?: string
           prompt_version: number
           quote?: Json | null
@@ -1625,13 +1708,19 @@ export type Database = {
           visualization: Json
         }
         Update: {
+          action_done?: boolean
           affirmations?: Json
+          agent_version?: string
           created_at?: string
+          daily_action?: Json | null
           fact_ids?: string[]
+          focus_area?: string | null
           generation?: number
+          generator?: string
           id?: string
           identity_reminder?: string
           local_date?: string
+          mantra?: string | null
           model?: string
           prompt_version?: number
           quote?: Json | null

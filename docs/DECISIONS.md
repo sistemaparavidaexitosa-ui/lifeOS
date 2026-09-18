@@ -2849,3 +2849,62 @@ implementa:
   pasada y un presupuesto de 30 s, detrás del coach. Costes aceptados: si el
   análisis falla, esa noche no se reintenta; y quien apaga el coach apaga
   también estos insights, porque comparten preferencia.
+
+- **D-164 · El Arquitecto de Manifestación: un agente en Python, pero la
+  autoridad se queda en casa.** El brief de identidad (D-161) crece a 10-20
+  afirmaciones con categoría, una visualización de ~5 minutos con arco de nueve
+  tiempos, un mantra de una frase, una acción concreta del día y un área de
+  foco. Lo escribe un servicio Python aparte (`agents/`, FastAPI + Pydantic),
+  desplegado fuera de Vercel. **Python no toca Supabase**: pide el contexto a
+  `/api/agents/manifestation/context` —que reusa `loadScoreContext`,
+  `loadFacts` y `buildContext`, así que ve exactamente lo mismo que el
+  respaldo— llama al modelo, y devuelve el brief en su respuesta; quien escribe
+  es la Server Action, con la sesión de la persona y la RLS de siempre.
+  `src/lib/identity/generar.ts` **queda como respaldo**: sin URL configurada,
+  con timeout, error de red, 5xx o payload inválido se genera en TypeScript y
+  la fila lo dice en `identity_briefs.generator`. No cae con 409 («aún no has
+  dicho en quién te estás convirtiendo»): eso es del usuario, y el respaldo
+  fallaría igual. Todo lo nuevo es NULLABLE para que una fila del respaldo
+  —cinco afirmaciones, sin mantra— siga siendo válida y la pantalla omita lo
+  que falta sin ramas especiales.
+  - **La autoridad es `sanearBrief`.** Lo que devuelve Python pasa por el mismo
+    saneado que lo que devuelve el respaldo, con `LIMITES_AGENTE` en vez de
+    `LIMITES_RESPALDO`. Los ids de rasgo y de hecho no se creen: se comprueban
+    contra el contexto recargado. Las copias de Jaccard y de la detección de
+    atribución que viven en Python ahorran un reintento; no protegen nada.
+  - **Las 11 categorías no sustituyen a las 7 áreas.** La categoría vive dentro
+    del jsonb `affirmations` y una función pura la proyecta a un área. El radar
+    y el componente «equilibrio» del Identity Score siguen midiendo contra las
+    mismas siete de 0064. `focus_area` es un área, no una categoría, para poder
+    cruzarse con el score.
+  - **Aprendizaje: TypeScript mide y calcula, Python redacta.**
+    `src/lib/domain/identity/estilo.ts` etiqueta cada brief (tono, longitud,
+    tipo de escena, si usa cifras, mezcla de categorías), mide el día siguiente
+    (cumplimiento, ánimo, energía, reacciones, acción hecha) y correlaciona.
+    Una etiqueta se conserva solo con `n ≥ 7`, `nSin ≥ 4` y `|lift| ≥ 6`, y se
+    recalcula quitando el mejor día del grupo: si el signo se invierte, se
+    descarta. Con menos de 14 días medidos no se afirma NADA. Vive en TS y no
+    en Python por tres razones: lee datos que solo LifeOS tiene, tiene que
+    sobrevivir a Python caído —si no, el respaldo se degrada justo el día que
+    más se nota—, y es la pieza con más probabilidad de inventar un patrón, que
+    es la que más conviene tener bajo `pnpm verify`. Efecto deseado que nadie
+    debe «arreglar»: si una preferencia se refuerza tanto que deja de haber
+    días sin ella, `nSin` cae bajo 4, la preferencia se cae sola y el sistema
+    vuelve a explorar.
+  - **Privacidad y coste.** Secreto propio (`MANIFESTATION_AGENT_SECRET`),
+    DISTINTO de `PUSH_DISPATCH_SECRET` y de otra categoría: aquél dispara
+    trabajo, éste devuelve el contenido íntimo de cualquier `user_id`. Por eso
+    el contexto exige además un token HMAC de diez minutos que ata la lectura
+    al guardado, respeta `ai_domains` con el mismo 409 que la acción, se audita
+    en `audit_log` (`ai.agent_context`) y lleva tope diario en `ai_job_runs`.
+    El tope de tres generaciones al día no cambia y sigue contándose en
+    `audit_log` bajo `ai.identity_brief`: por eso `guardarBrief()` es el ÚNICO
+    escritor de `identity_briefs`, o el tope se fugaría por el camino que no lo
+    cuenta. `identity_brief_style` cuelga del brief con `on delete cascade`,
+    así que «borrar historial de IA» borra también lo aprendido de él, y nadie
+    puede hacer UPDATE sobre su propio resultado medido: es un hecho del día,
+    no una opinión.
+  - **Costes aceptados.** El p95 del botón empeora (dos saltos de red más).
+    `pnpm verify` no cubre Python —cubre entero el camino del respaldo, que es
+    lo único que garantiza que la persona recibe un brief—. Y hay un segundo
+    despliegue y un segundo CI que mantener.

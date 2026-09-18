@@ -173,6 +173,12 @@ export async function middleware(request: NextRequest) {
   // hay cookie que valga. Lo que lo protege es `PUSH_DISPATCH_SECRET`, que la
   // propia ruta compara en tiempo constante.
   const isPushDispatch = pathname === "/api/push/dispatch";
+  // `/api/agents/*` lo invoca el Arquitecto de Manifestación (D-164), que es un
+  // servicio en otra máquina y tampoco trae cookie. Lo protege
+  // `MANIFESTATION_AGENT_SECRET` —distinto del de pg_cron porque este devuelve
+  // CONTENIDO y no solo dispara trabajo—, comparado en tiempo constante dentro
+  // de cada ruta.
+  const isAgentRoute = pathname.startsWith("/api/agents/");
   const isApiRoute = pathname.startsWith("/api/");
   // /invite/[token] es pública a propósito: el invitado llega desde el correo
   // SIN cuenta todavía. Si se redirigiera a /login, perdería el token y no
@@ -193,6 +199,7 @@ export async function middleware(request: NextRequest) {
     !isPublicAsset &&
     !isInvite &&
     !isHealthCheck &&
+    !isAgentRoute &&
     !isPushDispatch &&
     pathname !== "/"
   ) {

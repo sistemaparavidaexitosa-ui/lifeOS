@@ -4,12 +4,14 @@ import { useState, useTransition } from "react";
 import FormSheet, { Field, FormActions } from "../../FormSheet";
 import { upsertIdentityProfile } from "@/lib/identity/actions";
 import type { IdentityProfileLite } from "@/lib/data/identity";
+import type { Principio } from "@/lib/domain/identity/brief.ts";
 
 const INSPIRACIONES = [
   { value: "hill", label: "Napoleon Hill", hint: "Propósito definido, fe aplicada" },
   { value: "goddard", label: "Neville Goddard", hint: "Vivir desde el deseo cumplido" },
   { value: "clear", label: "James Clear", hint: "Cada acción es un voto; sistemas" },
-  { value: "sharma", label: "Robin Sharma", hint: "Mañanas, maestría, mejoras diarias" }
+  { value: "sharma", label: "Robin Sharma", hint: "Mañanas, maestría, mejoras diarias" },
+  { value: "dispenza", label: "Joe Dispenza", hint: "Ensayo mental: el cuerpo lo vive antes" }
 ] as const;
 
 /**
@@ -51,7 +53,7 @@ function Campos({ profile, sugerencias, close }: { profile: IdentityProfileLite 
         visionStatement: vision,
         coreValues: valores.split(",").map((v) => v.trim()),
         motivationalTone: tono,
-        inspirations: inspiraciones as ("hill" | "goddard" | "clear" | "sharma")[]
+        inspirations: inspiraciones as Principio[]
       });
       if (!r.ok) return setError(r.reason ?? "No se pudo guardar.");
       setError(null);

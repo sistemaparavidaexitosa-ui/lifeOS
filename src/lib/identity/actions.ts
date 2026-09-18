@@ -6,6 +6,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/data/session";
 import { actionFailed, actionOk, type ActionResult } from "@/lib/supabase/errors";
+import { PRINCIPIOS } from "@/lib/domain/identity/brief.ts";
 
 const AREAS = ["Salud", "Carrera", "Relaciones", "Finanzas", "Aprendizaje", "Espiritual", "Personal"] as const;
 
@@ -25,7 +26,10 @@ const profileSchema = z.object({
     .transform((xs) => [...new Set(xs.filter(Boolean))])
     .pipe(z.array(z.string()).max(10, "Hasta 10 valores")),
   motivationalTone: z.enum(["sereno", "directo", "intenso"]),
-  inspirations: z.array(z.enum(["hill", "goddard", "clear", "sharma"]))
+  // Del catálogo de `brief.ts` y no de una lista escrita a mano: era el cuarto
+  // sitio con los mismos cuatro nombres, y añadir el quinto (Dispenza) obligó
+  // a tocarlos todos. Ahora este se entera solo.
+  inspirations: z.array(z.enum(PRINCIPIOS))
 });
 
 export type IdentityProfileInput = z.input<typeof profileSchema>;

@@ -5,13 +5,22 @@ import { Card } from "@/components/ui";
 import { reactToBriefItem, regenerateTodayBrief } from "@/lib/identity/brief-actions";
 import type { BriefView, Reaccion } from "@/lib/identity/brief-view";
 import VisualizationPlayer from "./VisualizationPlayer";
-import { IconThumbDown, IconThumbUp } from "@/components/icons";
+import AffirmationGroups from "./AffirmationGroups";
+import MantraCard from "./MantraCard";
+import DailyActionCard from "./DailyActionCard";
 
+/**
+ * Nombrar al autor AQUÍ es correcto y distinto de atribuirle la frase: el pie
+ * dice en qué principios se inspiró un texto original, no quién lo escribió.
+ * Lo que tiene prohibido es aparecer dentro de `quote.text`, y de eso se
+ * encarga `citaAtribuida`.
+ */
 const PRINCIPIO: Record<string, string> = {
   hill: "Napoleon Hill",
   goddard: "Neville Goddard",
   clear: "James Clear",
-  sharma: "Robin Sharma"
+  sharma: "Robin Sharma",
+  dispenza: "Joe Dispenza"
 };
 
 /**
@@ -55,6 +64,8 @@ export default function BriefCard({ initial, traitNames }: { initial: BriefView;
 
   return (
     <div className="flex flex-col gap-3.5" style={{ opacity: pending ? 0.7 : 1, transition: "opacity .2s" }}>
+      <MantraCard mantra={brief.mantra} focusArea={brief.focusArea} />
+
       <Card>
         <div className="flex items-start gap-2">
           <div className="grow min-w-0 flex flex-col gap-1">
@@ -70,56 +81,15 @@ export default function BriefCard({ initial, traitNames }: { initial: BriefView;
           )}
         </div>
 
-        <ul className="flex flex-col gap-2.5 mt-4">
-          {brief.affirmations.map((a) => {
-            const r = brief.reactions[a.id];
-            return (
-              <li key={a.id} className="flex items-start gap-3">
-                <span aria-hidden="true" className="mt-2 rounded-full flex-shrink-0" style={{ width: 6, height: 6, background: "var(--accent)" }} />
-                <div className="grow min-w-0">
-                  <p className="text-sm leading-relaxed" style={{ overflowWrap: "anywhere" }}>
-                    {a.text}
-                  </p>
-                  {a.traitId && traitNames[a.traitId] && (
-                    <span className="text-[11px]" style={{ color: "var(--muted)" }}>
-                      Vota por {traitNames[a.traitId]}
-                    </span>
-                  )}
-                </div>
-                <div className="flex gap-1 flex-shrink-0" role="group" aria-label="¿Te resuena?">
-                  <button
-                    type="button"
-                    className="chip"
-                    aria-pressed={r === "resuena"}
-                    onClick={() => reaccionar(a.id, "resuena")}
-                    style={r === "resuena" ? { background: "color-mix(in srgb, var(--ok) 20%, var(--surface))", color: "var(--text)" } : undefined}
-                    title="Me resuena"
-                  >
-                    <IconThumbUp width={14} height={14} aria-hidden="true" />
-                    <span className="sr-only">Me resuena</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="chip"
-                    aria-pressed={r === "no_resuena"}
-                    onClick={() => reaccionar(a.id, "no_resuena")}
-                    style={r === "no_resuena" ? { background: "color-mix(in srgb, var(--danger) 18%, var(--surface))", color: "var(--text)" } : undefined}
-                    title="No me resuena"
-                  >
-                    <IconThumbDown width={14} height={14} aria-hidden="true" />
-                    <span className="sr-only">No me resuena</span>
-                  </button>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+        <AffirmationGroups brief={brief} traitNames={traitNames} onReact={reaccionar} />
         {error && (
           <p className="text-xs mt-3" role="alert" style={{ color: "var(--danger)" }}>
             {error}
           </p>
         )}
       </Card>
+
+      <DailyActionCard brief={brief} traitNames={traitNames} />
 
       <div className="grid gap-3.5 md:grid-cols-2 items-start">
         <Card>
