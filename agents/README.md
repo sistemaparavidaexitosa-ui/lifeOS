@@ -123,13 +123,19 @@ son 20 segundos. El primer brief de cada mañana —justo el que importa— agot
 el plazo siempre y lo escribiría el respaldo. El agente parecería no funcionar
 estando perfectamente sano: simplemente nunca llegaría a tiempo.
 
-Si quieres el plan gratuito de todas formas, la salida no es subir el plazo
-—nadie espera un minuto mirando un botón— sino **generar el brief de madrugada**
-en vez de al pulsar: el reloj de `/api/push/dispatch` ya corre cada cinco minutos
-y el endpoint `POST /api/agents/manifestation/brief` existe precisamente para
-ese camino asíncrono. A las cuatro de la mañana, que el contenedor tarde un
-minuto en despertar no se lo nota nadie, y por la mañana el botón solo lee una
-fila que ya está escrita. Eso no está implementado todavía.
+**Con la generación de madrugada, el plan `free` vuelve a ser viable.** El reloj
+de `/api/push/dispatch` escribe el brief a las 04:00 locales, cuando no hay nadie
+esperando, así que el minuto de arranque deja de importar: por la mañana abrir Hoy
+solo lee una fila que ya está.
+
+El reloj no le pide nada a un contenedor dormido. Primero llama a `/health` —que
+es barato y no pide secreto— y solo genera si contesta; si no, esa misma llamada
+ya empezó a despertarlo y la siguiente pasada, cinco minutos después, lo encuentra
+listo. La hora entera da doce oportunidades.
+
+Aun así, en `free` el botón «Otro» sigue siendo síncrono y se comería el arranque
+si el contenedor llevaba rato quieto. Con `starter` no pasa ninguna de las dos
+cosas.
 
 En local:
 

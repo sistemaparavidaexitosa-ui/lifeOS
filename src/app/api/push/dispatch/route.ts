@@ -15,7 +15,9 @@ import { claveDelCoach, momentoQueToca, PREFS_POR_DEFECTO } from "@/lib/domain/c
 import { generarYGuardarMensajeDiario } from "@/lib/coach/daily";
 import { proponerAristas } from "@/lib/coach/graph-suggestions";
 import { fuentesDe } from "@/lib/coach/facts";
-import { tocaFotoDeIdentidad } from "@/lib/domain/identity/schedule.ts";
+import { JOB_BRIEF_DEL_DIA, tocaBriefDelDia, tocaFotoDeIdentidad } from "@/lib/domain/identity/schedule.ts";
+import { despertarAgente, generarManifestacion } from "@/lib/identity/manifestacion";
+import { generacionesDeHoy, guardarBrief, MAX_GENERACIONES } from "@/lib/identity/guardar-brief";
 import { medirDia } from "@/lib/domain/identity/estilo.ts";
 import { completionRate } from "@/lib/domain/development/habit-analytics.ts";
 import { loadScoreContext, scoreOf } from "@/lib/identity/score-inputs";
@@ -82,12 +84,13 @@ export async function POST(request: Request) {
   const identidad = await despacharIdentidad(supabase, ahora, inicio);
   const estilo = await despacharEstilo(supabase, ahora, inicio);
   const insights = await despacharInsightsHabitos(supabase, ahora, inicio);
+  const briefs = await despacharBriefs(supabase, ahora, inicio);
   const reintentos = await reintentarPendientes(supabase);
 
   // «creados» y «entregados» se cuentan aparte a propósito: sin ningún
   // dispositivo suscrito se crean avisos que no se entregan, y mezclarlo
   // haría parecer que el reloj no hizo nada.
-  return NextResponse.json({ ok: true, recordatorios, vencimientos, coach, identidad, estilo, insights, entregados: reintentos });
+  return NextResponse.json({ ok: true, recordatorios, vencimientos, coach, identidad, estilo, insights, briefs, entregados: reintentos });
 }
 
 type Admin = ReturnType<typeof createAdminClient>;
@@ -685,4 +688,129 @@ async function despacharEstilo(supabase: Admin, ahora: Date, inicio: number): Pr
     }
   }
   return medidos;
+}
+
+/** Briefs por pasada: cada uno es una llamada al modelo de varios segundos. */
+const LOTE_BRIEFS = 3;
+/** Pasado esto no se empieza otro: los reintentos de la bandeja van detrás. */
+const PRESUPUESTO_BRIEFS_MS = 35_000;
+
+/**
+ * EL BRIEF, ESCRITO ANTES DE QUE LO PIDAN.
+ *
+ * Nació de un problema de despliegue y acabó siendo mejor producto. El agente
+ * vive en un servicio que, en los planes baratos, se apaga solo y tarda cerca de
+ * un minuto en despertar. El presupuesto del botón son veinte segundos, así que
+ * el primer brief de cada mañana —justo el que importa— lo escribía siempre el
+ * respaldo: el agente parecía roto estando sano.
+ *
+ * Escribiéndolo a las cuatro de la madrugada, el arranque en frío deja de
+ * importar porque no hay nadie esperando, y por la mañana abrir Hoy no cuesta ni
+ * una llamada al modelo: la fila ya está. El botón «Otro» sigue siendo síncrono,
+ * que es lo correcto — ahí sí hay alguien mirando.
+ *
+ * TRES GUARDAS, y las tres hacen falta:
+ *
+ *  1. **No se le pide nada a un agente dormido.** Primero `/health`, que es
+ *     barato y no pide secreto. Si no contesta, esa misma llamada ya empezó a
+ *     despertarlo y la siguiente pasada —cinco minutos después— lo encontrará
+ *     listo. La hora entera da doce oportunidades.
+ *  2. **Un intento por persona y día**, con la fila de `ai_job_runs` escrita
+ *     ANTES de llamar al modelo. Sin esto, doce pasadas fallidas agotarían el
+ *     tope de tres generaciones diarias y la persona no podría ni generarlo a
+ *     mano: el arreglo automático le habría quitado el manual.
+ *  3. **Si ya hay brief de hoy, no se toca.** Quien madrugó más que el reloj ya
+ *     tiene el suyo.
+ *
+ * Nunca lanza: un perfil que falle no puede dejar a los demás sin brief.
+ */
+async function despacharBriefs(supabase: Admin, ahora: Date, inicio: number): Promise<number> {
+  if (Date.now() - inicio > PRESUPUESTO_BRIEFS_MS) return 0;
+
+  const { data: perfiles } = await supabase.from("profiles").select("user_id, timezone").limit(1000);
+  if (!perfiles?.length) return 0;
+
+  // El estado del agente se consulta UNA vez por pasada y no por persona: es el
+  // mismo contenedor para todos, y doce llamadas a `/health` seguidas solo
+  // gastarían el presupuesto.
+  let estado: Awaited<ReturnType<typeof despertarAgente>> | null = null;
+
+  let escritos = 0;
+  for (const perfil of perfiles) {
+    if (escritos >= LOTE_BRIEFS || Date.now() - inicio > PRESUPUESTO_BRIEFS_MS) break;
+
+    const zona = perfil.timezone && isValidTimeZone(perfil.timezone) ? perfil.timezone : DEFAULT_TIMEZONE;
+    if (!tocaBriefDelDia(timeInTimeZone(zona, ahora))) continue;
+    const hoy = todayInTimeZone(zona, ahora);
+
+    try {
+      const { data: yaEsta } = await supabase
+        .from("identity_briefs")
+        .select("local_date")
+        .eq("user_id", perfil.user_id)
+        .eq("local_date", hoy)
+        .maybeSingle();
+      if (yaEsta) continue;
+
+      if (estado === null) estado = await despertarAgente();
+      // Dormido: no se escribe guarda ni se gasta intento. Se vuelve en cinco
+      // minutos, con el contenedor ya en pie por esta misma llamada.
+      if (estado === "durmiendo") return escritos;
+
+      const hechas = await generacionesDeHoy(supabase, perfil.user_id, hoy);
+      if (hechas >= MAX_GENERACIONES) continue;
+
+      // La guarda va ANTES del modelo. Si otra pasada ganó la carrera, el insert
+      // choca con la clave primaria y esta se retira.
+      const { error: guarda } = await supabase.from("ai_job_runs").insert({
+        user_id: perfil.user_id,
+        job: JOB_BRIEF_DEL_DIA,
+        local_date: hoy,
+        outcome: "en_curso"
+      });
+      if (guarda) continue;
+
+      const resultado = await generarManifestacion({
+        supabase,
+        userId: perfil.user_id,
+        today: hoy,
+        timeZone: zona,
+        sources: await fuentesDe(supabase, perfil.user_id),
+        modo: "servicio"
+      });
+
+      if (!resultado.ok) {
+        // Sin identidad declarada o con la IA apagada. No es un fallo del
+        // sistema y no merece reintento: es una elección de esa persona.
+        await supabase
+          .from("ai_job_runs")
+          .update({ outcome: resultado.reason.slice(0, 200) })
+          .eq("user_id", perfil.user_id)
+          .eq("job", JOB_BRIEF_DEL_DIA)
+          .eq("local_date", hoy);
+        continue;
+      }
+
+      const guardado = await guardarBrief({
+        supabase,
+        userId: perfil.user_id,
+        today: hoy,
+        producido: { ...resultado.producido, meta: { ...resultado.producido.meta, origen: "nocturno" } },
+        hechas,
+        reemplaza: false
+      });
+
+      await supabase
+        .from("ai_job_runs")
+        .update({ outcome: guardado.ok ? `hecho:${resultado.producido.generator}` : "fallido" })
+        .eq("user_id", perfil.user_id)
+        .eq("job", JOB_BRIEF_DEL_DIA)
+        .eq("local_date", hoy);
+
+      if (guardado.ok) escritos++;
+    } catch {
+      continue;
+    }
+  }
+  return escritos;
 }
