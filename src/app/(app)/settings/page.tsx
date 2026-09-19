@@ -11,6 +11,9 @@ import PushNotifications from "./PushNotifications";
 import type { ActionType, TriggerType } from "@/lib/domain/automations/rules.ts";
 import { getSessionUser } from "@/lib/data/session";
 import { isPlatformAdmin } from "@/lib/data/templates";
+import { loadRitualPolicy, loadRitualPreference } from "@/lib/data/ritual";
+import { pasosOfrecibles } from "@/lib/domain/ritual/policy.ts";
+import RitualPrefs from "./RitualPrefs";
 
 export default async function SettingsPage() {
   const supabase = await createClient();
@@ -47,6 +50,7 @@ export default async function SettingsPage() {
   // usar: /admin devuelve 404 a los demás, así que enseñar el enlace a todo el
   // mundo sería ofrecer una puerta que no abre.
   const esAdmin = await isPlatformAdmin();
+  const [ritualPolicy, ritualPref] = await Promise.all([loadRitualPolicy(), loadRitualPreference()]);
 
   const automations: AutomationRow[] = (automationRows ?? []).map((r) => ({
     id: r.id,
@@ -164,6 +168,33 @@ export default async function SettingsPage() {
         </div>
       </Card>
 
+      {/*
+        El arranque guiado (D-165). La tarjeta no existe mientras la política
+        esté apagada: ofrecer un interruptor para algo que el administrador no
+        ha encendido es ofrecer una puerta que no abre. El administrador sí la
+        ve, con el enlace a donde se enciende.
+      */}
+      {ritualPolicy.enabled ? (
+        <Card>
+          <h3 className="font-bold mb-2">Arranque del día</h3>
+          <RitualPrefs pref={ritualPref} ofrecidos={pasosOfrecibles(ritualPolicy)} iaOfrecida={ritualPolicy.aiEnabled} />
+        </Card>
+      ) : (
+        esAdmin && (
+          <Card>
+            <h3 className="font-bold mb-2">Arranque del día</h3>
+            <p className="text-xs" style={{ color: "var(--muted)" }}>
+              Está apagado para todo el mundo. Se enciende desde administración.
+            </p>
+            <div className="flex gap-1.5 flex-wrap" style={{ marginTop: 10 }}>
+              <Link href="/admin/ritual" className="btn-ghost btn-sm">
+                Configurar el arranque guiado
+              </Link>
+            </div>
+          </Card>
+        )
+      )}
+
       {esAdmin && (
         <Card>
           <h3 className="font-bold mb-2">Administración</h3>
@@ -175,6 +206,9 @@ export default async function SettingsPage() {
           <div className="flex gap-1.5 flex-wrap" style={{ marginTop: 10 }}>
             <Link href="/admin" className="btn-ghost btn-sm">
               Catálogo de plantillas
+            </Link>
+            <Link href="/admin/ritual" className="btn-ghost btn-sm">
+              Arranque guiado
             </Link>
           </div>
         </Card>

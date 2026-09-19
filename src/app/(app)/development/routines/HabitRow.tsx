@@ -1,38 +1,11 @@
 "use client";
 
-import { useEffect, useState, useTransition, type ReactNode } from "react";
-import { toggleHabitToday } from "./actions";
+import { useEffect, useState, type ReactNode } from "react";
+import HabitCheckbox from "@/components/habits/HabitCheckbox";
 import FoodSearchForm from "../nutrition/FoodSearchForm";
 import HabitLogSheet from "./HabitLogSheet";
 import type { Meal } from "@/lib/domain/development/nutrition.ts";
 import type { HabitLogEntry } from "@/lib/domain/development/habit-analytics.ts";
-
-/**
- * Cómo se pinta la casilla según el registro de hoy (0063). Omitido y
- * pospuesto no se ven como vacíos: la persona ya dijo algo sobre el día, y una
- * casilla en blanco le pediría decirlo otra vez.
- */
-function casilla(entry: HabitLogEntry | null): { borde: string; fondo: string; color: string; marca: string; etiqueta: string } {
-  if (!entry) return { borde: "var(--line)", fondo: "transparent", color: "inherit", marca: "", etiqueta: "Marcar como cumplido" };
-  if (entry.status === "skipped") {
-    return { borde: "var(--danger)", fondo: "transparent", color: "var(--danger)", marca: "–", etiqueta: "Omitido hoy. Tocar para marcar como cumplido" };
-  }
-  if (entry.status === "postponed") {
-    return { borde: "var(--warn)", fondo: "transparent", color: "var(--warn)", marca: "→", etiqueta: "Sin oportunidad hoy. Tocar para marcar como cumplido" };
-  }
-  if (entry.pct < 100) {
-    // Parcial: el anillo se llena hasta el porcentaje, el mismo `conic-gradient`
-    // que usan los anillos de metas y ahorro.
-    return {
-      borde: "transparent",
-      fondo: `conic-gradient(var(--ok) ${entry.pct}%, var(--surface2) 0)`,
-      color: "var(--text)",
-      marca: `${entry.pct}`,
-      etiqueta: `Hecho al ${entry.pct} %. Tocar para desmarcar`
-    };
-  }
-  return { borde: "var(--ok)", fondo: "var(--ok)", color: "#fff", marca: "✓", etiqueta: "Marcar como no cumplido" };
-}
 
 /**
  * Fila de hábito. En móvil la racha ya no compite por la primera línea con el
@@ -78,7 +51,6 @@ export default function HabitRow({
   /** Botón de edición: viaja desde el Server Component para vivir en la fila. */
   action?: ReactNode;
 }) {
-  const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   // El registro de hoy vive también en estado local: el toque se pinta con lo
   // que devuelve la acción, sin depender de que la página se vuelva a pedir.
@@ -88,7 +60,6 @@ export default function HabitRow({
     setEntry(todayEntry);
   }, [todayEntry?.status, todayEntry?.pct, todayEntry?.note]); // eslint-disable-line react-hooks/exhaustive-deps
   const doneToday = entry?.status === "completed";
-  const c = casilla(entry);
   const unidad = streakUnit === "semana" ? (streak === 1 ? "semana" : "semanas") : streak === 1 ? "día" : "días";
   const streakChip = (
     <span className={`chip ${streak > 0 ? "ok" : ""}`}>
@@ -98,29 +69,16 @@ export default function HabitRow({
 
   return (
     <div className="flex items-start gap-3 py-2.5" style={{ borderBottom: "1px solid var(--line)" }}>
-      <button
-        className="rounded-full grid place-items-center flex-shrink-0 text-[11px] font-bold"
-        style={{
-          width: 34,
-          height: 34,
-          border: `2px solid ${c.borde}`,
-          background: c.fondo,
-          color: c.color
+      <HabitCheckbox
+        routineId={routineId}
+        habitId={habit.id}
+        today={today}
+        entry={entry}
+        onResult={(nuevo, err) => {
+          setEntry(nuevo);
+          setError(err);
         }}
-        disabled={pending}
-        onClick={() =>
-          startTransition(async () => {
-            const r = await toggleHabitToday(routineId, habit.id);
-            setError(r.ok ? null : r.reason ?? "No se pudo guardar.");
-            if (r.ok && r.entry !== undefined) {
-              setEntry(r.entry ? { date: today, status: r.entry.status, pct: r.entry.pct, note: entry?.note, mood: entry?.mood, energy: entry?.energy } : null);
-            }
-          })
-        }
-        aria-label={c.etiqueta}
-      >
-        {c.marca}
-      </button>
+      />
 
       <div className="grow min-w-0 flex flex-col gap-1">
         <b style={{ overflowWrap: "anywhere" }}>{habit.name}</b>

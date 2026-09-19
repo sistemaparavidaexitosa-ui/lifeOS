@@ -2908,3 +2908,88 @@ implementa:
     `pnpm verify` no cubre Python —cubre entero el camino del respaldo, que es
     lo único que garantiza que la persona recibe un brief—. Y hay un segundo
     despliegue y un segundo CI que mantener.
+
+- **D-165 · El arranque guiado es una proyección, no contenido guardado.** La
+  capa premium que conduce la mañana —saludo, identidad, el siguiente hábito
+  pendiente, el contexto del día, el paso a ejecución— se calcula en cada
+  apertura a partir de rutinas, `habit_logs` de hoy, `identity_briefs`,
+  `daily_plans` y las cifras que ya arma `getHomeData`. Se descartó una tabla
+  `ritual_steps` donde el administrador compusiera la secuencia, y el motivo
+  ordena todo lo demás: **una secuencia guardada miente en cuanto los datos
+  cambian**. El paso «toma agua» seguiría ahí el día que se borra ese hábito, y
+  seguiría ahí a las once de la mañana cuando ya se lo tomó. Lo que el
+  administrador configura no es el contenido sino **qué tipos de paso están
+  permitidos**, en qué ventana horaria y con qué frecuencia; el orden es
+  narrativo y lo fija el dominio. Consecuencia que nadie debe «arreglar»: un día
+  sin hábitos pendientes, sin brief y sin tareas no produce ritual —
+  `hayContenido()` devuelve `false` y el overlay no se monta. Un saludo solo no
+  es un ritual.
+  - **La regla dura, y por qué es una conjunción.** El usuario puede apagar lo
+    que el administrador encendió, NUNCA al revés. `resolverAjustes()` es una
+    conjunción monótona (`enabled = p ∧ f`, `steps = p.steps \ f.stepsOff`), y
+    serlo es lo que la hace demostrable con una prueba de propiedad sobre una
+    matriz de combinaciones en vez de con una lista de casos que siempre deja
+    uno fuera. La forma de la tabla ya impide la mitad prohibida: `ritual_prefs`
+    tiene `steps_off`, no `steps_on`. Y `/settings` no pinta los interruptores de
+    los pasos que la política no ofrece — un interruptor que no puede encender
+    nada es una promesa rota en pantalla. Sin segmentación por rol ni por
+    segmento: una fila global y una preferencia por persona.
+  - **Nace apagada.** `ritual_policy.enabled` se siembra en `false`: desplegar la
+    migración 0068 no le cambia la mañana a nadie, y hasta que un administrador
+    la encienda la puerta del layout cuesta una lectura de una tabla de una fila.
+  - **«Ya visto hoy» va en tabla, no en cookie ni en `profiles`.** La cookie no
+    sobrevive a otro navegador —el ritual reaparecería a las 23:00 en el teléfono
+    tras haberlo hecho a las 6:00 en el portátil— y no deja al servidor responder
+    «¿se terminó?». Una columna en `profiles` pierde la distinción entre terminar
+    y omitir y abre la puerta a que cada feature futura cuelgue ahí su marca
+    diaria. `ritual_runs` es la forma que el repo ya conoce (`routine_runs`), cae
+    con `on delete cascade` y da adherencia gratis. Se escribe al MONTAR, no al
+    cerrar: «primera sesión del día» es literalmente lo pedido, y el coste —abrir
+    y cerrar la pestaña consume el arranque— se mitiga con un botón de repetir.
+  - **El brief que falta usa el respaldo que ya existe, y no bloquea.** Si no hay
+    fila de hoy en `identity_briefs`, el ritual dispara el camino de siempre
+    (`generarManifestacion()` → agente Python → respaldo `generar.ts` →
+    `guardarBrief()`, que sigue siendo el único escritor y el único que cuenta el
+    tope de tres al día). No se espera a que resuelva: el overlay monta con
+    saludo, rutina, contexto y plan, y cuando el brief llega el cliente vuelve a
+    llamar a `construirSecuencia()` —que es pura y corre igual en el navegador—
+    para insertar los pasos de identidad en su sitio. El saludo a pantalla
+    completa ES el presupuesto de latencia, y es gratis. Guarda propia en
+    `ritual_runs.brief_attempted`, distinta de la del reloj de las 04:00: un
+    intento por persona y día, pase lo que pase.
+  - **El tema se decide por la hora local del perfil.** Blanco con texto negro de
+    día, invertido en `[19, 7)`, con el mismo reloj que `todayForUser()`. No
+    `prefers-color-scheme`, que daría un ritual oscuro a mediodía en un portátil
+    con el sistema en oscuro — lo contrario de lo pedido. No `data-theme` del
+    `<html>`: se redefinen tokens con ámbito en `.rit-shell`, el precedente
+    exacto de `.gr-shell` del Execution Graph, y la app de debajo conserva su
+    tema sin parpadear al cerrar.
+  - **Se monta en el layout de `(app)`, no en cada pantalla ni como ruta.** El
+    ritual dispara en la primera sesión del día sea cual sea la pantalla que se
+    abrió, y ese layout es el único ancestro que las envuelve a todas — el mismo
+    argumento que ya lleva escrito para `CommandPalette`. Un redirect a `/ritual`
+    rompería los enlaces profundos y ensuciaría el historial. Cuesta una consulta
+    más por carga, servida por la RPC `ritual_gate()` en un solo viaje.
+  - **Correcciones que encontró la prueba de navegador, y que nadie debe
+    «simplificar» de vuelta.** (1) El respaldo del brief va por
+    `POST /api/ritual/brief` y NO como Server Action: Next ejecuta en fila las
+    Server Actions de un cliente, y con el agente sin contestar, marcar el hábito
+    esperaba detrás del modelo; por `fetch` responde en menos de un segundo.
+    (2) La guarda del respaldo es `ritual_runs.brief_attempted` y no
+    `ai_job_runs`, que está cerrada a `authenticated` y habría exigido
+    `service_role` en un camino de usuario. (3) El overlay vive en `RitualHost`,
+    que engancha el primer contenido: la revalidación que provoca marcar un
+    hábito repintaba el layout, la puerta veía «ya visto» y desmontaba el ritual a
+    mitad. «Ya visto» decide MONTAR, no desmontar. (4) La hora decide la rutina:
+    no se propone una cuyo bloque ya terminó ni una que empieza a más de tres
+    horas (`HORIZONTE_RUTINA_MIN`).
+  - **Sin estadísticas de uso en el panel de administración.** `ritual_runs` es
+    privada por persona y `is_admin` es un privilegio de contenido, no de datos
+    (hay una prueba pgTAP que lo fija). Un panel que contara quién omite el
+    ritual abriría justo esa puerta.
+  - **Lo que no se crea.** Ningún `<Dialog>` genérico: `MenuSurface` resuelve otra
+    cosa y generalizar con un solo consumidor produce una abstracción que el
+    segundo tendrá que romper. Ningún segundo calendario de días hábiles:
+    `frequency` reutiliza los cuatro valores de `routines.frequency` y
+    `routineDueToday()`. Ninguna notificación push propia: 0049 ya es dueño de
+    los avisos y el coach ya tiene su hora matutina.

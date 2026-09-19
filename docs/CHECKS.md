@@ -1767,3 +1767,71 @@ Zona horaria restaurada y filas de prueba borradas al terminar.
   la da como `local: 0067, remote: <vacío>`. Hasta que se haga `pnpm db:push`,
   cualquier despliegue del PR tiene el brief roto: `loadContextoDelBrief`
   consulta `identity_brief_style`, que allí todavía no existe.
+
+## Arranque guiado (D-165, migración 0068) — 19-sep-2026
+
+Lo que **se ejecutó de verdad** en esta máquina, con su salida:
+
+| Comprobación | Comando | Resultado |
+|---|---|---|
+| Cadena completa | `pnpm verify` | ✅ código de salida 0 |
+| Tipos | `pnpm typecheck` | ✅ sin errores |
+| Lint | `pnpm lint` | ✅ sin avisos |
+| Unitarias | `pnpm test:unit` | ✅ **1158 pass / 0 fail** (eran 1080; +78: 65 de dominio y 13 de DOM) |
+| Build | `pnpm build` | ✅ compila; `/admin/ritual` y `/api/ritual/brief` presentes |
+| Migraciones + RLS | `supabase db reset` + `supabase test db` | ✅ **42 archivos, 409 pruebas, PASS** — 0068 aplicada desde cero |
+| Tipos generados | `pnpm gen:types:local` | ✅ `ritual_policy`, `ritual_prefs`, `ritual_runs`, `ritual_gate` |
+
+Esta vez **sí** se corrió `pnpm verify` entero, y por tanto `supabase db reset`:
+antes se comprobó que la base local solo tenía las cuentas de la semilla.
+
+TDD de verdad en el dominio: cada archivo de `tests/domain/ritual-*.test.ts` y
+`tests/dom/ritual-focus-dom.test.ts` se vio **fallar** antes de escribir su
+módulo. El de foco cazó en rojo un `instanceof HTMLInputElement` que solo
+funciona en el realm principal.
+
+### Recorrido real en navegador (Chromium headless contra `pnpm build && pnpm start`)
+
+Guion de Playwright, usuario `luis.demo`, política encendida por SQL. Para el
+camino lento del respaldo, el servidor se arrancó con
+`MANIFESTATION_AGENT_URL` apuntando a una IP que no contesta. **28 de 28**
+comprobaciones en verde:
+
+- El overlay aparece en la primera carga; saludo «Buenas tardes, Luis.» con el
+  nombre de pila; fondo `rgb(255,255,255)`; el foco empieza en el titular; ocho
+  Tab no se escapan del overlay.
+- Marcar el hábito lo pone verde (`rgb(0,200,117)`) en **~850 ms mientras el
+  respaldo del brief sigue esperando al agente**, y la fila queda en
+  `habit_logs`.
+- Termina en «¿Qué quieres hacer hoy?». Escape cierra y queda `skipped = true`
+  con el total de pasos guardado. Recargar no lo vuelve a mostrar.
+- «Repetir el arranque de hoy» en `/development/routines` lo reabre; «Ahora no»
+  lo cierra.
+- A 400 px: desborde horizontal 0. Con la zona horaria del perfil en
+  `Asia/Tokyo` (04:xx) el tema es «oscuro».
+- A las 13:xx la rutina del demo, anclada a 20:30–21:00, **no** se propone.
+- Política apagada → no aparece nada y la app no queda `inert`. Preferencia del
+  usuario apagada → no aparece. La tarjeta de Configuración y el panel
+  `/admin/ritual` se pintan. Cero errores de JavaScript en consola.
+
+Esa prueba **encontró cinco fallos reales** que las unitarias no podían ver, y
+todos están corregidos y documentados en el spec («Lo que cambió al
+implementarlo») y en D-165: la cola de Server Actions de Next, el overlay que se
+desmontaba al revalidar, el paso que desaparecía al marcar el hábito, el
+`steps_total` que se quedaba en cero por una carrera, y la rutina de la noche
+propuesta por la mañana. El guion vive fuera del repo (no hay Playwright en
+`devDependencies`, D-008) y no forma parte de `pnpm verify`.
+
+### Lo que NO se ha ejercitado, y hay que saberlo
+
+- **Ningún brief real generado desde el ritual.** No hay `GEMINI_API_KEY` en
+  local: se probó que el respaldo se dispara, no bloquea y se marca una sola vez,
+  pero no que su resultado aparezca insertado en la secuencia en vivo. Esa rama
+  (`setBrief` + recálculo) está cubierta por `ritual-secuencia.test.ts` en el
+  dominio, no en el navegador.
+- **WebKit / iPhone.** Solo Chromium de escritorio. No se ha visto en Safari ni
+  con el teclado de iOS.
+- **Lectores de pantalla reales.** El foco y `aria-modal` están probados en jsdom
+  y en Chromium; nadie lo ha escuchado con VoiceOver o NVDA.
+- **Producción.** La migración 0068 no está aplicada en la nube y nada de esto
+  está desplegado.

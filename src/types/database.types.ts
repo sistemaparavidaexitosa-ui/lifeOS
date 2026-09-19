@@ -2974,6 +2974,111 @@ export type Database = {
         }
         Relationships: []
       }
+      ritual_policy: {
+        Row: {
+          ai_enabled: boolean
+          blocking: boolean
+          enabled: boolean
+          frequency: string
+          id: boolean
+          max_routine_steps: number
+          steps: string[]
+          updated_at: string
+          updated_by: string | null
+          window_end: number
+          window_start: number
+        }
+        Insert: {
+          ai_enabled?: boolean
+          blocking?: boolean
+          enabled?: boolean
+          frequency?: string
+          id?: boolean
+          max_routine_steps?: number
+          steps?: string[]
+          updated_at?: string
+          updated_by?: string | null
+          window_end?: number
+          window_start?: number
+        }
+        Update: {
+          ai_enabled?: boolean
+          blocking?: boolean
+          enabled?: boolean
+          frequency?: string
+          id?: boolean
+          max_routine_steps?: number
+          steps?: string[]
+          updated_at?: string
+          updated_by?: string | null
+          window_end?: number
+          window_start?: number
+        }
+        Relationships: []
+      }
+      ritual_prefs: {
+        Row: {
+          ai_enabled: boolean
+          created_at: string
+          enabled: boolean
+          steps_off: string[]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ai_enabled?: boolean
+          created_at?: string
+          enabled?: boolean
+          steps_off?: string[]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ai_enabled?: boolean
+          created_at?: string
+          enabled?: boolean
+          steps_off?: string[]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      ritual_runs: {
+        Row: {
+          brief_attempted: boolean
+          completed_at: string | null
+          last_step: string
+          local_date: string
+          skipped: boolean
+          started_at: string
+          steps_done: number
+          steps_total: number
+          user_id: string
+        }
+        Insert: {
+          brief_attempted?: boolean
+          completed_at?: string | null
+          last_step?: string
+          local_date: string
+          skipped?: boolean
+          started_at?: string
+          steps_done?: number
+          steps_total?: number
+          user_id: string
+        }
+        Update: {
+          brief_attempted?: boolean
+          completed_at?: string | null
+          last_step?: string
+          local_date?: string
+          skipped?: boolean
+          started_at?: string
+          steps_done?: number
+          steps_total?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       routine_runs: {
         Row: {
           completed_at: string | null
@@ -3788,6 +3893,23 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      ritual_gate: {
+        Args: { p_date: string }
+        Returns: {
+          ai_enabled: boolean
+          blocking: boolean
+          frequency: string
+          max_routine_steps: number
+          policy_enabled: boolean
+          pref_ai: boolean
+          pref_enabled: boolean
+          pref_steps_off: string[]
+          run_exists: boolean
+          steps: string[]
+          window_end: number
+          window_start: number
+        }[]
       }
       search_notes: {
         Args: { p_query: string; p_workspace_id: string }

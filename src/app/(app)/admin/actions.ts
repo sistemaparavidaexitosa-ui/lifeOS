@@ -19,12 +19,13 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { getSessionUser } from "@/lib/data/session";
-import { isPlatformAdmin } from "@/lib/data/templates";
+import { exigirAdmin as exigirAdminCon } from "@/lib/admin/guard";
 import { TEMPLATE_SCHEMA_BY_KIND, TEMPLATE_KINDS, slugSchema, type TemplateKind } from "@/lib/domain/templates/schema.ts";
 import { actionFailed, type ActionResult } from "@/lib/supabase/errors";
 
 const kindSchema = z.enum(TEMPLATE_KINDS);
+
+const exigirAdmin = () => exigirAdminCon("Solo un administrador puede editar el catálogo de plantillas.");
 
 /**
  * Las pantallas que muestran el catálogo, para repintarlas al publicar.
@@ -37,15 +38,6 @@ const PANTALLAS: Record<TemplateKind, string[]> = {
   routine: ["/development/routines", "/development"],
   habit: ["/development/habits", "/development"]
 };
-
-async function exigirAdmin(): Promise<{ userId: string } | { error: ActionResult }> {
-  const user = await getSessionUser();
-  if (!user) return { error: { ok: false, reason: "Tu sesión expiró. Vuelve a iniciar sesión." } };
-  if (!(await isPlatformAdmin())) {
-    return { error: { ok: false, reason: "Solo un administrador puede editar el catálogo de plantillas." } };
-  }
-  return { userId: user.id };
-}
 
 function repintar(kind: TemplateKind) {
   revalidatePath("/admin");

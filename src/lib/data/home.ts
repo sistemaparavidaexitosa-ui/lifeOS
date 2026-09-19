@@ -105,6 +105,11 @@ export async function getHomeData(userId: string) {
     )
   );
   const budgetRemaining = budgetRows.reduce((sum, r) => sum + Math.max(0, r.remaining), 0);
+  // «Te quedan $0» y «no tienes presupuesto» son cosas distintas y con un solo
+  // número no se distinguen. Home no lo necesitaba —pinta la cifra y ya—, pero
+  // el arranque guiado sí: sin esto inventaría un presupuesto agotado para quien
+  // nunca configuró ninguno, que es justo lo que prohíbe el guardrail NO-MOCK.
+  const hasBudget = budgetRows.length > 0;
 
   const impactTasks = allTasks.filter((t) => t.impact && t.status !== "Completed" && t.status !== "Cancelled").slice(0, 3);
   const overdueCount = allTasks.filter((t) => effectiveStatus({ status: t.status, due: t.due }, t0) === "Overdue").length;
@@ -159,6 +164,7 @@ export async function getHomeData(userId: string) {
     liquidity,
     periodStats: stats,
     budgetRemaining,
+    hasBudget,
     saturation,
     reminders: reminders.map((r) => ({ ...r, subjectTitle: titleById.get(r.subjectId) ?? null })),
     todayISO: t0,
