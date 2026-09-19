@@ -4003,6 +4003,13 @@ textarea:focus {
   .rit-shell .rit-title {
     font-size: clamp(2.25rem, 9vw, 3rem) !important;
   }
+  /* Misma trampa con los grupos del centro: la regla móvil general baja todo
+     `h3` a 1.02rem, y el titular de grupo quedaba del mismo tamaño que sus
+     destinos — es decir, dejaba de ser un titular. */
+  .rit-shell .rit-centro-grupo {
+    font-size: 1.375rem !important;
+    margin-top: 6px;
+  }
 }
 
 .rit-lead {

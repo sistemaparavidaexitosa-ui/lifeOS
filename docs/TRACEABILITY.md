@@ -80,3 +80,16 @@ uno de ellos.
 | Respaldo del brief sin bloquear, un intento al día | `ritual_runs.brief_attempted`; `identity_briefs` vía `guardarBrief` | sesión; `ritual_runs_own` | `POST /api/ritual/brief` → `generateTodayBrief` | — | recorrido de navegador con el agente en un agujero negro (✅) |
 | Blanco de día, invertido de noche, por hora local | — | — | — | `.rit-shell[data-ritual-theme]` en `globals.css` | `tests/domain/ritual-tema.test.ts` (4, ✅) · recorrido de navegador (✅) |
 | Accesible con teclado y lector de pantalla | — | — | — | `src/lib/dom/ritual-focus.ts` | `tests/dom/ritual-focus-dom.test.ts` (13, ✅) |
+
+## Navegación premium (D-166, migración 0069)
+
+| Requisito | Tablas | RLS / GRANT | Server Actions y rutas | UI | Pruebas |
+|---|---|---|---|---|---|
+| El modo es de cada persona y la sigue entre dispositivos | `ritual_prefs.nav_mode` | `ritual_prefs_own`; `check (nav_mode in ('premium','habitual'))` | `setNavMode(modo)` | `CentroPremium` (pie), `ActivarPremium` (Home) | `supabase/tests/0042_navegacion_premium.sql` (6 assertions, ✅) |
+| Sin elección previa, premium | — | `coalesce(f.nav_mode,'premium')` en `ritual_gate` | — | — | pgTAP 0042 (✅) · `centro-apertura.test.ts` (✅) |
+| Se abre al empezar la visita en Home, no en cada navegación ni sobre un enlace directo | — | — | — | `RitualHost` (`sessionStorage`) | `tests/domain/centro-apertura.test.ts` (7, ✅) · navegador (✅) |
+| El centro enseña lo siguiente, las cifras del día y todos los módulos | lee lo de D-165 | la RLS de cada tabla | `GET /api/centro` | `CentroPremium.tsx` | `centro-componer.test.ts` (9, ✅) · `centro-destinos.test.ts` (8, ✅) |
+| Una sola lista de destinos, la del menú | — | — | — | `destinosDelCentro(NAV_ITEMS)` | `centro-destinos.test.ts` compara con `NAV_ITEMS` real (✅) |
+| Siempre se puede salir y volver | `ritual_prefs.nav_mode` | — | `setNavMode` | «Navegación habitual» · `BotonCentro` · `ActivarPremium` | navegador: persiste tras recargar y en contexto nuevo (✅) |
+| La secuencia de la mañana termina en el centro | `ritual_runs` | — | — | `RitualOverlay alCentro` | navegador (✅) |
+| El coste no crece en cada clic | — | — | `ritual_gate` con una columna más; contenido por ruta | — | revisión del código; sin prueba automática de rendimiento |
