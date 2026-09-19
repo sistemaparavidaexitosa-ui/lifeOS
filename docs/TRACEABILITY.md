@@ -66,3 +66,17 @@ Contrato entre lenguajes: `agents/contract/brief.example.json` lo validan **los
 dos lados** (`tests/domain/identity-payload.test.ts` y
 `agents/tests/test_manifestation_models.py`), así que una deriva pone en rojo a
 uno de ellos.
+
+
+## Arranque guiado (D-165, migración 0068)
+
+| Requisito | Tablas | RLS / GRANT | Server Actions y rutas | UI | Pruebas |
+|---|---|---|---|---|---|
+| Política global editable solo por el administrador; nace apagada | `ritual_policy` (fila única, sin dueño) | `select` con sesión; `insert`/`update`/`delete` solo `is_admin()`; `revoke all from anon` | `updateRitualPolicy` (triple defensa con `exigirAdmin`) | `/admin/ritual` (`RitualPolicyForm.tsx`) | `supabase/tests/0041_arranque_guiado.sql` (19 assertions, ✅) |
+| El usuario apaga lo que el admin encendió, **nunca al revés** | `ritual_prefs` (`steps_off`, no `steps_on`) | `ritual_prefs_own` | `updateRitualPrefs` | `settings/RitualPrefs.tsx` (solo pinta `pasosOfrecibles`) | `tests/domain/ritual-policy.test.ts` (prueba de propiedad sobre 400 combinaciones, ✅) |
+| Primera sesión del día, dentro de ventana y frecuencia | `ritual_runs` (PK `user_id, local_date`) | `ritual_runs_own`; `ritual_gate()` es `security invoker` | `startRitual`,`advanceRitual`,`skipRitual`,`completeRitual` | `components/ritual/RitualGate.tsx` en `(app)/layout.tsx` | `tests/domain/ritual-decidir.test.ts` (11, ✅) · recorrido de navegador, ver CHECKS.md |
+| La secuencia se calcula de datos reales; ningún paso sin dato; la hora decide la rutina | — (lee `routines`,`habits`,`habit_logs`,`occupations`,`identity_briefs`,`daily_plans`, dinero) | la RLS de cada tabla | `loadRitualContent` (`src/lib/data/ritual.ts`), `loadRoutinesForToday` | `RitualOverlay.tsx`,`RitualStep.tsx` | `tests/domain/ritual-secuencia.test.ts` (27, ✅) · `ritual-contexto.test.ts` (11, ✅) |
+| Marcar el hábito con la acción de siempre | `habit_logs` | `habit_logs` de siempre | `toggleHabitToday` (sin duplicar) | `components/habits/HabitCheckbox.tsx` (extraída de `HabitRow`) | recorrido de navegador (✅) |
+| Respaldo del brief sin bloquear, un intento al día | `ritual_runs.brief_attempted`; `identity_briefs` vía `guardarBrief` | sesión; `ritual_runs_own` | `POST /api/ritual/brief` → `generateTodayBrief` | — | recorrido de navegador con el agente en un agujero negro (✅) |
+| Blanco de día, invertido de noche, por hora local | — | — | — | `.rit-shell[data-ritual-theme]` en `globals.css` | `tests/domain/ritual-tema.test.ts` (4, ✅) · recorrido de navegador (✅) |
+| Accesible con teclado y lector de pantalla | — | — | — | `src/lib/dom/ritual-focus.ts` | `tests/dom/ritual-focus-dom.test.ts` (13, ✅) |

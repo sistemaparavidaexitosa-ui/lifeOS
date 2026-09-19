@@ -290,6 +290,30 @@ normalmente porque esa cuenta todavía no ha iniciado sesión nunca y su fila de
 Para quitarlo, el mismo `update` con `false`. Es reversible y no borra nada: las
 plantillas que haya publicado siguen publicadas.
 
+## 3quater) El arranque guiado (D-165, migración 0068)
+
+**No pide ninguna variable de entorno nueva** y **nace apagado**: aplicar la
+migración 0068 (`pnpm db:push`) no le cambia la mañana a nadie. La puerta del
+layout cuesta, mientras esté apagado, una lectura de una tabla de una fila.
+
+Para encenderlo hace falta un administrador (ver 3bis). En la aplicación:
+**Configuración → Administración → Arranque guiado**, marca «Arranque guiado
+activo», elige pasos, ventana horaria y días, y guarda. Se aplica en la
+siguiente carga de cada persona. Cada persona puede apagarlo —o apagar pasos—
+en **Configuración → Arranque del día**; nunca encender lo que el administrador
+dejó apagado.
+
+Dos cosas que conviene saber antes de encenderlo en producción:
+
+- **`maxDuration = 60` en el layout de `(app)`.** El respaldo del brief se sirve
+  por `POST /api/ritual/brief` (con su propio `maxDuration = 60`); el del layout
+  cubre las acciones que se disparan desde el overlay en cualquier pantalla. En el
+  plan gratuito de Vercel el techo real es menor que 60 s: si el agente está
+  dormido, el respaldo puede cortarse y ese día el ritual sale sin los pasos de
+  identidad. No rompe nada; los demás pasos siguen.
+- **Para apagarlo de golpe**, el mismo panel, o por SQL:
+  `update public.ritual_policy set enabled = false;`
+
 ## 3ter) Aplicar la migración 0054 (Execution Graph) sobre una base con datos
 
 Es la primera migración del repo que **rellena tablas nuevas a partir de las
