@@ -1835,3 +1835,54 @@ propuesta por la mañana. El guion vive fuera del repo (no hay Playwright en
   y en Chromium; nadie lo ha escuchado con VoiceOver o NVDA.
 - **Producción.** La migración 0068 no está aplicada en la nube y nada de esto
   está desplegado.
+
+## Navegación premium (D-166, migración 0069) — 19-sep-2026
+
+| Comprobación | Comando | Resultado |
+|---|---|---|
+| Cadena completa | `pnpm verify` | ✅ código de salida 0 |
+| Unitarias | `pnpm test:unit` | ✅ **1182 pass / 0 fail** (eran 1158; +24 del dominio del centro) |
+| Migraciones + RLS | `supabase db reset` + `supabase test db` | ✅ **43 archivos, 415 pruebas, PASS** — 0069 aplicada desde cero |
+| Tipos | `pnpm gen:types:local` | ✅ `nav_mode` y `pref_nav_mode` presentes |
+| Build | `pnpm build` | ✅ compila; `/api/centro` en la lista de rutas |
+
+TDD en el dominio: los tres archivos de `tests/domain/centro-*.test.ts` se
+vieron en rojo (`ERR_MODULE_NOT_FOUND` ×9) antes de escribir sus módulos, y el
+pgTAP `0042` falló primero con «column "pref_nav_mode" does not exist».
+
+### Recorrido real en navegador (Chromium headless contra `pnpm build && pnpm start`)
+
+**25 de 25** comprobaciones en verde:
+
+- Una visita nueva en `/home` abre el centro con el saludo ya pintado («Buenas
+  tardes, Luis.»), los cuatro grupos del menú y sin ofrecerse Home a sí misma.
+- Elegir un destino cierra el centro y navega; queda el botón «Centro»,
+  **centrado abajo** (comprobado midiendo su rectángulo contra el ancho de la
+  ventana, que es lo que evita el choque con el botón de enviar del chat).
+- «Centro» lo reabre desde cualquier pantalla; Escape lo cierra y deja el botón.
+- «Navegación habitual» quita centro y botón, deja `nav_mode = 'habitual'` en la
+  base, **y sigue así tras recargar y en un contexto de navegador nuevo**.
+- En habitual, Home ofrece reactivarlo; al pulsar, vuelve `premium` y se abre.
+- Un enlace directo a `/money` **no** se tapa con el centro, y el botón sí está.
+- Con el ritual pendiente, la visita arranca en la secuencia, su cierre **no**
+  repite los enlaces y terminar deja en el centro.
+- A 400 px, desborde horizontal 0. Cero errores de JavaScript en consola.
+
+Lo que la prueba corrigió esta vez fue **el propio guion**, no el código: al
+iniciar sesión en cada caso, la app ya aterriza en `/home` y ahí se consumía la
+visita, así que los casos probaban otra cosa. Ahora se inicia sesión una vez, se
+guardan las cookies y cada caso abre su visita directamente en la ruta que le
+toca. A ojo sí apareció un defecto real: en móvil, la regla global
+`h3 { font-size: 1.02rem !important }` dejaba el titular de grupo del mismo
+tamaño que sus destinos; se vence con especificidad sin tocar esa regla.
+
+### Lo que NO se ha ejercitado, y hay que saberlo
+
+- **El coste en producción.** El razonamiento —la puerta cuesta una RPC y el
+  contenido se pide solo al abrir el centro— está revisado en el código, pero no
+  hay ninguna medición de latencia ni prueba de rendimiento.
+- **PWA instalada en el teléfono.** «Visita» se probó como pestaña nueva de
+  Chromium, no como la aplicación instalada reabriéndose.
+- **WebKit / iPhone** y lectores de pantalla reales, igual que en D-165.
+- **Ventana privada estricta**, donde `sessionStorage` puede lanzar: el código
+  lo trata como «es el principio de la visita», pero no se ha reproducido.

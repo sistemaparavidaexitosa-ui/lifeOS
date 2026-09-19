@@ -314,6 +314,26 @@ Dos cosas que conviene saber antes de encenderlo en producción:
 - **Para apagarlo de golpe**, el mismo panel, o por SQL:
   `update public.ritual_policy set enabled = false;`
 
+## 3quinquies) La navegación premium (D-166, migración 0069)
+
+**Sin variables de entorno nuevas.** Pero, al contrario que el arranque guiado,
+**esta sí cambia lo que ve todo el mundo en cuanto se despliega**: sin fila en
+`ritual_prefs`, el modo es `premium`, así que la siguiente vez que alguien abra
+la aplicación por Home verá el centro.
+
+Sale de ahí con «Navegación habitual» —un clic, y se recuerda— y vuelve desde la
+tarjeta de Home. Si hiciera falta apagarlo para todo el mundo de golpe, no hay
+interruptor global: es una preferencia por persona. El apagado de emergencia es
+revertir el despliegue, o por SQL:
+
+```sql
+-- Pone a todo el mundo en navegación habitual (reversible: cada quien puede
+-- volver a activarla desde Home).
+insert into public.ritual_prefs (user_id, nav_mode)
+select user_id, 'habitual' from public.profiles
+on conflict (user_id) do update set nav_mode = 'habitual';
+```
+
 ## 3ter) Aplicar la migración 0054 (Execution Graph) sobre una base con datos
 
 Es la primera migración del repo que **rellena tablas nuevas a partir de las

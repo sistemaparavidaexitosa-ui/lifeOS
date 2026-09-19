@@ -9,6 +9,8 @@ import { FOCUS_TITLE } from "@/lib/domain/development/reading-plan.ts";
 import { BookCover } from "../development/library/BookForm";
 import RemindersCard from "./RemindersCard";
 import InsightSection from "@/components/InsightSection";
+import { loadRitualGate } from "@/lib/data/ritual";
+import ActivarPremium from "@/components/ritual/ActivarPremium";
 
 export default async function HomePage() {
   const user = await getSessionUser();
@@ -17,6 +19,9 @@ export default async function HomePage() {
   // NO-MOCK (F8): si esto falla (BD desconectada), la página muestra el error
   // de Next.js — NUNCA datos de relleno.
   const data = await getHomeData(user.id);
+  // El camino de vuelta a la navegación premium (D-166). `loadRitualGate` está
+  // en caché: el layout ya la pidió en este mismo request.
+  const puertaRitual = await loadRitualGate();
   // El saludo y la fecha de corte usan la zona del PERFIL, no la del servidor
   // (en Vercel el proceso corre en UTC: a la 1 pm en México decía "Buenas
   // noches"). Ver src/lib/domain/datetime.ts.
@@ -28,6 +33,7 @@ export default async function HomePage() {
 
   return (
     <div className="flex flex-col gap-3.5">
+      {puertaRitual?.navMode === "habitual" && <ActivarPremium />}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <div className="text-xs" style={{ color: "var(--muted)" }}>

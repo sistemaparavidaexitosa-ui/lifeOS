@@ -7,6 +7,8 @@ import { getSessionUser } from "@/lib/data/session";
 import { todayForUser } from "@/lib/data/profile";
 import { actionFailed, actionOk, type ActionResult } from "@/lib/supabase/errors";
 import { loadRitualGate, loadRitualContent, type ContenidoDelRitual } from "@/lib/data/ritual";
+import { esModoNavegacion, type ModoNavegacion } from "@/lib/domain/centro/apertura.ts";
+import { revalidatePath } from "next/cache";
 
 /**
  * Las acciones del arranque guiado (D-165).
@@ -146,4 +148,28 @@ export async function contenidoParaRepetir(): Promise<
   const contenido = await loadRitualContent(puerta);
   if (!contenido) return { ok: false, reason: "No se pudo preparar el arranque de hoy." };
   return { ok: true, contenido, blocking: puerta.settings.blocking };
+}
+
+/**
+ * Guarda cómo navega esta persona (D-166).
+ *
+ * Es la ÚNICA acción de este módulo que revalida, y solo `/home`: la tarjeta
+ * «Activar navegación premium» vive ahí y tiene que desaparecer al pulsarla. El
+ * resto de la pantalla no se toca — el centro y el botón los mueve el cliente,
+ * que ya sabe el modo nuevo sin esperar al servidor.
+ */
+export async function setNavMode(modo: ModoNavegacion): Promise<ActionResult> {
+  if (!esModoNavegacion(modo)) return { ok: false, reason: "Modo de navegación desconocido." };
+
+  const s = await sesion();
+  if (!s) return { ok: false, reason: "Tu sesión expiró. Vuelve a iniciar sesión." };
+
+  const { error } = await s.supabase
+    .from("ritual_prefs")
+    .upsert({ user_id: s.user.id, nav_mode: modo }, { onConflict: "user_id" });
+  if (error) return actionFailed(error);
+
+  await s.supabase.from("audit_log").insert({ user_id: s.user.id, action: "ritual.nav_mode", object: modo });
+  revalidatePath("/home");
+  return actionOk;
 }

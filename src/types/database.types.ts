@@ -3021,6 +3021,7 @@ export type Database = {
           ai_enabled: boolean
           created_at: string
           enabled: boolean
+          nav_mode: string
           steps_off: string[]
           updated_at: string
           user_id: string
@@ -3029,6 +3030,7 @@ export type Database = {
           ai_enabled?: boolean
           created_at?: string
           enabled?: boolean
+          nav_mode?: string
           steps_off?: string[]
           updated_at?: string
           user_id: string
@@ -3037,6 +3039,7 @@ export type Database = {
           ai_enabled?: boolean
           created_at?: string
           enabled?: boolean
+          nav_mode?: string
           steps_off?: string[]
           updated_at?: string
           user_id?: string
@@ -3904,6 +3907,7 @@ export type Database = {
           policy_enabled: boolean
           pref_ai: boolean
           pref_enabled: boolean
+          pref_nav_mode: string
           pref_steps_off: string[]
           run_exists: boolean
           steps: string[]

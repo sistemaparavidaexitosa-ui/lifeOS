@@ -2993,3 +2993,51 @@ implementa:
     `frequency` reutiliza los cuatro valores de `routines.frequency` y
     `routineDueToday()`. Ninguna notificación push propia: 0049 ya es dueño de
     los avisos y el coach ya tiene su hora matutina.
+
+- **D-166 · La capa premium deja de ser un momento y pasa a ser la puerta.** El
+  arranque guiado (D-165) se convierte en el **centro** de la aplicación: una
+  pantalla editorial con el saludo, lo que toca ahora, las cifras del día y
+  todos los módulos, desde la que se abren **las pantallas de siempre**. No se
+  rediseña ningún módulo ni cambia ninguna ruta: el centro es una capa encima,
+  igual que el ritual. La secuencia de la mañana sigue existiendo y, cuando
+  toca, es lo primero de la visita; al terminarla u omitirla se cae en el
+  centro, así que el «¿Qué quieres hacer hoy?» dejó de ser una lista de enlaces
+  y pasó a ser una puerta de verdad.
+  - **El modo lo decide solo la persona, y sin fila es `premium`.** Decisión
+    del usuario: la política de D-165 sigue gobernando la secuencia de la
+    mañana, pero el modo de navegación no tiene ajuste de administración. Vive
+    en `ritual_prefs.nav_mode` (0069) y no en una cookie porque es una decisión
+    sobre cómo se usa el producto, y tiene que seguir a la persona del portátil
+    al teléfono. Salir cuesta un clic —«Navegación habitual»— y se recuerda;
+    volver, otro, desde la tarjeta de Home.
+  - **Tres condiciones para abrirse solo, y las tres importan:** modo premium,
+    principio de una visita (`sessionStorage`, no cada navegación) y haber
+    entrado por `/home` o por la raíz. La tercera es la que impide que una
+    notificación que abre una tarea acabe tapada por el centro. En todo lo
+    demás, el centro está a un clic en su botón.
+  - **La puerta gana una columna; no una consulta.** Con premium por defecto,
+    cada carga de página de cada persona pasa por el layout. `nav_mode` viaja
+    en la RPC `ritual_gate` que ya se pagaba; el CONTENIDO del centro —rutinas,
+    dinero, tareas, brief— se pide solo al abrirlo, por `GET /api/centro`. Si se
+    leyera en el layout, toda la aplicación pagaría media aplicación en cada
+    clic. Y por ruta y no por Server Action, por lo mismo que el respaldo del
+    brief: Next las ejecuta en fila.
+  - **El centro se compone llamando a `construirSecuencia`.** No es un atajo: es
+    lo que le hace heredar ya probadas la regla de la hora (una rutina de la
+    noche no se propone por la mañana), la del hábito ya registrado y la de
+    «ningún bloque sin su dato». Con `maxRoutineSteps: 1`, porque el centro
+    enseña lo SIGUIENTE, no la lista — que está a un clic. La política de pasos
+    del administrador **no** recorta el centro: apagar el paso de contexto en la
+    secuencia no puede dejar sin cifras la pantalla con la que se navega.
+  - **Una sola lista de destinos.** El centro lee `NAV_ITEMS`, la del menú
+    lateral, y hay una prueba que compara las dos: una pantalla nueva aparece
+    sola. Una copia se habría quedado atrás a la primera, y el fallo —un módulo
+    inalcanzable desde el centro— no lo nota nadie hasta que lo busca.
+  - **El botón «Centro» va abajo y centrado**, no en una esquina: a la derecha
+    choca con el botón de enviar del rail del chat y a la izquierda con el menú
+    lateral. Su capa es `--z-centro: 65`, por debajo del menú móvil a propósito.
+  - **Lo que no se hizo.** Vestir de premium cada módulo (era el deseo original
+    y se descartó por tamaño: el centro abre las pantallas de siempre);
+    `/centro` como ruta (tocaría el middleware y «atrás» devolvería al centro);
+    mostrarlo en cada navegación (interrumpe); ocultar la barra lateral (quien
+    está dentro de un módulo sigue moviéndose entre pantallas vecinas).

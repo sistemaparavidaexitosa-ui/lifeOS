@@ -143,6 +143,7 @@ export default function RitualStep({
   currency,
   locale,
   esperandoBrief,
+  enCentro,
   identidadDeclarada,
   marcados,
   onMarcado,
@@ -154,6 +155,8 @@ export default function RitualStep({
   locale: string;
   /** El respaldo del brief está generando: el paso de identidad aún no llegó. */
   esperandoBrief?: boolean;
+  /** En navegación premium el cierre lleva al centro y no repite sus enlaces. */
+  enCentro?: boolean;
   identidadDeclarada?: string | null;
   marcados: Record<string, HabitLogEntry | null>;
   onMarcado: (habitId: string, entry: HabitLogEntry | null) => void;
@@ -260,6 +263,13 @@ export default function RitualStep({
       return (
         <div className="rit-step">
           <Titulo>{paso.frase}</Titulo>
+          {/* En premium, la flecha lleva al centro, que ya es el menú: repetir
+              aquí los destinos sería enseñar dos veces lo mismo. */}
+          {enCentro ? (
+            <p className="rit-muted" style={{ marginTop: 18 }}>
+              Sigue para ir a tu centro.
+            </p>
+          ) : (
           <div className="flex flex-wrap gap-2" style={{ marginTop: 22 }}>
             {DESTINOS.map((d) => (
               <Link
@@ -279,6 +289,7 @@ export default function RitualStep({
               </Link>
             ))}
           </div>
+          )}
         </div>
       );
   }
