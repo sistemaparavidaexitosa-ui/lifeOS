@@ -40,7 +40,8 @@ export default function RitualOverlay({
   hayBriefDeHoy,
   briefIntentadoHoy,
   currency,
-  locale
+  locale,
+  alCentro
 }: {
   entrada: EntradaSecuencia;
   blocking: boolean;
@@ -49,6 +50,12 @@ export default function RitualOverlay({
   briefIntentadoHoy: boolean;
   currency: string;
   locale: string;
+  /**
+   * En navegación premium (D-166), terminar u omitir el ritual deja en el
+   * centro, que es la puerta de la aplicación. Sin esta prop —modo habitual— el
+   * cierre es el de D-165: una pregunta y sus enlaces.
+   */
+  alCentro?: () => void;
 }) {
   const [abierto, setAbierto] = useState(true);
   const [indice, setIndice] = useState(0);
@@ -125,8 +132,9 @@ export default function RitualOverlay({
       setAbierto(false);
       if (motivo === "omitido") void skipRitual(paso?.kind ?? "", actual);
       else void completeRitual(total);
+      alCentro?.();
     },
-    [paso?.kind, actual, total]
+    [paso?.kind, actual, total, alCentro]
   );
 
   // Foco: al abrir va al título del paso; al cerrar vuelve a donde estaba. Sin
@@ -218,6 +226,7 @@ export default function RitualOverlay({
           today={entrada.dateISO}
           currency={currency}
           locale={locale}
+          enCentro={alCentro !== undefined}
           esperandoBrief={pidiendoBrief}
           identidadDeclarada={identidadDeclarada}
           marcados={marcados}

@@ -2,6 +2,7 @@ import { loadRitualGate, loadRitualContent } from "@/lib/data/ritual";
 import { debeMostrarseHoy } from "@/lib/domain/ritual/decidir.ts";
 import { construirSecuencia, hayContenido } from "@/lib/domain/ritual/secuencia.ts";
 import { publicEnv } from "@/config/env";
+import { greetingFor } from "@/lib/domain/datetime.ts";
 import RitualHost, { type DatosDelRitual } from "./RitualHost";
 
 /**
@@ -69,5 +70,22 @@ async function datosDeHoy(): Promise<DatosDelRitual | null> {
  * `RitualHost`). Un anfitrión con `null` no pinta nada.
  */
 export default async function RitualGate() {
-  return <RitualHost datos={await datosDeHoy()} />;
+  const puerta = await loadRitualGate();
+  // Sin puerta —sin sesión, o la consulta falló— la capa entera desaparece en
+  // silencio: es opcional y no puede tumbar el layout de nadie.
+  if (!puerta) return null;
+
+  return (
+    <RitualHost
+      datos={await datosDeHoy()}
+      navMode={puerta.navMode}
+      ritualPermitido={puerta.settings.enabled}
+      hourLocal={puerta.hourLocal}
+      // El saludo viaja ya hecho para que el centro pinte al instante, sin
+      // esperar a `/api/centro`.
+      cabecera={{ saludo: greetingFor(puerta.hourLocal), nombre: puerta.nombre, dateISO: puerta.dateISO }}
+      currency={publicEnv.NEXT_PUBLIC_DEFAULT_CURRENCY}
+      locale={publicEnv.NEXT_PUBLIC_DEFAULT_LOCALE}
+    />
+  );
 }

@@ -10,6 +10,7 @@ import { loadRoutinesForToday } from "@/lib/data/routines";
 import { resolverAjustes, POLITICA_POR_DEFECTO, PREFERENCIA_POR_DEFECTO } from "@/lib/domain/ritual/policy.ts";
 import { hechosDeContexto } from "@/lib/domain/ritual/contexto.ts";
 import { esTipoPaso, type RitualSettings, type TipoPaso } from "@/lib/domain/ritual/types.ts";
+import { esModoNavegacion, type ModoNavegacion } from "@/lib/domain/centro/apertura.ts";
 import type { EntradaSecuencia } from "@/lib/domain/ritual/secuencia.ts";
 import type { Frequency } from "@/lib/domain/development/routines.ts";
 
@@ -42,6 +43,12 @@ export interface PuertaDelRitual {
   ahoraMin: number;
   yaHayEjecucionHoy: boolean;
   nombre: string;
+  /**
+   * Cómo navega esta persona (D-166). Viaja en la misma RPC que todo lo demás:
+   * con premium por defecto, leerlo aparte sería una segunda consulta en cada
+   * carga de página de toda la aplicación.
+   */
+  navMode: ModoNavegacion;
 }
 
 /** «HH:MM[:SS]» → minutos desde medianoche. */
@@ -105,7 +112,10 @@ export const loadRitualGate = cache(async (): Promise<PuertaDelRitual | null> =>
       hourLocal: hourInTimeZone(timeZone),
       ahoraMin: aMinutos(timeInTimeZone(timeZone)),
       yaHayEjecucionHoy: data.run_exists,
-      nombre: nombreDePila(profile?.name) || "Hola"
+      nombre: nombreDePila(profile?.name) || "Hola",
+      // Un valor desconocido —una versión futura, una fila a mano— cae a
+      // premium, que es el valor por defecto del producto.
+      navMode: esModoNavegacion(data.pref_nav_mode) ? data.pref_nav_mode : "premium"
     };
   } catch {
     return null;

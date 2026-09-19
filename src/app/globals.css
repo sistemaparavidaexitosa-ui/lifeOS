@@ -81,6 +81,10 @@
      serlo: si el drawer móvil quedara encima, el ritual se pintaría debajo de
      un menú que la persona no abrió. */
   --z-ritual: 80;
+  /* El botón «Centro» (D-166). Por encima de los menús anclados, por DEBAJO
+     del menú lateral móvil: con el menú abierto, el botón tiene que quedar
+     tapado como el resto del contenido. */
+  --z-centro: 65;
   /* Capas del Execution Graph. El lienzo va POR DEBAJO de todo el chrome: es
      contenido, aunque ocupe la pantalla entera. El minimapa y el buscador
      flotan sobre él pero siguen por debajo de la barra superior, o taparían el
@@ -4193,4 +4197,89 @@ textarea:focus {
 .rit-shell :focus-visible {
   outline: 2px solid var(--rit-accent);
   outline-offset: 3px;
+}
+
+/* ===========================================================================
+   EL CENTRO PREMIUM (D-166)
+   ---------------------------------------------------------------------------
+   Vive dentro de `.rit-shell`, así que hereda el fondo, el texto y la inversión
+   de noche de D-165. Lo de aquí es solo la jerarquía propia del centro.
+
+   POR QUÉ LOS DESTINOS NO VAN EN TIPOGRAFÍA GIGANTE: son 23 en cinco grupos.
+   Veintitrés titulares enormes no son un menú, son una pared. El GRUPO manda en
+   tamaño y sus destinos se leen debajo, a un tamaño cómodo para tocar.
+   =========================================================================== */
+.rit-centro {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  width: 100%;
+}
+
+.rit-centro-bloques {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.rit-centro-grupo {
+  font-size: clamp(1.25rem, 3.4vw, 1.75rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0 0 8px;
+}
+
+.rit-centro-destinos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 6px 18px;
+  margin-bottom: 18px;
+}
+
+.rit-centro-destino {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--rit-text);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  width: fit-content;
+}
+.rit-centro-destino:hover { border-bottom-color: var(--rit-text); }
+
+.rit-centro-pie {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding-top: 18px;
+  border-top: 1px solid var(--rit-line);
+}
+
+/* El botón para volver al centro. ABAJO Y CENTRADO, no en una esquina: a la
+   derecha choca con el botón de enviar del rail del chat, y a la izquierda con
+   el menú lateral. */
+.rit-boton-centro {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  z-index: var(--z-centro);
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 20px;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #fff;
+  background: #0b0b12;
+  box-shadow: 0 10px 30px rgba(11, 11, 18, 0.28);
+  cursor: pointer;
+}
+.rit-boton-centro:hover { transform: translateX(-50%) translateY(-2px); }
+
+html[data-theme="dark"] .rit-boton-centro { color: #0b0b12; background: #f6f6fa; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rit-boton-centro, .rit-boton-centro:hover { transition: none; transform: translateX(-50%); }
 }
