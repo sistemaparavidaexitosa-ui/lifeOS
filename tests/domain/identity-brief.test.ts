@@ -6,6 +6,9 @@ import {
   filtrarRepetidas,
   citaAtribuida,
   sanearBrief,
+  sanearMantra,
+  sanearAccionDelDia,
+  LIMITES_AGENTE,
   type BriefCrudo
 } from "../../src/lib/domain/identity/brief.ts";
 
@@ -106,4 +109,151 @@ test("sanearBrief: repetidas fuera; con menos de 3 afirmaciones no hay brief", (
 test("sanearBrief: sin recordatorio o pregunta no hay brief", () => {
   assert.equal(sanearBrief(crudo({ recordatorio: "   " }), CONTEXTO).ok, false);
   assert.equal(sanearBrief(crudo({ pregunta: "" }), CONTEXTO).ok, false);
+});
+
+// ===========================================================================
+// D-164 · Lo que el brief gana con el agente: límites parametrizados, mantra,
+// acción del día, categorías y área de foco.
+// ===========================================================================
+
+/** Doce afirmaciones distintas entre sí, para ejercitar los límites del agente. */
+function crudoAgente(extra: Partial<BriefCrudo> = {}): BriefCrudo {
+  const afirmaciones = [
+    { texto: "Cumplo lo que me prometo, aunque nadie me mire.", rasgoId: "t1", categoria: "Disciplina" },
+    { texto: "Cada peso que ahorro compra libertad futura.", rasgoId: "t2", categoria: "Dinero" },
+    { texto: "Mi cuerpo responde al entrenamiento que le doy.", rasgoId: "", categoria: "Salud" },
+    { texto: "Termino un asunto antes de abrir otro distinto.", rasgoId: "", categoria: "Disciplina" },
+    { texto: "Escucho antes de responder en cada reunión.", rasgoId: "t1", categoria: "Liderazgo" },
+    { texto: "Cobro lo que vale mi trabajo sin disculparme.", rasgoId: "t2", categoria: "Negocio" },
+    { texto: "Aprendo algo aplicable de cada libro que abro.", rasgoId: "", categoria: "Aprendizaje" },
+    { texto: "Llego a casa presente, no solo de cuerpo.", rasgoId: "", categoria: "Relaciones" },
+    { texto: "Sostengo la calma cuando el plan se tuerce.", rasgoId: "t1", categoria: "Confianza" },
+    { texto: "Construyo algo que seguirá en pie sin mí.", rasgoId: "", categoria: "Propósito" },
+    { texto: "Mi agenda refleja aquello que digo querer.", rasgoId: "t2", categoria: "Carrera" },
+    { texto: "Doy gracias por lo que ya está funcionando.", rasgoId: "", categoria: "Espiritualidad" }
+  ];
+  /** El arco de nueve tiempos, que es lo que el tope de 8 pasos amputaba. */
+  const pasos = [
+    { texto: "Respira hondo tres veces y suelta los hombros.", segundos: 40 },
+    { texto: "La habitación se queda en silencio a tu alrededor.", segundos: 30 },
+    { texto: "Estás en tu oficina un martes de octubre del año que viene.", segundos: 40 },
+    { texto: "Notas el peso de la taza caliente en la mano.", segundos: 35 },
+    { texto: "Tu socio te dice que el trimestre cerró por encima del plan.", segundos: 40 },
+    { texto: "Miras la cifra en la pantalla y es la que escribiste hace un año.", segundos: 35 },
+    { texto: "Sientes el orgullo tranquilo de quien ya no tiene que demostrarlo.", segundos: 35 },
+    { texto: "Agradeces las mañanas en las que no te apetecía y fuiste igual.", segundos: 30 },
+    { texto: "Vuelves a esta habitación con esa certeza puesta.", segundos: 30 }
+  ];
+  return { ...crudo(), afirmaciones, visualizacion: { titulo: "El martes de octubre", pasos }, ...extra };
+}
+
+test("citaAtribuida: Dispenza entra con el mismo cambio que lo hace elegible", () => {
+  assert.equal(citaAtribuida("La mente crea la realidad. — Joe Dispenza"), true);
+  assert.equal(citaAtribuida("Como enseña Dispenza, el cuerpo aprende antes que la mente"), true);
+});
+
+test("LIMITES_AGENTE: los nueve tiempos sobreviven y la escena llega a cinco minutos", () => {
+  const r = sanearBrief(crudoAgente(), CONTEXTO, LIMITES_AGENTE);
+  assert.equal(r.ok, true);
+  // Con LIMITES_RESPALDO (slice(0,8)) se perdían gratitud y regreso.
+  assert.equal(r.brief!.visualization.steps.length, 9);
+  assert.match(r.brief!.visualization.steps[8]!.text, /Vuelves a esta habitación/);
+  const total = r.brief!.visualization.steps.reduce((s, p) => s + p.seconds, 0);
+  assert.ok(total >= 240 && total <= 420, `la escena dura ${total} s, fuera de 240-420`);
+  assert.equal(r.brief!.visualization.durationMin, 5);
+});
+
+test("LIMITES_AGENTE: doce afirmaciones con ids a1..a12 y su categoría", () => {
+  const r = sanearBrief(crudoAgente(), CONTEXTO, LIMITES_AGENTE);
+  assert.equal(r.brief!.affirmations.length, 12);
+  assert.equal(r.brief!.affirmations[11]!.id, "a12");
+  assert.equal(r.brief!.affirmations[0]!.category, "Disciplina");
+  assert.equal(r.brief!.affirmations[1]!.category, "Dinero");
+  // Doce está dentro de 10-20: es un brief legítimo, no un reintento.
+  assert.deepEqual(r.problemas, []);
+});
+
+test("LIMITES_AGENTE: con nueve afirmaciones se pide un reintento, pero el brief se sostiene", () => {
+  const corto = crudoAgente();
+  corto.afirmaciones = corto.afirmaciones.slice(0, 9);
+  const r = sanearBrief(corto, CONTEXTO, LIMITES_AGENTE);
+  assert.equal(r.ok, false, "nueve está por debajo del mínimo del agente");
+  assert.ok(r.problemas.some((p) => p.includes("Faltan afirmaciones")));
+});
+
+test("una escena que se pasa de largo se reescala sin perder ningún paso", () => {
+  const largo = crudoAgente();
+  largo.visualizacion.pasos = largo.visualizacion.pasos.map((p) => ({ ...p, segundos: 90 }));
+  const r = sanearBrief(largo, CONTEXTO, LIMITES_AGENTE);
+  assert.equal(r.brief!.visualization.steps.length, 9, "reescalar no es recortar");
+  const total = r.brief!.visualization.steps.reduce((s, p) => s + p.seconds, 0);
+  assert.equal(total, 420);
+});
+
+test("una categoría desconocida no tumba la afirmación: la deja sin etiqueta", () => {
+  const raro = crudoAgente();
+  raro.afirmaciones[0] = { ...raro.afirmaciones[0]!, categoria: "Productividad" };
+  const r = sanearBrief(raro, CONTEXTO, LIMITES_AGENTE);
+  assert.equal(r.brief!.affirmations.length, 12);
+  assert.equal(r.brief!.affirmations[0]!.category, null);
+  assert.deepEqual(r.problemas, [], "una etiqueta de más no merece un reintento");
+});
+
+test("sanearMantra: una frase de hasta veinte palabras; lo demás se descarta, no se recorta", () => {
+  assert.equal(sanearMantra("Hoy elijo la versión de mí que no negocia sus mañanas").mantra, "Hoy elijo la versión de mí que no negocia sus mañanas");
+  assert.equal(sanearMantra(undefined).mantra, null);
+  assert.equal(sanearMantra(undefined).problema, null, "el respaldo no escribe mantra y eso no es un fallo");
+
+  const largo = sanearMantra("Uno dos tres cuatro cinco seis siete ocho nueve diez once doce trece catorce quince dieciséis diecisiete dieciocho diecinueve veinte veintiuno");
+  assert.equal(largo.mantra, null);
+  assert.match(largo.problema!, /21 palabras/);
+
+  // Cortarlo a la mitad con puntos suspensivos no daría un mantra corto: daría
+  // basura que alguien se repetiría en voz alta.
+  const dos = sanearMantra("Hoy cumplo lo que prometo. Mañana también lo haré.");
+  assert.equal(dos.mantra, null);
+  assert.match(dos.problema!, /UNA sola frase/);
+
+  // Un punto final bien puesto no es dos frases.
+  assert.equal(sanearMantra("Hoy cumplo lo que me prometo.").mantra, "Hoy cumplo lo que me prometo.");
+});
+
+test("sanearAccionDelDia: rechaza el estado de ánimo, acepta lo que se puede terminar hoy", () => {
+  const ctx = { rasgos: new Set(["t1"]) };
+
+  const buena = sanearAccionDelDia({ texto: "Llama al cliente de Monterrey antes de las 11", rasgoId: "t1", area: "Carrera" }, ctx);
+  assert.equal(buena.accion!.text, "Llama al cliente de Monterrey antes de las 11");
+  assert.equal(buena.accion!.traitId, "t1");
+  assert.equal(buena.accion!.area, "Carrera");
+  assert.equal(buena.problema, null);
+
+  for (const vaga of ["Sé más constante con tus cosas", "Intenta cuidarte un poco más", "Recuerda que eres capaz de lograrlo"]) {
+    const r = sanearAccionDelDia({ texto: vaga }, ctx);
+    assert.equal(r.accion, null, `«${vaga}» debería rechazarse`);
+    assert.match(r.problema!, /estado de ánimo/);
+  }
+
+  assert.equal(sanearAccionDelDia({ texto: "Entrena" }, ctx).accion, null, "una palabra no es una acción");
+  assert.equal(sanearAccionDelDia(undefined, ctx).accion, null);
+  assert.equal(sanearAccionDelDia(undefined, ctx).problema, null);
+
+  // Un rasgo que no existe se cae, igual que en las afirmaciones.
+  assert.equal(sanearAccionDelDia({ texto: "Revisa el flujo de caja del trimestre", rasgoId: "inventado" }, ctx).accion!.traitId, null);
+});
+
+test("un área de foco inventada se cae sin provocar un reintento", () => {
+  const r = sanearBrief(crudoAgente({ focusArea: "Productividad" }), CONTEXTO, LIMITES_AGENTE);
+  assert.equal(r.brief!.focusArea, null);
+  assert.deepEqual(r.problemas, []);
+  assert.equal(sanearBrief(crudoAgente({ focusArea: "finanzas" }), CONTEXTO, LIMITES_AGENTE).brief!.focusArea, "Finanzas");
+});
+
+test("el respaldo sigue sin mantra, sin acción y sin foco, y eso es un brief válido", () => {
+  const r = sanearBrief(crudo(), CONTEXTO);
+  assert.equal(r.ok, true);
+  assert.equal(r.brief!.mantra, null);
+  assert.equal(r.brief!.dailyAction, null);
+  assert.equal(r.brief!.focusArea, null);
+  assert.equal(r.brief!.affirmations.length, 5);
+  assert.equal(r.brief!.affirmations[0]!.category, null);
 });

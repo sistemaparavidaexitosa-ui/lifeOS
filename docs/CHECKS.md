@@ -1655,3 +1655,115 @@ en que hay que tocar las cosas porque hay datos de por medio.
   coach y solo si quedan menos de `PRESUPUESTO_ARISTAS_MS` usados, así que un
   corte ya no puede repetir el mensaje; como mucho se pierde la sugerencia de ese
   día. Se revisa en la fase A.
+
+---
+
+## Arquitecto de Manifestación (D-164, migración 0067) — 17-sep-2026
+
+Lo que **se ejecutó de verdad** en esta máquina, con su salida:
+
+| Comprobación | Comando | Resultado |
+|---|---|---|
+| Tipos | `pnpm typecheck` | ✅ sin errores |
+| Lint | `pnpm lint` | ✅ sin avisos |
+| Unitarias | `pnpm test:unit` | ✅ **1078 pass / 0 fail** (eran 1065 antes de esta fase) |
+| Build | `pnpm build` | ✅ compila; `/development/routines` con `maxDuration = 60` |
+| Migraciones + RLS | `supabase test db` | ✅ **41 archivos, 390 pruebas, PASS** |
+| Tipos generados | `pnpm gen:types:local` | ✅ `identity_brief_style` y las columnas nuevas presentes |
+| Agente Python | `cd agents && make test` | ✅ **61 pass / 0 fail** |
+
+La migración se probó primero **dentro de una transacción con `rollback`** contra
+la base local antes de aplicarla, para no arriesgar los datos de desarrollo. No
+se corrió `pnpm verify` entero por el mismo motivo: termina en `supabase db
+reset`, que borra la base local. Se corrieron sus siete pasos por separado.
+
+### Pruebas nuevas, y qué fijan
+
+- `tests/domain/identity-brief.test.ts` (+10): los **nueve tiempos** del arco
+  sobreviven con `LIMITES_AGENTE` (con el tope anterior de 8 pasos se perdían
+  gratitud y regreso); mantra de 21 palabras → `null` con el motivo en palabras,
+  no en caracteres; acción abstracta rechazada y concreta aceptada; categoría y
+  área desconocidas se caen sin tumbar el brief; el respaldo sigue produciendo
+  exactamente lo de siempre.
+- `tests/domain/identity-categorias.test.ts`: el mapeo categoría→área es TOTAL.
+- `tests/domain/identity-estilo.test.ts`: con menos de 14 días medidos se
+  devuelven **cero** preferencias; un rasgo sin contraste (`nSin < 4`) se cae
+  solo; un único día afortunado no dicta el estilo de un mes.
+- `tests/domain/identity-token.test.ts`: el token no vale para otra persona ni
+  para otro día, caduca a los 10 min, y una firma más corta no revienta
+  `timingSafeEqual`.
+- `tests/domain/identity-payload.test.ts`: valida **el mismo archivo** que
+  `agents/tests` (`agents/contract/brief.example.json`) — prueba de contrato
+  entre los dos lenguajes.
+- `tests/domain/identity-respaldo.test.ts`: el 409 **no** cae al respaldo; todo
+  lo demás sí.
+- `supabase/tests/0040_arquitecto_de_manifestacion.sql` (13 pruebas): la persona
+  puede escribir `reactions` y `action_done` pero **no** `mantra`, `focus_area`
+  ni `generator`; nadie puede hacer `UPDATE` sobre su propio resultado medido;
+  borrar el brief borra su fila de estilo (el cascade de privacidad).
+
+### Recorrido real contra la app levantada (`pnpm build && pnpm start`)
+
+Con un usuario de desarrollo con identidad declarada:
+
+- `POST /api/agents/manifestation/context` sin secreto → **401**. Con secreto →
+  **200** con `contextVersion: 1`, token firmado, 1 rasgo, 8 hechos, y el libro
+  de estilo diciendo «todavía no he medido ningún día».
+- `POST …/brief` con 40 afirmaciones y una clave de más → **422** con los
+  problemas en español; **no se guardó nada**.
+- `POST …/brief` con el token de una persona y el `userId` de otra → **401**.
+- `POST …/brief` válido → **200**. La fila quedó con `generator='py'`, 12
+  afirmaciones, **9 pasos**, 5 minutos, mantra, acción concreta, y con el
+  `trait_id` y los `factIds` del ejemplo **descartados por no existir** para ese
+  usuario. `audit_log` registró `fuente: "py"`.
+- El servicio Python levantado de verdad (`uvicorn`): `/health` 200; sin secreto
+  401; sin llave de Gemini **503 en 369 ms** (falla rápido para que el respaldo
+  tenga presupuesto); usuario sin identidad **409** con el mensaje en español.
+- El agente Python leyó el **contexto real** de LifeOS y produjo un payload
+  coherente con un proveedor falso: planificó 13 afirmaciones repartidas por
+  categoría y propuso «Salud» como área de foco a partir de los datos reales.
+
+Todas las filas de prueba se borraron al terminar (0 briefs, 0 filas de estilo).
+
+### Lo que NO se ha ejercitado, y hay que saberlo
+
+- **Ninguna llamada real a Gemini desde el agente.** No hay `GEMINI_API_KEY` en
+  esta máquina. El camino `gemini.py → generate_json` está probado solo contra
+  dobles: el manejo de 429, de `MAX_TOKENS` y de la respuesta troceada está
+  escrito copiando lo que ya funciona en `gemini-provider.ts`, pero no
+  verificado contra la API.
+- **El respaldo no se ha visto correr entero desde el botón.** La regla que lo
+  decide está probada (`identity-respaldo.test.ts`) y el agente devuelve los
+  códigos correctos, pero la Server Action necesita una sesión de navegador y no
+  se ha ejercitado de punta a punta. Es el paso 5 de la verificación del plan y
+  queda pendiente de un recorrido manual.
+- **El bucle nocturno de MEDICIÓN no ha corrido.** `despacharEstilo` está
+  escrito y tipado, y `medirDia` está probado, pero no se ha ejecutado contra el
+  reloj real: hace falta un brief de ayer y pasar por la ventana de las 23:00
+  locales.
+
+### Generación de madrugada — SÍ ejecutada contra el reloj real (18-sep-2026)
+
+Se puso la zona horaria de un usuario de desarrollo en `America/Adak` para caer
+dentro de la ventana de las 04:00 y se llamó a `/api/push/dispatch` de verdad:
+
+- **Agente dormido** (URL a un puerto muerto): `briefs: 0` y **ninguna fila en
+  `ai_job_runs`**. No se gasta el intento del día, que es el punto entero de la
+  guarda.
+- **Agente despierto** (uvicorn en pie, sin llave de Gemini): `ai_job_runs` →
+  `identity.brief → fallido`, y `audit_log` → `origen: nocturno · fuente: ts ·
+  motivo: http-5xx · ok: false`. Es decir: pidió al agente, el agente devolvió
+  503, se clasificó como fallo suyo, cayó al respaldo y lo registró honestamente.
+- **Cuatro pasadas seguidas del reloj → UN solo intento.** La persona conserva
+  2 de sus 3 generaciones manuales.
+
+Zona horaria restaurada y filas de prueba borradas al terminar.
+- **No hay despliegue real.** El `Dockerfile` SÍ se ha construido y probado en
+  local (18-sep-2026): la imagen levanta, respeta `$PORT` como hace Render
+  —se comprobó con `PORT=10000`, `/health` → 200— y cierra con `SIGTERM` en
+  896 ms dejando `Finished server process [1]`, o sea con uvicorn como PID 1.
+  Lo que no se ha hecho es desplegarla en Render ni conectarla a Vercel.
+- **La migración 0067 NO está en la nube.** `supabase migration list --linked`
+  la da como `local: 0067, remote: <vacío>`. Hasta que se haga `pnpm db:push`,
+  cualquier despliegue del PR tiene el brief roto: `loadContextoDelBrief`
+  consulta `identity_brief_style`, que allí todavía no existe.

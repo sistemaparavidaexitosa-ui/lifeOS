@@ -1,0 +1,46 @@
+{
+  "ok": true,
+  "model": "gemini-3.6-flash",
+  "agentVersion": "1.0.0",
+  "promptVersion": 1,
+  "payload": {
+    "afirmaciones": [
+      { "texto": "Cumplo lo que me prometo, aunque nadie me mire.", "rasgoId": "t1", "categoria": "Disciplina" },
+      { "texto": "Cada peso que ahorro compra una hora de libertad futura.", "rasgoId": "t2", "categoria": "Dinero" },
+      { "texto": "Mi cuerpo responde al entrenamiento que le doy cada mañana.", "rasgoId": "", "categoria": "Salud" },
+      { "texto": "Termino un asunto antes de abrir el siguiente.", "rasgoId": "t1", "categoria": "Disciplina" },
+      { "texto": "Escucho entera la frase antes de responder en cada reunión.", "rasgoId": "", "categoria": "Liderazgo" },
+      { "texto": "Cobro lo que vale mi trabajo sin pedir disculpas.", "rasgoId": "t2", "categoria": "Negocio" },
+      { "texto": "Aprendo algo aplicable de cada libro que abro.", "rasgoId": "", "categoria": "Aprendizaje" },
+      { "texto": "Llego a casa presente, no solo de cuerpo.", "rasgoId": "", "categoria": "Relaciones" },
+      { "texto": "Sostengo la calma cuando el plan se tuerce.", "rasgoId": "t1", "categoria": "Confianza" },
+      { "texto": "Construyo algo que seguirá en pie sin mí.", "rasgoId": "", "categoria": "Propósito" },
+      { "texto": "Mi agenda refleja de verdad lo que digo querer.", "rasgoId": "t2", "categoria": "Carrera" },
+      { "texto": "Doy gracias por lo que ya está funcionando.", "rasgoId": "", "categoria": "Espiritualidad" }
+    ],
+    "visualizacion": {
+      "titulo": "El martes de octubre",
+      "pasos": [
+        { "texto": "Respira hondo tres veces y suelta los hombros.", "segundos": 40 },
+        { "texto": "La habitación se queda en silencio a tu alrededor.", "segundos": 30 },
+        { "texto": "Estás en tu oficina un martes de octubre del año que viene.", "segundos": 40 },
+        { "texto": "Notas el peso de la taza caliente en la mano.", "segundos": 35 },
+        { "texto": "Tu socio te dice que el trimestre cerró por encima del plan.", "segundos": 40 },
+        { "texto": "Miras la cifra en la pantalla y es la que escribiste hace un año.", "segundos": 35 },
+        { "texto": "Sientes el orgullo tranquilo de quien ya no tiene que demostrarlo.", "segundos": 35 },
+        { "texto": "Agradeces las mañanas en las que no te apetecía y fuiste igual.", "segundos": 30 },
+        { "texto": "Vuelves a esta habitación con esa certeza puesta.", "segundos": 30 }
+      ]
+    },
+    "recordatorio": "Hoy no tienes que sentirte disciplinado: tienes que actuar como alguien que ya lo es.",
+    "pregunta": "¿Qué hiciste hoy que la persona que quieres ser también habría hecho?",
+    "cita": {
+      "texto": "La constancia no es fuerza de voluntad: es haber decidido antes de que llegara el momento de decidir.",
+      "principio": "dispenza"
+    },
+    "mantra": "Hoy elijo la versión de mí que no negocia sus mañanas",
+    "accionDelDia": { "texto": "Llama al cliente de Monterrey antes de las 11", "rasgoId": "t2", "area": "Carrera" },
+    "focusArea": "Carrera",
+    "factIds": ["habits.streak.h1"]
+  }
+}

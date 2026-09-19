@@ -50,3 +50,19 @@ tests/domain/*.test.ts → 56 tests, 56 pass, 0 fail (node --experimental-strip-
 
 Ver `/docs/CHECKS.md` para el desglose exacto por archivo y para los ítems
 marcados honestamente como NO EJECUTADOS.
+
+## Arquitecto de Manifestación (D-164, migración 0067)
+
+| Requisito | Tablas | RLS / GRANT | Server Actions y rutas | UI | Pruebas |
+|---|---|---|---|---|---|
+| Brief ampliado: mantra, acción del día, área de foco, categorías, 10-20 afirmaciones | `identity_briefs` (+`mantra`,`daily_action`,`focus_area`,`action_done`,`generator`,`agent_version`) | `identity_briefs_own`; GRANT por columna: la persona solo escribe `reactions` y `action_done` | `generateTodayBrief`,`regenerateTodayBrief`,`marcarAccionDelDia` | `brief/MantraCard.tsx`,`brief/DailyActionCard.tsx`,`brief/AffirmationGroups.tsx`,`brief/BriefCard.tsx` | `tests/domain/identity-brief.test.ts` (19 casos, ✅) · `supabase/tests/0040_*.sql` (13 assertions, ✅) |
+| Las 11 categorías proyectan a las 7 áreas sin taxonomía nueva | — (dentro del jsonb `affirmations`) | — | — | `AffirmationGroups.tsx` | `tests/domain/identity-categorias.test.ts` (6 casos, ✅) |
+| Libro de estilo: etiquetar, medir, correlacionar | `identity_brief_style` | `_select_own`,`_insert_own`; **sin UPDATE ni DELETE** para `authenticated`; cascade desde el brief | `guardarBrief` (etiqueta) · `despacharEstilo` en `/api/push/dispatch` (mide) | — (viaja al prompt) | `tests/domain/identity-estilo.test.ts` (16 casos, ✅) |
+| El agente Python escribe el brief; TypeScript es el respaldo | `identity_briefs.generator` | — | `src/lib/identity/manifestacion.ts` (único punto de decisión) | — | `tests/domain/identity-respaldo.test.ts` (5 casos, ✅) · `agents/tests/` (61 casos, ✅) |
+| Contexto e ingesta del agente, sin sesión | lectura de las mismas que el brief | `MANIFESTATION_AGENT_SECRET` + token HMAC; `audit_log` de cada lectura; opt-in de `ai_domains` respetado | `/api/agents/manifestation/context`, `/api/agents/manifestation/brief` | — | `tests/domain/identity-token.test.ts` (7 casos, ✅) · `tests/domain/identity-payload.test.ts` (8 casos, ✅) · recorrido real con `curl`, ver CHECKS.md |
+| Joe Dispenza como quinta inspiración, sin poder atribuirse | `identity_profiles.inspirations` (check ampliado) | `identity_profiles_own` | `upsertIdentityProfile` | `IdentityProfileSheet.tsx`,`BriefCard.tsx` | `citaAtribuida` en `identity-brief.test.ts` (✅) · `0040_*.sql` (✅) |
+
+Contrato entre lenguajes: `agents/contract/brief.example.json` lo validan **los
+dos lados** (`tests/domain/identity-payload.test.ts` y
+`agents/tests/test_manifestation_models.py`), así que una deriva pone en rojo a
+uno de ellos.

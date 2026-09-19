@@ -30,6 +30,16 @@ import HabitForm from "./HabitForm";
 import RoutineRunner, { type RunnerHabit } from "./RoutineRunner";
 import { getSessionUser } from "@/lib/data/session";
 
+/**
+ * Las Server Actions heredan el `maxDuration` del segmento de ruta desde el que
+ * se invocan, y generar el brief es la más lenta del producto: puede esperar
+ * hasta veinte segundos al agente y, si este no contesta, gastar diez más en el
+ * respaldo. Con el valor por defecto de Vercel (quince segundos) ese peor caso
+ * se cortaría justo cuando el respaldo está haciendo su trabajo — es decir,
+ * fallaría precisamente el día en que el respaldo existe para salvar.
+ */
+export const maxDuration = 60;
+
 export default async function RoutinesPage() {
   const supabase = await createClient();
   const user = await getSessionUser();
