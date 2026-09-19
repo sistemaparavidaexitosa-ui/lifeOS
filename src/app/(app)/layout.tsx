@@ -5,8 +5,21 @@ import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import NotificationsBell from "@/components/NotificationsBell";
 import PushSetup from "@/components/PushSetup";
+import RitualGate from "@/components/ritual/RitualGate";
 import { getPersonalWorkspace } from "@/lib/data/workspaces";
 import { getSessionUser } from "@/lib/data/session";
+
+/**
+ * El respaldo del brief del arranque guiado (D-165) se dispara desde el overlay,
+ * y el overlay vive en ESTE layout: puede invocarse desde cualquier pantalla. Las
+ * Server Actions heredan el `maxDuration` del segmento desde el que se llaman, y
+ * con el valor por defecto de Vercel (quince segundos) la cadena agente →
+ * respaldo —hasta veinte más diez— se cortaría justo el día en que el respaldo
+ * existe para salvar. Es el mismo número y el mismo motivo que ya lleva
+ * `development/routines/page.tsx`. Solo sube el techo: nada de lo que ya
+ * terminaba antes tarda más por esto.
+ */
+export const maxDuration = 60;
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -53,6 +66,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         sentido con sesión — a quien no ha entrado no hay a quién avisar.
       */}
       <PushSetup />
+      {/*
+        El arranque guiado (D-165). Aquí y no en cada pantalla: dispara en la
+        primera sesión del día, sea cual sea la pantalla que se abrió, y este es
+        el único ancestro que las envuelve a todas — el mismo argumento que ya
+        vale para CommandPalette.
+
+        Tras un límite de Suspense por la misma razón que la campana: consulta en
+        TODAS las pantallas y no puede retrasar el pintado de ninguna. Casi
+        siempre devuelve `null`, que es el caso normal: nace apagado.
+      */}
+      <Suspense fallback={null}>
+        <RitualGate />
+      </Suspense>
     </AppShell>
   );
 }

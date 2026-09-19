@@ -77,6 +77,10 @@
   --z-drawer: 50;        /* panel de detalle */
   --z-popover: 60;       /* menús anclados: por encima del drawer */
   --z-nav: 70;           /* menú lateral en móvil: toma la pantalla entera */
+  /* El arranque guiado (D-165). ÚNICO valor por encima del menú, y tiene que
+     serlo: si el drawer móvil quedara encima, el ritual se pintaría debajo de
+     un menú que la persona no abrió. */
+  --z-ritual: 80;
   /* Capas del Execution Graph. El lienzo va POR DEBAJO de todo el chrome: es
      contenido, aunque ocupe la pantalla entera. El minimapa y el buscador
      flotan sobre él pero siguen por debajo de la barra superior, o taparían el
@@ -3905,4 +3909,288 @@ textarea:focus {
 .recharts-wrapper:focus,
 .recharts-surface:focus {
   outline: none;
+}
+
+/* ===========================================================================
+   EL ARRANQUE GUIADO (D-165)
+   ---------------------------------------------------------------------------
+   Blanco con texto negro de día, invertido de noche. LA DECIDE LA HORA LOCAL
+   DEL PERFIL —la misma que `todayForUser()`—, no `prefers-color-scheme`: con la
+   preferencia del sistema, un portátil en modo oscuro daría un ritual negro a
+   mediodía, que es lo contrario de lo que se pidió.
+
+   Se hace redefiniendo TOKENS PROPIOS con ámbito en `.rit-shell`, igual que
+   `.gr-shell` hace con los del grafo, y sin tocar `data-theme` en <html>: la
+   aplicación de debajo conserva su tema y no parpadea al cerrar la capa.
+
+   La estética es editorial a propósito: una sola idea por pantalla, tipografía
+   enorme, y tanto espacio en blanco como quepa. No es un panel.
+   =========================================================================== */
+.rit-shell {
+  --rit-bg: #ffffff;
+  --rit-text: #0b0b12;
+  --rit-muted: #6b6b7a;
+  --rit-line: rgba(11, 11, 18, 0.12);
+  --rit-accent: #0b0b12;
+
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-ritual);
+  background: var(--rit-bg);
+  color: var(--rit-text);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* El notch y la barra de gestos del teléfono: el ritual ocupa la pantalla
+     entera, así que los cuatro lados son suyos. */
+  padding:
+    calc(24px + env(safe-area-inset-top, 0px))
+    calc(20px + env(safe-area-inset-right, 0px))
+    calc(24px + env(safe-area-inset-bottom, 0px))
+    calc(20px + env(safe-area-inset-left, 0px));
+}
+
+.rit-shell[data-ritual-theme="oscuro"] {
+  --rit-bg: #0b0b12;
+  --rit-text: #f6f6fa;
+  --rit-muted: #9a9ab0;
+  --rit-line: rgba(246, 246, 250, 0.16);
+  --rit-accent: #f6f6fa;
+}
+
+/* La columna de contenido. 680px es donde una línea de texto grande deja de
+   poder seguirse con la vista de un renglón al siguiente. */
+.rit-main {
+  flex: 1;
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 20px;
+}
+
+/* La tipografía del ritual. `clamp` y no puntos de ruptura: entre 400px y una
+   pantalla grande el tamaño tiene que moverse de forma continua, o el titular
+   salta de tamaño a mitad de un redimensionado. */
+.rit-title {
+  font-size: clamp(2.25rem, 8vw, 4.5rem);
+  line-height: 1.02;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* El titular se enfoca POR CÓDIGO, para que el lector de pantalla lea el paso
+   nuevo; no es un control y no se llega a él con Tab. Un recuadro de foco a su
+   alrededor es ruido sobre la pieza más importante de la pantalla. */
+.rit-shell .rit-title:focus,
+.rit-shell .rit-title:focus-visible {
+  outline: none;
+}
+
+/* La regla móvil general de este archivo fuerza `h2 { font-size: 1.15rem
+   !important }` por debajo de 640px, y el titular del ritual ES un h2. No se toca
+   aquella regla —la usa toda la aplicación—: se le gana con especificidad. */
+@media (max-width: 640px) {
+  .rit-shell .rit-title {
+    font-size: clamp(2.25rem, 9vw, 3rem) !important;
+  }
+}
+
+.rit-lead {
+  font-size: clamp(1.125rem, 3.2vw, 1.5rem);
+  line-height: 1.35;
+  font-weight: 600;
+  color: var(--rit-text);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.rit-muted {
+  color: var(--rit-muted);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.rit-eyebrow {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--rit-muted);
+  margin: 0;
+}
+
+/* La barra de arriba: progreso a la izquierda, salida a la derecha. */
+.rit-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto 8px;
+}
+
+.rit-progress {
+  flex: 1;
+  height: 2px;
+  background: var(--rit-line);
+  position: relative;
+  overflow: hidden;
+}
+
+.rit-progress > i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--rit-accent);
+  transition: width 0.35s ease;
+}
+
+.rit-skip {
+  background: none;
+  border: 0;
+  padding: 6px 2px;
+  font: inherit;
+  font-size: 0.875rem;
+  color: var(--rit-muted);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.rit-skip:hover { color: var(--rit-text); }
+
+/* La flecha de avanzar, abajo a la derecha. Negra sobre blanco, blanca sobre
+   negro: es el único control que la persona necesita encontrar sin pensar. */
+.rit-next {
+  align-self: flex-end;
+  margin-top: 8px;
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  border: 0;
+  background: var(--rit-accent);
+  color: var(--rit-bg);
+  font-size: 1.375rem;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: transform 0.18s ease, opacity 0.18s ease;
+}
+.rit-next:hover { transform: translateX(3px); }
+.rit-next:disabled { opacity: 0.45; cursor: default; transform: none; }
+
+/* El pie, donde vive la flecha, también se centra con el contenido. */
+.rit-bottom {
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Tarjeta de hábito del paso de rutina: la casilla enorme y el nombre al lado. */
+.rit-habit {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 20px 0;
+  border-top: 1px solid var(--rit-line);
+  border-bottom: 1px solid var(--rit-line);
+}
+
+/* Los hechos del día: una rejilla que se apila sola en pantallas estrechas. */
+.rit-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px;
+  width: 100%;
+}
+
+.rit-fact {
+  padding: 14px 0;
+  border-top: 1px solid var(--rit-line);
+}
+
+.rit-fact b {
+  display: block;
+  font-size: clamp(1.375rem, 4.5vw, 2rem);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.rit-fact span {
+  display: block;
+  font-size: 0.8125rem;
+  color: var(--rit-muted);
+  margin-top: 2px;
+}
+
+.rit-fact[data-tono="bad"] b { color: #e2445c; }
+.rit-fact[data-tono="warn"] b { color: #c77700; }
+.rit-fact[data-tono="ok"] b { color: #00895a; }
+.rit-shell[data-ritual-theme="oscuro"] .rit-fact[data-tono="warn"] b { color: #fdab3d; }
+.rit-shell[data-ritual-theme="oscuro"] .rit-fact[data-tono="ok"] b { color: #3ddc97; }
+.rit-shell[data-ritual-theme="oscuro"] .rit-fact[data-tono="bad"] b { color: #ff6b7f; }
+
+/* Lista de afirmaciones y de tareas del plan. */
+.rit-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rit-list li {
+  font-size: clamp(1rem, 2.6vw, 1.25rem);
+  line-height: 1.4;
+  font-weight: 600;
+  padding-left: 18px;
+  position: relative;
+  overflow-wrap: anywhere;
+}
+
+.rit-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.62em;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--rit-accent);
+}
+
+/* La transición entre pasos. Suave y corta: el ritual es silencioso. */
+.rit-step {
+  animation: rit-in 0.32s ease both;
+}
+
+@keyframes rit-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Quien pide menos movimiento no recibe ninguno — ni en los pasos, ni en la
+   barra de progreso, ni en la flecha. Mismo criterio que VisualizationPlayer. */
+@media (prefers-reduced-motion: reduce) {
+  .rit-step { animation: none; }
+  .rit-progress > i { transition: none; }
+  .rit-next { transition: none; }
+  .rit-next:hover { transform: none; }
+}
+
+/* El foco tiene que verse sobre los dos fondos. */
+.rit-shell :focus-visible {
+  outline: 2px solid var(--rit-accent);
+  outline-offset: 3px;
 }
