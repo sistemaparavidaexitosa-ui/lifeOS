@@ -83,5 +83,8 @@ export const NAV_ITEMS: NavItem[] = [
   // Se alcanza desde Configuración, y solo si eres administrador. Figura de
   // todos modos porque de esta lista sale el título de la barra superior: sin
   // la entrada, la pantalla se titularía "Life OS".
-  { href: "/admin", label: "Administración", group: "Cuenta", icon: "settings", color: "var(--muted)", hidden: true }
+  { href: "/admin", label: "Administración", group: "Cuenta", icon: "settings", color: "var(--muted)", hidden: true },
+  // El panel del arranque guiado (D-165). Oculto como /admin: se llega desde el
+  // índice de administración, pero de aquí sale el título de la barra superior.
+  { href: "/admin/ritual", label: "Arranque guiado", group: "Cuenta", icon: "settings", color: "var(--muted)", hidden: true }
 ];

@@ -54,6 +54,17 @@ export default async function AdminPage() {
           </Link>
         ))}
       </div>
+
+      {/* El arranque guiado (D-165) no es una plantilla: es una política de
+          comportamiento. Va aparte para que nadie lo busque en el catálogo. */}
+      <Link href="/admin/ritual" style={{ textDecoration: "none" }}>
+        <Card>
+          <h3 className="font-bold mb-1">Arranque guiado</h3>
+          <p className="text-xs" style={{ color: "var(--muted)" }}>
+            La secuencia de la primera sesión del día: si está activa, qué pasos, en qué horario.
+          </p>
+        </Card>
+      </Link>
     </>
   );
 }

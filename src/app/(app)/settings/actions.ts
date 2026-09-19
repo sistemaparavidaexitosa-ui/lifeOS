@@ -6,6 +6,7 @@ import { z } from "zod";
 import { isValidTimeZone } from "@/lib/domain/datetime.ts";
 import { requireUser } from "@/lib/data/session";
 import { actionFailed, actionOk, describeDbError, type ActionResult } from "@/lib/supabase/errors";
+import { PASOS_RITUAL, esTipoPaso } from "@/lib/domain/ritual/types.ts";
 
 const profileSchema = z.object({
   name: z.string().min(1),
@@ -124,4 +125,46 @@ export async function toggleTheme(theme: "light" | "dark") {
   });
 
   revalidatePath("/", "layout");
+}
+
+/**
+ * La preferencia del arranque guiado (D-165).
+ *
+ * SOLO PUEDE QUITAR. La pantalla pinta una casilla por paso que la política
+ * ofrece, y lo que se guarda son los DESMARCADOS (`steps_off`): no existe forma
+ * de nombrar un paso para encenderlo. Aunque alguien llame a esta acción a mano
+ * con un paso que el administrador apagó, lo más que consigue es añadirlo a su
+ * lista de apagados — que ya lo estaba. La regla la cierra `resolverAjustes()`.
+ */
+export async function updateRitualPrefs(formData: FormData): Promise<ActionResult> {
+  const ofrecidos = String(formData.get("offered") ?? "")
+    .split(",")
+    .filter((p): p is (typeof PASOS_RITUAL)[number] => esTipoPaso(p));
+
+  const { supabase, user } = await requireUser();
+
+  // Lo que la persona apagó de un paso que HOY no se ofrece se conserva: si el
+  // administrador lo vuelve a encender, tiene que seguir apagado para quien ya
+  // dijo que no lo quería. Guardar solo lo que se ve en pantalla se lo borraría.
+  const { data: previa } = await supabase.from("ritual_prefs").select("steps_off").eq("user_id", user.id).maybeSingle();
+  const fueraDePantalla = (previa?.steps_off ?? []).filter((p) => esTipoPaso(p) && !ofrecidos.includes(p));
+
+  const { error } = await supabase.from("ritual_prefs").upsert(
+    {
+      user_id: user.id,
+      enabled: casilla(formData, "enabled"),
+      ai_enabled: casilla(formData, "aiEnabled"),
+      steps_off: [...fueraDePantalla, ...ofrecidos.filter((p) => !casilla(formData, `step.${p}`))],
+      updated_at: new Date().toISOString()
+    },
+    { onConflict: "user_id" }
+  );
+  if (error) return actionFailed(error);
+
+  await supabase.from("audit_log").insert({ user_id: user.id, action: "ritual.prefs.update" });
+  revalidatePath("/settings");
+  // La puerta vive en el layout: sin esto, apagar el ritual no se nota hasta
+  // que Next decida rehacer la página.
+  revalidatePath("/", "layout");
+  return actionOk;
 }

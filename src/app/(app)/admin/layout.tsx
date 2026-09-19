@@ -18,7 +18,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="flex flex-col gap-3.5">
       <div className="text-xs" style={{ color: "var(--muted)" }}>
-        <Link href="/admin">Administración</Link> · catálogo de plantillas
+        {/* Genérico desde D-165: ya no todo lo que cuelga de /admin es el
+            catálogo de plantillas. */}
+        <Link href="/admin">Administración</Link>
       </div>
       {children}
     </div>
