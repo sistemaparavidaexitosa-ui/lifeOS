@@ -45,8 +45,9 @@ const AGENTE_POR_ORIGEN: Record<string, AgentId> = {
  * distingue lo que realimenta el prompt; aquí hace falta el reparto completo
  * entre aceptar y rechazar.
  */
-const ACEPTA = new Set(["Accepted", "Applied", "Edited"]);
-const RECHAZA = new Set(["Dismissed", "Suppressed", "Reported"]);
+const ACEPTA = ["Accepted", "Applied", "Edited"] as const;
+const RECHAZA = ["Dismissed", "Suppressed", "Reported"] as const;
+const DECIDIDOS: string[] = [...ACEPTA, ...RECHAZA];
 
 /**
  * Deja constancia de que un agente pudo hablar y no lo hizo.
@@ -134,14 +135,20 @@ export async function leerDecisionesDeInsights(supabase: Db, userId: string): Pr
       .from("recommendations")
       .select("type, status, created_at")
       .eq("user_id", userId)
+      // El filtro va en la CONSULTA y no después, porque `limit` se aplica
+      // antes: con el filtro en JS, alguien con quinientas recomendaciones sin
+      // abrir se quedaba sin una sola decisión que aprender. Lo encontró una
+      // sonda contra la base local, no la lectura del código.
+      .in("status", DECIDIDOS)
       .order("created_at", { ascending: false })
       .limit(500);
 
     if (error || !data) return [];
 
     return data.flatMap((fila): DecisionTomada[] => {
-      const acepta = ACEPTA.has(fila.status);
-      if (!acepta && !RECHAZA.has(fila.status)) return [];
+      const acepta = (ACEPTA as readonly string[]).includes(fila.status);
+      // Cinturón, por si la consulta y esta lista se separan algún día.
+      if (!acepta && !(RECHAZA as readonly string[]).includes(fila.status)) return [];
       return [
         {
           agenteId: "insights-nocturno",
