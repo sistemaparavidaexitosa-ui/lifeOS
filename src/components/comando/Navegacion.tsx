@@ -42,16 +42,14 @@ export default function Navegacion({
   const [error, setError] = useState<string | null>(null);
   const [pendiente, startTransition] = useTransition();
 
-  const mando = useMemo(() => {
-    const m = componerMando(entrada, pospuestas);
-    // Lo resuelto en ESTA visita se retira aquí: `componerMando` es puro y no
-    // sabe qué acabas de tocar. Al caer un ítem, el siguiente de su carril sube
-    // solo — la conducta de D-169, conservada.
-    return {
-      ...m,
-      carriles: m.carriles.map((v) => (v.item && resueltas.includes(v.item.id) ? { ...v, item: null } : v))
-    };
-  }, [entrada, pospuestas, resueltas]);
+  // Lo apartado y lo resuelto entran en la composición, no se tachan después:
+  // si se anulara el ítem ya elegido, el carril quedaría en falsa calma con
+  // otra tarjeta suya esperando turno, y `dominante` seguiría apuntando a algo
+  // que ya no se ve.
+  const mando = useMemo(
+    () => componerMando(entrada, pospuestas, resueltas),
+    [entrada, pospuestas, resueltas]
+  );
 
   function aceptar(propuestaId: string, href: string | null, id: string) {
     startTransition(async () => {

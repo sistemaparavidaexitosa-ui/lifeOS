@@ -221,8 +221,22 @@ function estadoDeCalma(carril: Carril, e: EntradaDeMando): { estado: string; des
  * `pospuestas` son los ids que apartaste con «Ahora no». Se pasan tal cual a
  * `tarjetasDelCentro`, que ya sabe bajarlos al final sin duplicarlos: apartar
  * algo no lo borra, y esa regla de D-169 se conserva entera.
+ *
+ * `resueltas` son los que acabas de completar en esta visita —marcar el hábito,
+ * aceptar la propuesta—. Se filtran AQUÍ, antes de elegir el primero de cada
+ * carril, y por eso al caer uno sube el siguiente de su frente.
+ *
+ * Que este filtro viva en el dominio y no en el componente no es colocación:
+ * la primera versión lo hacía fuera, anulando el ítem ya elegido, y el carril
+ * se quedaba en falsa calma con una segunda tarjeta elegible esperando. Lo
+ * encontró una revisión de Codex; el comentario del componente afirmaba la
+ * conducta que el código no tenía.
  */
-export function componerMando(e: EntradaDeMando, pospuestas: readonly string[] = []): Mando {
+export function componerMando(
+  e: EntradaDeMando,
+  pospuestas: readonly string[] = [],
+  resueltas: readonly string[] = []
+): Mando {
   const tarjetas = tarjetasDelCentro(e, [...pospuestas]);
 
   // `tarjetasDelCentro` SIEMPRE cierra con la tarjeta de cierre. Aquí se
@@ -231,7 +245,8 @@ export function componerMando(e: EntradaDeMando, pospuestas: readonly string[] =
   const cierre = tarjetas.find((t) => t.kind === "cierre");
   const accionables = tarjetas
     .filter((t) => t.kind !== "cierre" && t.kind !== "apertura")
-    .map((t) => itemDe(t, e));
+    .map((t) => itemDe(t, e))
+    .filter((i) => !resueltas.includes(i.id));
 
   // UN SOLO ÍTEM POR CARRIL, Y ES EL PRIMERO. Como `accionables` ya viene en el
   // orden de caducidad de D-169, quedarse con el primero de cada frente

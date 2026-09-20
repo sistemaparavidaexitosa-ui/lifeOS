@@ -2509,3 +2509,29 @@ flotante**, que es de lo que iba el encargo.
   generativa del Centro **sigue sin verse funcionar**, duodécimo ciclo.
 - **`delegar` e `investigar`** siguen sin fuente ni pantalla.
 - Móvil real, WebKit/iPhone, lectores de pantalla y PWA: sin probar desde D-165.
+
+### Lo que encontró la revisión de Codex (PR #62)
+
+Dos hallazgos, los dos ciertos, sobre código escrito en esta misma sesión.
+
+- **Importante, y era un bug de verdad.** `Navegacion.tsx` anulaba el ítem YA
+  ELEGIDO cuando lo resolvías, en vez de filtrarlo antes de elegir. Con dos
+  tarjetas compitiendo en el mismo frente —la Única Cosa y las vencidas—,
+  resolver la primera dejaba el carril en **falsa calma** con la segunda
+  esperando turno, y `dominante` seguía apuntando a algo que ya no se veía.
+  Peor: el comentario de ese `useMemo` **afirmaba** que «el siguiente de su
+  carril sube solo», que es exactamente lo que no hacía. Un comentario que
+  describe la conducta deseada en vez de la real es peor que no tener ninguno.
+  Arreglado moviendo el filtro al dominio: `componerMando(e, pospuestas,
+  resueltas)`. Tres pruebas nuevas, la principal se llama **«RESOLVER
+  PROMUEVE»**.
+- **Menor.** `components/comando/Tarjeta.tsx` quedó sin consumidor al retirar la
+  superficie de la home: D-177 borró `CentroDeMando` y `Cabecera` y se dejó
+  ésta. Borrado. Es justo el «envoltorio sin consumidor» del que advierte el
+  documento de arquitectura, cometido por quien lo escribió.
+
+Ninguna de las dos la habrían encontrado los 1319 tests anteriores: la primera
+vivía en la transición de estado de React, que el dominio no cubría; la segunda
+no rompe nada, solo sobra.
+
+`pnpm test:unit` **1322/1322** ✅ · typecheck ✅ · lint ✅ · build ✅ 102 kB.

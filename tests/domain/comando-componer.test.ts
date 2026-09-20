@@ -211,3 +211,44 @@ test("cada ítem lleva lo justo para resolverse sin salir del centro", () => {
   assert.equal(dinero?.datos.tipo, "navegar");
   assert.ok(dinero?.href, "lo que navega tiene a dónde ir");
 });
+
+// --- Resolver promueve (el bug que encontró la revisión de Codex) ---
+
+// La primera versión anulaba el ítem YA ELEGIDO en el componente, así que el
+// carril se quedaba en falsa calma con una segunda tarjeta suya esperando. El
+// comentario del componente afirmaba la conducta que el código no tenía.
+test("RESOLVER PROMUEVE: al caer un ítem sube el siguiente de SU carril", () => {
+  // Dos de ejecución compitiendo: la Única Cosa y las vencidas.
+  const e = entrada({ unicaCosa: "Cerrar el rediseño", vencidas: 2 });
+
+  const antes = componerMando(e);
+  const primero = via(antes, "execution").item!;
+
+  const despues = componerMando(e, [], [primero.id]);
+  const segundo = via(despues, "execution").item;
+
+  assert.ok(segundo, "el carril NO puede quedarse en calma con otra tarjeta suya esperando");
+  assert.notEqual(segundo!.id, primero.id);
+});
+
+test("resolver recalcula quién manda", () => {
+  // Ejecución manda; al resolver su único ítem, manda el dinero.
+  const e = entrada({ unicaCosa: "Algo", presupuestoEnRojo: true });
+
+  const antes = componerMando(e);
+  assert.equal(antes.dominante, "execution");
+
+  const despues = componerMando(e, [], [via(antes, "execution").item!.id]);
+  assert.equal(despues.dominante, "money", "el dominante no puede apuntar a algo que ya no se ve");
+});
+
+test("resolver lo último de un carril lo deja en calma, no mudo", () => {
+  const e = entrada({ presupuestoEnRojo: true });
+  const dinero = via(componerMando(e), "money").item!;
+
+  const v = via(componerMando(e, [], [dinero.id]), "money");
+
+  assert.equal(v.item, null);
+  assert.ok(v.estado.length > 0, "sin ítem sigue diciendo qué sabe");
+  assert.ok(v.href.length > 0, "y sigue dejando entrar");
+});
