@@ -163,3 +163,41 @@ test("un día en que nadie debe hablar devuelve dos listas coherentes", () => {
   assert.deepEqual(actuan, []);
   assert.deepEqual(callan, []);
 });
+
+// --- El rechazo sostenido (D-174) ---
+
+test("un agente ignorado durante semanas se calla, y el motivo lo explica", () => {
+  const v = convieneActuar(agente("coach"), evento(), {
+    ...historiaLimpia(),
+    rechazoSostenido: true
+  });
+
+  assert.equal(v.actuar, false);
+  assert.match(v.actuar === false ? v.motivo : "", /descartas/);
+  // Dice que volverá: un silencio permanente sería una jaula, no una lección.
+  assert.match(v.actuar === false ? v.motivo : "", /datos nuevos/);
+});
+
+// Callar por falta de datos sería castigar a un agente por ser nuevo.
+test("sin historial, el agente actúa como siempre", () => {
+  const sinDato = convieneActuar(agente("coach"), evento(), historiaLimpia());
+  const conFalse = convieneActuar(agente("coach"), evento(), {
+    ...historiaLimpia(),
+    rechazoSostenido: false
+  });
+
+  assert.equal(sinDato.actuar, true);
+  assert.equal(conFalse.actuar, true);
+});
+
+// Un descarte de HOY es más reciente y más concreto que semanas de estadística.
+test("el descarte del día gana al rechazo sostenido en el motivo", () => {
+  const v = convieneActuar(agente("coach"), evento(), {
+    ...historiaLimpia(),
+    descartadoHoy: true,
+    rechazoSostenido: true
+  });
+
+  assert.equal(v.actuar, false);
+  assert.match(v.actuar === false ? v.motivo : "", /descartaste/);
+});
