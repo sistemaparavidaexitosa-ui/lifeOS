@@ -15,7 +15,7 @@
 // entera en vez de guardarse a medias, porque un botón que falla al pulsarlo es
 // peor que un botón que no existe.
 
-export const TIPOS = ["tarea", "bloque", "rutina", "estructura", "meta", "arista"] as const;
+export const TIPOS = ["tarea", "bloque", "rutina", "estructura", "meta", "arista", "foco"] as const;
 export type Tipo = (typeof TIPOS)[number];
 
 /**
@@ -24,6 +24,14 @@ export type Tipo = (typeof TIPOS)[number];
  * redacta libremente. Si el coach devolviera una igual, se descarta aquí.
  */
 export const TIPOS_DEL_COACH: readonly Tipo[] = ["tarea", "bloque", "rutina", "estructura", "meta"];
+
+/**
+ * Lo que el CENTRO puede proponer (D-167). Menos que el coach a propósito: el
+ * centro tiene tres líneas y se lee de pasada, así que propone continuar algo
+ * (`foco`), apuntar una tarea o reservar un bloque. Una meta o una estructura
+ * son conversaciones, y esas viven en el chat.
+ */
+export const TIPOS_DEL_CENTRO: readonly Tipo[] = ["foco", "tarea", "bloque"];
 
 /** Las únicas relaciones que la IA puede sugerir. Ninguna es de dependencia: esas bloquean. */
 export const RELACIONES_SUGERIBLES = ["supports", "related_to", "duplicates"] as const;
@@ -94,6 +102,18 @@ export function sanearPropuesta(cruda: PropuestaCruda): PropuestaSaneada | null 
   const datos = leerDatos(cruda.datos);
 
   switch (tipo) {
+    case "foco": {
+      // `foco` NO CREA NADA: lleva a una pantalla. Aquí solo se comprueba la
+      // forma —que haya un destino interno—; si ese destino EXISTE lo decide
+      // `destinoValido` en el dominio del centro, que sí conoce los proyectos
+      // de la persona. Sin destino no hay propuesta: un botón que no lleva a
+      // ningún sitio es peor que no ofrecer nada.
+      const href = texto(datos.href, 120);
+      const motivo = texto(datos.motivo, MAX_DETALLE);
+      if (!href.startsWith("/")) return null;
+      return { tipo, titulo, detalle, payload: { href, motivo } };
+    }
+
     case "tarea":
       // El título ES la tarea. No lleva fecha, igual que `sanitizeProposedTask`:
       // una fecha inventada deja el tablero lleno de tareas vencidas.

@@ -96,6 +96,14 @@ async function ejecutar(p: PropuestaSaneada, workspaceId: string | null): Promis
     case "estructura":
       return { ...actionOk, href: `/execution?project=${p.payload.projectId}` };
 
+    case "foco":
+      // NO CREA NADA, igual que `estructura` y por un motivo parecido: «sigue
+      // con el proyecto en el que estabas» no es algo que haya que crear, es un
+      // sitio al que volver. El destino ya viene validado contra el menú y
+      // contra los proyectos reales (`destinoValido`, D-167), así que aquí solo
+      // se devuelve para que la pantalla navegue.
+      return { ...actionOk, href: p.payload.href };
+
     case "arista":
       // No pasa por aquí: `acceptProposal` la manda a `aceptarArista`, que
       // reclama y escribe en una sola transacción de base.
