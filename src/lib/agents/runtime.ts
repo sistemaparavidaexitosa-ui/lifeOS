@@ -24,10 +24,15 @@ import "server-only";
 // no reintenta, no guarda. La persistencia de corridas llega en la Fase 4, con
 // su migración, cuando se sepa qué merece guardarse.
 //
-// Hoy este registro sigue VACÍO a propósito: el sistema se comporta exactamente
-// igual que antes de que existiera este archivo.
+// EL REGISTRO YA NO ESTÁ VACÍO, DESDE D-172
+// Vive en él el coach diario, y **sigue sin cambiar nada**: nadie llama a
+// `ejecutarAgente`, así que el coach de verdad sigue siendo el de
+// `/api/push/dispatch` → `generarYGuardarMensajeDiario`. Registrar no es
+// conectar. Lo que se gana es que el contrato ya tiene un consumidor real que
+// lo pone a prueba en cada `pnpm typecheck`, en vez de un agente de mentira.
 
 import { crearRegistro } from "@/lib/domain/agents/registro.ts";
+import { coachDiario } from "./coach-diario.ts";
 import type { AgentId, AgentInput, AgentResult, AnyAgentDefinition } from "@/lib/domain/agents/types.ts";
 import type { ActionResult } from "@/lib/supabase/errors";
 
@@ -39,6 +44,21 @@ import type { ActionResult } from "@/lib/supabase/errors";
  * el `Map`, la validación de contrato.ts sería opcional y dejaría de servir.
  */
 const registro = crearRegistro();
+
+/**
+ * El alta de los agentes del sistema.
+ *
+ * Se hace aquí, al evaluarse el módulo, y NO se comprueba el resultado con un
+ * `throw`: si el coach no entrara —contrato roto tras un cambio de tipos—, lo
+ * correcto es que LifeOS arranque sin coach y lo diga, no que la aplicación
+ * entera deje de responder. Es la misma regla que aplica el registro al no
+ * lanzar (D-021), sostenida en el único sitio donde sería tentador romperla.
+ *
+ * El motivo no se pierde: `listarAgentes()` no lo incluirá y `ejecutarAgente`
+ * dirá «no hay ningún agente ...». Cuando exista el segundo agente, esto pasa a
+ * ser un bucle sobre una lista.
+ */
+const altaDelCoach = registro.registrar(coachDiario);
 
 /**
  * Da de alta un agente. No lanza: devuelve `{ ok: false, reason }` con un
@@ -57,9 +77,20 @@ export function obtenerAgente(id: AgentId): AnyAgentDefinition | null {
   return registro.obtener(id);
 }
 
-/** Los agentes registrados, ordenados por id. Hoy: ninguno. */
+/** Los agentes registrados, ordenados por id. */
 export function listarAgentes(): AnyAgentDefinition[] {
   return registro.listar();
+}
+
+/**
+ * Qué agentes del sistema no consiguieron entrar, y por qué.
+ *
+ * Existe para que un alta fallida sea VISIBLE sin tener que tumbar el arranque.
+ * Hoy la lista está vacía y lo comprueba el typecheck; el día que no lo esté,
+ * esto es lo que hay que mirar antes que el registro.
+ */
+export function problemasDeArranque(): string[] {
+  return altaDelCoach.ok ? [] : [altaDelCoach.reason ?? "El coach diario no se pudo registrar."];
 }
 
 /**

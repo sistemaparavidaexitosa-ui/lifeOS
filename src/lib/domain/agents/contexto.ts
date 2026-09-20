@@ -67,6 +67,13 @@ export function acotarContexto(
 
   const permitidos = new Set<Domain>(visibles);
 
+  // Lo que ESTE agente pidió y no puede ver. Se calcula desde `agente.domains`
+  // y no desde `base.skippedDomains` porque son dos preguntas distintas: al
+  // agente no le sirve saber qué apagó la persona en general, sino qué le falta
+  // a ÉL. Un agente de hábitos no debe disculparse por no ver el dinero que
+  // nunca pidió.
+  const sinPermiso = agente.domains.filter((d) => !permitidos.has(d));
+
   return {
     ok: true,
     entrada: {
@@ -75,6 +82,7 @@ export function acotarContexto(
       timeZone: base.timeZone,
       evento,
       domains: visibles,
+      skippedDomains: sinPermiso,
       facts: base.facts.filter((f) => permitidos.has(f.domain)),
       // Memoria y rechazos son texto ya redactado por la persona o por sus
       // propias decisiones: no llevan dominio, así que no hay nada que

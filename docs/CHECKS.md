@@ -2162,3 +2162,63 @@ viejo cambió: es que las reglas dicen lo que creemos que dicen.
   enfrentado a un caso incómodo.
 - **Ninguna llamada real al modelo**, sexto ciclo seguido. Y sigue pendiente todo
   lo de D-165 a D-169: WebKit/iPhone, lectores de pantalla, PWA instalada.
+
+## Agentic Kernel, Fase 2 — el coach (D-172, sin migración) — 20-sep-2026
+
+La fase existía para responder una pregunta: **¿el contrato del Kernel le queda
+bien a un agente de verdad?** La respuesta es sí, con una costura y una
+diferencia de conducta que conviene no olvidar.
+
+### Lo que sí se probó
+
+- `pnpm test:unit`: **1276/1276** ✅, con **11 tests nuevos** en
+  `agents-coach.test.ts`.
+- El coach pasa `validarAgente()` con sus catorce campos, entra en el registro,
+  responde a `cron.manana` y `cron.noche` y a nada más, y el tope de riesgo
+  medio le da **una vez por franja** — que es justo lo que el camino actual ya
+  hacía con `claveDelCoach`.
+- Privacidad: pide los ocho dominios y recibe solo los encendidos; con todo
+  apagado **no corre** (la misma regla que `daily.ts` aplicaba a mano); y sabe
+  qué pidió y no puede ver.
+- `pnpm typecheck` ✅ · `pnpm lint` ✅ · `pnpm build` ✅ con las mismas 39
+  páginas y **First Load JS 102 kB, sin cambio**. Esto último importa más de lo
+  que parece: `runtime.ts` ahora arrastra `coach-diario` → `coach/generar` →
+  `gemini-provider`, y el bundle de cliente no se enteró. `server-only` cumplió.
+- `git diff` acotado: solo archivos del Kernel. Esta vez sí, a diferencia de la
+  Fase 1.
+
+### Lo que la escritura encontró y el diseño no
+
+- **El contrato tuvo que cambiar, y estuvo bien que fuera ahora.** `AgentInput`
+  no tenía `skippedDomains`, y el prompt del coach ya decía «el usuario apagó
+  estos dominios, no especules sobre ellos». Sin ese campo el primer agente real
+  habría redactado como si tuviera la foto completa. Es exactamente el tipo de
+  hueco que solo aparece al envolver algo de verdad.
+- **Hizo falta una costura `AgentInput → InsightContext`**, en
+  `coach-diario.ts`. No recalcula nada —solo vuelve a poner los mismos datos en
+  la caja que `generarMensajeCoach` espera—, pero es una traducción, y existe
+  porque el contrato del Kernel deliberadamente no habla el vocabulario de
+  Insights. Vive en el agente y no en el Kernel; si un segundo agente la
+  necesita, se sube.
+- **La «sombra» del documento de arquitectura no se hizo, y se decidió no
+  hacerla.** Envolver `generarMensajeCoach` implica una llamada real al modelo:
+  correrla en paralelo duplicaría la llamada más cara del sistema por persona y
+  franja, sobre una cuota gratuita que ya gestiona 429 saltando de modelo, para
+  comparar dos salidas que vienen de la misma función. **Es una desviación del
+  plan aprobado**, y está aquí escrita para que se vea.
+
+### Lo que NO se ha ejercitado, y hay que saberlo
+
+- **`ejecutarAgente` sigue sin haberse llamado nunca.** El agente existe,
+  compila y está registrado; que funcione de punta a punta no se sabrá hasta la
+  Fase 3. Todo lo verde de arriba prueba lo que rodea a `ejecutar`, no `ejecutar`.
+- **No hay paridad de conducta con el camino actual.** El agente no recibe
+  `CajaDeHerramientas`, así que no puede pedir más hechos con `leer_hechos` a
+  mitad de razonar. El coach de producción sí puede. **Sustituirlo hoy sería una
+  regresión**, y el obstáculo es de capas: la caja lleva `server-only` y no cabe
+  en un `AgentInput` puro. Es la primera decisión de la Fase 3.
+- **Los topes por franja siguen sin calibrarse con datos reales** (D-171), y la
+  proporción de silencios sigue sin poder leerse: no hay dónde guardarla.
+- **Ninguna llamada real al modelo**, séptimo ciclo seguido — y ahora con un
+  agente escrito que solo se puede probar llamándolo. Sigue pendiente todo lo de
+  D-165 a D-169: WebKit/iPhone, lectores de pantalla, PWA instalada.

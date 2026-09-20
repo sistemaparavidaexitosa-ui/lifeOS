@@ -131,6 +131,17 @@ export interface AgentInput {
   evento: AgentEvent;
   /** Los que de verdad viajan: `ai_domains` ∩ `agente.domains`. */
   domains: Domain[];
+  /**
+   * Los que este agente pidió y NO puede ver, porque la persona los tiene
+   * apagados para la IA.
+   *
+   * Añadido en D-172, al envolver el primer agente real: el prompt del coach ya
+   * decía «el usuario apagó estos dominios, no especules sobre ellos», y sin
+   * este campo el agente habría redactado como si tuviera la foto completa. Es
+   * lo contrario de un dato de depuración: es lo que impide que el silencio de
+   * la persona se lea como ausencia de problema.
+   */
+  skippedDomains: Domain[];
   /** Ya filtrados, ordenados por peso y recortados. El agente no calcula. */
   facts: Fact[];
   /** Memoria vigente, ya resuelta por `activeMemory()`. */

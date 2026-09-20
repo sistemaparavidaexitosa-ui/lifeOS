@@ -166,3 +166,24 @@ rutas ni pantallas. La diferencia con D-170 es que ahora hay reglas que probar.
 | No se llama al modelo sin presupuesto | — | — | — | — | `agents-registro.test.ts`: pensar ≥ tope se rechaza (✅) |
 | Un agente que falla no tumba a quien lo llamó | — | — | `ejecutarAgente` con `server-only` | — | `pnpm build` (✅); sin agente real todavía (⚠️) |
 | Ningún módulo importa el Kernel | — | — | — | — | `git diff` acotado a Kernel + mudanza de `Budget` (✅) |
+
+## Agentic Kernel, Fase 2 — el coach (D-172, sin migración)
+
+Primer agente real. Las columnas de datos siguen vacías porque registrar no es
+conectar: el coach de producción sigue siendo el de `/api/push/dispatch`.
+
+| Requisito | Tablas | RLS / GRANT | Server Actions y rutas | UI | Pruebas |
+|---|---|---|---|---|---|
+| El coach cumple el contrato de agente | — | — | — | — | `agents-coach.test.ts`: `validarAgente` lo acepta (✅) |
+| Entra en el registro al arrancar | — | — | `runtime.ts` (`server-only`) | — | `agents-coach.test.ts` (✅) · `problemasDeArranque()` vacío (✅ typecheck) |
+| Responde a las dos citas del día y a nada más | — | — | — | — | `agents-coach.test.ts`: mañana y noche sí; centro y hábito no (✅) |
+| Una vez por franja | — | — | — | — | `agents-coach.test.ts`: riesgo medio → tope 1 (✅) |
+| Pide ocho dominios, ve solo los encendidos | `profiles.ai_domains` | la de 0048 | — | — | `agents-coach.test.ts` (✅) |
+| Sabe qué dominios pidió y no puede ver | — | — | — | — | `agents-coach.test.ts`: `skippedDomains` incluye lo apagado (✅) |
+| Con todo apagado, no corre | — | — | — | — | `agents-coach.test.ts` (✅) — misma regla que ya aplicaba `daily.ts` |
+| No choca con ningún especialista futuro | — | — | — | — | `agents-coach.test.ts`: sirve las 7 áreas (✅) |
+| Un disparo que no es suyo no se interpreta | — | — | — | — | `agents-coach.test.ts`: `momentoDelDisparo` → `null` (✅) |
+| El agente no escribe | `ai_chat_messages`, `coach_proposals` | sin cambios | envuelve `generarMensajeCoach`, no `…Guardar…` | — | por construcción: la función envuelta no importa Supabase (✅) |
+| No se filtra al bundle de cliente | — | — | `server-only` | — | `pnpm build`: First Load JS 102 kB, sin cambio (✅) |
+| `ejecutar` con un agente real | — | — | — | — | **sin ejercitar** (⚠️): nadie lo llama todavía |
+| Paridad de conducta con el camino actual | — | — | — | — | **no** (⚠️): sin `CajaDeHerramientas`, ver CHECKS |

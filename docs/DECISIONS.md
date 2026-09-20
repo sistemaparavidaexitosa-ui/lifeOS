@@ -3277,3 +3277,59 @@ implementa:
     traduce fallos: no mide, no reintenta y no guarda la corrida. La
     persistencia llega en la Fase 4, con su migración, cuando se sepa qué merece
     guardarse.
+
+- **D-172 · El coach como primer agente: se envuelve lo que piensa, no lo que
+  escribe.** Fase 2 del Agentic Kernel. Un solo agente real, para responder la
+  única pregunta que la Fase 1 no podía: ¿el contrato le queda bien a algo de
+  verdad?
+  - **El punto de envoltura es `generarMensajeCoach`, no
+    `generarYGuardarMensajeDiario`.** El orquestador reúne contexto, piensa y
+    ESCRIBE —turno, propuestas, rastro—. Un agente no escribe (D-171). La mitad
+    de en medio encajó sin forzar nada porque ya estaba escrita con esa
+    frontera: su cabecera decía, desde antes del Kernel, «recibe hechos ya
+    calculados y devuelve texto; quien la llama decide si algo se guarda». Esa
+    es la respuesta a la pregunta de la fase: el contrato sirve, y sirve porque
+    el repositorio ya separaba pensar de escribir.
+  - **El contrato SÍ tuvo que cambiar, y en un punto que importa.**
+    `AgentInput` gana `skippedDomains`. El prompt del coach ya decía «el usuario
+    apagó estos dominios, no especules sobre ellos», y sin ese campo el agente
+    habría redactado como si tuviera la foto completa. Se calcula desde
+    `agente.domains`, no desde el contexto base: al agente no le sirve saber qué
+    apagó la persona en general, sino qué le falta a ÉL. Un agente de hábitos no
+    debe disculparse por no ver el dinero que nunca pidió.
+  - **Metadatos en el dominio, `ejecutar` en los efectos.** Un agente tiene dos
+    mitades con destinos distintos: lo que declara se puede probar, lo que hace
+    lleva `server-only` y llama al modelo. Separarlas (`domain/agents/coach.ts`
+    frente a `lib/agents/coach-diario.ts`) es lo que permite que
+    `tests/domain/agents-coach.test.ts` compruebe qué datos ve el agente y
+    cuándo se le deja hablar. Es el patrón que deben copiar los siguientes.
+    `COACH_METADATOS` se tipa como `Omit<AnyAgentDefinition, "ejecutar">`: si el
+    contrato gana un campo obligatorio, deja de compilar en vez de quedarse
+    viejo en silencio.
+  - **El coach pide los ocho dominios y las siete áreas**, y no es pereza: por
+    eso usa `MAX_FACTS_COACH = 120` y no los 40 del chat, y por eso existe. El
+    efecto secundario buscado es que **nunca choca con nadie**
+    —`identidadesIncompatibles` exige no compartir NINGÚN área—, que es lo
+    correcto para el agente que mira el conjunto: si pudiera chocar, bloquearía
+    a cualquier especialista que llegara después.
+  - **NO se ejecuta en sombra dentro del despachador**, aunque el documento de
+    arquitectura lo proponía. Envolver `generarMensajeCoach` significa una
+    llamada REAL al modelo: correrlo en paralelo al camino actual duplicaría la
+    llamada más cara del sistema, por persona y por franja, sobre una cuota
+    gratuita que ya gestiona 429 saltando de modelo. Y compararía dos salidas
+    que por construcción vienen de la misma función. La comparación honesta es
+    la sustitución de la Fase 3, detrás de una condición reversible.
+  - **Registrar no es conectar.** El registro ya no está vacío, y aun así nada
+    cambió: nadie llama a `ejecutarAgente`, así que el coach de verdad sigue
+    siendo el de `/api/push/dispatch`. Lo que se gana es que el contrato tiene
+    un consumidor real que lo pone a prueba en cada `pnpm typecheck`.
+  - **El alta no lanza.** `runtime.ts` registra al coach y expone
+    `problemasDeArranque()` en vez de comprobar con un `throw`. Si el coach no
+    entrara, lo correcto es que LifeOS arranque sin coach y lo diga, no que la
+    aplicación deje de responder. Es la regla de D-021 sostenida justo donde
+    sería tentador romperla.
+  - **Diferencia de conducta conocida:** el agente no recibe
+    `CajaDeHerramientas`, así que no puede pedir más hechos con `leer_hechos` a
+    mitad de razonar; el camino actual sí se la pasa. Hay que cerrarlo antes de
+    sustituir a nadie, y el obstáculo es de capas: `CajaDeHerramientas` lleva
+    `server-only` y no puede viajar en un `AgentInput` puro.
