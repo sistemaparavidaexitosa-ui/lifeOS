@@ -3134,3 +3134,36 @@ implementa:
     payload. La lista de tipos es ACUMULATIVA: reescribirla copiando una
     migración vieja ya borró `arista` una vez (ver 0070), y ahora está avisado
     dentro de la propia migración.
+
+- **D-169 · El centro dice qué hacer: una cosa a la vez.** Otra lectura literal
+  del usuario después de usarlo: «aún no se siente como experiencia premium de
+  navegación inteligente… que sea un flujo semiconversacional, sobre el centro
+  como lienzo dinámico; no necesito que el centro muestre todos los módulos y
+  sus secciones, sino que me diga qué es lo que debo hacer». Hasta D-168 el
+  centro seguía siendo, en el fondo, **un menú con inteligencia encima**: 23
+  destinos, una rejilla de cifras y tres líneas derivadas. Aunque acertara, se
+  leía como un panel con un widget.
+  - **La pantalla entera pasa a ser lo derivado.** Una sola tarjeta: su porqué
+    arriba en versalitas, qué hacer en tipografía grande, la acción, y «Ahora
+    no» para apartarla. Nada más. El orden lo fija `tarjetasDelCentro`, pura y
+    probada: apertura (el resumen) → hábito → propuesta de la IA → Única Cosa →
+    dinero → vencidas → cierre. Es el orden de **lo que caduca antes**.
+  - **Sin pasos numerados.** El ritual de D-165 es una secuencia con principio y
+    fin porque es un rito; el centro se abre veinte veces al día y numerar sería
+    convertir cada visita en una tarea de cinco pasos. Hay un contador discreto
+    —«Quedan 2»— y el tope es **seis tarjetas** más el cierre: el centro no es
+    una bandeja de entrada.
+  - **El menú se borra, no se esconde.** `destinos.ts`, `destacados.ts`,
+    `componer.ts`, sus tres suites y `Sugerencias.tsx` se eliminan enteros, con
+    su CSS. Para navegar está la barra lateral, que no se tocó desde D-166, y
+    «Cerrar» deja la app a la vista en un toque. Código que pierde a su
+    consumidor se borra el mismo día; si no, vuelve.
+  - **Lo que ya existía no se reescribió.** El hábito sale de
+    `construirSecuencia` acotada a `routineStep`, así que hereda la regla de la
+    hora de D-165 en vez de tener una segunda copia; las propuestas siguen
+    siendo la cola única de D-151 y se aceptan con `acceptProposal` (D-153); la
+    casilla es `HabitCheckbox`, la misma de `/development/routines`.
+  - **«Cerrar», no «Ahora no», en la barra de arriba.** Dentro de una tarjeta
+    «Ahora no» significa apartarla; dos botones con la misma etiqueta y distinto
+    efecto en la misma pantalla es una trampa. Lo encontró la prueba de
+    navegador tropezando con ella, no la lectura del código.

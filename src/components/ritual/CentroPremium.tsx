@@ -158,8 +158,12 @@ export default function CentroPremium({
         <span className="rit-muted" style={{ fontSize: 13 }}>
           {cabecera.saludo}, {cabecera.nombre} · {fdate(cabecera.dateISO, locale)}
         </span>
+        {/* «Cerrar», no «Ahora no»: dentro de una tarjeta «Ahora no» significa
+            apartarla, y dos botones con la misma etiqueta y distinto efecto en
+            la misma pantalla es una trampa. Lo encontró la prueba de navegador
+            tropezando con ella. */}
         <button className="rit-skip" onClick={onCerrar}>
-          Ahora no
+          Cerrar
         </button>
       </div>
 
@@ -169,7 +173,6 @@ export default function CentroPremium({
             entrada={entrada}
             today={cabecera.dateISO}
             workspaceId={workspaceId}
-            onCerrar={onCerrar}
             onNavegar={onIrA}
           />
         ) : (

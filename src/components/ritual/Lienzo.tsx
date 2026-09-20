@@ -22,14 +22,11 @@ export default function Lienzo({
   entrada,
   today,
   workspaceId,
-  onCerrar,
   onNavegar
 }: {
   entrada: EntradaLienzo;
   today: string;
   workspaceId: string | null;
-  /** «Ahora no» en la última: cierra el centro. */
-  onCerrar: () => void;
   /** Antes de navegar, para que el centro se quite de en medio. */
   onNavegar: () => void;
 }) {
@@ -60,11 +57,9 @@ export default function Lienzo({
     setIndice(0);
   }
 
+  // El cierre no lleva este botón —ahí la salida es «Cerrar» de arriba y la
+  // barra de captura—, así que aquí no hay caso para él.
   function ahoraNo() {
-    if (tarjeta!.kind === "cierre") {
-      onCerrar();
-      return;
-    }
     // Apartar no es descartar: baja al final y sigue estando.
     setPospuestas((p) => (p.includes(tarjeta!.id) ? p : [...p, tarjeta!.id]));
     setIndice(0);
