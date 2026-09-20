@@ -12,6 +12,8 @@ import { destinosDelCentro } from "@/lib/domain/centro/destinos.ts";
 import type { ContenidoDelRitual } from "@/lib/data/ritual";
 import type { HabitLogEntry } from "@/lib/domain/development/habit-analytics.ts";
 import type { HechoRitual } from "@/lib/domain/ritual/types.ts";
+import type { SugerenciaView } from "@/lib/centro/sugerencias";
+import Sugerencias from "./Sugerencias";
 
 /**
  * El centro premium (D-166): la puerta de la aplicación.
@@ -32,7 +34,8 @@ export default function CentroPremium({
   onCerrar,
   onIrA,
   onHabitual,
-  onRepetirRitual
+  onRepetirRitual,
+  workspaceId
 }: {
   cabecera: { saludo: string; nombre: string; dateISO: string };
   hourLocal: number;
@@ -45,8 +48,11 @@ export default function CentroPremium({
   onHabitual: () => void;
   /** `null` si la política no permite el ritual: entonces no se ofrece repetirlo. */
   onRepetirRitual: (() => void) | null;
+  /** Donde se crean las tareas que se acepten desde una sugerencia. */
+  workspaceId: string | null;
 }) {
   const [contenido, setContenido] = useState<ContenidoDelRitual | null>(null);
+  const [sugerencias, setSugerencias] = useState<SugerenciaView[]>([]);
   const [marcados, setMarcados] = useState<Record<string, HabitLogEntry | null>>({});
   const shellRef = useRef<HTMLDivElement | null>(null);
 
@@ -57,10 +63,12 @@ export default function CentroPremium({
   useEffect(() => {
     let vivo = true;
     void fetch("/api/centro")
-      .then((r) => (r.ok ? (r.json() as Promise<{ contenido: ContenidoDelRitual }>) : null))
+      .then((r) => (r.ok ? (r.json() as Promise<{ contenido: ContenidoDelRitual; sugerencias?: SugerenciaView[] }>) : null))
       .catch(() => null)
       .then((r) => {
-        if (vivo && r?.contenido) setContenido(r.contenido);
+        if (!vivo || !r) return;
+        if (r.contenido) setContenido(r.contenido);
+        if (r.sugerencias?.length) setSugerencias(r.sugerencias);
       });
     return () => {
       vivo = false;
@@ -180,6 +188,10 @@ export default function CentroPremium({
               })}
             </div>
           )}
+
+          {/* Lo que la IA propone va ENCIMA de los destinos, porque es lo que
+              cambia cada día; la lista de módulos siempre está donde estaba. */}
+          <Sugerencias iniciales={sugerencias} workspaceId={workspaceId} onNavegar={onIrA} />
 
           <div>
             <p className="rit-eyebrow" style={{ marginBottom: 14 }}>

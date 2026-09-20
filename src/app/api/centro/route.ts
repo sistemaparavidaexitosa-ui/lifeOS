@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { loadRitualGate, loadRitualContent } from "@/lib/data/ritual";
+import { sugerenciasDelCentro } from "@/lib/centro/sugerencias";
 
 /**
  * El contenido del centro premium (D-166).
@@ -15,13 +16,21 @@ import { loadRitualGate, loadRitualContent } from "@/lib/data/ritual";
  * abre justo cuando la persona quiere hacer algo.
  */
 export const dynamic = "force-dynamic";
+// Pensar las sugerencias puede costar unos segundos cuando toca franja nueva.
+export const maxDuration = 60;
 
 export async function GET() {
   const puerta = await loadRitualGate();
   if (!puerta) return NextResponse.json({ ok: false, reason: "Sin sesión." }, { status: 401 });
 
-  const contenido = await loadRitualContent(puerta);
+  // Las dos mitades van en paralelo, y las SUGERENCIAS NO MANDAN: si su promesa
+  // falla o el modelo no contesta, se devuelve la lista vacía y el centro se
+  // pinta igual. Es un extra, no el contenido.
+  const [contenido, sugerencias] = await Promise.all([
+    loadRitualContent(puerta),
+    sugerenciasDelCentro().catch(() => [])
+  ]);
   if (!contenido) return NextResponse.json({ ok: false, reason: "No se pudo preparar el centro." }, { status: 503 });
 
-  return NextResponse.json({ ok: true, contenido });
+  return NextResponse.json({ ok: true, contenido, sugerencias });
 }

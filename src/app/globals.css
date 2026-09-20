@@ -4290,3 +4290,44 @@ html[data-theme="dark"] .rit-boton-centro { color: #0b0b12; background: #f6f6fa;
 @media (prefers-reduced-motion: reduce) {
   .rit-boton-centro, .rit-boton-centro:hover { transition: none; transform: translateX(-50%); }
 }
+
+/* Lo siguiente: lo que la IA propone en el centro (D-167). Tres filas como
+   mucho, cada una con su acción a la derecha. */
+.rit-sug-lista {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.rit-sug {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 0;
+  border-top: 1px solid var(--rit-line);
+}
+.rit-sug:last-child { border-bottom: 1px solid var(--rit-line); }
+
+.rit-sug-botones {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.rit-sug-si {
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 18px;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 700;
+  background: var(--rit-accent);
+  color: var(--rit-bg);
+  cursor: pointer;
+}
+.rit-sug-si:disabled { opacity: 0.5; cursor: default; }

@@ -117,6 +117,14 @@ export const COACH_BUDGET: Budget = { maxOutputTokens: 4000, thinkingBudget: 204
 export const BRIEF_BUDGET: Budget = { maxOutputTokens: 4000, thinkingBudget: 1024 };
 
 /**
+ * El centro agéntico (D-167). EL PRESUPUESTO MÁS PEQUEÑO DEL REPO, y a
+ * propósito: son como mucho tres frases con su motivo, y se pagan hasta tres
+ * veces al día por persona. Si alguna vez hace falta más sitio, la pregunta
+ * correcta no es subir el tope sino por qué el centro está escribiendo párrafos.
+ */
+export const CENTRO_BUDGET: Budget = { maxOutputTokens: 1500, thinkingBudget: 512 };
+
+/**
  * Ni un modelo lento puede dejar un botón girando para siempre. Mismo criterio
  * que `AUTH_DEADLINE_MS` en el middleware.
  */
