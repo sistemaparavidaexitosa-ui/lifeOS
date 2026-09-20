@@ -1,22 +1,28 @@
 // src/lib/domain/agents/types.ts
-// El vocabulario de los agentes (D-170) — lógica pura, sin React ni Supabase.
+// El vocabulario de los agentes (D-170, extendido en D-171) — lógica pura, sin
+// React ni Supabase.
 //
 // POR QUÉ EXISTE
 // LifeOS ya tiene piezas que piensan: el Coach propone, Manifestation redacta,
 // Insights resume, Automations despacha, el chat llama herramientas. Ninguna
 // sabe de las otras. Cada una se invoca desde su propio sitio con su propia
 // firma, y por eso «conectar dos» siempre ha significado escribir el pegamento
-// a mano una vez más.
-//
-// Lo que falta no es inteligencia: es un NOMBRE COMÚN. Este archivo lo da, y
-// nada más. Aquí no se ejecuta nada, no se elige nada y no se orquesta nada;
-// eso llega en sprints posteriores. Un sprint que sólo define palabras parece
-// poco trabajo hasta que se mira el coste de la alternativa: cada módulo que
-// llega inventando su propio contrato deja una costura permanente.
+// a mano una vez más. Lo que falta no es inteligencia: es un NOMBRE COMÚN.
 //
 // Sin "server-only" a propósito: igual que `domain/ritual/types.ts`, esto lo
-// importan el servidor, los componentes cliente y los tests. El día que un
-// agente deba describirse en pantalla, el tipo ya está del lado correcto.
+// importan el servidor, los componentes cliente y los tests.
+//
+// LA REGLA QUE ORDENA ESTE ARCHIVO
+// El Kernel decide QUIÉN actúa y SI conviene actuar. No sabe hacer nada. Todo
+// lo que sabe hacer algo ya existe, así que este vocabulario se apoya en el que
+// ya hay —`Domain` de Insights, `Area` de identidad, `Budget` del dominio de
+// IA— en vez de inventar sinónimos. Cada import de este archivo es una
+// duplicación que no se escribió.
+
+import type { Domain } from "../insights/types.ts";
+import type { Fact } from "../insights/types.ts";
+import type { Area } from "../identity/categorias.ts";
+import type { Budget } from "../ai/model-chain.ts";
 
 /**
  * El identificador estable de un agente.
@@ -32,17 +38,105 @@
 export type AgentId = string;
 
 /**
+ * Qué hace que un agente despierte. Unión cerrada, como `TriggerType` de
+ * `domain/automations/rules.ts`: el compilador obliga a cubrir cada caso, y un
+ * disparo que nadie sabe emitir no se puede declarar por error.
+ *
+ * `identidad.revisada` NO es aspiracional: el trigger
+ * `registrar_revision_de_identidad` (migración 0064) ya escribe
+ * `identity_revisions` en cada cambio del perfil. Lo único que falta es que
+ * alguien lo convierta en este evento. Está aquí porque es el disparo que
+ * invalida lo aprendido: sin él, el sistema sabotearía en junio a quien cambió
+ * de rumbo en enero.
+ */
+export const DISPAROS = [
+  "cron.manana",
+  "cron.noche",
+  "habito.completado",
+  "tarea.cambio_estado",
+  "identidad.revisada",
+  "centro.abierto"
+] as const;
+
+export type AgentTrigger = (typeof DISPAROS)[number];
+
+export function esDisparo(v: string): v is AgentTrigger {
+  return (DISPAROS as readonly string[]).includes(v);
+}
+
+/**
+ * Qué puede hacer un agente. La lista es corta a propósito: **no existe
+ * «escribir»**.
+ *
+ * La salida de un agente es una propuesta en `coach_proposals`; quien escribe
+ * es una Server Action con la sesión de la persona y la RLS de siempre (D-089,
+ * D-164). Añadir aquí una capacidad de escritura sería la primera grieta en la
+ * invariante que hace que un fallo del Kernel sea un silencio y no un daño.
+ */
+export const CAPACIDADES = ["proponer", "resumir", "detectar"] as const;
+export type AgentCapability = (typeof CAPACIDADES)[number];
+
+/**
+ * Cuánto puede actuar por su cuenta.
+ *
+ * Hoy **solo `propone` es legal**; los otros dos existen para poder nombrarlos
+ * y rechazarlos en `validarAgente()` en vez de que alguien los invente con otro
+ * nombre dentro de seis meses. Que el vocabulario admita lo que la política
+ * prohíbe es deliberado: así el rechazo está escrito en un sitio y se puede
+ * probar.
+ */
+export const AUTONOMIAS = ["propone", "actua_con_permiso", "autonomo"] as const;
+export type AgentAutonomy = (typeof AUTONOMIAS)[number];
+
+/** Cuánto duele si se equivoca. Lo usa `politicas.ts`, no el registro. */
+export const RIESGOS = ["bajo", "medio", "alto"] as const;
+export type AgentRisk = (typeof RIESGOS)[number];
+
+/**
+ * Algo que pasó y que puede despertar a un agente.
+ *
+ * **No se persiste.** Vive dentro de una petición, exactamente como
+ * `AutomationEvent` desde la migración 0008. Una tabla de eventos genérica
+ * parece la base de todo sistema agentic y aquí sería una tabla enorme sin
+ * lector: los disparos ya existen (Server Actions, `pg_cron`) y lo que merece
+ * guardarse ya se guarda (`audit_log`, `coach_proposals`, `centro_runs`).
+ */
+export interface AgentEvent {
+  tipo: AgentTrigger;
+  userId: string;
+  /** ISO. Cuándo pasó, no cuándo se procesó. */
+  ocurridoEn: string;
+  /** Qué filas lo provocaron. Misma forma que `Fact.refs`. */
+  refs?: { table: string; id: string }[];
+}
+
+/**
  * Lo que un agente recibe para trabajar.
  *
- * Hoy sólo el usuario, y esa pobreza es deliberada. Contexto, memoria, grafo,
- * evento disparador y presupuesto de tokens van a entrar aquí, pero inventarlos
- * ahora —sin un solo agente real que los consuma— sería adivinar la forma de
- * algo que todavía no se ha usado nunca. Ampliar este tipo cuando llegue el
- * primer agente cuesta una línea; desandar cinco campos mal elegidos que ya
- * tienen implementaciones encima, no.
+ * NO lleva el `InsightContext` de `lib/insights/context.ts`, aunque el diseño
+ * lo proponía. Dos razones: importarlo invertiría las capas —el dominio
+ * dependería de la capa de aplicación, que aquí no lo hace nadie— y ataría el
+ * contrato de TODO agente al vocabulario del Intelligence OS. Lo que el agente
+ * necesita son los datos, no el envase: `domains` y `facts` ya viven en el
+ * dominio, y `memory`/`rejections` son texto plano.
+ *
+ * La conversión `InsightContext → AgentInput` es trivial y vivirá en la capa de
+ * efectos cuando haya un llamador real (Fase 3).
  */
 export interface AgentInput {
   userId: string;
+  /** YYYY-MM-DD en la zona de la persona. Nunca `new Date()` dentro del agente. */
+  today: string;
+  timeZone: string;
+  evento: AgentEvent;
+  /** Los que de verdad viajan: `ai_domains` ∩ `agente.domains`. */
+  domains: Domain[];
+  /** Ya filtrados, ordenados por peso y recortados. El agente no calcula. */
+  facts: Fact[];
+  /** Memoria vigente, ya resuelta por `activeMemory()`. */
+  memory: string[];
+  /** Lo que la persona ya rechazó. Solo el rechazo enseña, de momento. */
+  rejections: string[];
 }
 
 /**
@@ -63,14 +157,14 @@ export type AgentResult<T = unknown> =
 /**
  * Lo que hay que escribir para que algo sea un agente de LifeOS.
  *
- * `ejecutar` está aquí —en el TIPO— aunque el runtime de este sprint no lo
- * llame nunca. Es la diferencia entre «preparado para ejecutar» y «un método
- * vacío esperando»: el contrato queda cerrado y verificado por el compilador,
- * de modo que el Sprint 2 añade la invocación sin renegociar nada con los
- * agentes que ya se hayan escrito.
+ * `ejecutar` está aquí —en el TIPO— desde D-170, y el runtime no lo llamó hasta
+ * D-171. Es la diferencia entre «preparado para ejecutar» y «un método vacío
+ * esperando»: el contrato queda cerrado y verificado por el compilador.
  */
 export interface AgentDefinition<S = unknown> {
   id: AgentId;
+  /** Cómo se llama para una persona. `id` es para máquinas. */
+  name: string;
   /**
    * Versión del agente, no del contrato. Sirve para que una corrida guardada
    * diga qué versión la produjo: sin esto, un agente que cambia de criterio
@@ -79,6 +173,45 @@ export interface AgentDefinition<S = unknown> {
   version: string;
   /** Para qué sirve, en una frase y en el idioma del usuario. */
   descripcion: string;
+
+  /**
+   * Los dominios que necesita ver.
+   *
+   * Es el campo más importante del contrato: ata cada agente a la puerta de
+   * privacidad que ya existe (D-027). Se INTERSECA con `profiles.ai_domains`, y
+   * si la intersección queda vacía el agente no corre —antes de tocar ninguna
+   * tabla de ese dominio—. Que sea obligatorio significa que no se puede
+   * escribir un agente que vea todo por descuido.
+   */
+  domains: Domain[];
+
+  /**
+   * A qué versión de la persona sirve este agente.
+   *
+   * Son las SIETE `AREAS` de la migración 0064, no texto libre, y esa es toda
+   * la decisión: con áreas cerradas, `identidadesIncompatibles()` puede
+   * DETECTAR un conflicto y probarlo con un test. Con texto libre solo se
+   * podría preguntar al modelo, y una respuesta que no se puede verificar no es
+   * una salvaguarda, es una opinión.
+   */
+  identityServed: Area[];
+
+  triggers: AgentTrigger[];
+  capabilities: AgentCapability[];
+  riskLevel: AgentRisk;
+  autonomyLevel: AgentAutonomy;
+
+  /** Apagarlo no lo borra del registro: sigue listable y explicable. */
+  enabled: boolean;
+  /** Menor corre antes. Empate: por `id`, para que el orden sea estable. */
+  priority: number;
+
+  /**
+   * Obligatorio. No se llama al modelo sin declarar cuánto puede gastar, y el
+   * sitio de esa promesa es el contrato, no el cuerpo de `ejecutar`.
+   */
+  budget: Budget;
+
   ejecutar(entrada: AgentInput): Promise<AgentResult<S>>;
 }
 

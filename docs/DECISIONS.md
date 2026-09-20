@@ -3210,3 +3210,70 @@ implementa:
     `GET /api/centro` lee media aplicación porque está pensado para pedirse sólo
     al abrir el centro — no sirve para alimentar una barra que se pinta en cada
     navegación.
+
+- **D-171 · El Kernel decide quién actúa y si conviene actuar; no sabe hacer
+  nada.** La Fase 1 del Agentic Kernel (`docs/AGENTIC_KERNEL_ARCHITECTURE.md`)
+  amplía el contrato de D-170 y añade las dos piezas que de verdad no existían:
+  selección y restraint. Todo lo demás que un Kernel necesita —contexto,
+  llamada al modelo, herramientas, memoria, grafo, reloj— ya estaba, y
+  envolverlo habría sido escribir el sistema dos veces con nombres nuevos.
+  - **Siete archivos, no trece.** Se descartaron con nombre `orchestrator.ts`
+    (es selección + políticas + runtime; un archivo así acaba siendo donde va lo
+    que no se supo colocar), `events.ts` (un `AgentEvent` es un tipo, no un
+    módulo), `memory.ts`, `graph.ts`, `tools.ts` y `scheduler.ts` (envoltorios
+    de `domain/insights/memory.ts`, `domain/graph/`, `CajaDeHerramientas` y
+    `pg_cron`). Y **`actions.ts` no debe existir**: la salida de un agente es
+    una propuesta en `coach_proposals`, y quien escribe es una Server Action con
+    la sesión de la persona (D-089, D-164). Es la invariante que hace que un
+    fallo del Kernel sea un silencio y no un daño.
+  - **El veredicto por defecto es NO actuar.** `politicas.ts` es el único
+    archivo del Kernel que no existiría en un sistema agentic normal. Hay que
+    argumentar para hablar, no para callar: sin `identityServed` y sin capacidad
+    de proponer o detectar, un agente genera actividad, no evidencia, y la
+    actividad no justifica interrumpir. Un agente de riesgo ALTO interrumpe
+    MENOS, no más. Generaliza lo que ya hacían `debeAnalizar()`,
+    `MAX_ARISTAS_POR_DIA = 3` y la guarda por franja de `centro_runs`.
+  - **La selección es determinista, y el modelo no participa.** Pedirle al
+    modelo que elija agente acertaría casi siempre, y «casi siempre» es el
+    problema: un sistema que no puede explicar por qué actuó no se puede
+    corregir. En un producto sobre identidad, «no sé por qué te dijo eso» es un
+    fallo de producto, no técnico. Por eso todo el que calla lleva motivo
+    legible: el silencio tiene que poder explicarse o es indistinguible de un
+    fallo.
+  - **`identityServed` son las siete `AREAS` de 0064, no texto libre.** Es lo
+    único que hace DETECTABLE la incompatibilidad entre agentes y probarla con
+    un test. Con texto libre habría que preguntarle al modelo, y una salvaguarda
+    que no se puede verificar no es una salvaguarda. Definición operativa
+    adoptada: dos agentes chocan si ambos proponen y no comparten NINGÚN área;
+    gana el de mayor prioridad, porque dejar pasar a los dos es la contradicción
+    que paraliza.
+  - **`domains` es obligatorio, y ahí está la puerta de privacidad.** Ata cada
+    agente a D-027: `agente.domains ∩ profiles.ai_domains`, y si queda vacío el
+    agente no corre —antes de tocar ninguna tabla—. `acotarContexto()` estrecha
+    y nunca ensancha; los hechos se filtran por dominio además de los dominios,
+    porque «autorizado para la persona» no es «declarado por este agente». El
+    Kernel NO construye contexto: eso sigue siendo `buildContext()`, y escribir
+    aquí un segundo ensamblador habría creado la quinta copia de una puerta de
+    privacidad que ya está repetida cuatro veces.
+  - **Tres autonomías en el tipo, una permitida por la política.** Que el
+    vocabulario nombre lo que la regla prohíbe es deliberado: así el rechazo de
+    `autonomo` vive en un sitio y se puede probar, en vez de que alguien invente
+    su propio nombre dentro de seis meses porque el suyo no cabía.
+  - **`Budget` se mudó al dominio, y con ello la Fase 1 dejó de tener «cero
+    líneas modificadas».** Era un tipo puro —dos números— declarado en
+    `src/lib/ai/gemini-provider.ts`, que lleva `server-only`; el dominio no podía
+    nombrarlo sin invertir las capas. Vive ahora en `domain/ai/model-chain.ts` y
+    el proveedor lo reexporta, así que sus ocho consumidores no se enteraron. La
+    alternativa —duplicar la interfaz en el dominio— dejaba que las dos copias
+    derivaran en silencio, que es peor que tocar dos archivos con el compilador
+    vigilando.
+  - **`AgentInput` no lleva `InsightContext`,** aunque el diseño lo proponía.
+    Importarlo habría hecho que el dominio dependiera de la capa de aplicación
+    —cosa que hoy no hace ningún archivo de `domain/`— y habría atado el
+    contrato de TODO agente al vocabulario del Intelligence OS. El agente recibe
+    los datos (`domains`, `facts`, `memory`, `rejections`), no el envase.
+  - **Sigue sin haber agentes.** El registro arranca vacío, ningún módulo
+    importa el Kernel y no se creó ninguna tabla. `ejecutarAgente` invoca y
+    traduce fallos: no mide, no reintenta y no guarda la corrida. La
+    persistencia llega en la Fase 4, con su migración, cuando se sepa qué merece
+    guardarse.

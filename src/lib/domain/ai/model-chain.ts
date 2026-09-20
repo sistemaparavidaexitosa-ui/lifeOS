@@ -93,3 +93,24 @@ export function problemasDeEsquema(esquema: EsquemaLike, ruta = "raíz"): string
 
   return problemas;
 }
+
+/**
+ * Un modelo con pensamiento gasta tokens de razonamiento CONTRA el mismo tope
+ * que la respuesta. Por eso cada feature declara las dos cifras juntas y no
+ * solo el tope: un presupuesto de pensamiento demasiado cerca del techo
+ * produce el peor fallo posible —`MAX_TOKENS` con el texto vacío—, que no es
+ * un error de red y hay que detectar a mano.
+ *
+ * VIVE AQUÍ, Y NO EN `src/lib/ai/gemini-provider.ts`, DESDE D-171. Es un tipo
+ * puro —dos números— y el proveedor lleva `server-only`, así que declararlo
+ * allí impedía que el dominio lo nombrara. Ahora `AgentDefinition.budget`
+ * (`domain/agents/types.ts`) exige un presupuesto a cada agente SIN que el
+ * dominio tenga que importar la capa que habla con la red. El proveedor lo
+ * reexporta, así que sus ocho consumidores no se enteraron.
+ */
+export interface Budget {
+  /** Tope TOTAL: pensamiento + respuesta. */
+  maxOutputTokens: number;
+  /** Cuánto de ese tope puede gastar pensando. 0 lo desactiva. */
+  thinkingBudget: number;
+}

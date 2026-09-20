@@ -16,19 +16,19 @@ import "server-only";
 // cliente llegue AHORA —cuando la importación está de más— y no dentro de tres
 // sprints, cuando además arrastre credenciales al bundle.
 //
-// NO EXPONE `ejecutar()`, Y ESO ES EL SPRINT
-// El contrato de ejecución ya está cerrado en `AgentDefinition.ejecutar`, así
-// que los agentes se pueden escribir enteros desde hoy. Lo que falta es quién
-// los llama, con qué presupuesto, qué se guarda de cada corrida y qué pasa
-// cuando uno tarda demasiado. Esas son cuatro decisiones que no se toman bien
-// en abstracto, sin un solo agente real delante. Un `ejecutar()` escrito ahora
-// sería una respuesta inventada a preguntas que todavía no se han hecho.
+// EJECUTAR, DESDE D-171
+// D-170 dejó el contrato cerrado en `AgentDefinition.ejecutar` sin que nadie lo
+// llamara, porque quién llama y qué se guarda de cada corrida eran preguntas
+// que no se responden bien sin un agente real delante. Ahora se responde la
+// primera y SOLO la primera: `ejecutarAgente` invoca y traduce fallos. No mide,
+// no reintenta, no guarda. La persistencia de corridas llega en la Fase 4, con
+// su migración, cuando se sepa qué merece guardarse.
 //
-// Hoy este registro está VACÍO a propósito: el sistema se comporta exactamente
+// Hoy este registro sigue VACÍO a propósito: el sistema se comporta exactamente
 // igual que antes de que existiera este archivo.
 
 import { crearRegistro } from "@/lib/domain/agents/registro.ts";
-import type { AgentId, AnyAgentDefinition } from "@/lib/domain/agents/types.ts";
+import type { AgentId, AgentInput, AgentResult, AnyAgentDefinition } from "@/lib/domain/agents/types.ts";
 import type { ActionResult } from "@/lib/supabase/errors";
 
 /**
@@ -60,4 +60,46 @@ export function obtenerAgente(id: AgentId): AnyAgentDefinition | null {
 /** Los agentes registrados, ordenados por id. Hoy: ninguno. */
 export function listarAgentes(): AnyAgentDefinition[] {
   return registro.listar();
+}
+
+/**
+ * Ejecuta un agente y devuelve lo que diga, sin interpretarlo.
+ *
+ * **No lanza, pase lo que pase** (D-021). Un agente es código de otro módulo:
+ * puede tener un fallo, quedarse sin red o tirar una excepción donde el
+ * contrato pedía un `AgentResult`. Si eso se propagara, un agente secundario
+ * roto tumbaría la Server Action que lo invocó —y con ella la pantalla de la
+ * persona— por una sugerencia que sobraba. El `try/catch` de aquí es la
+ * frontera que convierte «se rompió» en «hoy no dijo nada», que es la forma
+ * correcta de fallar para todo lo que rodea al modelo.
+ *
+ * Lo que este runtime NO hace todavía, y conviene saberlo: no comprueba
+ * políticas (eso es `politicas.ts`, y lo aplica quien construye la entrada), no
+ * acota el contexto (`contexto.ts`), no mide, no reintenta y no guarda la
+ * corrida. Ejecutar es una cosa sola.
+ */
+export async function ejecutarAgente(
+  id: AgentId,
+  entrada: AgentInput
+): Promise<AgentResult<unknown>> {
+  const agente = registro.obtener(id);
+  if (!agente) return { ok: false, reason: `No hay ningún agente «${id}».` };
+
+  // Apagado se comprueba aquí ADEMÁS de en la selección: `ejecutarAgente` es
+  // público y alguien puede llamarlo por id sin haber pasado por `agentesPara`.
+  if (!agente.enabled) return { ok: false, reason: `«${agente.name}» está apagado.` };
+
+  try {
+    const resultado = await agente.ejecutar(entrada);
+    // Un agente que devuelve algo que no es un AgentResult es un fallo de
+    // contrato, no un fallo de ejecución. Se nombra en vez de dejar que el
+    // llamador lea `undefined.ok` tres capas más arriba.
+    if (typeof resultado !== "object" || resultado === null || typeof resultado.ok !== "boolean") {
+      return { ok: false, reason: `«${agente.name}» devolvió algo que no es un resultado de agente.` };
+    }
+    return resultado;
+  } catch (error) {
+    const detalle = error instanceof Error ? error.message : String(error);
+    return { ok: false, reason: `«${agente.name}» falló: ${detalle}` };
+  }
 }

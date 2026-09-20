@@ -2104,3 +2104,61 @@ tanto, no es que algo nuevo funcione: es que nada viejo cambió.
   Sigue pendiente todo lo de D-165 a D-169 (WebKit/iPhone, lectores de pantalla,
   PWA instalada) y **la llamada real al modelo sigue sin verse**, cinco ciclos
   seguidos.
+
+## Agentic Kernel, Fase 1 (D-171, sin migración) — 20-sep-2026
+
+Segunda entrega seguida cuyo éxito es que no se note nada. Pero ésta ya tiene
+reglas con criterio dentro, así que lo que hay que comprobar no es solo que nada
+viejo cambió: es que las reglas dicen lo que creemos que dicen.
+
+### Lo que sí se probó
+
+- `pnpm test:unit`: **1265/1265** ✅, con **40 tests nuevos** repartidos en cuatro
+  suites (`agents-registro`, `agents-seleccion`, `agents-politicas`,
+  `agents-contexto`).
+- **El test que más importa de toda la entrega** es `agents-politicas.test.ts`
+  → «EL CASO POR DEFECTO: un agente que solo resume, calla». Si algún día ese
+  test se «arregla» para que pase actuando, el producto habrá cambiado de
+  naturaleza sin que nadie lo decida.
+- Restraint probado pieza a pieza: apagado, disparo ajeno, descarte del día,
+  tope por franja (con riesgo alto más estricto que riesgo bajo), evidencia vs
+  actividad, e identidades incompatibles con el conflicto resuelto a favor del
+  primero.
+- Privacidad probada en los dos puntos: la selección deja fuera al agente con
+  todos sus dominios apagados, y `acotarContexto` estrecha sin ensanchar —el
+  agente de hábitos no ve el hecho de dinero aunque la persona tenga dinero
+  encendido para otra cosa.
+- `pnpm typecheck` ✅ · `pnpm lint` ✅ sin avisos · `pnpm build` ✅ con las
+  **mismas 39 páginas estáticas** y el **mismo First Load JS compartido
+  (102 kB)** que antes de la entrega.
+
+### Lo que la escritura encontró y el documento de arquitectura no
+
+- **`Budget` no se podía importar desde el dominio.** El diseño daba por hecho
+  que `AgentDefinition.budget` usaría el tipo de `gemini-provider.ts`, que lleva
+  `server-only`. Hubo que mudarlo a `domain/ai/model-chain.ts` y reexportarlo.
+  **Consecuencia honesta: la Fase 1 ya NO cumple «cero líneas modificadas en
+  código existente»**, que era su criterio de éxito escrito. Se modificaron dos
+  archivos ajenos al Kernel, sin cambio de conducta, y el build lo confirma.
+- **`AgentInput` no puede llevar `InsightContext`.** El diseño (§9) lo proponía;
+  habría sido el primer archivo de `src/lib/domain/` que importa la capa de
+  aplicación. Se cambió por los datos sueltos.
+- **`contexto.ts` acabó en el dominio, no en la capa de efectos.** Como Fase 1
+  no tiene llamador, un adaptador con `server-only` habría sido justo el
+  «envoltorio sin consumidor» contra el que advierte el propio documento.
+
+### Lo que NO se ha ejercitado, y hay que saberlo
+
+- **Sigue sin haber un solo agente registrado.** Todo lo probado son reglas
+  sobre agentes de mentira. Que el contrato sea el ADECUADO no se sabrá hasta la
+  Fase 2, y ahí es donde puede tener que cambiar.
+- **`ejecutarAgente` no se ha ejecutado nunca con un agente real.** Su `try/catch`
+  está probado por lectura, no por un fallo de verdad.
+- **El restraint no se ha calibrado con datos reales.** Los topes por franja
+  (2 / 1 / 1) son un punto de partida conservador elegido a mano, no medido. La
+  proporción de silencios no se puede leer todavía: no hay dónde guardarla.
+- **`identidadesIncompatibles` nunca ha visto dos agentes de verdad.** La regla
+  —ambos proponen y no comparten área— es razonable sobre el papel y no se ha
+  enfrentado a un caso incómodo.
+- **Ninguna llamada real al modelo**, sexto ciclo seguido. Y sigue pendiente todo
+  lo de D-165 a D-169: WebKit/iPhone, lectores de pantalla, PWA instalada.

@@ -143,3 +143,26 @@ núcleo entra sin tocar base, sin rutas y sin pantallas.
 | El registro no lanza nunca (D-021) | — | — | — | — | `agents-registro.test.ts`: id desconocido → `null` (✅) |
 | El runtime no entra en el bundle de cliente | — | — | `runtime.ts` con `server-only` | — | `pnpm build` (✅) · `git diff --stat` vacío (✅) |
 | Preparado para ejecutar, sin ejecutar | — | — | — | — | `AgentDefinition.ejecutar` en el tipo; el runtime no lo expone (✅) |
+
+## Agentic Kernel, Fase 1 (D-171, sin migración)
+
+Las columnas vacías siguen siendo el resultado: el Kernel crece sin tocar base,
+rutas ni pantallas. La diferencia con D-170 es que ahora hay reglas que probar.
+
+| Requisito | Tablas | RLS / GRANT | Server Actions y rutas | UI | Pruebas |
+|---|---|---|---|---|---|
+| Cada agente declara qué dominios necesita | — | — | — (puro) | — | `agents-registro.test.ts`: sin dominios no entra (✅) |
+| La puerta de privacidad se aplica al agente | — | — | — (puro) | — | `agents-contexto.test.ts`: estrecha y nunca ensancha (✅) |
+| Un dominio apagado deja al agente fuera | — | — | — | — | `agents-seleccion.test.ts` + `agents-contexto.test.ts`: corta con motivo (✅) |
+| Los hechos se filtran por dominio del agente | — | — | — | — | `agents-contexto.test.ts`: el de hábitos no ve dinero (✅) |
+| Cada agente dice a qué versión de ti sirve | — | — | — | — | `agents-registro.test.ts`: solo las 7 `AREAS` (✅) |
+| Identidades incompatibles se detectan | — | — | — | — | `agents-politicas.test.ts`: gana el primero, el otro calla (✅) |
+| **Por defecto NO se actúa** | — | — | — | — | `agents-politicas.test.ts`: el que solo resume, calla (✅) |
+| Un descarte de hoy silencia al agente | — | — | — | — | `agents-politicas.test.ts` (✅) |
+| Riesgo alto interrumpe menos, no más | — | — | — | — | `agents-politicas.test.ts`: topes por franja (✅) |
+| Todo silencio lleva motivo legible | — | — | — | — | `agents-politicas.test.ts`: motivo que nombra al agente (✅) |
+| La selección es determinista y estable | — | — | — | — | `agents-seleccion.test.ts`: prioridad, desempate por id (✅) |
+| Solo se permite la autonomía «propone» | — | — | — | — | `agents-registro.test.ts`: `autonomo` rechazado (✅) |
+| No se llama al modelo sin presupuesto | — | — | — | — | `agents-registro.test.ts`: pensar ≥ tope se rechaza (✅) |
+| Un agente que falla no tumba a quien lo llamó | — | — | `ejecutarAgente` con `server-only` | — | `pnpm build` (✅); sin agente real todavía (⚠️) |
+| Ningún módulo importa el Kernel | — | — | — | — | `git diff` acotado a Kernel + mudanza de `Budget` (✅) |

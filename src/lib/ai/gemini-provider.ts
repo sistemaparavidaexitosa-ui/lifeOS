@@ -1,6 +1,6 @@
 import "server-only";
 import { requireGeminiApiKey } from "@/config/env";
-import { debeSaltarDeModelo, motivoCadenaAgotada, problemasDeEsquema } from "@/lib/domain/ai/model-chain.ts";
+import { debeSaltarDeModelo, motivoCadenaAgotada, problemasDeEsquema, type Budget } from "@/lib/domain/ai/model-chain.ts";
 
 /**
  * EL ÚNICO SITIO DEL PROYECTO QUE HABLA CON UN MODELO.
@@ -56,18 +56,11 @@ export const GEMINI_MODELS = ["gemini-3.1-flash-lite", "gemini-3.6-flash"] as co
 export const GEMINI_MODEL = GEMINI_MODELS[0];
 
 /**
- * Un modelo con pensamiento gasta tokens de razonamiento CONTRA el mismo tope
- * que la respuesta. Por eso cada feature declara las dos cifras juntas y no
- * solo el tope: un presupuesto de pensamiento demasiado cerca del techo
- * produce el peor fallo posible —`MAX_TOKENS` con el texto vacío—, que no es
- * un error de red y hay que detectar a mano.
+ * `Budget` se mudó a `@/lib/domain/ai/model-chain.ts` en D-171: es un tipo puro
+ * y este archivo lleva `server-only`, así que declararlo aquí impedía que el
+ * dominio de agentes lo nombrara. Se reexporta para no tocar a nadie más.
  */
-export interface Budget {
-  /** Tope TOTAL: pensamiento + respuesta. */
-  maxOutputTokens: number;
-  /** Cuánto de ese tope puede gastar pensando. 0 lo desactiva. */
-  thinkingBudget: number;
-}
+export type { Budget } from "@/lib/domain/ai/model-chain.ts";
 
 /** Estructurar un proyecto es criterio, pero acotado: no hace falta más. */
 export const PLAN_BUDGET: Budget = { maxOutputTokens: 8000, thinkingBudget: 2048 };
