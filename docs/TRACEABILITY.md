@@ -237,3 +237,22 @@ tenían lo necesario.
 | El botón «Analizar» no pasa por el Kernel | — | — | `origen === "nocturno"` | `/intelligence` | por construcción (✅) |
 | Variable propia, encendido de uno en uno | — | — | `insightsPorElKernel()` | — | `pnpm build` (✅) |
 | Sin sus dominios, no corre | `profiles.ai_domains` | la de 0048 | `acotarContexto` | — | `agents-insights.test.ts` (✅) |
+
+## El centro de mando (D-176, sin migración)
+
+Sin tablas, sin rutas y sin Server Actions nuevas: la pantalla se arma con lo
+que `/home` ya pagaba más las propuestas que el chat ya cargaba.
+
+| Requisito | Tablas | RLS / GRANT | Server Actions y rutas | UI | Pruebas |
+|---|---|---|---|---|---|
+| El orden lo sigue decidiendo D-169 | — | — | — (puro) | — | `comando-componer.test.ts`: «NO REORDENA» (✅) |
+| Una sola cosa grande arriba | — | — | — | `.cmd-item-heroe` | navegador 1100 y 1440 px (✅) |
+| Los bloqueos no ocupan el foco | — | — | — | sección aparte | `comando-componer.test.ts` (✅) · navegador con 2 vencidas (✅) |
+| Siete categorías, derivadas | `coach_proposals.tipo` | la de 0053 | — | `Chip` + `NAV_ICONS` | `comando-componer.test.ts` (✅) · navegador: Decide/Te frena/Ejecuta (✅) |
+| Un tipo nuevo no deja hueco | — | — | — | — | `comando-componer.test.ts` (✅) |
+| «Ahora no» aparta, no borra | — | — | — | botón por tarjeta | `comando-componer.test.ts` (✅) · navegador **no ejercitado** (⚠️) |
+| El día vacío no miente | — | — | — | `.cmd-cierre` | `comando-componer.test.ts` (✅) · navegador con usuario sin datos (✅) |
+| Aceptar una propuesta la retira de los dos sitios | `coach_proposals` | la de 0053 | `acceptProposal` (ya existía) | — | por construcción (✅); navegador **no ejercitado** (⚠️) |
+| Un solo chat: en la home no hay rail | — | — | — | `AppShell` | navegador 1440 px: `.ai-rail` = 0 (✅) |
+| El rail sigue intacto fuera de la home | — | — | — | `AiChatRail` | navegador `/execution`: rail y composer (✅) |
+| Con la bandera apagada, nada cambia | — | — | `centroDeMando()` → `false` | tablero | navegador: `.cmd` = 0, 10 `.card` (✅) |

@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { centroDeMando } from "@/config/env";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -49,6 +50,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       userName={profile.name || "Usuario"}
       workspaceId={personalWorkspace?.id ?? null}
       chatCollapsed={chatCollapsed}
+      centroEnHome={centroDeMando()}
       // Tras un límite de Suspense: la bandeja consulta en TODAS las pantallas
       // y no puede retrasar el pintado de ninguna. `null` de fallback porque un
       // esqueleto de campana parpadeando en cada navegación molesta más que
