@@ -4019,10 +4019,6 @@ textarea:focus {
   /* Misma trampa con los grupos del centro: la regla móvil general baja todo
      `h3` a 1.02rem, y el titular de grupo quedaba del mismo tamaño que sus
      destinos — es decir, dejaba de ser un titular. */
-  .rit-shell .rit-centro-grupo {
-    font-size: 1.375rem !important;
-    margin-top: 6px;
-  }
 }
 
 .rit-lead {
@@ -4242,30 +4238,6 @@ textarea:focus {
   gap: 18px;
 }
 
-.rit-centro-grupo {
-  font-size: clamp(1.25rem, 3.4vw, 1.75rem);
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  margin: 0 0 8px;
-}
-
-.rit-centro-destinos {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 6px 18px;
-  margin-bottom: 18px;
-}
-
-.rit-centro-destino {
-  font-size: 1.0625rem;
-  font-weight: 600;
-  line-height: 1.6;
-  color: var(--rit-text);
-  text-decoration: none;
-  border-bottom: 1px solid transparent;
-  width: fit-content;
-}
-.rit-centro-destino:hover { border-bottom-color: var(--rit-text); }
 
 .rit-centro-pie {
   display: flex;
@@ -4346,37 +4318,7 @@ html[data-theme="dark"] .rit-boton-centro { color: #0b0b12; background: #f6f6fa;
 .rit-sug-si:disabled { opacity: 0.5; cursor: default; }
 
 /* «Sigue por aquí» (D-168): tarjetas anchas, no una lista más. Tienen que
-   leerse como un atajo y no como otro menú. */
-.rit-destacados {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 10px;
-  margin-top: 10px;
-}
 
-.rit-destacado {
-  display: block;
-  padding: 14px 16px;
-  border: 1px solid var(--rit-line);
-  border-radius: 14px;
-  text-decoration: none;
-  color: var(--rit-text);
-}
-.rit-destacado:hover { border-color: var(--rit-text); }
-
-.rit-destacado b {
-  display: block;
-  font-size: 1.0625rem;
-  line-height: 1.3;
-  overflow-wrap: anywhere;
-}
-
-.rit-destacado span {
-  display: block;
-  font-size: 0.8125rem;
-  color: var(--rit-muted);
-  margin-top: 2px;
-}
 
 /* La barra de captura del centro (D-168). */
 .rit-barra {
@@ -4415,4 +4357,22 @@ html[data-theme="dark"] .rit-boton-centro { color: #0b0b12; background: #f6f6fa;
   justify-content: space-between;
   gap: 14px;
   flex-wrap: wrap;
+}
+
+/* El lienzo: UNA cosa a la vez (D-169). Centrado vertical, como el ritual, para
+   que la pantalla entera sea esa cosa y no un bloque dentro de un panel. */
+.rit-lienzo {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 16px;
+  min-height: 48vh;
+}
+
+.rit-lienzo-acciones {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 8px;
 }

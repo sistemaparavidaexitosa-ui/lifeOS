@@ -2005,3 +2005,53 @@ centro. Se remapean los tokens dentro de `.rit-shell`.
   sabe con qué frecuencia acabará preguntando en vez de decidir.
 - WebKit/iPhone, lectores de pantalla y PWA instalada: igual que en D-165, D-166
   y D-167.
+
+## El centro dice qué hacer (D-169, sin migración) — 20-sep-2026
+
+Sin migración: D-169 no añade ni una columna. Lo que cambia es **qué se pinta**,
+y eso vive en una función pura y en dos componentes.
+
+### Lo que sí se probó
+
+- `pnpm test:unit`: **1213 en verde**, 14 de ellas nuevas en
+  `tests/domain/centro-lienzo.test.ts`, todas vistas en rojo antes.
+- `pnpm typecheck`, `pnpm lint`, `pnpm build`: limpios.
+- Navegador de verdad (Chromium, contra `pnpm build && pnpm start`), cinco
+  suites: **ritual 27/27 · centro 23/23 · agéntico 17/17 · lienzo 11/11 ·
+  una-cosa 20/20**.
+
+### Lo que encontró el navegador y no habría encontrado la lectura
+
+1. **Dos botones «Ahora no»** en la misma pantalla con efectos distintos: el de
+   arriba cerraba el centro, el de la tarjeta la apartaba. El localizador se
+   quedó atascado entre los dos. El de arriba ahora dice **«Cerrar»**.
+2. **Cuatro suites viejas se pusieron rojas**, y tres con razón: afirmaban sobre
+   el menú (`.rit-centro-grupo`), la lista de sugerencias (`.rit-sug`) y los
+   destacados (`.rit-destacado`), que ya no existen. Reescritas contra la
+   tarjeta.
+3. **Las suites heredaban su escenario en vez de montarlo.** La del ritual daba
+   por hechas la política encendida, la ventana horaria, la lista de pasos, el
+   `is_admin` del demo y la hora de la mañana; corriéndolas de madrugada, cinco
+   aserciones fallaban sin que nada estuviera roto. Ahora cada suite se monta su
+   escenario y lo repone. Una corrida que reventó a mitad había dejado además la
+   rutina del demo **sin su bloque de las 20:30**: exactamente el dato que otra
+   aserción medía.
+
+### Lo que se comprobó a ojo, en la captura
+
+Fondo oscuro (eran las 00:xx locales, y el tema va por hora local), versalitas
+«4 DÍAS DE QUINCENA», el titular grande «Sigue con Dinero», «Ir» / «Ahora no»,
+«Quedan 1», la barra de captura abajo y el pie. Ni rastro de la lista de
+módulos.
+
+### Lo que NO se ha ejercitado, y hay que saberlo
+
+- **Sigue sin verse una sola llamada real al modelo.** En local no hay
+  `GEMINI_API_KEY`: `centro_runs.outcome` guarda literalmente ese error. Lo
+  probado es la maquinaria; **la calidad de los tres prompts —sugerencias,
+  resumen y clasificación de la barra— sigue sin verificar**, cuatro ciclos
+  seguidos.
+- **El orden de las tarjetas no se ha visto con datos densos de verdad**: en la
+  semilla rara vez hay seis cosas compitiendo.
+- WebKit/iPhone, lectores de pantalla y PWA instalada: igual que en D-165 a
+  D-168.

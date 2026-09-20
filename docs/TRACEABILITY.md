@@ -115,3 +115,15 @@ uno de ellos.
 | Escribir una idea y que la IA diga dónde va | `coach_proposals` (tipo `nota`) | `check` con `nota` | `POST /api/centro/capturar`, `capturarIdea` | `BarraCaptura.tsx` | `centro-captura.test.ts` (10, ✅) · navegador (✅) |
 | Aceptar una nota la crea de verdad | `notes` | la de siempre | `ejecutar()` → `createNote` + `saveNote` (versión 1) | botón «Guardar» | navegador: 0 → 1 notas, con su cuerpo (✅) |
 | Ante la duda, pregunta | — | — | `sanearCaptura` degrada a `pregunta` | opciones como botones | `centro-captura.test.ts` (✅) |
+
+## El centro dice qué hacer (D-169, sin migración)
+
+| Requisito | Tablas | RLS / GRANT | Server Actions y rutas | UI | Pruebas |
+|---|---|---|---|---|---|
+| Una sola cosa en pantalla, en orden de caducidad | — (nada nuevo) | — | — (puro) | `Lienzo.tsx` | `centro-lienzo.test.ts` (14, ✅) · navegador: «se ve UNA sola cosa» (✅) |
+| El porqué acompaña siempre al qué | `centro_runs.resumen`, `coach_proposals.payload.motivo` | las de D-167/D-168 | `GET /api/centro` (sin cambios) | `.rit-eyebrow` | `centro-lienzo.test.ts`: sin dato no hay tarjeta (✅) · navegador (✅) |
+| El hábito se marca sin salir, con la regla de la hora de D-165 | `habit_logs` | `habit_logs_own` | `toggleHabitToday` (ya existía) | `HabitCheckbox` 64px | `ritual-secuencia.test.ts` (✅) · navegador (✅) |
+| Una propuesta se acepta de un toque | `coach_proposals` | la de D-151 | `acceptProposal` (ya existía) | «Ir» / «Añadir» | navegador: navega y queda `accepted` (✅) |
+| «Ahora no» aparta; nada se pierde | — (estado en el cliente) | — | — | contador «Quedan N» | `centro-lienzo.test.ts`: lo pospuesto va al final sin duplicarse (✅) · navegador (✅) |
+| Un día sin nada no miente | — | — | — | tarjeta de cierre | `centro-lienzo.test.ts`: día vacío abre en el cierre (✅) · navegador (✅) |
+| El menú desaparece del centro | — | — | — | `destinos.ts`, `destacados.ts`, `componer.ts` y `Sugerencias.tsx` **borrados** | navegador: ni lista de módulos, ni atajos, ni rejilla (✅) |
