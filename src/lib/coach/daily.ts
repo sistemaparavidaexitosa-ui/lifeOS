@@ -17,6 +17,8 @@ import { COACH_METADATOS } from "@/lib/domain/agents/coach.ts";
 import { convieneActuar } from "@/lib/domain/agents/politicas.ts";
 import { acotarContexto } from "@/lib/domain/agents/contexto.ts";
 import type { AgentEvent } from "@/lib/domain/agents/types.ts";
+import { anotarSilencio, leerDecisiones, ultimaRevisionDeIdentidad } from "@/lib/agents/bitacora";
+import { enRechazoSostenido } from "@/lib/domain/agents/aprendizaje.ts";
 import type { CajaDeHerramientas } from "@/lib/domain/ai/tools.ts";
 import type { InsightContext } from "@/lib/insights/context";
 import { esSalidaCoach } from "@/lib/agents/coach-diario";
@@ -89,6 +91,7 @@ export interface EntradaCoach {
  * otro fallo en vez de perderse.
  */
 async function pensarPorElKernel(input: {
+  supabase: Admin;
   context: InsightContext;
   caja: CajaDeHerramientas;
   momento: Momento;
@@ -107,15 +110,36 @@ async function pensarPorElKernel(input: {
     ocurridoEn: new Date().toISOString()
   };
 
+  // Lo que la persona ha hecho con lo que se le propuso (D-174), acotado a
+  // partir de su última revisión de identidad: lo decidido por quien ya no
+  // quiere ser no cuenta. Si algo falla, las dos lecturas devuelven vacío y el
+  // agente actúa como siempre — callar por falta de datos sería castigarlo por
+  // ser nuevo.
+  const [decisiones, desdeLaRevision] = await Promise.all([
+    leerDecisiones(input.supabase, input.userId),
+    ultimaRevisionDeIdentidad(input.supabase, input.userId)
+  ]);
+
   // La primera vez del día: `vecesEnLaFranja` en 0 porque quien llama a este
   // archivo ya aplicó el dedupe de `claveDelCoach` antes de entrar. Contarlo
   // otra vez aquí sería el mismo filtro dos veces con dos relojes distintos.
   const veredicto = convieneActuar(agente, evento, {
     vecesEnLaFranja: 0,
     yaActuaron: [],
-    descartadoHoy: false
+    descartadoHoy: false,
+    rechazoSostenido: enRechazoSostenido(decisiones, agente.id, { desdeLaRevision })
   });
-  if (!veredicto.actuar) return { ...VACIO_COACH, reason: veredicto.motivo };
+  if (!veredicto.actuar) {
+    // El silencio deja rastro, o no se distingue de un fallo. Es la métrica
+    // declarada del Kernel: que esta proporción suba con el tiempo.
+    await anotarSilencio(input.supabase, {
+      userId: input.userId,
+      agenteId: agente.id,
+      evento,
+      motivo: veredicto.motivo
+    });
+    return { ...VACIO_COACH, reason: veredicto.motivo };
+  }
 
   const acotado = acotarContexto(
     agente,
@@ -210,7 +234,7 @@ export async function generarYGuardarMensajeDiario(entrada: EntradaCoach): Promi
   });
 
   const result = coachPorElKernel()
-    ? await pensarPorElKernel({ context, caja, momento, today, userId })
+    ? await pensarPorElKernel({ supabase, context, caja, momento, today, userId })
     : await generarMensajeCoach({ context, tools: caja, momento, today });
   if (!result.ok) return { ok: false, reason: result.reason };
 

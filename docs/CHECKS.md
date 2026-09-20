@@ -2266,3 +2266,57 @@ separa esta entrega de un riesgo real.
   nadie. El día que un agente lo necesite, esto es una mentira esperando.
 - Sigue pendiente todo lo de D-165 a D-169: WebKit/iPhone, lectores de pantalla,
   PWA instalada.
+
+## Agentic Kernel, Fase 4 — aprender de las decisiones (D-174, sin migración) — 20-sep-2026
+
+Primera fase que lee datos de la persona para cambiar el comportamiento del
+Kernel. Y primera en la que el propio documento de arquitectura estaba
+equivocado.
+
+### Lo que sí se probó
+
+- `pnpm test:unit`: **1294/1294** ✅, con **15 tests nuevos** (12 de aprendizaje,
+  3 de restraint).
+- **El test que protege el principio** es `agents-aprendizaje.test.ts` → «SE CAE
+  SOLA: sin datos nuevos, el agente vuelve a hablar». Es el mecanismo
+  antidependencia de D-164 trasladado al Kernel. Si algún día alguien lo
+  "arregla" para que el silencio persista, habrá construido una jaula y el test
+  es lo único que lo dirá.
+- Las otras dos salvaguardas, cada una con su prueba: veinte rechazos seguidos
+  sin contrafactual producen **cero** lecciones, y una revisión de identidad
+  borra lo aprendido y le devuelve la voz al agente castigado.
+- Un agente nuevo no se castiga por serlo, y un descarte de HOY gana al rechazo
+  estadístico en el motivo — lo reciente y concreto sobre lo agregado.
+- `pnpm typecheck` ✅ · `pnpm lint` ✅ · `pnpm build` ✅ con las mismas 39 páginas
+  y **First Load JS 102 kB**, sin cambio por quinta entrega consecutiva.
+
+### Lo que la escritura encontró y el documento no
+
+- **La Fase 4 NO necesitaba migración**, y el documento de arquitectura decía que
+  sí. `coach_proposals` guarda `origen`, `tipo`, `status` y `resolved_at` desde
+  `0062`; `audit_log` es genérico desde `0009`. Se creyó una tabla necesaria sin
+  mirar las que ya había. El documento queda corregido en su §12 y §13.
+- **El Kernel ya no son siete archivos, son nueve** (más los dos del coach, que
+  son el agente y no el Kernel). Los dos nuevos —`aprendizaje.ts` y
+  `bitacora.ts`— se ganaron el sitio, pero conviene decirlo en vez de dejar que
+  el número del documento envejezca en silencio.
+
+### Lo que NO se ha ejercitado, y hay que saberlo
+
+- **Nada de esto ha corrido con datos reales.** `leerDecisiones()`,
+  `ultimaRevisionDeIdentidad()` y `anotarSilencio()` son consultas escritas y
+  compiladas; **no se ha insertado ni leído una sola fila**. La primera ejecución
+  será también la primera prueba de que las consultas son correctas.
+- **`agente.silencio` no existe todavía en ninguna base.** El día que se
+  encienda, esa acción aparecerá en `audit_log` por primera vez.
+- **El camino del Kernel sigue sin ejecutarse** (D-173): todo esto vive detrás de
+  `AGENT_KERNEL_COACH`, apagado. Cinco entregas en verde seguidas prueban que
+  nada se rompió, no que el sistema agentic funcione.
+- **Los umbrales son heredados, no calibrados para esto.** `minDias 14, minN 7,
+  minSinN 4, minLift 6` funcionan para el estilo del brief; que sirvan para las
+  propuestas es una apuesta razonada, no una medición.
+- **Solo el coach tiene agente**, así que `enRechazoSostenido` —que compara un
+  agente contra los demás— no puede dispararse hoy: no hay «los demás». Es
+  correcto y es inerte hasta el segundo agente.
+- Sigue pendiente todo lo de D-165 a D-169: WebKit/iPhone, lectores de pantalla,
+  PWA instalada. Y ninguna llamada real al modelo, noveno ciclo.

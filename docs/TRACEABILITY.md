@@ -204,3 +204,22 @@ la columna que importa es la última: todo depende de una variable apagada.
 | El coach puede callarse, con motivo | — | — | el motivo va a `audit_log` | — | `agents-politicas.test.ts` (✅) · de punta a punta **no** (⚠️) |
 | Lo que devuelve el agente se comprueba | — | — | `esSalidaCoach()` | — | `pnpm typecheck`: sin `as` (✅) |
 | Volver atrás no requiere desplegar | — | — | borrar `AGENT_KERNEL_COACH` | — | por construcción (✅) |
+
+## Agentic Kernel, Fase 4 — aprender de las decisiones (D-174, sin migración)
+
+La primera fase que lee datos de la persona para cambiar cómo se comporta el
+Kernel. Sin tablas nuevas: `coach_proposals` (0062) y `audit_log` (0009) ya
+tenían lo necesario.
+
+| Requisito | Tablas | RLS / GRANT | Server Actions y rutas | UI | Pruebas |
+|---|---|---|---|---|---|
+| Se aprende del tipo de propuesta, no de la hora | `coach_proposals` | la de 0053 | `leerDecisiones()` | — | `agents-aprendizaje.test.ts` (✅) |
+| Con pocos días no se afirma nada | — | — | — | — | `agents-aprendizaje.test.ts`: motivo pintable (✅) |
+| Sin contrafactual no hay lección | — | — | — | — | `agents-aprendizaje.test.ts`: 20 rechazos y cero lecciones (✅) |
+| Revisar la identidad borra lo aprendido | `identity_revisions` | la de 0064 | `ultimaRevisionDeIdentidad()` | — | `agents-aprendizaje.test.ts` (✅) |
+| Un agente ignorado se calla | — | — | `convieneActuar` | — | `agents-politicas.test.ts` (✅) |
+| **La lección se cae sola** | — | — | — | — | `agents-aprendizaje.test.ts`: «SE CAE SOLA» (✅) |
+| Un agente nuevo no se castiga por serlo | — | — | — | — | `agents-aprendizaje.test.ts` (✅) |
+| El silencio deja rastro contable | `audit_log` | `audit_log_insert_own` | `anotarSilencio()` | — | por construcción (✅); **sin fila real** (⚠️) |
+| Lo pendiente no cuenta como rechazo | `coach_proposals` | — | filtro `in (accepted, dismissed)` | — | por construcción (✅) |
+| Anotar no puede tumbar el mensaje | — | — | `try/catch` en `bitacora.ts` | — | por lectura (⚠️) |

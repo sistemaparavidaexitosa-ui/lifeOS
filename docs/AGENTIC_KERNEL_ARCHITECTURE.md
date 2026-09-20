@@ -491,8 +491,15 @@ el contrato sirve.
 sigue vivo detrás de una condición, para poder volver en un commit.
 
 **Fase 4 — Aprendizaje.** Generalizar `estilo.ts` a las decisiones sobre propuestas.
-Aquí sí hace falta migración (línea base y resultado), y aquí es donde encaja la fase
-L del sistema cognitivo.
+~~Aquí sí hace falta migración (línea base y resultado)~~, y aquí es donde encaja la
+fase L del sistema cognitivo.
+
+> **Corregido el 2026-09-20 (D-174): NO hizo falta migración.** `coach_proposals` ya
+> guarda `origen`, `tipo`, `status` y `resolved_at` desde `0062`, y `audit_log` es
+> genérico desde `0009`. Este documento dio por supuesta una tabla que dos tablas
+> existentes ya cubrían. Lo que sí sigue necesitando migración es la **línea base**
+> de D-154 —evaluar a 7/14/30 días si los hechos citados mejoraron—, que se aplazó:
+> pide semanas de datos y el camino del Kernel no se ha ejecutado ni una vez.
 
 **Fase 5 — Migrar el resto, de uno en uno.** Cada módulo, su PR, sus tests, su
 entrada en `DECISIONS.md`. Un módulo que no mejore al migrarse **no se migra**.
@@ -506,7 +513,7 @@ entrada en `DECISIONS.md`. Un módulo que no mejore al migrarse **no se migra**.
 | **1** | Contratos, selección, restraint, contexto, `ejecutar()` | No | Muy bajo | `pnpm build` idéntico y `git diff` sin tocar código existente |
 | **2** | Un agente en sombra | No | Bajo | Su salida se compara con la del camino actual durante 7 días |
 | **3** | Primer disparo real | No | Medio | Reversible en un commit |
-| **4** | Aprendizaje sobre decisiones | Sí | Medio | La proporción de silencios se puede leer |
+| **4** | Aprendizaje sobre decisiones | ~~Sí~~ **No** | Medio | La proporción de silencios se puede leer |
 | **5** | Migración módulo a módulo | Según módulo | Medio | Cada uno con su decisión documentada |
 
 **Lo que la Fase 1 NO incluye, y es deliberado:** orquestación de varios agentes,

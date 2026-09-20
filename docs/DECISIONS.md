@@ -3379,3 +3379,51 @@ implementa:
     registro guarda `AnyAgentDefinition` y el tipo se pierde. Se comprueba con
     `esSalidaCoach()` en vez de afirmarlo: es la misma regla que hace pasar por
     `sanearBrief` lo que devuelve el agente de Python (D-164).
+
+- **D-174 · El Kernel aprende de lo que decides, y sus lecciones caducan solas.**
+  Fase 4. Dos huecos que CHECKS venía señalando en cada entrega: el sistema no
+  sabía cuántas veces había decidido callarse, y no aprendía nada de lo que la
+  persona aceptaba o descartaba.
+  - **Sin migración, y el documento de arquitectura se equivocaba.** Decía que
+    esta fase necesitaría tablas nuevas. No las necesita: `coach_proposals`
+    guarda `origen`, `tipo`, `status` y `resolved_at` desde `0062`, y `audit_log`
+    es genérico desde `0009` (`action`, `object`, `meta`, append-only). Añadir
+    una tabla para lo que dos tablas ya registran habría creado el segundo sitio
+    donde buscar la misma respuesta. El documento queda corregido.
+  - **Se aprende de la DECISIÓN, no del contenido.** No «le gustan los mensajes
+    a las nueve» sino «lleva un mes descartando todo lo que le propone rutinas».
+    Lo primero optimiza cuándo interrumpir, que es la métrica de una app que
+    quiere engancharte; lo segundo reduce cuántas veces hace falta interrumpir.
+  - **El método es el de D-164, copiado a propósito.** `domain/identity/estilo.ts`
+    lleva meses infiriendo preferencias de estilo sin producir una falsa, con
+    `minDias 14`, `minN 7`, `minSinN 4`, `minLift 6` y tope de tres. Se reusan
+    los MISMOS números: dos juegos de umbrales para el mismo tipo de inferencia
+    serían dos cosas que calibrar y una que nadie recordaría por qué difiere.
+  - **Las tres salvaguardas son el producto, no la estadística.** (1) Corte por
+    revisión de identidad: lo decidido antes de que la persona cambiara en quién
+    quiere convertirse no cuenta, o el sistema sabotearía en junio a quien cambió
+    de rumbo en enero. (2) Contrafactual obligatorio: una lección sobre las
+    rutinas exige decisiones que NO eran de rutinas, porque si el agente solo
+    propone rutinas «rechaza las rutinas» significa «rechaza lo que le llega».
+    (3) Caducidad automática, que es consecuencia de la anterior.
+  - **`enRechazoSostenido` es la única lección que cambia la conducta**, y no el
+    prompt: un agente al que no se le acepta nada se calla. Se mide contra los
+    demás agentes y no contra un umbral absoluto, porque «se acepta poco» solo
+    significa algo comparado con lo que sí se acepta.
+  - **Y se cae sola. Si alguien la "arregla" para que persista, habrá construido
+    una jaula.** Silenciado el agente, deja de haber decisiones suyas; en cuanto
+    envejecen bajo `minDias`, vuelve a hablar sin que nadie se acuerde de
+    reactivarlo. Es el mecanismo antidependencia de D-164 —«si una preferencia se
+    refuerza tanto que deja de haber días sin ella, se cae sola»— trasladado al
+    Kernel, y tiene su propio test con ese nombre.
+  - **El silencio deja rastro.** `anotarSilencio()` escribe `agente.silencio` en
+    `audit_log` con el motivo. Desde D-171 la métrica declarada del Kernel es que
+    la proporción de silencios SUBA con el tiempo; hasta hoy era una aspiración
+    sin instrumento, y un silencio sin registrar era indistinguible de un fallo.
+  - **Una propuesta `pending` no es un rechazo.** Solo cuentan `accepted` y
+    `dismissed`: contar lo pendiente convertiría «no ha abierto la app» en «no le
+    interesa», que es justo la inferencia que no queremos hacer.
+  - **Lo aplazado, con su motivo:** la línea base de D-154 —guardar el peso de
+    los `fact_ids` citados y evaluar a 7/14/30 días si mejoraron— sí necesita
+    migración, pide semanas de datos y mide algo distinto (si la propuesta
+    FUNCIONÓ, no si gustó). No se empieza antes de ver una ejecución real.

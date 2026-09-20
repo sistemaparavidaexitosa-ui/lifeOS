@@ -42,6 +42,16 @@ export interface HistoriaReciente {
   yaActuaron: readonly string[];
   /** Si la persona ya descartó hoy una propuesta de este agente. */
   descartadoHoy: boolean;
+  /**
+   * Si este agente lleva semanas proponiendo cosas que nadie acepta (D-174).
+   *
+   * Lo calcula `enRechazoSostenido()` con los datos de `coach_proposals`, y es
+   * la única lección que cambia la conducta del Kernel en vez de solo el
+   * prompt. Opcional porque quien llama puede no tener el historial a mano: sin
+   * él se actúa como siempre, que es el defecto correcto —callar por falta de
+   * datos sería castigar a un agente por ser nuevo.
+   */
+  rechazoSostenido?: boolean;
 }
 
 /**
@@ -80,6 +90,17 @@ export function convieneActuar(
   // convierte en uno del que hay que esconderse.
   if (historia.descartadoHoy) {
     return NO(`Hoy ya descartaste una propuesta de «${agente.name}».`);
+  }
+
+  // Un agente al que no se le acepta nada no está ayudando, por buenas que
+  // sean sus frases. Va DESPUÉS del descarte del día —que es más reciente y más
+  // concreto— y ANTES del tope, porque este silencio no es por haber hablado ya:
+  // es por no merecer el turno.
+  //
+  // Se cae solo: silenciado el agente, deja de haber decisiones suyas, y en
+  // cuanto envejecen bajo `minDias` vuelve a hablar. Ver aprendizaje.ts.
+  if (historia.rechazoSostenido) {
+    return NO(`«${agente.name}» lleva semanas proponiendo cosas que descartas; se calla hasta que haya datos nuevos.`);
   }
 
   const tope = TOPE_POR_FRANJA[agente.riskLevel];
