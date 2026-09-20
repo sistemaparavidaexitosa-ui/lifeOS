@@ -3333,3 +3333,49 @@ implementa:
     mitad de razonar; el camino actual sí se la pasa. Hay que cerrarlo antes de
     sustituir a nadie, y el obstáculo es de capas: `CajaDeHerramientas` lleva
     `server-only` y no puede viajar en un `AgentInput` puro.
+
+- **D-173 · El coach pasa por el Kernel, detrás de una variable.** Fase 3. Dos
+  cosas: cerrar la diferencia de conducta que dejó D-172 y dar al Kernel su
+  primer disparo real.
+  - **Las herramientas cruzan la frontera moviendo tipos, no copiándolos.** El
+    agente no podía recibir `CajaDeHerramientas` porque vivía en
+    `src/lib/ai/tools.ts`, detrás de `server-only`, y un `AgentInput` puro no
+    puede nombrarla. Se movieron al dominio la FORMA —`GeminiSchema`,
+    `FunctionDeclaration` y la interfaz `CajaDeHerramientas`, a
+    `domain/ai/tools.ts`— y se dejó donde estaba la FÁBRICA,
+    `crearCajaDeHerramientas`, que sí toca Supabase. Ninguno de los tipos
+    movidos tenía nada de servidor: describen un formato de wire y estaban en la
+    capa de efectos por costumbre. Los sitios originales los reexportan, así que
+    sus consumidores no se enteraron.
+  - **Y con eso murió `EsquemaLike`.** Era una copia mínima de `GeminiSchema` en
+    `model-chain.ts`, con un comentario que decía por qué: «para no arrastrar el
+    tipo completo de `gemini-provider.ts` —que es `server-only`— hasta el
+    dominio». Ese motivo dejó de existir, así que la copia también: conservarla
+    habría sido mantener la deriva sin mantener la razón.
+  - **`AgentInput.herramientas` es OPCIONAL, y la opcionalidad es el contrato.**
+    Un agente tiene que saber trabajar sin caja, porque quien lo invoca puede no
+    poder construirla — el despachador nocturno corre sin sesión y ya le quita
+    `consultar` por eso mismo. Un agente que sin caja no sabe qué hacer está mal
+    escrito.
+  - **El disparo real vive detrás de `AGENT_KERNEL_COACH`, apagado por
+    defecto.** Sin la variable, el despacho se comporta exactamente igual que
+    antes. Encenderla es una decisión de operación y apagarla también: volver
+    atrás es borrar una variable, no desplegar. Es por instalación y no por
+    persona, porque el coach corre en un bucle sobre todo el mundo en la misma
+    pasada y un reparto por usuario haría que un fallo se viera en unos y no en
+    otros — el peor escenario para diagnosticar.
+  - **La sustitución es de cuatro líneas, y esa estrechez es el diseño.** Todo
+    lo de antes —perfil, opt-in, hechos, cadenas, `buildContext`, la caja sin
+    `consultar`— y todo lo de después —guardar el turno, las propuestas, el
+    rastro— es el mismo código. Solo cambia quién decide que hay que hablar y
+    quién llama al modelo. Si el Kernel construyera su propio contexto, una
+    diferencia en el mensaje no diría si piensa distinto o si mira datos
+    distintos, y no habría forma de saberlo sin repetir la llamada.
+  - **La novedad visible es que ahora el coach puede callarse.** `convieneActuar`
+    manda en este camino: el Kernel puede decidir que hoy no toca y devolver el
+    motivo, que acaba en `audit_log` como cualquier otro. El camino viejo no
+    sabía callarse —`claveDelCoach` evitaba repetir, no evitaba decir algo—.
+  - **Nada de `as`.** `ejecutarAgente` devuelve `datos: unknown` porque el
+    registro guarda `AnyAgentDefinition` y el tipo se pierde. Se comprueba con
+    `esSalidaCoach()` en vez de afirmarlo: es la misma regla que hace pasar por
+    `sanearBrief` lo que devuelve el agente de Python (D-164).

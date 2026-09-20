@@ -23,6 +23,7 @@ import type { Domain } from "../insights/types.ts";
 import type { Fact } from "../insights/types.ts";
 import type { Area } from "../identity/categorias.ts";
 import type { Budget } from "../ai/model-chain.ts";
+import type { CajaDeHerramientas } from "../ai/tools.ts";
 
 /**
  * El identificador estable de un agente.
@@ -148,6 +149,21 @@ export interface AgentInput {
   memory: string[];
   /** Lo que la persona ya rechazó. Solo el rechazo enseña, de momento. */
   rejections: string[];
+  /**
+   * Con qué puede pedir más datos a mitad de razonar, si quien lo llama se la
+   * dio (D-173).
+   *
+   * Opcional, y esa opcionalidad es el contrato: un agente tiene que saber
+   * trabajar sin herramientas, porque quien lo invoca puede no poder
+   * construirlas —el despachador nocturno corre sin sesión y le quita
+   * `consultar` por eso mismo—. Un agente que sin caja no sabe qué hacer está
+   * mal escrito.
+   *
+   * La FORMA vive en el dominio (`domain/ai/tools.ts`); la FÁBRICA, que toca
+   * Supabase, sigue en `lib/ai/tools.ts` con su `server-only`. Por eso esto
+   * cabe aquí sin que el dominio dependa de la capa que habla con la base.
+   */
+  herramientas?: CajaDeHerramientas;
 }
 
 /**

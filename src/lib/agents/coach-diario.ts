@@ -20,11 +20,12 @@ import "server-only";
 // para un agente de verdad?—: sirve, y sirve porque el repositorio ya separaba
 // pensar de escribir antes de que existiera el Kernel.
 //
-// LO QUE ESTE AGENTE TODAVÍA NO HACE
-// No recibe `CajaDeHerramientas`, así que no puede pedir más hechos con
-// `leer_hechos` a mitad de razonar; piensa solo sobre lo que `AgentInput` le
-// dio. El camino actual sí se la pasa. Es la diferencia de conducta que hay que
-// cerrar antes de sustituir a nadie (Fase 3), y está en CHECKS.
+// LAS HERRAMIENTAS, DESDE D-173
+// Ya recibe la caja si quien lo llama pudo construirla, así que vuelve a poder
+// pedir más hechos con `leer_hechos` a mitad de razonar — que es lo que hace el
+// camino actual y lo que faltaba para que sustituirlo no fuera una regresión.
+// Si no la recibe, piensa con lo que `AgentInput` le dio: un agente que sin
+// caja no sabe qué hacer está mal escrito.
 
 import { generarMensajeCoach, type CoachPropuesta } from "@/lib/coach/generar";
 import { COACH_METADATOS, momentoDelDisparo } from "@/lib/domain/agents/coach.ts";
@@ -68,6 +69,22 @@ function contextoDelCoach(entrada: AgentInput): InsightContext {
   };
 }
 
+/**
+ * ¿Lo que salió del runtime es un mensaje del coach?
+ *
+ * El registro guarda agentes como `AnyAgentDefinition`, así que `ejecutarAgente`
+ * devuelve `datos: unknown` y el tipo se pierde por el camino. Un `as` lo
+ * recuperaría sin comprobar nada, y este repo no hace eso: lo que devuelve el
+ * agente de Python pasa por `sanearBrief` por la misma razón (D-164). La
+ * comprobación es barata y convierte un fallo de contrato en un motivo legible
+ * en vez de en un `undefined` tres capas más arriba.
+ */
+export function esSalidaCoach(v: unknown): v is SalidaCoach {
+  if (typeof v !== "object" || v === null) return false;
+  const s = v as Partial<SalidaCoach>;
+  return typeof s.mensaje === "string" && typeof s.resumen === "string" && Array.isArray(s.propuestas) && Array.isArray(s.factIds);
+}
+
 export const coachDiario: AgentDefinition<SalidaCoach> = {
   ...COACH_METADATOS,
 
@@ -81,6 +98,10 @@ export const coachDiario: AgentDefinition<SalidaCoach> = {
 
     const resultado = await generarMensajeCoach({
       context: contextoDelCoach(entrada),
+      // `generarMensajeCoach` une los id entregados por la caja a los del
+      // contexto antes de validar las citas. Sin pasarla, todo lo que el modelo
+      // pidiera por herramienta se le descartaría por «inventado».
+      tools: entrada.herramientas,
       momento,
       today: entrada.today
     });

@@ -187,3 +187,20 @@ conectar: el coach de producción sigue siendo el de `/api/push/dispatch`.
 | No se filtra al bundle de cliente | — | — | `server-only` | — | `pnpm build`: First Load JS 102 kB, sin cambio (✅) |
 | `ejecutar` con un agente real | — | — | — | — | **sin ejercitar** (⚠️): nadie lo llama todavía |
 | Paridad de conducta con el camino actual | — | — | — | — | **no** (⚠️): sin `CajaDeHerramientas`, ver CHECKS |
+
+## Agentic Kernel, Fase 3 — el disparo real (D-173, sin migración)
+
+Primera vez que el Kernel puede cambiar el comportamiento de producción. Por eso
+la columna que importa es la última: todo depende de una variable apagada.
+
+| Requisito | Tablas | RLS / GRANT | Server Actions y rutas | UI | Pruebas |
+|---|---|---|---|---|---|
+| El agente recibe la caja de herramientas | — | — | `daily.ts` → `acotarContexto` | — | `agents-contexto.test.ts`: pasa entera (✅) |
+| Un agente sin caja sigue funcionando | — | — | — | — | `agents-contexto.test.ts`: no la inventa (✅) |
+| La forma de la caja vive en el dominio | — | — | fábrica intacta en `lib/ai/tools.ts` | — | `pnpm typecheck`: 8 consumidores sin tocar (✅) |
+| Sin la variable, nada cambia | — | — | `coachPorElKernel()` → `false` | — | `pnpm build` (✅) · en producción **sin ejercitar** (⚠️) |
+| Con la variable, el Kernel decide y ejecuta | — | — | `daily.ts` · `/api/push/dispatch` | — | **sin ejercitar** (⚠️): requiere `GEMINI_API_KEY` |
+| El contexto es el mismo por los dos caminos | — | — | — | — | por construcción: se sustituyen 4 líneas (✅ lectura) |
+| El coach puede callarse, con motivo | — | — | el motivo va a `audit_log` | — | `agents-politicas.test.ts` (✅) · de punta a punta **no** (⚠️) |
+| Lo que devuelve el agente se comprueba | — | — | `esSalidaCoach()` | — | `pnpm typecheck`: sin `as` (✅) |
+| Volver atrás no requiere desplegar | — | — | borrar `AGENT_KERNEL_COACH` | — | por construcción (✅) |

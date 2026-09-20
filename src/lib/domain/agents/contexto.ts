@@ -14,10 +14,11 @@
 // agente concreto solo debe ver lo que declaró necesitar. Estrechar siempre es
 // seguro; ensanchar no se puede desde aquí, y ese es todo el archivo.
 //
-// La conversión `InsightContext → AgentInput` vivirá en la capa de efectos
-// cuando haya un llamador real (Fase 3). Escribirla hoy sería un adaptador sin
-// consumidor.
+// La conversión `InsightContext → AgentInput` vive en el agente que la necesita
+// (`lib/agents/coach-diario.ts`), no aquí: mientras haya uno solo, un adaptador
+// compartido sería un archivo con un único consumidor.
 
+import type { CajaDeHerramientas } from "../ai/tools.ts";
 import type { Domain, Fact } from "../insights/types.ts";
 import { dominiosVisibles } from "./seleccion.ts";
 import type { AgentEvent, AgentInput, AnyAgentDefinition } from "./types.ts";
@@ -32,6 +33,8 @@ export interface ContextoAutorizado {
   facts: Fact[];
   memory: string[];
   rejections: string[];
+  /** Si quien llama pudo construirlas. Ver `AgentInput.herramientas`. */
+  herramientas?: CajaDeHerramientas;
 }
 
 export type ContextoDeAgente =
@@ -88,7 +91,11 @@ export function acotarContexto(
       // propias decisiones: no llevan dominio, así que no hay nada que
       // estrechar. Recortarlos por heurística sería adivinar.
       memory: base.memory,
-      rejections: base.rejections
+      rejections: base.rejections,
+      // La caja pasa entera: sus herramientas YA intersecan con `autorizados`
+      // por dentro (`crearCajaDeHerramientas`), así que recortarla aquí sería
+      // aplicar dos veces el mismo filtro y arriesgarse a que difieran.
+      ...(base.herramientas ? { herramientas: base.herramientas } : {})
     }
   };
 }

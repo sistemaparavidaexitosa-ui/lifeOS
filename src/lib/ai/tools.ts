@@ -2,7 +2,7 @@ import "server-only";
 import { generateGroundedText, type FunctionDeclaration, type GeminiSchema } from "./gemini-provider";
 import { loadFacts, type Db, type FactsOverrides, type ProfileBits } from "@/lib/insights/facts-loader";
 import { tablaConsultable, TABLAS_CONSULTABLES, dominioDeTabla } from "@/lib/insights/context";
-import { idDeFila, limiteConsulta, ventanaConsulta } from "@/lib/domain/ai/tools.ts";
+import { idDeFila, limiteConsulta, ventanaConsulta, type CajaDeHerramientas } from "@/lib/domain/ai/tools.ts";
 import { nodosParaModelo, type NodoCrudo } from "@/lib/domain/ai/graph-tool.ts";
 import type { Domain } from "@/lib/domain/insights/types.ts";
 
@@ -34,22 +34,13 @@ import type { Domain } from "@/lib/domain/insights/types.ts";
  * no un descuido, y es lo que permite que el coach diga «Cuenta Nómina».
  */
 
-export interface CajaDeHerramientas {
-  declaraciones: FunctionDeclaration[];
-  ejecutar: (name: string, args: Record<string, unknown>) => Promise<unknown>;
-  /**
-   * Los id que el modelo SÍ puede citar porque se los dimos por herramienta.
-   * Quien valida las citas tiene que unirlos a los del contexto: si no, todo
-   * lo que el modelo pidió se le descartaría por «inventado».
-   */
-  entregados: () => Set<string>;
-  /**
-   * Lo que se buscó en internet, textual. Va a `audit_log`: sin esto, «salió
-   * una consulta hacia Google» y «salió QUÉ hacia Google» se ven igual, y solo
-   * la segunda permite comprobar que no viajaron datos del usuario.
-   */
-  busquedas: () => string[];
-}
+/**
+ * `CajaDeHerramientas` se mudó a `@/lib/domain/ai/tools.ts` en D-173: es la
+ * FORMA de lo que se le entrega al modelo, y mientras vivió detrás de
+ * `server-only` el contrato de los agentes no podía ofrecerla. La FÁBRICA
+ * —`crearCajaDeHerramientas`, que sí toca Supabase— no se movió.
+ */
+export type { CajaDeHerramientas } from "@/lib/domain/ai/tools.ts";
 
 const ESQUEMA_HECHOS: GeminiSchema = {
   type: "OBJECT",

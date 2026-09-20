@@ -2222,3 +2222,47 @@ diferencia de conducta que conviene no olvidar.
 - **Ninguna llamada real al modelo**, séptimo ciclo seguido — y ahora con un
   agente escrito que solo se puede probar llamándolo. Sigue pendiente todo lo de
   D-165 a D-169: WebKit/iPhone, lectores de pantalla, PWA instalada.
+
+## Agentic Kernel, Fase 3 — el disparo real (D-173, sin migración) — 20-sep-2026
+
+La primera entrega del Kernel que PUEDE cambiar lo que le pasa a una persona. No
+lo hace todavía, porque la variable está apagada, y esa distinción es todo lo que
+separa esta entrega de un riesgo real.
+
+### Lo que sí se probó
+
+- `pnpm test:unit`: **1279/1279** ✅, con 3 tests nuevos para el paso de la caja.
+- **La mudanza de tipos no rompió a nadie.** `GeminiSchema`, `FunctionDeclaration`
+  y la interfaz `CajaDeHerramientas` cambiaron de archivo y sus consumidores no
+  se enteraron: `pnpm typecheck` ✅, `pnpm lint` ✅, `pnpm build` ✅ con las
+  mismas 39 páginas y **First Load JS 102 kB**, sin cambio por cuarta entrega
+  consecutiva.
+- `EsquemaLike` desapareció y `problemasDeEsquema` pasó a `GeminiSchema` sin que
+  su suite (`ai-model-chain.test.ts`) necesitara un solo cambio — que es la
+  prueba de que era la misma forma.
+- El camino nuevo está escrito y compila entero, con la salida del agente
+  comprobada por `esSalidaCoach()` en vez de afirmada con un `as`.
+
+### Lo que NO se ha ejercitado, y es lo importante de esta entrega
+
+- **El camino del Kernel NO se ha ejecutado ni una vez.** Ni en local ni en
+  producción. Está detrás de `AGENT_KERNEL_COACH`, que no está puesta en ningún
+  sitio. Todo lo verde de arriba prueba que compila y que el camino viejo sigue
+  intacto; **no prueba que el camino nuevo funcione**.
+- **Y no se puede probar aquí:** en local no hay `GEMINI_API_KEY`, octavo ciclo
+  seguido. La primera ejecución real será también la primera vez que se llame al
+  modelo desde el Kernel.
+- **Cómo encenderlo con red:** poner `AGENT_KERNEL_COACH=1`, esperar al despacho
+  de la mañana o forzarlo, y mirar `audit_log` con `action = 'ai.coach'`. Si el
+  Kernel decidió callar, el motivo estará en `MensajeCoach.reason` y **no** habrá
+  fila: eso es lo primero que hay que distinguir de un fallo. Volver atrás es
+  borrar la variable; no hace falta desplegar.
+- **La paridad de conducta es por lectura, no medida.** Los dos caminos
+  comparten contexto, hechos, caja y opt-in, y solo se sustituyen cuatro líneas.
+  Eso hace que una diferencia sea atribuible al Kernel, pero **nadie ha
+  comparado dos mensajes de verdad**.
+- **`timeZone: "UTC"` en el camino del Kernel** es un valor de relleno: el coach
+  recibe `today` ya resuelto y no vuelve a calcular fechas, así que hoy no lo usa
+  nadie. El día que un agente lo necesite, esto es una mentira esperando.
+- Sigue pendiente todo lo de D-165 a D-169: WebKit/iPhone, lectores de pantalla,
+  PWA instalada.

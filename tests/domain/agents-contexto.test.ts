@@ -100,3 +100,41 @@ test("un contexto sin hechos sigue siendo válido si hay dominios", () => {
   assert.equal(r.ok, true);
   assert.deepEqual(r.ok ? r.entrada.facts : null, []);
 });
+
+// --- La caja de herramientas (D-173) ---
+
+/** Una caja de mentira: la FORMA vive en el dominio, así que aquí cabe. */
+const cajaFalsa = () => ({
+  declaraciones: [],
+  ejecutar: async () => ({}),
+  entregados: () => new Set<string>(),
+  busquedas: () => []
+});
+
+test("la caja pasa entera al agente cuando quien llama pudo construirla", () => {
+  const caja = cajaFalsa();
+
+  const r = acotarContexto(agente("x", { domains: ["habits"] }), base({ herramientas: caja }), evento());
+
+  // Entera y sin recortar: sus herramientas ya intersecan con lo autorizado por
+  // dentro, y filtrarla otra vez aquí sería el mismo filtro con dos criterios.
+  assert.equal(r.ok ? r.entrada.herramientas : null, caja);
+});
+
+// Un agente tiene que saber trabajar sin caja: el despachador nocturno corre
+// sin sesión y ya le quita `consultar` por eso mismo.
+test("sin caja, la entrada no la inventa", () => {
+  const r = acotarContexto(agente("x", { domains: ["habits"] }), base(), evento());
+
+  assert.equal(r.ok ? r.entrada.herramientas : "no-ok", undefined);
+});
+
+test("sin dominios, no hay entrada ni caja que pasar", () => {
+  const r = acotarContexto(
+    agente("dinero", { domains: ["money"] }),
+    base({ domains: ["habits"], herramientas: cajaFalsa() }),
+    evento()
+  );
+
+  assert.equal(r.ok, false);
+});

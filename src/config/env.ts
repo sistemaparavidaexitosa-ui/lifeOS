@@ -242,6 +242,23 @@ export function manifestationAgentTimeoutMs(): number {
 }
 
 /**
+ * ¿El mensaje del coach lo decide el Agentic Kernel? (D-173)
+ *
+ * APAGADO MIENTRAS NO SE DIGA LO CONTRARIO, y ese defecto es la mitad del
+ * valor: con la variable sin poner, el despacho nocturno se comporta
+ * exactamente igual que antes de que el Kernel existiera. Encenderla es una
+ * decisión de operación, no un despliegue; apagarla, también.
+ *
+ * Se mira por persona no, por instalación sí: el coach corre en un bucle sobre
+ * todo el mundo dentro de la misma pasada, y un reparto por usuario haría que
+ * un fallo del Kernel se viera en unos y no en otros, que es el peor escenario
+ * para diagnosticar. O todos o ninguno, y el salto atrás es una variable.
+ */
+export function coachPorElKernel(): boolean {
+  return process.env.AGENT_KERNEL_COACH?.trim() === "1";
+}
+
+/**
  * Lee el JWK completo, la forma antigua de `VAPID_PRIVATE_JWK`.
  *
  * Se conserva para no invalidar las instalaciones que ya lo tienen puesto, pero

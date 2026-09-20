@@ -1,6 +1,7 @@
 import "server-only";
 import { requireGeminiApiKey } from "@/config/env";
 import { debeSaltarDeModelo, motivoCadenaAgotada, problemasDeEsquema, type Budget } from "@/lib/domain/ai/model-chain.ts";
+import type { GeminiSchema, FunctionDeclaration } from "@/lib/domain/ai/tools.ts";
 
 /**
  * EL ÚNICO SITIO DEL PROYECTO QUE HABLA CON UN MODELO.
@@ -124,43 +125,12 @@ export const CENTRO_BUDGET: Budget = { maxOutputTokens: 1500, thinkingBudget: 51
 const TIMEOUT_MS = 60_000;
 
 /**
- * El subconjunto de OpenAPI 3.0 que admite `responseSchema`.
- *
- * Se declara aquí en vez de aceptar `unknown` para que un campo que la API no
- * entiende se caiga en `tsc` y no en producción. Dos ausencias que sorprenden
- * y por eso se nombran: **no existe `additionalProperties`** (el modo es
- * estricto de todas formas) y `propertyOrdering` no es decorativo — sin él el
- * orden de las claves puede bailar entre llamadas idénticas.
+ * `GeminiSchema` y `FunctionDeclaration` se mudaron a
+ * `@/lib/domain/ai/tools.ts` en D-173: describen un formato de wire, no tienen
+ * nada de servidor, y mientras vivieron detrás de `server-only` el dominio no
+ * podía nombrar una herramienta. Se reexportan para no tocar a nadie más.
  */
-export interface GeminiSchema {
-  /**
-   * EN MAYÚSCULAS, y no es cosmético: el cuerpo se parsea como JSON de
-   * protobuf, donde un valor de enum se casa por su NOMBRE exacto. `"string"`
-   * en minúscula no es el nombre de nada y se rechaza con un 400 antes de
-   * llegar al modelo.
-   */
-  type: "OBJECT" | "ARRAY" | "STRING" | "NUMBER" | "INTEGER" | "BOOLEAN";
-  description?: string;
-  enum?: string[];
-  /** `"enum"` acompaña siempre a un `enum` de tipo STRING; es la forma documentada. */
-  format?: string;
-  nullable?: boolean;
-  items?: GeminiSchema;
-  properties?: Record<string, GeminiSchema>;
-  required?: string[];
-  propertyOrdering?: string[];
-}
-
-/**
- * Una herramienta declarada al modelo. `parameters` reusa `GeminiSchema`
- * —el mismo dialecto de `responseSchema`— porque es el mismo subconjunto de
- * OpenAPI: dos tipos para la misma forma sería una deriva esperando a pasar.
- */
-export interface FunctionDeclaration {
-  name: string;
-  description: string;
-  parameters: GeminiSchema;
-}
+export type { GeminiSchema, FunctionDeclaration } from "@/lib/domain/ai/tools.ts";
 
 export interface GenerateJsonInput<T> {
   system: string;

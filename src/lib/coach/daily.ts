@@ -9,8 +9,20 @@ import { sanearPropuestas } from "@/lib/domain/coach/proposals.ts";
 import { claveDelCoach, type Momento } from "@/lib/domain/coach/schedule.ts";
 import type { Domain } from "@/lib/domain/insights/types.ts";
 import type { MemoryItemLike, MemoryScope } from "@/lib/domain/insights/memory.ts";
-import { generarMensajeCoach } from "./generar";
+import { generarMensajeCoach, type CoachResult } from "./generar";
 import { overridesDelCoach } from "./facts";
+import { coachPorElKernel } from "@/config/env";
+import { obtenerAgente, ejecutarAgente } from "@/lib/agents/runtime";
+import { COACH_METADATOS } from "@/lib/domain/agents/coach.ts";
+import { convieneActuar } from "@/lib/domain/agents/politicas.ts";
+import { acotarContexto } from "@/lib/domain/agents/contexto.ts";
+import type { AgentEvent } from "@/lib/domain/agents/types.ts";
+import type { CajaDeHerramientas } from "@/lib/domain/ai/tools.ts";
+import type { InsightContext } from "@/lib/insights/context";
+import { esSalidaCoach } from "@/lib/agents/coach-diario";
+
+/** Un `CoachResult` que no dijo nada, para no repetir la forma en cada salida. */
+const VACIO_COACH: CoachResult = { ok: false, resumen: "", mensaje: "", propuestas: [], factIds: [] };
 
 /**
  * UN MENSAJE DIARIO, DE PRINCIPIO A FIN.
@@ -54,6 +66,82 @@ export interface EntradaCoach {
   momento: Momento;
   /** "Hoy" en la zona del usuario. */
   today: string;
+}
+
+/**
+ * El mismo mensaje, pero decidido por el Kernel (D-173).
+ *
+ * LO QUE CAMBIA Y LO QUE NO. Todo lo de antes —perfil, opt-in, hechos, cadenas,
+ * `buildContext`, la caja sin `consultar`— es exactamente el mismo código, y
+ * todo lo de después —guardar el turno, las propuestas, el rastro— también. Lo
+ * único que se sustituye son cuatro líneas en medio: quién decide que hay que
+ * hablar, y quién llama al modelo.
+ *
+ * Es deliberado que la comparación sea así de estrecha. Si el Kernel construyera
+ * su propio contexto, una diferencia en el mensaje no diría si el Kernel piensa
+ * distinto o si mira datos distintos, y no habría forma de saberlo sin repetir
+ * la llamada. Con el contexto compartido, cualquier diferencia es del Kernel.
+ *
+ * El restraint SÍ manda aquí, y es la novedad visible: el Kernel puede decidir
+ * que hoy no toca hablar y devolver un `ok: false` con el motivo. El camino
+ * viejo no sabía callarse —`claveDelCoach` evitaba repetir, pero no evitaba
+ * decir algo—; éste sí, y por eso el motivo acaba en `audit_log` como cualquier
+ * otro fallo en vez de perderse.
+ */
+async function pensarPorElKernel(input: {
+  context: InsightContext;
+  caja: CajaDeHerramientas;
+  momento: Momento;
+  today: string;
+  userId: string;
+}): Promise<CoachResult> {
+  const agente = obtenerAgente(COACH_METADATOS.id);
+  if (!agente) {
+    // Con `problemasDeArranque()` no vacío. No se improvisa un coach: se dice.
+    return { ...VACIO_COACH, reason: "El Kernel no tiene registrado al coach diario." };
+  }
+
+  const evento: AgentEvent = {
+    tipo: input.momento === "morning" ? "cron.manana" : "cron.noche",
+    userId: input.userId,
+    ocurridoEn: new Date().toISOString()
+  };
+
+  // La primera vez del día: `vecesEnLaFranja` en 0 porque quien llama a este
+  // archivo ya aplicó el dedupe de `claveDelCoach` antes de entrar. Contarlo
+  // otra vez aquí sería el mismo filtro dos veces con dos relojes distintos.
+  const veredicto = convieneActuar(agente, evento, {
+    vecesEnLaFranja: 0,
+    yaActuaron: [],
+    descartadoHoy: false
+  });
+  if (!veredicto.actuar) return { ...VACIO_COACH, reason: veredicto.motivo };
+
+  const acotado = acotarContexto(
+    agente,
+    {
+      userId: input.userId,
+      today: input.today,
+      timeZone: "UTC", // el coach ya recibe `today` resuelto; no vuelve a calcular fechas
+      domains: input.context.domains,
+      facts: input.context.facts,
+      memory: input.context.memory,
+      rejections: input.context.rejections,
+      herramientas: input.caja
+    },
+    evento
+  );
+  if (!acotado.ok) return { ...VACIO_COACH, reason: acotado.reason };
+
+  const salida = await ejecutarAgente(agente.id, acotado.entrada);
+  if (!salida.ok) return { ...VACIO_COACH, reason: salida.reason };
+
+  if (!esSalidaCoach(salida.datos)) {
+    return { ...VACIO_COACH, reason: "El coach del Kernel devolvió algo que no es un mensaje." };
+  }
+
+  const { resumen, mensaje, propuestas, factIds } = salida.datos;
+  return { ok: true, resumen, mensaje, propuestas, factIds };
 }
 
 export async function generarYGuardarMensajeDiario(entrada: EntradaCoach): Promise<MensajeCoach> {
@@ -121,7 +209,9 @@ export async function generarYGuardarMensajeDiario(entrada: EntradaCoach): Promi
     overrides
   });
 
-  const result = await generarMensajeCoach({ context, tools: caja, momento, today });
+  const result = coachPorElKernel()
+    ? await pensarPorElKernel({ context, caja, momento, today, userId })
+    : await generarMensajeCoach({ context, tools: caja, momento, today });
   if (!result.ok) return { ok: false, reason: result.reason };
 
   const { data: guardado, error } = await supabase

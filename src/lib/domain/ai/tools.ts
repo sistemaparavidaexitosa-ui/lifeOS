@@ -17,6 +17,78 @@ import { addDaysISO } from "../datetime.ts";
  */
 export const MAX_DIAS_CONSULTA = 400;
 
+/**
+ * El subconjunto de OpenAPI 3.0 que admite `responseSchema`.
+ *
+ * Se declara en vez de aceptar `unknown` para que un campo que la API no
+ * entiende se caiga en `tsc` y no en producción. Dos ausencias que sorprenden
+ * y por eso se nombran: **no existe `additionalProperties`** (el modo es
+ * estricto de todas formas) y `propertyOrdering` no es decorativo — sin él el
+ * orden de las claves puede bailar entre llamadas idénticas.
+ *
+ * VIVE AQUÍ, Y NO EN `src/lib/ai/gemini-provider.ts`, DESDE D-173. Es un tipo
+ * puro que describe un formato de wire: estaba en la capa de efectos por
+ * costumbre, no porque tuviera nada de servidor. Mientras estuvo allí —detrás
+ * de `server-only`— el dominio no podía nombrar una herramienta, y por tanto no
+ * podía existir un agente que usara herramientas. El proveedor lo reexporta.
+ */
+export interface GeminiSchema {
+  /**
+   * EN MAYÚSCULAS, y no es cosmético: el cuerpo se parsea como JSON de
+   * protobuf, donde un valor de enum se casa por su NOMBRE exacto. `"string"`
+   * en minúscula no es el nombre de nada y se rechaza con un 400 antes de
+   * llegar al modelo.
+   */
+  type: "OBJECT" | "ARRAY" | "STRING" | "NUMBER" | "INTEGER" | "BOOLEAN";
+  description?: string;
+  enum?: string[];
+  /** `"enum"` acompaña siempre a un `enum` de tipo STRING; es la forma documentada. */
+  format?: string;
+  nullable?: boolean;
+  items?: GeminiSchema;
+  properties?: Record<string, GeminiSchema>;
+  required?: string[];
+  propertyOrdering?: string[];
+}
+
+/**
+ * Una herramienta declarada al modelo. `parameters` reusa `GeminiSchema` —el
+ * mismo dialecto de `responseSchema`— porque es el mismo subconjunto de
+ * OpenAPI: dos tipos para la misma forma sería una deriva esperando a pasar.
+ */
+export interface FunctionDeclaration {
+  name: string;
+  description: string;
+  parameters: GeminiSchema;
+}
+
+/**
+ * Lo que se le puede entregar al modelo para que pida datos por su cuenta.
+ *
+ * Es solo la FORMA. Quien la construye —con Supabase, la lista blanca de tablas
+ * y los dominios ya intersecados— es `crearCajaDeHerramientas()` en
+ * `src/lib/ai/tools.ts`, que sigue llevando `server-only` y no se movió.
+ * Separar la forma de la fábrica es lo que permite que `AgentInput` ofrezca
+ * herramientas a un agente sin que el contrato de los agentes dependa de la
+ * capa que habla con la base (D-173).
+ */
+export interface CajaDeHerramientas {
+  declaraciones: FunctionDeclaration[];
+  ejecutar: (name: string, args: Record<string, unknown>) => Promise<unknown>;
+  /**
+   * Los id que el modelo SÍ puede citar porque se los dimos por herramienta.
+   * Quien valida las citas tiene que unirlos a los del contexto: si no, todo
+   * lo que el modelo pidió se le descartaría por «inventado».
+   */
+  entregados: () => Set<string>;
+  /**
+   * Lo que se buscó en internet, textual. Va a `audit_log`: sin esto, «salió
+   * una consulta hacia Google» y «salió QUÉ hacia Google» se ven igual, y solo
+   * la segunda permite comprobar que no viajaron datos del usuario.
+   */
+  busquedas: () => string[];
+}
+
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Una fecha ISO que además EXISTE: `2026-13-45` cumple el patrón y no es un día. */
