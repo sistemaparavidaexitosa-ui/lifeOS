@@ -223,3 +223,17 @@ tenían lo necesario.
 | El silencio deja rastro contable | `audit_log` | `audit_log_insert_own` | `anotarSilencio()` | — | por construcción (✅); **sin fila real** (⚠️) |
 | Lo pendiente no cuenta como rechazo | `coach_proposals` | — | filtro `in (accepted, dismissed)` | — | por construcción (✅) |
 | Anotar no puede tumbar el mensaje | — | — | `try/catch` en `bitacora.ts` | — | por lectura (⚠️) |
+
+## Agentic Kernel, Fase 5 — el segundo agente (D-175, sin migración)
+
+| Requisito | Tablas | RLS / GRANT | Server Actions y rutas | UI | Pruebas |
+|---|---|---|---|---|---|
+| Un segundo agente encaja SIN cambiar el contrato | — | — | — | — | `agents-insights.test.ts`: `validarAgente` lo acepta tal cual (✅) |
+| Los dos conviven en el registro | — | — | `runtime.ts` (bucle) | — | `agents-insights.test.ts` (✅) |
+| Cada uno responde a su disparo | — | — | — | — | `agents-insights.test.ts`: mañana solo el coach (✅) |
+| Declarar menos áreas hace detectables los conflictos | — | — | — | — | `agents-insights.test.ts`: choca con un agente de Relaciones (✅) |
+| El riesgo gradúa los turnos por franja | — | — | — | — | `agents-insights.test.ts`: 2 el análisis, 1 el coach (✅) |
+| El aprendizaje ve las dos tablas | `coach_proposals`, `recommendations` | las de 0053 y 0008 | `leerTodasLasDecisiones()` | — | por construcción (✅); **sin fila real** (⚠️) |
+| El botón «Analizar» no pasa por el Kernel | — | — | `origen === "nocturno"` | `/intelligence` | por construcción (✅) |
+| Variable propia, encendido de uno en uno | — | — | `insightsPorElKernel()` | — | `pnpm build` (✅) |
+| Sin sus dominios, no corre | `profiles.ai_domains` | la de 0048 | `acotarContexto` | — | `agents-insights.test.ts` (✅) |

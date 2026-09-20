@@ -17,7 +17,7 @@ import { COACH_METADATOS } from "@/lib/domain/agents/coach.ts";
 import { convieneActuar } from "@/lib/domain/agents/politicas.ts";
 import { acotarContexto } from "@/lib/domain/agents/contexto.ts";
 import type { AgentEvent } from "@/lib/domain/agents/types.ts";
-import { anotarSilencio, leerDecisiones, ultimaRevisionDeIdentidad } from "@/lib/agents/bitacora";
+import { anotarSilencio, leerTodasLasDecisiones, ultimaRevisionDeIdentidad } from "@/lib/agents/bitacora";
 import { enRechazoSostenido } from "@/lib/domain/agents/aprendizaje.ts";
 import type { CajaDeHerramientas } from "@/lib/domain/ai/tools.ts";
 import type { InsightContext } from "@/lib/insights/context";
@@ -116,7 +116,7 @@ async function pensarPorElKernel(input: {
   // agente actúa como siempre — callar por falta de datos sería castigarlo por
   // ser nuevo.
   const [decisiones, desdeLaRevision] = await Promise.all([
-    leerDecisiones(input.supabase, input.userId),
+    leerTodasLasDecisiones(input.supabase, input.userId),
     ultimaRevisionDeIdentidad(input.supabase, input.userId)
   ]);
 

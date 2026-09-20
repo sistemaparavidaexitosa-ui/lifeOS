@@ -2320,3 +2320,47 @@ equivocado.
   correcto y es inerte hasta el segundo agente.
 - Sigue pendiente todo lo de D-165 a D-169: WebKit/iPhone, lectores de pantalla,
   PWA instalada. Y ninguna llamada real al modelo, noveno ciclo.
+
+## Agentic Kernel, Fase 5 — el segundo agente (D-175, sin migración) — 20-sep-2026
+
+La fase que iba a responder si el Kernel es multi-agente o es el coach con otro
+nombre.
+
+### Lo que sí se probó
+
+- `pnpm test:unit`: **1304/1304** ✅, con **10 tests nuevos**.
+- **El test que justifica la fase**: «el análisis nocturno cumple el contrato SIN
+  que hiciera falta cambiarlo». El coach obligó a añadir `skippedDomains` y luego
+  `herramientas`; éste no pidió nada. Con un solo agente eso no se podía saber.
+- **Dos mecanismos dejaron de ser inertes.** `identidadesIncompatibles` ahora
+  puede disparar, porque el análisis declara cinco áreas y no siete: hay un test
+  con un agente de Relaciones que choca con él y NO choca con el coach. Y
+  `enRechazoSostenido` ya tiene contra quién comparar.
+- `pnpm typecheck` ✅ · `pnpm lint` ✅ · `pnpm build` ✅ con las mismas 39 páginas
+  y **First Load JS 102 kB**, sin cambio por sexta entrega consecutiva.
+
+### Lo que la escritura encontró y el plan no
+
+- **El centro no era el candidato**, aunque lo parecía. `generarSugerencias`
+  necesita `franja`, `destinos`, `proyectos` y `yaPropuestas`: migrarlo obligaba
+  a ensanchar el contrato de todos los agentes para acomodar a uno. Se descarta
+  con motivo, y es el único descarte reabrible de los cuatro.
+- **`recommendations` no tiene `resolved_at`** (0008), así que las decisiones de
+  Insights se agrupan por el día en que se PROPUSO, no en el que se decidió. Para
+  contar días con actividad da igual; para medir cuánto tarda alguien en decidir
+  haría falta una columna.
+
+### Lo que NO se ha ejercitado, y hay que saberlo
+
+- **Ninguno de los dos caminos del Kernel se ha ejecutado.** `AGENT_KERNEL_COACH`
+  y `AGENT_KERNEL_INSIGHTS` están ambos apagados. Seis entregas seguidas en verde
+  prueban que nada se rompió; **no prueban que el sistema agentic funcione**.
+- **`leerDecisionesDeInsights` no ha leído una fila.** Igual que las de D-174.
+- **`identidadesIncompatibles` sigue sin poder dispararse en producción**: el
+  conflicto probado necesita un agente de Relaciones que no existe. Lo que cambió
+  es que ahora *podría*; antes era estructuralmente imposible.
+- **El análisis nocturno ya corría con `scope: "habits"`** y el agente lo
+  reconstruye igual, pero declara siete dominios. Si algún día se le amplía el
+  scope, hay dos sitios que recordar en vez de uno.
+- Y ninguna llamada real al modelo, décimo ciclo. Pendiente todo lo de D-165 a
+  D-169: WebKit/iPhone, lectores de pantalla, PWA instalada.

@@ -6,7 +6,16 @@ import type { Database } from "@/types/database.types";
 import { loadFacts, type FactsOverrides } from "./facts-loader";
 import { allowedDomains, buildContext, type InsightContext, type Scope } from "./context";
 import { loadChainFacts } from "./graph-context";
-import { recommend } from "@/lib/ai/recommend";
+import { recommend, type RecommendResult } from "@/lib/ai/recommend";
+import { insightsPorElKernel } from "@/config/env";
+import { obtenerAgente, ejecutarAgente } from "@/lib/agents/runtime";
+import { esSalidaInsights } from "@/lib/agents/insights-nocturno";
+import { anotarSilencio, leerTodasLasDecisiones, ultimaRevisionDeIdentidad } from "@/lib/agents/bitacora";
+import { INSIGHTS_METADATOS } from "@/lib/domain/agents/insights.ts";
+import { convieneActuar } from "@/lib/domain/agents/politicas.ts";
+import { acotarContexto } from "@/lib/domain/agents/contexto.ts";
+import { enRechazoSostenido } from "@/lib/domain/agents/aprendizaje.ts";
+import type { AgentEvent } from "@/lib/domain/agents/types.ts";
 import { GEMINI_MODEL } from "@/lib/ai/gemini-provider";
 import { recommendationFingerprint } from "@/lib/domain/insights/fingerprint.ts";
 import { REJECTION_STATUSES } from "@/lib/domain/insights/states.ts";
@@ -142,15 +151,91 @@ export function huellaDeHechos(context: InsightContext): string {
   return createHash("sha256").update(texto).digest("hex");
 }
 
+/**
+ * El mismo análisis, decidido por el Kernel (D-175).
+ *
+ * Misma costura estrecha que `pensarPorElKernel` en `coach/daily.ts`: el
+ * contexto ya está construido y lo que sigue —guardar, auditar, aplicar el
+ * fingerprint— no cambia. Solo se sustituye quién decide que hay algo que
+ * analizar y quién llama al modelo.
+ *
+ * `recommend` devuelve `{ ok: true }` con lista vacía cuando no hay nada
+ * anómalo, y el Kernel puede devolver `ok: false` porque decidió callarse. Son
+ * dos cosas distintas y por eso el motivo del silencio se anota aparte.
+ */
+async function analizarPorElKernel(input: {
+  supabase: Db;
+  userId: string;
+  context: InsightContext;
+  today: string | null;
+}): Promise<RecommendResult> {
+  const agente = obtenerAgente(INSIGHTS_METADATOS.id);
+  if (!agente) {
+    return { ok: false, recommendations: [], dropped: [], reason: "El Kernel no tiene registrado el análisis nocturno." };
+  }
+
+  const hoy = input.today ?? new Date().toISOString().slice(0, 10);
+  const evento: AgentEvent = { tipo: "cron.noche", userId: input.userId, ocurridoEn: new Date().toISOString() };
+
+  const [decisiones, desdeLaRevision] = await Promise.all([
+    leerTodasLasDecisiones(input.supabase, input.userId),
+    ultimaRevisionDeIdentidad(input.supabase, input.userId)
+  ]);
+
+  const veredicto = convieneActuar(agente, evento, {
+    vecesEnLaFranja: 0,
+    yaActuaron: [],
+    descartadoHoy: false,
+    rechazoSostenido: enRechazoSostenido(decisiones, agente.id, { desdeLaRevision })
+  });
+  if (!veredicto.actuar) {
+    await anotarSilencio(input.supabase, { userId: input.userId, agenteId: agente.id, evento, motivo: veredicto.motivo });
+    return { ok: false, recommendations: [], dropped: [], reason: veredicto.motivo };
+  }
+
+  const acotado = acotarContexto(
+    agente,
+    {
+      userId: input.userId,
+      today: hoy,
+      timeZone: "UTC",
+      domains: input.context.domains,
+      facts: input.context.facts,
+      memory: input.context.memory,
+      rejections: input.context.rejections
+    },
+    evento
+  );
+  if (!acotado.ok) return { ok: false, recommendations: [], dropped: [], reason: acotado.reason };
+
+  const salida = await ejecutarAgente(agente.id, acotado.entrada);
+  if (!salida.ok) return { ok: false, recommendations: [], dropped: [], reason: salida.reason };
+  if (!esSalidaInsights(salida.datos)) {
+    return { ok: false, recommendations: [], dropped: [], reason: "El análisis del Kernel devolvió algo que no son recomendaciones." };
+  }
+
+  const { recomendaciones, descartadas, model } = salida.datos;
+  return { ok: true, recommendations: recomendaciones, dropped: descartadas, ...(model ? { model } : {}) };
+}
+
 export async function recomendarYGuardar(opts: {
   supabase: Db;
   userId: string;
   scope: Scope;
   context: InsightContext;
   origen: "manual" | "nocturno";
+  /** «Hoy» en la zona de la persona. Solo lo usa el camino del Kernel. */
+  today?: string;
 }): Promise<AnalyzeResult> {
   const { supabase, userId, scope, context, origen } = opts;
-  const result = await recommend(context);
+
+  // El Kernel solo manda de noche (D-175). Con `origen: "manual"` la persona
+  // acaba de pulsar «Analizar» y está mirando: un restraint que decidiera
+  // callarse sería un botón que no hace nada.
+  const result =
+    origen === "nocturno" && insightsPorElKernel()
+      ? await analizarPorElKernel({ supabase, userId, context, today: opts.today ?? null })
+      : await recommend(context);
 
   await supabase.from("audit_log").insert({
     user_id: userId,
