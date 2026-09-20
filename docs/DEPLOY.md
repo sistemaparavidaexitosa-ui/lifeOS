@@ -357,6 +357,20 @@ Para apagarlo sin desplegar nada, basta con quitar el dominio correspondiente en
 **Configuración → Recomendaciones (Intelligence OS)**: sin hechos autorizados no
 hay sugerencias.
 
+## 3septies) El centro lienzo (D-168, migración 0071)
+
+**Sin variables de entorno nuevas** y aditiva. Lo que cambia sin pedir permiso:
+
+- **El centro aparece ya pintado**, sin el parpadeo de antes. La marca de
+  «visita» pasa a ser la cookie de sesión `lifeos_visita`, que pone el
+  middleware. No es sensible y no lleva nada dentro: solo dice que esta visita
+  ya empezó.
+- **El «cómo voy» y la barra de captura necesitan `GEMINI_API_KEY`.** Sin ella,
+  el centro se ve igual salvo por esos dos: la narrativa no aparece y la barra
+  contesta que la IA no está configurada.
+- **«Sigue por aquí» no necesita IA**: se deduce de tu actividad y aparece
+  siempre que haya señales.
+
 ## 3ter) Aplicar la migración 0054 (Execution Graph) sobre una base con datos
 
 Es la primera migración del repo que **rellena tablas nuevas a partir de las

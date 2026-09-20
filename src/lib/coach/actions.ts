@@ -20,7 +20,7 @@ import { requireUser } from "@/lib/data/session";
 import { actionFailed, actionOk, type ActionResult } from "@/lib/supabase/errors";
 import { sanearPropuesta, type PropuestaSaneada } from "@/lib/domain/coach/proposals.ts";
 import { quickAddTask } from "@/lib/search/quick-add";
-import { createNote, saveNote } from "@/app/(app)/notebooks/actions";
+import { createNote, saveNote, deleteNote } from "@/app/(app)/notebooks/actions";
 import { upsertOccupation } from "@/app/(app)/time/actions";
 import { upsertRoutine } from "@/app/(app)/development/routines/actions";
 import { upsertPersonalGoal } from "@/app/(app)/development/goals/actions";
@@ -104,8 +104,18 @@ async function ejecutar(p: PropuestaSaneada, workspaceId: string | null): Promis
       // su concurrencia optimista y su registro.
       const creada = await createNote(p.payload.notebookId ?? "");
       if (!creada.ok || !creada.id) return { ok: false, reason: creada.reason ?? "No se pudo crear la nota." };
-      const guardada = await saveNote(creada.id, p.titulo, p.payload.cuerpo ?? "", 0);
-      if (!guardada.ok) return { ok: false, reason: guardada.reason ?? "No se pudo guardar la nota." };
+
+      // VERSIÓN 1, no 0: una nota recién creada nace en 1, y `saveNote` compara
+      // la versión EXACTA (concurrencia optimista). Con 0 el update no encuentra
+      // fila, no falla ruidosamente y deja una nota vacía en el cuaderno. Lo
+      // cazó la prueba de navegador.
+      const guardada = await saveNote(creada.id, p.titulo, p.payload.cuerpo ?? "", 1);
+      if (!guardada.ok) {
+        // Sin esto, cada intento fallido dejaría una nota en blanco que la
+        // persona tendría que borrar a mano.
+        await deleteNote(creada.id);
+        return { ok: false, reason: guardada.reason ?? "No se pudo guardar la nota." };
+      }
       return { ...actionOk, href: `/notebooks?notebook=${p.payload.notebookId}` };
     }
 

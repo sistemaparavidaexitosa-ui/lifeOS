@@ -3088,3 +3088,49 @@ implementa:
     nada, y hoy sería inventar una correlación sobre cuatro datos). **La barra
     de captura** —escribir una idea y que la IA la coloque en un notebook o en
     un proyecto— es el subsistema B y va aparte.
+
+- **D-168 · El centro deja de parpadear, habla, y se le puede escribir.** Cuatro
+  cosas que salieron de usar el centro agéntico en producción, y de la lectura
+  literal del usuario: «tiene delay para aparecer», «no logro identificar la
+  barra de conversación», «no hay texto que me diga cómo voy», «sigo sin sentir
+  el menú dinámico». La primera era un fallo; la segunda, una pieza que nunca se
+  construyó; las otras dos, huecos de diseño.
+  - **El parpadeo era arquitectónico, no de CSS.** La decisión de abrir el
+    centro vivía en un `useEffect` porque «¿es el principio de una visita?» se
+    resolvía con `sessionStorage`, que solo existe en el navegador: el servidor
+    mandaba la pantalla normal, React hidrataba, y el centro aparecía encima. Se
+    veían los dos estados, en ese orden. Ahora la marca es una **cookie de
+    sesión** puesta por el middleware —sin `Max-Age`, muere con el navegador,
+    que es exactamente lo que significa «visita»— y la ruta viaja en una
+    cabecera propia, `x-ruta`, porque las internas de Next no están garantizadas
+    en la primera petición del documento. El Server Component decide antes de
+    pintar: el centro viaja en el primer HTML o no viaja. De regalo, deja de
+    depender de `sessionStorage`, que en una ventana privada estricta lanza.
+  - **La narrativa va en la llamada que ya existía.** Un campo `resumen` más en
+    la respuesta por franja, guardado en `centro_runs.resumen`. **Ni una
+    petición extra**, y el resto de aperturas de la franja lo leen de la base.
+    Si no hay nada que contar, viene vacío y no se pinta: un hueco bajo el
+    titular se lee como un error de carga.
+  - **«Sigue por aquí» se deduce, no se le pregunta al modelo.** De tres a cinco
+    destinos con su motivo, calculados por reglas puras sobre datos que el
+    centro ya tiene. Tres razones, en orden: llega con el primer HTML en vez de
+    con la respuesta del modelo; «12 movimientos en Rediseño» es un hecho y no
+    una opinión; y funciona sin llave de IA y sin hechos suficientes, que es
+    justo cuando el centro más se nota vacío. La IA sigue mandando en «Lo
+    siguiente», donde aporta: decidir QUÉ hacer. Aquí solo se decide a dónde ir.
+  - **El menú completo NO se reordena ni se recorta.** Fue una decisión del
+    usuario entre tres opciones: una fila de atajos arriba conserva la memoria
+    muscular de dónde está cada cosa, mientras que reordenar la lista entera
+    obliga a leerla completa en cada visita.
+  - **La barra propone; no escribe.** Escribes una idea, un `generateJson`
+    decide entre `nota`, `tarea` o `pregunta`, y **ante cualquier duda
+    pregunta**: preguntar cuesta un toque, y guardar algo en el cuaderno
+    equivocado es un desorden que la persona descubre semanas después. El
+    destino tiene que existir y ser suyo; si no, `sanearCaptura` degrada a
+    `pregunta`. Lo que sale es una propuesta en la cola de siempre (D-151), y
+    aceptarla llama a `createNote` + `saveNote`, las acciones reales (D-153). No
+    es un chat: es una captura, y el chat transversal sigue donde estaba.
+  - **Tipo `nota`** en `coach_proposals`, con `notebookId` y `cuerpo` en el
+    payload. La lista de tipos es ACUMULATIVA: reescribirla copiando una
+    migración vieja ya borró `arista` una vez (ver 0070), y ahora está avisado
+    dentro de la propia migración.
