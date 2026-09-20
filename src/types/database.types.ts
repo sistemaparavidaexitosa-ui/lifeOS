@@ -569,6 +569,33 @@ export type Database = {
         }
         Relationships: []
       }
+      centro_runs: {
+        Row: {
+          created_at: string
+          facts_hash: string
+          franja: string
+          local_date: string
+          outcome: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          facts_hash?: string
+          franja: string
+          local_date: string
+          outcome?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          facts_hash?: string
+          franja?: string
+          local_date?: string
+          outcome?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       coach_proposals: {
         Row: {
           created_at: string

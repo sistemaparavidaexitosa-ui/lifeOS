@@ -55,6 +55,7 @@ export default function RitualHost({
   cabecera,
   hourLocal,
   ritualPermitido,
+  workspaceId,
   currency,
   locale
 }: {
@@ -64,6 +65,8 @@ export default function RitualHost({
   hourLocal: number;
   /** Si la política del administrador permite el ritual (D-165). */
   ritualPermitido: boolean;
+  /** Espacio personal, donde se crean las tareas aceptadas desde el centro. */
+  workspaceId: string | null;
   currency: string;
   locale: string;
 }) {
@@ -148,6 +151,7 @@ export default function RitualHost({
         onIrA={() => setVista(null)}
         onHabitual={aHabitual}
         onRepetirRitual={ritualPermitido ? repetirRitual : null}
+        workspaceId={workspaceId}
       />
     );
   }

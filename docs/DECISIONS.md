@@ -3041,3 +3041,50 @@ implementa:
     `/centro` como ruta (tocaría el middleware y «atrás» devolvería al centro);
     mostrarlo en cada navegación (interrumpe); ocultar la barra lateral (quien
     está dentro de un módulo sigue moviéndose entre pantallas vecinas).
+
+- **D-167 · El centro propone; la persona acepta de un toque.** El centro
+  (D-166) deja de ser una pantalla de datos y empieza a decir qué sigue:
+  «llevas tres días en Rediseño», «abre Dinero», «pon esto en tu día». Lo hace
+  con la maquinaria que ya existía —`coach_proposals`, `sanearPropuesta`,
+  `acceptProposal`, `activityFacts` con `busyProjectFacts` dentro— y no con una
+  segunda: **D-151 sigue en pie, una sola cola**, y **D-153 también**, porque
+  aceptar una propuesta que crea algo pasa por la Server Action real. La IA no
+  escribe en las tablas de nadie por su cuenta, y eso es lo que permite dejarla
+  proponer sin pedir permiso antes.
+  - **Un tipo nuevo que no escribe nada: `foco`.** «Sigue con lo que estabas
+    haciendo» no es algo que crear, es un sitio al que volver. Aceptarlo navega
+    y marca la propuesta, nada más — la misma forma que ya tenía `estructura`,
+    que tampoco crea. Sin este tipo, el centro habría tenido que inventar una
+    tarea para poder decir «sigue con esto».
+  - **El destino se valida en el servidor, no en el prompt.** `destinoValido`
+    cierra tres agujeros: direcciones externas (una IA que escribe un `http://`
+    en un botón de tu app puede sacarte de ella), rutas que no están en el menú
+    o están ocultas, y proyectos que no son tuyos. Pedirlo en el prompt habría
+    sido pedirle al modelo que se autocontrole.
+  - **Piensa una vez por franja, y solo si algo cambió.** Mañana, tarde y noche
+    (`h < 12`, `12 ≤ h < 19`, `h ≥ 19`, el mismo corte que el tema nocturno).
+    Tope de tres llamadas al día, y cero si la huella de hechos coincide con la
+    de la franja anterior — `debeAnalizar`, que ya existía para el análisis
+    nocturno. `CENTRO_BUDGET` es el presupuesto más pequeño del repo: son tres
+    frases; si alguna vez hace falta más, la pregunta no es subir el tope sino
+    por qué el centro escribe párrafos.
+  - **La guarda es la clave primaria de `centro_runs`,** y se reserva la franja
+    ANTES de llamar al modelo: dos pestañas abiertas a la vez no pagan dos
+    veces. No va en `ai_job_runs` por lo mismo que el respaldo del brief: esa
+    tabla está cerrada a `authenticated` y esto se dispara desde el navegador.
+  - **Las sugerencias no mandan.** Viajan en la misma respuesta que el contenido
+    del centro, pero si el modelo no contesta —o no hay llave— se devuelve una
+    lista vacía y el centro se pinta igual. Es un extra, no el contenido.
+  - **Origen `centro`, sin turno de chat.** La regla de 0062 no era «toda
+    propuesta necesita un turno» sino «el coach lo necesita»
+    (`origen <> 'coach' or message_id is not null`), así que el centro entra sin
+    él, como ya hacían `analisis` y `grafo`. Su contexto es el `motivo`.
+    Consecuencia aceptada: borrar el historial de chat no se lleva por delante
+    las sugerencias del centro, porque no salieron de él.
+  - **Lo que NO se hizo.** Que la IA escriba sola (lo pidió el usuario como
+    «que actúe», y se acordó que actuar es proponer sin que se lo pidan, no
+    escribir sin permiso); una segunda cola; notificaciones push del centro;
+    aprender qué sugerencias funcionan (hace falta historial antes de medir
+    nada, y hoy sería inventar una correlación sobre cuatro datos). **La barra
+    de captura** —escribir una idea y que la IA la coloque en un notebook o en
+    un proyecto— es el subsistema B y va aparte.

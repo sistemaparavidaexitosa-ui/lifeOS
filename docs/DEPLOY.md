@@ -334,6 +334,29 @@ select user_id, 'habitual' from public.profiles
 on conflict (user_id) do update set nav_mode = 'habitual';
 ```
 
+## 3sexies) El centro agéntico (D-167, migración 0070)
+
+**Sin variables de entorno nuevas** —usa la `GEMINI_API_KEY` que ya exigen el
+resto de funciones de IA— y **aditiva**: mientras no haya sugerencias, el centro
+se ve exactamente igual que antes.
+
+Sin `GEMINI_API_KEY` no pasa nada malo: la orquestación anota el motivo en
+`centro_runs.outcome` y el centro se pinta sin el bloque.
+
+Gasto: **como mucho tres llamadas al modelo por persona y día** (una por franja),
+y ninguna si los hechos no cambiaron desde la franja anterior. Para ver qué está
+pasando:
+
+```sql
+select local_date, franja, outcome from public.centro_runs
+where user_id = (select id from auth.users where email = 'tu-correo@ejemplo.com')
+order by local_date desc, franja;
+```
+
+Para apagarlo sin desplegar nada, basta con quitar el dominio correspondiente en
+**Configuración → Recomendaciones (Intelligence OS)**: sin hechos autorizados no
+hay sugerencias.
+
 ## 3ter) Aplicar la migración 0054 (Execution Graph) sobre una base con datos
 
 Es la primera migración del repo que **rellena tablas nuevas a partir de las

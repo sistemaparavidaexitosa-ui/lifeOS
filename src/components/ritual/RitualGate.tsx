@@ -2,6 +2,7 @@ import { loadRitualGate, loadRitualContent } from "@/lib/data/ritual";
 import { debeMostrarseHoy } from "@/lib/domain/ritual/decidir.ts";
 import { construirSecuencia, hayContenido } from "@/lib/domain/ritual/secuencia.ts";
 import { publicEnv } from "@/config/env";
+import { getPersonalWorkspace } from "@/lib/data/workspaces";
 import { greetingFor } from "@/lib/domain/datetime.ts";
 import RitualHost, { type DatosDelRitual } from "./RitualHost";
 
@@ -80,6 +81,7 @@ export default async function RitualGate() {
       datos={await datosDeHoy()}
       navMode={puerta.navMode}
       ritualPermitido={puerta.settings.enabled}
+      workspaceId={(await getPersonalWorkspace())?.id ?? null}
       hourLocal={puerta.hourLocal}
       // El saludo viaja ya hecho para que el centro pinte al instante, sin
       // esperar a `/api/centro`.
