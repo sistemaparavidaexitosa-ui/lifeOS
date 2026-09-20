@@ -2,6 +2,8 @@
 
 **Fecha:** 2026-09-20 · **Estado:** diseño aprobado, pendiente de plan. Continúa D-165, D-166 y D-167.
 
+**Decisión:** D-168. La watchlist de Money OS pasa a D-169 y migración 0072.
+
 ## Contexto
 
 El centro agéntico (D-167) salió a producción y el usuario lo usó. Su lectura,
