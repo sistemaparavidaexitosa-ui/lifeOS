@@ -127,3 +127,19 @@ uno de ellos.
 | «Ahora no» aparta; nada se pierde | — (estado en el cliente) | — | — | contador «Quedan N» | `centro-lienzo.test.ts`: lo pospuesto va al final sin duplicarse (✅) · navegador (✅) |
 | Un día sin nada no miente | — | — | — | tarjeta de cierre | `centro-lienzo.test.ts`: día vacío abre en el cierre (✅) · navegador (✅) |
 | El menú desaparece del centro | — | — | — | `destinos.ts`, `destacados.ts`, `componer.ts` y `Sugerencias.tsx` **borrados** | navegador: ni lista de módulos, ni atajos, ni rejilla (✅) |
+
+## Agent Runtime mínimo (D-170, sin migración)
+
+Las columnas vacías no son un descuido: **son el resultado del sprint**. El
+núcleo entra sin tocar base, sin rutas y sin pantallas.
+
+| Requisito | Tablas | RLS / GRANT | Server Actions y rutas | UI | Pruebas |
+|---|---|---|---|---|---|
+| Existe un vocabulario común de agente | — | — | — (puro) | — | `types.ts` compila bajo `strict` (✅) |
+| El registro da de alta y devuelve por id | — | — | — (puro) | — | `agents-registro.test.ts` (12, ✅) |
+| Listar es estable, no depende del orden de import | — | — | — | — | `agents-registro.test.ts`: orden por id (✅) |
+| Un contrato inválido no entra, con motivo pintable | — | — | — | — | `agents-registro.test.ts`: id, versión, descripción, `ejecutar` (✅) |
+| Un id duplicado se rechaza y gana el primero | — | — | — | — | `agents-registro.test.ts`: el que ya estaba queda intacto (✅) |
+| El registro no lanza nunca (D-021) | — | — | — | — | `agents-registro.test.ts`: id desconocido → `null` (✅) |
+| El runtime no entra en el bundle de cliente | — | — | `runtime.ts` con `server-only` | — | `pnpm build` (✅) · `git diff --stat` vacío (✅) |
+| Preparado para ejecutar, sin ejecutar | — | — | — | — | `AgentDefinition.ejecutar` en el tipo; el runtime no lo expone (✅) |

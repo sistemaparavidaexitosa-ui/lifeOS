@@ -3167,3 +3167,46 @@ implementa:
     «Ahora no» significa apartarla; dos botones con la misma etiqueta y distinto
     efecto en la misma pantalla es una trampa. Lo encontró la prueba de
     navegador tropezando con ella, no la lectura del código.
+
+- **D-170 · Un runtime de agentes que todavía no ejecuta nada.** LifeOS ya tiene
+  piezas que piensan —Coach, Manifestation, Insights, Automations, el chat con
+  sus herramientas— y ninguna sabe de las otras. Cada una se invoca desde su
+  propio sitio con su propia firma, así que «conectar dos» siempre ha
+  significado escribir el pegamento otra vez. Lo que falta no es inteligencia:
+  es un nombre común. Este sprint añade sólo eso.
+  - **El sistema se comporta exactamente igual.** Cuatro archivos nuevos, cero
+    líneas modificadas en código existente, ninguna migración, ninguna API,
+    ninguna pantalla. El registro arranca vacío. Es una entrega que no se nota,
+    y esa es la prueba de que salió bien: la infraestructura entra cuando no
+    tiene consumidores, porque entonces equivocarse es barato.
+  - **Un `Map` donde el repo siempre usó `switch`.** Hasta hoy el patrón ha sido
+    unión discriminada más despacho explícito (`ejecutar()` en `lib/ai/tools.ts`,
+    `decide()` en `domain/automations/rules.ts`), y es mejor casi siempre porque
+    el compilador obliga a cubrir cada caso. Aquí no sirve: un `switch` exige
+    que el archivo que despacha CONOZCA a todos los candidatos, que es
+    justamente lo que impediría a Coach o Insights sumarse sin tocar un archivo
+    central. El registro invierte la dependencia. Se paga con la pérdida de
+    exhaustividad, y por eso existe `contrato.ts`.
+  - **`ejecutar` está en el TIPO, no en el runtime.** Un agente se puede escribir
+    entero desde hoy porque `AgentDefinition.ejecutar` ya fija la firma. Lo que
+    falta es quién lo llama, con qué presupuesto, qué se guarda de cada corrida
+    y qué pasa cuando uno tarda demasiado: cuatro decisiones que no se toman
+    bien en abstracto, sin un agente real delante. Escribir `ejecutar()` ahora
+    sería inventar la respuesta a preguntas que nadie ha hecho aún.
+  - **El registro no lanza (D-021).** Un id duplicado o una definición rota
+    devuelven `{ ok: false, reason }` con texto pintable. Que la aplicación
+    entera no arranque porque un agente secundario está mal escrito es peor que
+    arrancar sin él y poder decirlo. Gana el primero que se registró: reemplazar
+    en silencio haría que el comportamiento dependiera del orden de los imports.
+  - **Sin zod, a propósito.** En este repo zod vive en la frontera —rutas,
+    Server Actions, salida del modelo— donde el dato es ajeno. Un agente no es
+    dato ajeno: es código propio que se comprueba al arrancar. `validarAgente()`
+    copia la firma de `validateAction()` (`string | null`) y no añade peso.
+  - **Nada se conectó.** Coach, Manifestation, Insights, Automations, AI Chat,
+    Knowledge Graph, Graphify y Memory quedan intactos. El centro y la barra
+    lateral, también: la idea de una navegación que refleje lo que hay que hacer
+    se aplaza hasta que haya agentes que la alimenten. Conviene anotar lo que se
+    vio al mirar: la priorización ya existe y es pura (`tarjetasDelCentro()`), y
+    `GET /api/centro` lee media aplicación porque está pensado para pedirse sólo
+    al abrir el centro — no sirve para alimentar una barra que se pinta en cada
+    navegación.

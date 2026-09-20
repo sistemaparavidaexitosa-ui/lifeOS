@@ -2055,3 +2055,52 @@ módulos.
   semilla rara vez hay seis cosas compitiendo.
 - WebKit/iPhone, lectores de pantalla y PWA instalada: igual que en D-165 a
   D-168.
+
+## Agent Runtime mínimo (D-170, sin migración) — 20-sep-2026
+
+Un sprint cuya entrega es que **no se note nada**. Lo que hay que comprobar, por
+tanto, no es que algo nuevo funcione: es que nada viejo cambió.
+
+### Lo que sí se probó
+
+- `pnpm test:unit`: **1225/1225** ✅, de las cuales 12 nuevas en
+  `tests/domain/agents-registro.test.ts` — alta y lectura por id, registro vacío
+  al nacer, orden por id, id duplicado rechazado con el primero intacto,
+  definición sin `ejecutar` rechazada y registro todavía usable, dos registros
+  sin estado compartido, y los motivos de `validarAgente()` uno a uno (objeto,
+  forma del id, versión, descripción).
+- `pnpm typecheck` ✅ · `pnpm lint` ✅ (sin avisos) · `pnpm build` ✅, con el
+  mismo conjunto de rutas y el mismo *First Load JS* compartido (102 kB) que
+  antes del sprint: el núcleo, al no tener consumidores, no entra en ningún
+  bundle.
+- `git diff --stat` **vacío**. Los únicos cambios son archivos nuevos bajo
+  `src/lib/agents/`, `src/lib/domain/agents/` y `tests/domain/`. Ésta es la
+  verificación central del sprint, y conviene repetirla antes de fusionar.
+
+### Lo que la escritura encontró y la lectura del plan no
+
+- El plan daba por bueno importar `ActionResult` con el alias `@/…` desde el
+  dominio. **Habría roto la suite**: los tests corren con Node a secas y Node no
+  resuelve el alias. Ningún otro archivo de `src/lib/domain/` lo usa — la regla
+  estaba ahí, sin escribir. En `domain/` se importa con ruta relativa y
+  extensión `.ts`; en la capa de efectos (`lib/agents/runtime.ts`), con `@/`.
+- El plan preveía un `eslint-disable` para `any` en `AnyAgentDefinition`. No
+  hizo falta: `ejecutar` se declara con sintaxis de método, que TypeScript
+  comprueba de forma bivariante, así que `AgentDefinition<MiSalida>` encaja sin
+  forzar nada. Se quitó también el genérico de ENTRADA: si cada agente pudiera
+  pedir la suya, no habría contrato común que registrar.
+
+### Lo que NO se ha ejercitado, y hay que saberlo
+
+- **No hay ni un agente registrado.** El registro arranca vacío y se queda
+  vacío. Todo lo probado es la maquinaria; que el contrato sea el ADECUADO para
+  un agente real sigue sin verificar, y no se sabrá hasta el primero.
+- **Nada se ha ejecutado.** El runtime no expone `ejecutar()`. Presupuesto,
+  tiempo máximo, qué se guarda de cada corrida y qué pasa con un agente que
+  cuelga: cuatro preguntas abiertas.
+- **`AgentInput` sólo lleva `userId`.** Contexto, memoria y grafo no están, y su
+  forma es exactamente lo que este sprint se negó a adivinar.
+- **No se ha tocado el navegador**, y es correcto: no hay superficie que mirar.
+  Sigue pendiente todo lo de D-165 a D-169 (WebKit/iPhone, lectores de pantalla,
+  PWA instalada) y **la llamada real al modelo sigue sin verse**, cinco ciclos
+  seguidos.
