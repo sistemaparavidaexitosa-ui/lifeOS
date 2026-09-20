@@ -1945,3 +1945,63 @@ los tokens dentro de `.rit-shell` en vez de tocar el componente.
   franjas reales seguidas.
 - **El coste real** de tres llamadas diarias por persona: sin medir.
 - WebKit/iPhone y lectores de pantalla, igual que en D-165 y D-166.
+
+## Centro lienzo (D-168, migración 0071) — 20-sep-2026
+
+| Comprobación | Comando | Resultado |
+|---|---|---|
+| Cadena completa | `pnpm verify` | ✅ código de salida 0 |
+| Unitarias | `pnpm test:unit` | ✅ **1227 pass / 0 fail** (eran 1206; +21) |
+| Migraciones + RLS | `supabase db reset` + `supabase test db` | ✅ **45 archivos, 429 pruebas, PASS** |
+| Build | `pnpm build` | ✅ compila |
+
+### El parpadeo: cómo se comprobó que de verdad se fue
+
+No basta con mirar la pantalla: el ojo no distingue «rápido» de «no hay dos
+estados». Se pide el **HTML crudo** con `context.request.get()`, sin ejecutar
+JavaScript, y se comprueba que la cadena `aria-label="Centro"` ya está dentro.
+También que una segunda petición de la misma visita **no** lo trae, y que un
+enlace directo a `/money` tampoco.
+
+Ese sondeo falló la primera vez por un error del propio sondeo —reutilizar el
+estado del login arrastra la cookie de visita, así que para el servidor no era
+una visita nueva—. Es el mismo error que ya cometí en D-166 con otra forma.
+
+### Tres fallos que encontró la prueba, no la lectura
+
+1. **La nota se creaba vacía.** `createNote` deja la nota en versión **1** y yo
+   pasaba `0` a `saveNote`, cuya concurrencia optimista compara exacto: el
+   update no encontraba fila, no fallaba ruidosamente, y dejaba una nota en
+   blanco en el cuaderno. Ahora pasa 1 y, si el guardado falla, borra la nota
+   huérfana.
+2. **Colisión de nombres** entre la prop `abrirCentro` y el callback homónimo:
+   el listener acabó recibiendo un booleano. Lo cazó el compilador.
+3. **Las suites de D-166 y D-167 se pusieron rojas**, y con razón: asumían el
+   mecanismo viejo de visita. Actualizadas a la cookie.
+
+### Recorrido real en navegador
+
+**13/13** en la suite nueva, y las anteriores siguen verdes: **25/25** (D-166) y
+**19/19** (D-167).
+
+- El centro está en el primer HTML y no se repite en la misma visita.
+- La narrativa se pinta bajo el saludo cuando hay resumen guardado.
+- «Sigue por aquí» aparece con su motivo real («1 hábito pendiente hoy») y navega.
+- La barra existe, se entiende, y **contesta en vez de colgarse** cuando no hay
+  llave de IA.
+- Aceptar una propuesta de nota **crea la nota con su cuerpo** (0 → 1).
+
+A ojo salió además un defecto de contraste que ninguna aserción habría visto: la
+casilla del hábito usaba los tokens de la app y desaparecía sobre el fondo del
+centro. Se remapean los tokens dentro de `.rit-shell`.
+
+### Lo que NO se ha ejercitado, y hay que saberlo
+
+- **Sigue sin verse una sola llamada real al modelo.** Ni las sugerencias, ni el
+  resumen, ni la clasificación de la barra: en local no hay `GEMINI_API_KEY`. Lo
+  probado es la maquinaria; **la calidad de los tres prompts está sin
+  verificar**.
+- **La barra no se ha probado con un modelo real decidiendo**, así que no se
+  sabe con qué frecuencia acabará preguntando en vez de decidir.
+- WebKit/iPhone, lectores de pantalla y PWA instalada: igual que en D-165, D-166
+  y D-167.

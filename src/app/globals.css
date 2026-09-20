@@ -4344,3 +4344,75 @@ html[data-theme="dark"] .rit-boton-centro { color: #0b0b12; background: #f6f6fa;
   cursor: pointer;
 }
 .rit-sug-si:disabled { opacity: 0.5; cursor: default; }
+
+/* «Sigue por aquí» (D-168): tarjetas anchas, no una lista más. Tienen que
+   leerse como un atajo y no como otro menú. */
+.rit-destacados {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.rit-destacado {
+  display: block;
+  padding: 14px 16px;
+  border: 1px solid var(--rit-line);
+  border-radius: 14px;
+  text-decoration: none;
+  color: var(--rit-text);
+}
+.rit-destacado:hover { border-color: var(--rit-text); }
+
+.rit-destacado b {
+  display: block;
+  font-size: 1.0625rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.rit-destacado span {
+  display: block;
+  font-size: 0.8125rem;
+  color: var(--rit-muted);
+  margin-top: 2px;
+}
+
+/* La barra de captura del centro (D-168). */
+.rit-barra {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 18px;
+  border-top: 1px solid var(--rit-line);
+}
+
+.rit-barra-linea {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.rit-barra-campo {
+  flex: 1;
+  min-width: 180px;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid var(--rit-line);
+  border-radius: 0;
+  padding: 10px 2px;
+  font: inherit;
+  font-size: 1.0625rem;
+  color: var(--rit-text);
+}
+.rit-barra-campo::placeholder { color: var(--rit-muted); }
+.rit-barra-campo:focus { outline: none; border-bottom-color: var(--rit-accent); }
+
+.rit-barra-respuesta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}

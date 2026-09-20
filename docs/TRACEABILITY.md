@@ -104,3 +104,14 @@ uno de ellos.
 | Piensa una vez por franja y solo si algo cambió | `centro_runs` | `centro_runs_own` | `sugerenciasDelCentro()` con `debeAnalizar` | — | `centro-franja.test.ts` (6, ✅) · pgTAP: PK por franja (✅) |
 | Aceptar crea de verdad; descartar no vuelve | `coach_proposals.status` | — | `acceptProposal`, `dismissProposal` (ya existían) | `Sugerencias.tsx` | navegador: 0 → 1 tareas, y lo descartado no reaparece (✅) |
 | Si el modelo no contesta, el centro se pinta igual | — | — | `/api/centro` con `Promise.all` y `.catch(() => [])` | — | navegador sin `GEMINI_API_KEY` (✅) |
+
+## Centro lienzo (D-168, migración 0071)
+
+| Requisito | Tablas | RLS / GRANT | Server Actions y rutas | UI | Pruebas |
+|---|---|---|---|---|---|
+| El centro llega en el primer HTML, sin parpadeo | — | — | `middleware.ts` (cookie `lifeos_visita` + `x-ruta`), `RitualGate` decide en servidor | `RitualHost` arranca con la vista ya decidida | navegador: el diálogo está en el HTML crudo, sin ejecutar JS (✅) |
+| «Cómo voy» bajo el saludo | `centro_runs.resumen` | `centro_runs_own` | `generar.ts` (campo `resumen`), `sugerenciasDelCentro` | `CentroPremium` | pgTAP 0044 (✅) · navegador (✅) |
+| «Sigue por aquí» por contexto, sin IA | — (deduce de `workspace_activity`, tareas, rutinas, quincena) | la RLS de cada tabla | `loadRitualContent` calcula `SenalesDelDia` | `.rit-destacado` | `centro-destacados.test.ts` (11, ✅) · navegador (✅) |
+| Escribir una idea y que la IA diga dónde va | `coach_proposals` (tipo `nota`) | `check` con `nota` | `POST /api/centro/capturar`, `capturarIdea` | `BarraCaptura.tsx` | `centro-captura.test.ts` (10, ✅) · navegador (✅) |
+| Aceptar una nota la crea de verdad | `notes` | la de siempre | `ejecutar()` → `createNote` + `saveNote` (versión 1) | botón «Guardar» | navegador: 0 → 1 notas, con su cuerpo (✅) |
+| Ante la duda, pregunta | — | — | `sanearCaptura` degrada a `pregunta` | opciones como botones | `centro-captura.test.ts` (✅) |

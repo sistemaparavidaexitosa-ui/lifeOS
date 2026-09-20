@@ -68,10 +68,18 @@ async function pendientes(supabase: Db, userId: string): Promise<SugerenciaView[
   });
 }
 
-export async function sugerenciasDelCentro(): Promise<SugerenciaView[]> {
+export interface CentroPensado {
+  sugerencias: SugerenciaView[];
+  /** El «cómo voy». Vacío = no hay nada que contar, y el centro no pinta nada. */
+  resumen: string;
+}
+
+const VACIO: CentroPensado = { sugerencias: [], resumen: "" };
+
+export async function sugerenciasDelCentro(): Promise<CentroPensado> {
   try {
     const user = await getSessionUser();
-    if (!user) return [];
+    if (!user) return VACIO;
 
     const supabase = await createClient();
     const [today, timeZone] = await Promise.all([todayForUser(), getUserTimeZone()]);
@@ -80,12 +88,14 @@ export async function sugerenciasDelCentro(): Promise<SugerenciaView[]> {
     // 1. ¿Ya se pensó en esta franja?
     const { data: corridas } = await supabase
       .from("centro_runs")
-      .select("franja, facts_hash")
+      .select("franja, facts_hash, resumen")
       .eq("user_id", user.id)
       .eq("local_date", today);
 
-    const yaEnEstaFranja = (corridas ?? []).some((c) => c.franja === franja);
-    if (yaEnEstaFranja) return pendientes(supabase, user.id);
+    const deEstaFranja = (corridas ?? []).find((c) => c.franja === franja);
+    if (deEstaFranja) {
+      return { sugerencias: await pendientes(supabase, user.id), resumen: deEstaFranja.resumen ?? "" };
+    }
 
     // 2. Los hechos, por la puerta de privacidad de siempre (`ai_domains`).
     const preparado = await prepararAnalisis({
@@ -99,7 +109,9 @@ export async function sugerenciasDelCentro(): Promise<SugerenciaView[]> {
       await supabase
         .from("centro_runs")
         .insert({ user_id: user.id, local_date: today, franja, outcome: "ia-apagada" });
-      return [];
+      // Aunque la IA esté apagada o falten hechos, lo que YA estaba propuesto
+      // sigue siendo válido: no se esconde.
+      return { sugerencias: await pendientes(supabase, user.id), resumen: "" };
     }
 
     // 3. ¿Cambió algo desde la franja anterior de hoy?
@@ -110,7 +122,10 @@ export async function sugerenciasDelCentro(): Promise<SugerenciaView[]> {
       await supabase
         .from("centro_runs")
         .insert({ user_id: user.id, local_date: today, franja, facts_hash: huella, outcome: decision });
-      return pendientes(supabase, user.id);
+      // Se arrastra el resumen de la franja anterior: si nada cambió, lo que se
+      // dijo entonces sigue siendo verdad, y pedir otro sería pagar por lo mismo.
+      const previo = (corridas ?? []).find((c) => c.resumen)?.resumen ?? "";
+      return { sugerencias: await pendientes(supabase, user.id), resumen: previo };
     }
 
     // 4. Reservar la franja ANTES de llamar. Si otra pestaña llegó primero, su
@@ -118,7 +133,7 @@ export async function sugerenciasDelCentro(): Promise<SugerenciaView[]> {
     const { error: reserva } = await supabase
       .from("centro_runs")
       .insert({ user_id: user.id, local_date: today, franja, facts_hash: huella, outcome: "pensando" });
-    if (reserva) return pendientes(supabase, user.id);
+    if (reserva) return { sugerencias: await pendientes(supabase, user.id), resumen: "" };
 
     const [{ data: proyectos }, vivas] = await Promise.all([
       supabase.from("projects").select("id, title").eq("status", "Activo").limit(20),
@@ -142,7 +157,7 @@ export async function sugerenciasDelCentro(): Promise<SugerenciaView[]> {
         .eq("user_id", user.id)
         .eq("local_date", today)
         .eq("franja", franja);
-      return vivas;
+      return { sugerencias: vivas, resumen: "" };
     }
 
     const sanas = sanearSugerencias(generado.crudas, {
@@ -167,15 +182,15 @@ export async function sugerenciasDelCentro(): Promise<SugerenciaView[]> {
     await Promise.all([
       supabase
         .from("centro_runs")
-        .update({ outcome: `hecho:${sanas.length}` })
+        .update({ outcome: `hecho:${sanas.length}`, resumen: generado.resumen })
         .eq("user_id", user.id)
         .eq("local_date", today)
         .eq("franja", franja),
       supabase.from("audit_log").insert({ user_id: user.id, action: "ai.centro_sugerencias", object: franja })
     ]);
 
-    return pendientes(supabase, user.id);
+    return { sugerencias: await pendientes(supabase, user.id), resumen: generado.resumen };
   } catch {
-    return [];
+    return VACIO;
   }
 }

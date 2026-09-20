@@ -3,7 +3,9 @@ import { debeMostrarseHoy } from "@/lib/domain/ritual/decidir.ts";
 import { construirSecuencia, hayContenido } from "@/lib/domain/ritual/secuencia.ts";
 import { publicEnv } from "@/config/env";
 import { getPersonalWorkspace } from "@/lib/data/workspaces";
+import { headers } from "next/headers";
 import { greetingFor } from "@/lib/domain/datetime.ts";
+import { debeAbrirseElCentro } from "@/lib/domain/centro/apertura.ts";
 import RitualHost, { type DatosDelRitual } from "./RitualHost";
 
 /**
@@ -76,9 +78,31 @@ export default async function RitualGate() {
   // silencio: es opcional y no puede tumbar el layout de nadie.
   if (!puerta) return null;
 
+  // LA DECISIÓN DE ABRIR EL CENTRO SE TOMA AQUÍ, EN EL SERVIDOR (D-168).
+  //
+  // Antes vivía en un efecto del cliente, porque «¿es el principio de una
+  // visita?» se resolvía con `sessionStorage`. Eso producía el parpadeo que el
+  // usuario notó: primero la app normal, y el centro después de hidratar. Ahora
+  // la marca la pone el middleware en una cookie de sesión y llega como
+  // cabecera, así que el centro viaja en el primer HTML o no viaja.
+  //
+  // `x-forwarded-…` y compañía no valen aquí: se lee la cabecera propia, que
+  // solo puede haber puesto nuestro middleware.
+  const cabeceras = await headers();
+  const abrirCentro = debeAbrirseElCentro({
+    modo: puerta.navMode,
+    inicioDeVisita: cabeceras.get("x-visita-nueva") === "1",
+    // La ruta la manda el middleware: el layout no la conoce, y las cabeceras
+    // internas de Next no están garantizadas en la primera petición del
+    // documento, que es justo la que importa aquí. Sin ella no se abre, que es
+    // el lado seguro: siempre queda el botón.
+    ruta: cabeceras.get("x-ruta") ?? ""
+  });
+
   return (
     <RitualHost
       datos={await datosDeHoy()}
+      abrirCentro={abrirCentro}
       navMode={puerta.navMode}
       ritualPermitido={puerta.settings.enabled}
       workspaceId={(await getPersonalWorkspace())?.id ?? null}

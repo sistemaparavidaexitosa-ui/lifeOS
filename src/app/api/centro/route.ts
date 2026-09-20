@@ -26,11 +26,11 @@ export async function GET() {
   // Las dos mitades van en paralelo, y las SUGERENCIAS NO MANDAN: si su promesa
   // falla o el modelo no contesta, se devuelve la lista vacía y el centro se
   // pinta igual. Es un extra, no el contenido.
-  const [contenido, sugerencias] = await Promise.all([
+  const [contenido, pensado] = await Promise.all([
     loadRitualContent(puerta),
-    sugerenciasDelCentro().catch(() => [])
+    sugerenciasDelCentro().catch(() => ({ sugerencias: [], resumen: "" }))
   ]);
   if (!contenido) return NextResponse.json({ ok: false, reason: "No se pudo preparar el centro." }, { status: 503 });
 
-  return NextResponse.json({ ok: true, contenido, sugerencias });
+  return NextResponse.json({ ok: true, contenido, sugerencias: pensado.sugerencias, resumen: pensado.resumen });
 }

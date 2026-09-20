@@ -15,7 +15,7 @@
 // entera en vez de guardarse a medias, porque un botón que falla al pulsarlo es
 // peor que un botón que no existe.
 
-export const TIPOS = ["tarea", "bloque", "rutina", "estructura", "meta", "arista", "foco"] as const;
+export const TIPOS = ["tarea", "bloque", "rutina", "estructura", "meta", "arista", "foco", "nota"] as const;
 export type Tipo = (typeof TIPOS)[number];
 
 /**
@@ -102,6 +102,15 @@ export function sanearPropuesta(cruda: PropuestaCruda): PropuestaSaneada | null 
   const datos = leerDatos(cruda.datos);
 
   switch (tipo) {
+    case "nota": {
+      // La idea escrita en la barra del centro (D-168). El cuaderno tiene que
+      // ser un uuid con forma; que EXISTA y sea de esta persona lo comprueba
+      // `sanearCaptura`, que sí conoce sus cuadernos.
+      const notebookId = texto(datos.notebookId, 40);
+      if (!UUID.test(notebookId)) return null;
+      return { tipo, titulo, detalle, payload: { notebookId, cuerpo: texto(datos.cuerpo, 4000) } };
+    }
+
     case "foco": {
       // `foco` NO CREA NADA: lleva a una pantalla. Aquí solo se comprueba la
       // forma —que haya un destino interno—; si ese destino EXISTE lo decide
