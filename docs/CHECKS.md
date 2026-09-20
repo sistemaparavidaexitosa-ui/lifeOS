@@ -2402,3 +2402,63 @@ sembrando filas con marcador `SONDA-KERNEL` y borrándolas después.
   **replicando** los filtros de supabase-js; el código TypeScript no llegó a
   ejecutarse (lleva `server-only` y alias `@/`, que Node no resuelve).
 - `AGENT_KERNEL_COACH` y `AGENT_KERNEL_INSIGHTS` siguen apagadas.
+
+## El centro de mando (D-176, sin migración) — 20-sep-2026
+
+La primera entrega de esta serie que **sí se vio funcionando en un navegador**,
+con datos sembrados y borrados después.
+
+### Lo que sí se probó
+
+- `pnpm test:unit`: **1317/1317** ✅, con 13 tests nuevos en
+  `comando-componer.test.ts`. El que sostiene el diseño se llama **«NO REORDENA:
+  respeta el orden de tarjetasDelCentro»**: si algún día falla, alguien escribió
+  un tercer criterio de prioridad y el centro dejó de ser una cara de D-169.
+- `pnpm typecheck` ✅ · `pnpm lint` ✅ · `pnpm build` ✅ con las mismas 39 páginas
+  y **First Load JS 102 kB**, sin cambio por séptima entrega consecutiva.
+  `/home` pasa a 5.91 kB / 121 kB.
+- **En navegador** (Chromium headless contra `next start`, sesión real del
+  usuario demo, 1100 y 1440 px):
+  - Con `COMMAND_CENTER=1`: las tres secciones —«Hoy deberías», «Lo que te está
+    frenando», «Siguiente mejor acción»—, el héroe con su borde de acento, y los
+    chips de categoría correctos (Decide / Te frena / Ejecuta / Ejecuta) contra
+    datos sembrados: una Única Cosa, dos tareas vencidas y dos propuestas.
+  - **A 1440 px, `.ai-rail` = 0 en la home**: no hay dos chats. En `/execution`
+    el rail y su composer siguen ahí.
+  - **Con la bandera apagada: `.cmd` = 0 y diez `.card`** — el tablero de
+    siempre, intacto.
+  - Con un usuario sin nada que hacer: solo la tarjeta de cierre, sin secciones
+    vacías. El día vacío no miente.
+  - **Cero errores de página** en todos los recorridos.
+- Los datos sembrados (marcador `MANDO-DEMO`) se borraron: las cuatro tablas a cero.
+
+### Lo que la prueba encontró y el plan no
+
+- **El héroe puede no ser tu Única Cosa.** Con una propuesta del coach pendiente,
+  «Hoy deberías» enseña la propuesta, porque `tarjetasDelCentro` las ordena antes
+  que `unicaCosa`. Es fiel a D-169 y por eso NO se tocó, pero es una decisión de
+  producto que conviene mirar: si la Única Cosa debe ganar siempre, hay que
+  cambiar el criterio COMPARTIDO, y eso también cambia el arranque guiado.
+- **Faltaba desmontar el rail en la home.** El plan decía «plegarlo»; plegarlo
+  deja igualmente el botón y la cookie de por medio. Se desmonta.
+
+### Lo que NO se ha ejercitado, y hay que saberlo
+
+- **La bandera está apagada en todas partes.** Nadie ha visto esto salvo en
+  local.
+- **Sin `GEMINI_API_KEY` no hubo un solo mensaje de IA.** El feed se probó vacío
+  y con el historial sembrado; **enviar un mensaje y recibir respuesta sigue sin
+  verse**, undécimo ciclo.
+- **«Ahora no» y aceptar una propuesta no se pulsaron en el navegador.** Están
+  probados en el dominio y por construcción, no a mano.
+- **`delegar` e `investigar` no se han visto nunca en pantalla**: la primera no
+  tiene fuente de datos todavía, la segunda depende del chat.
+- **El resumen de la franja va vacío en la home** a propósito (vive en
+  `centro_runs`, tras el `/api/centro` caro). La cabecera lo omite, pero eso
+  significa que el centro de mando dice menos que el overlay premium sobre cómo
+  va el día.
+- **Dos puertas a la vez**: con navegación premium, el botón flotante «Centro»
+  del ritual sigue apareciendo sobre el centro de mando. Funciona, pero son dos
+  entradas a lo mismo y habrá que decidir cuál manda.
+- Móvil real, WebKit/iPhone, lectores de pantalla y PWA instalada: sin probar,
+  como desde D-165.

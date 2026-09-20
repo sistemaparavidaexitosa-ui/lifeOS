@@ -20,6 +20,7 @@ export default function AppShell({
   bell,
   workspaceId,
   chatCollapsed = false,
+  centroEnHome = false,
   children
 }: {
   userName: string;
@@ -28,6 +29,13 @@ export default function AppShell({
   workspaceId?: string | null;
   /** La preferencia de plegado del rail, ya leída de la cookie por el layout. */
   chatCollapsed?: boolean;
+  /**
+   * La home es el centro de mando (D-176). Entonces el rail NO se monta ahí: el
+   * chat ya está en el centro de la pantalla, y tener los dos a partir de
+   * 1280px son dos cajas de texto que hacen lo mismo, una al lado de la otra,
+   * con el mismo historial. En las demás pantallas el rail sigue igual.
+   */
+  centroEnHome?: boolean;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -84,7 +92,9 @@ export default function AppShell({
       {/* Tercera celda del grid, hermana de <main> y no hija: si colgara de
           dentro heredaría el max-w del contenido y el scroll de la página, y
           la conversación arrastraría el tablero al bajar. */}
-      <AiChatRail workspaceId={workspaceId ?? null} initialCollapsed={chatCollapsed} />
+      {!(centroEnHome && pathname === "/home") && (
+        <AiChatRail workspaceId={workspaceId ?? null} initialCollapsed={chatCollapsed} />
+      )}
     </div>
   );
 }

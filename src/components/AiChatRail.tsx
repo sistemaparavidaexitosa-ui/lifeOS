@@ -16,21 +16,17 @@
 // Por debajo de 1280px no cabe: 272 de menú + contenido + 360 de rail
 // estrangula la pantalla. Ahí se comporta como los demás paneles del proyecto,
 // reusando .td-backdrop/.td-drawer, que en móvil ya suben desde abajo.
+//
+// QUÉ QUEDÓ AQUÍ DESPUÉS DE D-176
+// Solo el envase: el plegado, la cookie, la hoja de móvil y las tres formas de
+// presentarse. El estado y la conversación se fueron a `chat/useAiChat.ts` y
+// `chat/Conversacion.tsx` para que el centro de mando comparta historial en vez
+// de abrir un segundo chat que se desincronizaría al primer mensaje. Ninguna
+// conducta cambió al mudarse.
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import {
-  loadChatHistory,
-  sendChatMessage,
-  createTaskFromChat,
-  createMemoryFromChat,
-  type ChatMessage
-} from "@/lib/ai-chat/actions";
-import {
-  loadPendingProposals,
-  acceptProposal,
-  dismissProposal,
-  type CoachProposalRow
-} from "@/lib/coach/actions";
+import { useCallback, useState } from "react";
+import { useAiChat } from "./chat/useAiChat";
+import Conversacion from "./chat/Conversacion";
 import { IconSparkles, IconClose, IconChevronRight } from "./icons";
 
 /**
@@ -46,6 +42,14 @@ import { IconSparkles, IconClose, IconChevronRight } from "./icons";
 const COOKIE = "lifeos_chat_collapsed";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
+const VACIO = (
+  <div className="text-xs" style={{ color: "var(--muted)" }}>
+    Pregúntame sobre tu semana, tus metas, tu dinero, tu agenda, tu tablero o lo que has comido. Veo todos tus módulos y
+    también puedo buscar en internet. Dos veces al día te escribo yo, sin que preguntes; eso y qué módulos ve se ajustan
+    en Configuración.
+  </div>
+);
+
 export default function AiChatRail({
   workspaceId,
   initialCollapsed
@@ -53,59 +57,16 @@ export default function AiChatRail({
   workspaceId: string | null;
   initialCollapsed: boolean;
 }) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [draft, setDraft] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [proposal, setProposal] = useState<string | null>(null);
-  const [created, setCreated] = useState(false);
-  const [memoria, setMemoria] = useState<{ text: string; scope: string } | null>(null);
-  const [nota, setNota] = useState<string | null>(null);
-  const [recordado, setRecordado] = useState(false);
-  /**
-   * Lo que el coach dejó propuesto mientras nadie miraba.
-   *
-   * Van aparte de `proposal` —la tarea que propone el chat en el turno actual—
-   * porque tienen otra vida: aquella vive lo que dura la respuesta y se pierde
-   * al recargar; estas están en la base desde las siete de la mañana y siguen
-   * ahí hasta que se pulsa algo.
-   */
-  const [propuestas, setPropuestas] = useState<CoachProposalRow[]>([]);
-  const [pending, startTransition] = useTransition();
-
   const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [sheetOpen, setSheetOpen] = useState(false);
 
-  const bodyRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    loadChatHistory()
-      .then(setMessages)
-      .catch(() => setError("No se pudo cargar la conversación."));
-    // Si esto falla no se dice nada: son botones de más sobre una conversación
-    // que se lee igual sin ellos. Un error rojo por no poder pintar un botón
-    // opcional es peor que el botón que falta.
-    loadPendingProposals()
-      .then(setPropuestas)
-      .catch(() => undefined);
-
-    // `?chat=1` es a donde lleva el aviso del coach. Sin esto, tocar la
-    // notificación en el teléfono abre Home con el rail plegado y el mensaje
-    // que acaba de sonar no se ve por ninguna parte.
-    try {
-      if (new URLSearchParams(window.location.search).get("chat") === "1") {
-        setCollapsed(false);
-        setSheetOpen(true);
-      }
-    } catch {
-      // Un parámetro ilegible no es motivo para no cargar el chat.
-    }
-  }, []);
-
-  // El último mensaje es el que uno viene a ver.
-  useEffect(() => {
-    const el = bodyRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, pending, sheetOpen, collapsed]);
+  // `?chat=1` es a donde lleva el aviso del coach. Sin esto, tocar la
+  // notificación en el teléfono abre Home con el rail plegado y el mensaje que
+  // acaba de sonar no se ve por ninguna parte.
+  const chat = useAiChat(workspaceId, () => {
+    setCollapsed(false);
+    setSheetOpen(true);
+  });
 
   const toggleCollapsed = useCallback(() => {
     setCollapsed((prev) => {
@@ -119,283 +80,6 @@ export default function AiChatRail({
     });
   }, []);
 
-  function send() {
-    const texto = draft.trim();
-    if (!texto || pending) return;
-
-    // El turno propio se pinta ANTES de que conteste el modelo. La respuesta
-    // tarda segundos y ver tu propia frase desaparecer de la caja sin
-    // aparecer arriba se lee como que se perdió.
-    const optimista: ChatMessage = {
-      id: `local-${Date.now()}`,
-      role: "user",
-      content: texto,
-      factIds: [],
-      createdAt: new Date().toISOString()
-    };
-    setMessages((prev) => [...prev, optimista]);
-    setDraft("");
-    setError(null);
-    setProposal(null);
-    setCreated(false);
-    setMemoria(null);
-    setRecordado(false);
-    setNota(null);
-
-    startTransition(async () => {
-      const result = await sendChatMessage(texto);
-      if (!result.ok || !result.reply) {
-        setError(result.reason ?? "No se pudo responder.");
-        return;
-      }
-      setMessages((prev) => [...prev, result.reply!]);
-      setProposal(result.proposedTask ?? null);
-      setMemoria(result.proposedMemory ?? null);
-      setNota(result.nota ?? null);
-    });
-  }
-
-  function crearTarea() {
-    if (!proposal || !workspaceId) return;
-    startTransition(async () => {
-      const result = await createTaskFromChat(workspaceId, proposal);
-      if (!result.ok) {
-        setError(result.reason ?? "No se pudo crear la tarea.");
-        return;
-      }
-      setCreated(true);
-      setProposal(null);
-    });
-  }
-
-  function aceptarPropuesta(p: CoachProposalRow) {
-    startTransition(async () => {
-      const result = await acceptProposal(p.id, workspaceId);
-      if (!result.ok) {
-        setError(result.reason ?? "No se pudo crear.");
-        // `resuelta` significa que la propuesta ya quedó `fallida` en la base
-        // (la frontera o un nodo que ya no se ve, ver `graph_aceptar_arista`):
-        // la tarjeta se retira igual que si se hubiera aceptado, porque un
-        // segundo clic solo puede volver a fallar por lo mismo. La razón se
-        // enseña igual, con el aviso de error de arriba.
-        if (result.resuelta) setPropuestas((prev) => prev.filter((x) => x.id !== p.id));
-        return;
-      }
-      setPropuestas((prev) => prev.filter((x) => x.id !== p.id));
-      // `estructura` no crea nada: lleva al proyecto, donde el plan se revisa
-      // antes de aplicarse. Ver `ejecutar()` en lib/coach/actions.ts.
-      if (result.href) window.location.href = result.href;
-    });
-  }
-
-  function descartarPropuesta(p: CoachProposalRow) {
-    startTransition(async () => {
-      await dismissProposal(p.id);
-      setPropuestas((prev) => prev.filter((x) => x.id !== p.id));
-    });
-  }
-
-  function recordar() {
-    if (!memoria) return;
-    startTransition(async () => {
-      const result = await createMemoryFromChat(memoria.text, memoria.scope);
-      if (!result.ok) {
-        setError(result.reason ?? "No se pudo guardar.");
-        return;
-      }
-      setRecordado(true);
-      setMemoria(null);
-    });
-  }
-
-  const conversacion = (
-    <>
-      <div className="ai-rail-body" ref={bodyRef}>
-        {!messages.length && !pending && (
-          <div className="text-xs" style={{ color: "var(--muted)" }}>
-            Pregúntame sobre tu semana, tus metas, tu dinero, tu agenda, tu tablero o lo que has comido. Veo todos tus
-            módulos y también puedo buscar en internet. Dos veces al día te escribo yo, sin que preguntes; eso y qué
-            módulos ve se ajustan en Configuración.
-          </div>
-        )}
-
-        {messages.map((m) => (
-          <div key={m.id} className={`ai-msg ${m.role === "user" ? "ai-msg-user" : "ai-msg-assistant"}`}>
-            {m.content}
-            {m.role === "assistant" && m.factIds.length > 0 && (
-              <div className="text-xs" style={{ color: "var(--muted)", marginTop: 5 }}>
-                {m.factIds.length === 1 ? "Basado en 1 hecho de tu cuenta" : `Basado en ${m.factIds.length} hechos de tu cuenta`}
-              </div>
-            )}
-          </div>
-        ))}
-
-        {pending && (
-          <div className="text-xs" style={{ color: "var(--muted)" }}>
-            Pensando…
-          </div>
-        )}
-
-        {propuestas.map((p) => (
-          <div
-            key={p.id}
-            style={{
-              border: "1px solid var(--line)",
-              borderRadius: 12,
-              padding: "9px 11px",
-              background: "var(--surface2)"
-            }}
-          >
-            <div className="text-xs" style={{ color: "var(--muted)" }}>
-              {p.tipo === "arista"
-                ? "Propongo conectar esto en tu mapa"
-                : p.tipo === "bloque"
-                  ? "Propongo agendar esto"
-                  : p.tipo === "rutina"
-                    ? "Propongo esta rutina"
-                    : p.tipo === "meta"
-                      ? "Propongo esta meta"
-                      : p.tipo === "estructura"
-                        ? "Este proyecto necesita estructura"
-                        : "Propongo esta tarea"}
-            </div>
-            <div className="text-sm" style={{ fontWeight: 700, margin: "3px 0 2px" }}>
-              {p.titulo}
-            </div>
-            {p.detalle && (
-              <div className="text-xs" style={{ color: "var(--muted)", marginBottom: 7 }}>
-                {p.detalle}
-              </div>
-            )}
-            <div className="flex gap-1.5 flex-wrap" style={{ marginTop: 7 }}>
-              <button
-                className="btn-primary btn-sm"
-                disabled={pending || (p.tipo === "tarea" && !workspaceId)}
-                onClick={() => aceptarPropuesta(p)}
-              >
-                {p.tipo === "estructura" ? "Ir al proyecto" : p.tipo === "arista" ? "Conectar" : "Crear"}
-              </button>
-              <button className="btn-ghost btn-sm" disabled={pending} onClick={() => descartarPropuesta(p)}>
-                Descartar
-              </button>
-              {p.tipo === "arista" && p.payload.source && (
-                <a className="btn-ghost btn-sm" href={`/graph?entity=${p.payload.source}`}>
-                  Ver en el grafo
-                </a>
-              )}
-            </div>
-          </div>
-        ))}
-
-        {proposal && (
-          <div
-            style={{
-              border: "1px solid var(--line)",
-              borderRadius: 12,
-              padding: "9px 11px",
-              background: "var(--surface2)"
-            }}
-          >
-            <div className="text-xs" style={{ color: "var(--muted)" }}>
-              Propongo esta tarea
-            </div>
-            <div className="text-sm" style={{ fontWeight: 700, margin: "3px 0 7px" }}>
-              {proposal}
-            </div>
-            <div className="flex gap-1.5 flex-wrap">
-              <button className="btn-primary btn-sm" disabled={pending || !workspaceId} onClick={crearTarea}>
-                Crear
-              </button>
-              <button className="btn-ghost btn-sm" disabled={pending} onClick={() => setProposal(null)}>
-                Descartar
-              </button>
-            </div>
-            {!workspaceId && (
-              <div className="text-xs" style={{ color: "var(--muted)", marginTop: 5 }}>
-                Necesitas un espacio con al menos un proyecto para poder crearla.
-              </div>
-            )}
-          </div>
-        )}
-
-        {memoria && (
-          <div
-            style={{
-              border: "1px solid var(--line)",
-              borderRadius: 12,
-              padding: "9px 11px",
-              background: "var(--surface2)"
-            }}
-          >
-            <div className="text-xs" style={{ color: "var(--muted)" }}>
-              ¿Lo recuerdo para siempre?
-            </div>
-            <div className="text-sm" style={{ fontWeight: 700, margin: "3px 0 7px" }}>
-              {memoria.text}
-            </div>
-            <div className="flex gap-1.5 flex-wrap">
-              <button className="btn-primary btn-sm" disabled={pending} onClick={recordar}>
-                Recordar
-              </button>
-              <button className="btn-ghost btn-sm" disabled={pending} onClick={() => setMemoria(null)}>
-                Descartar
-              </button>
-            </div>
-          </div>
-        )}
-
-        {created && (
-          <div className="text-xs" style={{ color: "var(--muted)" }}>
-            Tarea creada. La encuentras en Ejecución.
-          </div>
-        )}
-
-        {recordado && (
-          <div className="text-xs" style={{ color: "var(--muted)" }}>
-            Guardado. Lo puedes editar o borrar en Inteligencia → Memoria.
-          </div>
-        )}
-
-        {nota && (
-          <div className="text-xs" style={{ color: "var(--warn)" }}>
-            {nota}
-          </div>
-        )}
-
-        {error && (
-          <div className="text-xs" style={{ color: "var(--danger)" }}>
-            {error}
-          </div>
-        )}
-      </div>
-
-      <div className="ai-rail-composer">
-        {/* Sin `className`: `globals.css` estiliza `input, select, textarea` por
-            elemento, y este proyecto no tiene una clase `.input`. */}
-        <textarea
-          rows={2}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          // Enter envía y Shift+Enter salta de línea, como en cualquier chat.
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              send();
-            }
-          }}
-          placeholder="Pregunta lo que sea…"
-          aria-label="Escribe tu mensaje"
-          style={{ resize: "none", width: "100%" }}
-        />
-        <div className="flex justify-end" style={{ marginTop: 6 }}>
-          <button className="btn-primary btn-sm" disabled={pending || !draft.trim()} onClick={send}>
-            {pending ? "Pensando…" : "Enviar"}
-          </button>
-        </div>
-      </div>
-    </>
-  );
-
   return (
     <>
       {/* ESCRITORIO — la tercera columna. */}
@@ -408,7 +92,7 @@ export default function AiChatRail({
               <IconChevronRight width={16} height={16} />
             </button>
           </div>
-          {conversacion}
+          <Conversacion chat={chat} vacio={VACIO} />
         </aside>
       )}
 
@@ -435,7 +119,7 @@ export default function AiChatRail({
                 <IconClose width={16} height={16} />
               </button>
             </div>
-            {conversacion}
+            <Conversacion chat={chat} vacio={VACIO} />
           </aside>
         </>
       )}

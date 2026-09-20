@@ -3480,3 +3480,60 @@ implementa:
       contrato de todos para acomodar a uno, y además ya tiene su propio
       restraint más fino que el del Kernel (`centro_runs` por franja con
       `facts_hash`).
+
+- **D-176 · El centro de mando: se revierte «una sola tarjeta», se conserva el
+  criterio.** La home deja de ser un tablero de nueve tarjetas iguales y pasa a
+  decir qué hacer. Esto **supera D-169**, que es de anteayer, así que conviene
+  ser exacto sobre qué cae y qué no.
+  - **Qué se revierte de D-169:** la regla de que se vea UNA sola tarjeta a la
+    vez. El motivo por el que se tomó sigue siendo bueno —«una lista de nueve
+    cosas iguales no dice qué hacer»— pero su remedio tenía un coste que se ve
+    con el uso: para saber si algo te está frenando había que pasar tarjetas.
+    Ahora hay tres sitios con pesos distintos: lo que deberías hacer, lo que te
+    frena y lo que sigue.
+  - **Qué se conserva, y es casi todo:** el ORDEN. `tarjetasDelCentro()` sigue
+    siendo la única autoridad sobre qué merece pedirse y en qué secuencia —la de
+    lo que caduca antes—, con sus catorce pruebas intactas. `componerMando()` la
+    llama y se limita a repartir lo que devuelve. También sobreviven «Ahora no»
+    apartando sin borrar, el tope de tarjetas y **la tarjeta de cierre**: un día
+    sin nada sigue sin rellenarse con trabajo inventado.
+  - **Por eso no hay un tercer criterio de prioridad en el repositorio.** Era el
+    riesgo real: el centro de D-168 ya tuvo uno, D-169 lo sustituyó, y un
+    rediseño más con el suyo propio habría dejado tres sitios donde mirar para
+    entender por qué la aplicación dice lo que dice.
+  - **Las siete categorías se derivan, no se preguntan.** `ejecutar`, `revisar`,
+    `bloquear`, `recordar`, `delegar`, `decidir`, `investigar` salen de una
+    tabla pura contra el `check` de `coach_proposals.tipo`. El modelo redacta,
+    no calcula (la regla que sostiene `validateAnchoring`), y una etiqueta que
+    inventara el modelo gobernaría qué se pinta arriba sin poder probarse. Un
+    tipo que la base gane mañana cae en `ejecutar` en vez de dejar un hueco.
+  - **`delegar` existe en el vocabulario y hoy no tiene fuente.** `getHomeData`
+    sale de `loadMyTasks`: son tuyas por definición, así que no hay dato de
+    delegación. Se nombra para no tener que renombrar nada cuando lo haya, igual
+    que `autonomyLevel: "autonomo"` en el Kernel (D-171). Fingirle un origen
+    habría sido peor.
+  - **Los bloqueos NUNCA ocupan el foco.** Con dos tareas vencidas, «hoy
+    deberías» diría «ponte al día», que es lo contrario de avanzar. Lo que frena
+    tiene su propia sección con su propio peso.
+  - **Cero backend nuevo.** Ninguna ruta, ninguna Server Action, ninguna
+    migración. Y **no se usa `GET /api/centro`**: lee media aplicación y está
+    pensado para pedirse una vez al abrir el overlay; la home se pinta en cada
+    navegación. Se alimenta de `getHomeData` y de las propuestas que el chat ya
+    carga.
+  - **Un solo chat, extrayendo en vez de duplicando.** `AiChatRail` ya
+    renderizaba su conversación dos veces con una constante JSX; llevarla al
+    centro habrían sido tres, la tercera con su propio historial. Se sacaron
+    `chat/useAiChat.ts` y `chat/Conversacion.tsx`, y el rail pasó de 444 a 128
+    líneas **sin cambiar de conducta ni de aspecto**. De paso, la caja de
+    propuesta —escrita TRES veces con los mismos estilos inline— es ahora
+    `ProposalCard` en `ui.tsx`.
+  - **En la home no se monta el rail.** Con el centro de mando encendido, a
+    partir de 1280px habría dos cajas de texto haciendo lo mismo una al lado de
+    la otra. En las demás pantallas el rail sigue igual.
+  - **No se fuerza el tema oscuro**, aunque se pidió. Se usan los tokens de la
+    aplicación, así que con `data-theme="dark"` sale oscuro solo; imponer un
+    fondo negro habría dejado la única pantalla invertida del producto, que se
+    lee como un fallo y no como un diseño. El carácter de consola lo dan el
+    contraste, la densidad y los micro-iconos.
+  - **Detrás de `COMMAND_CENTER`, apagada.** Sin la variable, `/home` es el
+    tablero de siempre con su código intacto: la bifurcación ocurre antes de él.

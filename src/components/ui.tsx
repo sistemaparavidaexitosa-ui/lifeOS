@@ -112,3 +112,46 @@ export function AvatarStack({ names, max = 4 }: { names: string[]; max?: number 
     </span>
   );
 }
+
+/**
+ * La caja de «te propongo esto».
+ *
+ * Existe desde D-176 porque estaba escrita TRES VECES en `AiChatRail` —la
+ * propuesta del coach, la tarea que propone el chat y la memoria— con los
+ * mismos estilos inline copiados: `1px solid var(--line)`, radio 12, padding
+ * `9px 11px`, fondo `var(--surface2)`. Tres copias del mismo borde es como una
+ * de ellas se queda vieja sin que nadie lo note.
+ *
+ * `children` son los botones. No se fijan aquí porque cada propuesta se acepta
+ * de una forma distinta —«Crear», «Conectar», «Ir al proyecto», «Recordar»— y
+ * un componente que intentara cubrirlas todas acabaría con cinco props
+ * booleanas.
+ */
+export function ProposalCard({
+  eyebrow,
+  title,
+  detail,
+  children
+}: {
+  eyebrow: string;
+  title: string;
+  detail?: string | null;
+  children: ReactNode;
+}) {
+  return (
+    <div style={{ border: "1px solid var(--line)", borderRadius: 12, padding: "9px 11px", background: "var(--surface2)" }}>
+      <div className="text-xs" style={{ color: "var(--muted)" }}>
+        {eyebrow}
+      </div>
+      <div className="text-sm" style={{ fontWeight: 700, margin: detail ? "3px 0 2px" : "3px 0 7px" }}>
+        {title}
+      </div>
+      {detail && (
+        <div className="text-xs" style={{ color: "var(--muted)", marginBottom: 7 }}>
+          {detail}
+        </div>
+      )}
+      <div className="flex gap-1.5 flex-wrap">{children}</div>
+    </div>
+  );
+}
