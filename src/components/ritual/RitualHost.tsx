@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
 import type { ContenidoDelRitual } from "@/lib/data/ritual";
-import { debeAbrirseElCentro, type ModoNavegacion } from "@/lib/domain/centro/apertura.ts";
+import type { ModoNavegacion } from "@/lib/domain/centro/apertura.ts";
 import { contenidoParaRepetir, setNavMode } from "@/lib/ritual/actions";
 import RitualOverlay from "./RitualOverlay";
 import CentroPremium from "./CentroPremium";
@@ -15,27 +14,6 @@ export interface DatosDelRitual {
   blocking: boolean;
   currency: string;
   locale: string;
-}
-
-/** La marca de que esta visita ya empezó. Dura lo que dura la pestaña. */
-const CLAVE_VISITA = "lifeos_visita";
-
-/**
- * ¿Es el principio de una visita?
- *
- * Envuelto en `try`: en una ventana privada estricta, `sessionStorage` puede
- * lanzar. Tratar el fallo como «sí, es el principio» deja el centro abriéndose
- * en cada carga de Home, que es molesto pero omitible; tratarlo como «no» lo
- * dejaría inalcanzable salvo por el botón, que es peor.
- */
-function inicioDeVisita(): boolean {
-  try {
-    if (sessionStorage.getItem(CLAVE_VISITA)) return false;
-    sessionStorage.setItem(CLAVE_VISITA, "1");
-    return true;
-  } catch {
-    return true;
-  }
 }
 
 /**
@@ -51,6 +29,7 @@ function inicioDeVisita(): boolean {
  */
 export default function RitualHost({
   datos,
+  abrirCentro,
   navMode,
   cabecera,
   hourLocal,
@@ -60,6 +39,12 @@ export default function RitualHost({
   locale
 }: {
   datos: DatosDelRitual | null;
+  /**
+   * Si el centro tiene que estar abierto YA, decidido en el servidor (D-168).
+   * Llega como estado inicial y no como efecto: un efecto es exactamente lo que
+   * producía el parpadeo.
+   */
+  abrirCentro: boolean;
   navMode: ModoNavegacion;
   cabecera: { saludo: string; nombre: string; dateISO: string };
   hourLocal: number;
@@ -72,35 +57,27 @@ export default function RitualHost({
 }) {
   const [ritual, setRitual] = useState<DatosDelRitual | null>(datos);
   const [modo, setModo] = useState<ModoNavegacion>(navMode);
-  const [vista, setVista] = useState<"ritual" | "centro" | null>(null);
-  const pathname = usePathname();
+  const [vista, setVista] = useState<"ritual" | "centro" | null>(
+    datos ? "ritual" : abrirCentro ? "centro" : null
+  );
 
   // Solo engancha: un `null` que llega después no suelta lo que ya se mostró.
   useEffect(() => {
     if (!ritual && datos) setRitual(datos);
   }, [datos, ritual]);
 
-  // La decisión de abrir se toma UNA vez, al montar, y con la ruta de entrada:
-  // navegar después no debe reabrir nada.
-  useEffect(() => {
-    const primera = inicioDeVisita();
-    if (datos) {
-      setVista("ritual");
-      return;
-    }
-    if (debeAbrirseElCentro({ modo: navMode, inicioDeVisita: primera, ruta: pathname })) setVista("centro");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const abrirCentro = useCallback(() => {
+  // Nombre distinto del de la prop `abrirCentro` a propósito: aquella dice si
+  // hay que abrirlo al cargar, esta lo abre. Llamarlas igual hizo que el
+  // listener recibiera un booleano, y lo cazó el compilador.
+  const mostrarCentro = useCallback(() => {
     setModo("premium");
     setVista("centro");
   }, []);
 
   useEffect(() => {
-    window.addEventListener(EVENTO_ABRIR_CENTRO, abrirCentro);
-    return () => window.removeEventListener(EVENTO_ABRIR_CENTRO, abrirCentro);
-  }, [abrirCentro]);
+    window.addEventListener(EVENTO_ABRIR_CENTRO, mostrarCentro);
+    return () => window.removeEventListener(EVENTO_ABRIR_CENTRO, mostrarCentro);
+  }, [mostrarCentro]);
 
   // Al terminar u omitir el ritual se cae en el centro, que es la puerta. En
   // modo habitual no: allí el cierre del ritual es el de siempre.

@@ -25,6 +25,13 @@ import { publicEnv } from "@/config/env";
 const AUTH_DEADLINE_MS = 3000;
 
 /** Centinela del plazo agotado; no puede confundirse con una respuesta real. */
+/** La marca de «esta visita ya empezó». Sin `Max-Age`: muere con el navegador. */
+const VISITA = "lifeos_visita";
+/** Cómo se lo cuenta el middleware al Server Component que decide (D-168). */
+const VISITA_HEADER = "x-visita-nueva";
+/** Y la ruta pedida, que el layout no conoce y las cabeceras internas de Next no garantizan. */
+const RUTA_HEADER = "x-ruta";
+
 const AUTH_TIMED_OUT = Symbol("auth-deadline");
 
 /**
@@ -94,8 +101,24 @@ export async function middleware(request: NextRequest) {
   requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", csp);
 
+  // ¿ES EL PRINCIPIO DE UNA VISITA? (D-168)
+  //
+  // El centro premium se abre al empezar una visita, y esa decisión la tomaba
+  // el navegador con `sessionStorage`. El resultado era un parpadeo: el
+  // servidor mandaba la pantalla normal, React hidrataba, y solo entonces
+  // aparecía el centro encima. Se veían los dos estados, en ese orden.
+  //
+  // Aquí se resuelve ANTES de pintar nada. Una cookie SIN `Max-Age` dura lo que
+  // dura el navegador abierto, que es exactamente lo que significa «visita»; la
+  // cabecera se la lleva el Server Component, que ya puede decidir. De paso deja
+  // de depender de `sessionStorage`, que en una ventana privada estricta lanza.
+  const visitaNueva = !request.cookies.has(VISITA);
+  if (visitaNueva) requestHeaders.set(VISITA_HEADER, "1");
+  requestHeaders.set(RUTA_HEADER, request.nextUrl.pathname);
+
   let response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("Content-Security-Policy", csp);
+  if (visitaNueva) response.cookies.set(VISITA, "1", { path: "/", sameSite: "lax", httpOnly: false });
 
   // Un único abort para todo lo que este request le pregunte a Supabase: al
   // vencer el plazo corta el fetch en vuelo Y hace que los reintentos internos
@@ -120,6 +143,10 @@ export async function middleware(request: NextRequest) {
         for (const { name, value } of cookiesToSet) request.cookies.set(name, value);
         response = NextResponse.next({ request: { headers: requestHeaders } });
         response.headers.set("Content-Security-Policy", csp);
+        // La respuesta se REHACE aquí, así que la marca de visita hay que
+        // volver a ponerla o se pierde justo en los requests que refrescan la
+        // sesión — que son muchos, y el centro se abriría una y otra vez.
+        if (visitaNueva) response.cookies.set(VISITA, "1", { path: "/", sameSite: "lax", httpOnly: false });
         for (const { name, value, options } of cookiesToSet) response.cookies.set(name, value, options);
       }
     }
