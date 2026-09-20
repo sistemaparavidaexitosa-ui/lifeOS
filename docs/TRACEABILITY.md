@@ -93,3 +93,14 @@ uno de ellos.
 | Siempre se puede salir y volver | `ritual_prefs.nav_mode` | — | `setNavMode` | «Navegación habitual» · `BotonCentro` · `ActivarPremium` | navegador: persiste tras recargar y en contexto nuevo (✅) |
 | La secuencia de la mañana termina en el centro | `ritual_runs` | — | — | `RitualOverlay alCentro` | navegador (✅) |
 | El coste no crece en cada clic | — | — | `ritual_gate` con una columna más; contenido por ruta | — | revisión del código; sin prueba automática de rendimiento |
+
+## Centro agéntico (D-167, migración 0070)
+
+| Requisito | Tablas | RLS / GRANT | Server Actions y rutas | UI | Pruebas |
+|---|---|---|---|---|---|
+| La IA propone qué sigue, a partir de la actividad real | `coach_proposals` (`origen='centro'`), lee los hechos del motor | la de siempre; `origen <> 'coach' or message_id is not null` intacta | `src/lib/centro/generar.ts`, `src/lib/centro/sugerencias.ts`, `GET /api/centro` | `Sugerencias.tsx` | `supabase/tests/0043_centro_agentico.sql` (9, ✅) · navegador (✅) |
+| `foco` lleva a una pantalla y no escribe nada | `coach_proposals.tipo` | `check` con `foco` | `ejecutar()` devuelve `href`, como `estructura` | botón «Ir» | `centro-sugerencias.test.ts` (✅) · navegador: acepta y navega (✅) |
+| El destino no se lo inventa el modelo | — | — | `destinoValido(href, proyectos)` | — | `centro-sugerencias.test.ts`: externas, ocultas y proyectos ajenos (✅) |
+| Piensa una vez por franja y solo si algo cambió | `centro_runs` | `centro_runs_own` | `sugerenciasDelCentro()` con `debeAnalizar` | — | `centro-franja.test.ts` (6, ✅) · pgTAP: PK por franja (✅) |
+| Aceptar crea de verdad; descartar no vuelve | `coach_proposals.status` | — | `acceptProposal`, `dismissProposal` (ya existían) | `Sugerencias.tsx` | navegador: 0 → 1 tareas, y lo descartado no reaparece (✅) |
+| Si el modelo no contesta, el centro se pinta igual | — | — | `/api/centro` con `Promise.all` y `.catch(() => [])` | — | navegador sin `GEMINI_API_KEY` (✅) |

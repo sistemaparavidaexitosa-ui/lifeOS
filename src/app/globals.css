@@ -3963,6 +3963,19 @@ textarea:focus {
   --rit-accent: #f6f6fa;
 }
 
+/* Los componentes que se reutilizan dentro de la capa —la casilla del hábito,
+   sobre todo— están escritos con los tokens de la APP (`--line`, `--text`,
+   `--muted`, `--surface2`). Dentro del ritual y del centro esos tokens no
+   valen: el borde gris claro de la casilla desaparecía sobre el fondo negro.
+   Se remapean aquí, una vez, en lugar de tocar cada componente: así cualquier
+   pieza que se traiga a esta capa en el futuro se adapta sola. */
+.rit-shell {
+  --line: var(--rit-line);
+  --text: var(--rit-text);
+  --muted: var(--rit-muted);
+  --surface2: var(--rit-line);
+}
+
 /* La columna de contenido. 680px es donde una línea de texto grande deja de
    poder seguirse con la vista de un renglón al siguiente. */
 .rit-main {

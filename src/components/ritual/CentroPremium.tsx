@@ -191,7 +191,14 @@ export default function CentroPremium({
 
           {/* Lo que la IA propone va ENCIMA de los destinos, porque es lo que
               cambia cada día; la lista de módulos siempre está donde estaba. */}
-          <Sugerencias iniciales={sugerencias} workspaceId={workspaceId} onNavegar={onIrA} />
+          {/* Se monta SOLO cuando ya hay sugerencias, y no antes con una lista
+              vacía: `Sugerencias` guarda la suya en estado propio para poder
+              quitar una al descartarla, y un `useState(props)` se queda con el
+              primer valor —el vacío— aunque después lleguen. Montarlo con los
+              datos ya puestos es lo que evita esa clase de bug. */}
+          {sugerencias.length > 0 && (
+            <Sugerencias iniciales={sugerencias} workspaceId={workspaceId} onNavegar={onIrA} />
+          )}
 
           <div>
             <p className="rit-eyebrow" style={{ marginBottom: 14 }}>

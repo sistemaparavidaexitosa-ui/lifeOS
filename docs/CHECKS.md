@@ -1886,3 +1886,62 @@ tamaño que sus destinos; se vence con especificidad sin tocar esa regla.
 - **WebKit / iPhone** y lectores de pantalla reales, igual que en D-165.
 - **Ventana privada estricta**, donde `sessionStorage` puede lanzar: el código
   lo trata como «es el principio de la visita», pero no se ha reproducido.
+
+## Centro agéntico (D-167, migración 0070) — 19-sep-2026
+
+| Comprobación | Comando | Resultado |
+|---|---|---|
+| Cadena completa | `pnpm verify` | ✅ código de salida 0 |
+| Unitarias | `pnpm test:unit` | ✅ **1206 pass / 0 fail** (eran 1182; +24 del dominio del centro agéntico) |
+| Migraciones + RLS | `supabase db reset` + `supabase test db` | ✅ **44 archivos, 424 pruebas, PASS** |
+| Build | `pnpm build` | ✅ compila |
+
+TDD: `centro-franja` y `centro-sugerencias` se vieron en rojo antes de sus
+módulos, y el pgTAP `0043` falló primero con «violates check constraint
+coach_proposals_tipo_check».
+
+### Tres fallos que encontraron las pruebas, no la lectura
+
+1. **Rompí `0034_aristas_de_la_ia.sql`.** Al añadir `foco` copié la lista de
+   tipos de 0053 y le sumé uno, con lo que borré `arista`, que la había añadido
+   0062. El pgTAP de otra feature se puso rojo. Queda avisado en la propia
+   migración 0070.
+2. **`message_id` ya era nullable** desde 0062, con una regla que solo obliga al
+   coach. El plan asumía que había que quitarle el `not null` y lo que de verdad
+   hacía falta era un `origen` nuevo.
+3. **El bloque no se pintaba** aunque la API devolvía las sugerencias:
+   `Sugerencias` guarda la lista en estado propio y `useState(props)` se quedaba
+   con el array vacío del primer render. Se monta solo cuando ya hay datos.
+
+El compilador aportó un cuarto: al añadir `foco` al tipo `Tipo`, `ejecutar()`
+dejó de ser exhaustiva y hubo que decidir explícitamente qué hace al aceptarse
+—nada, como `estructura`—, que es justo la decisión que no conviene tomar por
+omisión.
+
+### Recorrido real en navegador
+
+**19/19** con las propuestas **sembradas por SQL** (en local no hay
+`GEMINI_API_KEY`): el bloque se pinta con título y motivo; un `foco` ofrece «Ir»
+y una tarea «Añadir»; aceptar el `foco` cierra el centro, navega a `/money` y la
+deja `accepted`; aceptar la tarea **la crea de verdad** (0 → 1 en `tasks`);
+descartar la quita, la deja `dismissed` y **no vuelve al recargar**; sin
+propuestas no hay bloque y el centro sigue completo; `centro_runs` tiene como
+mucho una fila por franja y anota qué pasó.
+
+Las 25 comprobaciones de la navegación premium (D-166) se volvieron a correr y
+siguen verdes, tras arreglar una carrera del propio guion.
+
+A ojo salió además un defecto de contraste: la casilla del hábito usa los tokens
+de la app (`--line`), que sobre el fondo del centro casi no se ve. Se remapean
+los tokens dentro de `.rit-shell` en vez de tocar el componente.
+
+### Lo que NO se ha ejercitado, y hay que saberlo
+
+- **NINGUNA llamada real al modelo.** No hay `GEMINI_API_KEY` en local: se probó
+  que la orquestación llama, que anota el fallo y que el centro no se rompe,
+  pero **nadie ha visto todavía una sugerencia escrita por Gemini**. La calidad
+  del prompt está sin verificar.
+- **La huella de hechos** (`debeAnalizar`) se probó por código, no con dos
+  franjas reales seguidas.
+- **El coste real** de tres llamadas diarias por persona: sin medir.
+- WebKit/iPhone y lectores de pantalla, igual que en D-165 y D-166.
