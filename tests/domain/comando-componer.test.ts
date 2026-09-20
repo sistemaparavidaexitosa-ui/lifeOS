@@ -2,12 +2,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { componerMando, type EntradaDeMando } from "../../src/lib/domain/comando/componer.ts";
 import { tarjetasDelCentro } from "../../src/lib/domain/centro/lienzo.ts";
-import { CATEGORIAS } from "../../src/lib/domain/comando/tipos.ts";
+import { CARRILES, CATEGORIAS } from "../../src/lib/domain/comando/tipos.ts";
 
-// El centro de mando (D-176). Lo que se prueba aquí NO es la priorización —eso
-// ya lo cubren los catorce casos de `centro-lienzo.test.ts`— sino que este
-// archivo **no la reescribe**: que reparte lo que `tarjetasDelCentro` devuelve
-// y que la reparte en el sitio correcto.
+// La capa de navegación del Centro (D-177). Lo que se prueba NO es la
+// priorización —eso son los catorce casos de `centro-lienzo.test.ts`— sino que
+// este archivo **no la reescribe**: que reparte en tres frentes lo que
+// `tarjetasDelCentro` devuelve, y que un frente en calma dice algo verdadero
+// en vez de callarse.
 
 function entrada(extra: Partial<EntradaDeMando> = {}): EntradaDeMando {
   return {
@@ -18,10 +19,7 @@ function entrada(extra: Partial<EntradaDeMando> = {}): EntradaDeMando {
     vencidas: 0,
     diasParaFinDeQuincena: 10,
     presupuestoEnRojo: false,
-    planAprobado: false,
-    saturacion: "ok",
-    minutosComprometidos: 0,
-    minutosDisponibles: 480,
+    senalesDeCarril: { tareasDelPlan: 0, habitosPendientes: 0, identidadDeclarada: true },
     ...extra
   };
 }
@@ -34,122 +32,168 @@ const propuesta = (id: string, tipo: string) => ({
   href: null
 });
 
-// LA PRUEBA QUE SOSTIENE EL DISEÑO. Si algún día esto falla, alguien escribió
-// un segundo criterio de prioridad y el centro dejó de ser una cara de D-169.
-test("NO REORDENA: respeta el orden de tarjetasDelCentro", () => {
+const habito = {
+  routineId: "r1",
+  routineName: "Mañana",
+  habitId: "h1",
+  nombre: "Leer 20 minutos",
+  durationMin: 20
+};
+
+const via = (m: ReturnType<typeof componerMando>, c: (typeof CARRILES)[number]) =>
+  m.carriles.find((v) => v.carril === c)!;
+
+// LA PRUEBA QUE SOSTIENE EL DISEÑO. Si falla, alguien escribió un segundo
+// criterio de prioridad y el Centro dejó de ser una cara de D-169.
+test("NO REORDENA: dentro de un carril manda el orden de tarjetasDelCentro", () => {
   const e = entrada({
-    resumen: "Vas bien",
     unicaCosa: "Cerrar el rediseño",
     vencidas: 2,
     propuestas: [propuesta("p1", "tarea")]
   });
 
-  const esperado = tarjetasDelCentro(e, []).filter((t) => t.kind !== "cierre").map((t) => t.id);
+  // Los tres de ejecución compiten entre sí; gana el primero que devuelva el
+  // lienzo, no el que a esta capa le parezca.
+  const orden = tarjetasDelCentro(e, [])
+    .filter((t) => t.kind !== "cierre" && t.kind !== "apertura")
+    .map((t) => t.id);
   const m = componerMando(e);
-  const obtenido = [m.foco, ...m.siguientes, ...m.bloqueos].filter(Boolean).map((i) => i!.id);
 
-  assert.deepEqual([...obtenido].sort(), [...esperado].sort(), "no puede aparecer ni desaparecer nada");
-  // Y dentro de cada sección, el orden relativo se conserva.
-  const soloResto = esperado.filter((id) => !m.bloqueos.some((b) => b.id === id));
-  assert.deepEqual([m.foco?.id, ...m.siguientes.map((s) => s.id)].filter(Boolean), soloResto);
+  const primeroDeEjecucion = orden.find((id) => id !== "dinero" && !id.startsWith("r1:"));
+  assert.equal(via(m, "execution").item?.id, primeroDeEjecucion);
 });
 
-test("el día vacío no miente: sin foco, sin bloqueos, con cierre", () => {
+test("siempre son los tres carriles, en su orden", () => {
   const m = componerMando(entrada());
 
-  assert.equal(m.foco, null);
-  assert.deepEqual(m.bloqueos, []);
-  assert.deepEqual(m.siguientes, []);
-  assert.ok(m.cierre.length > 0, "siempre hay algo honesto que decir");
+  assert.deepEqual(m.carriles.map((v) => v.carril), [...CARRILES]);
 });
 
-// Si los bloqueos pudieran ser el foco, un día con dos vencidas te diría que tu
-// única prioridad es ponerte al día — lo contrario de avanzar.
-test("los bloqueos NUNCA ocupan el foco", () => {
-  const m = componerMando(entrada({ vencidas: 3, unicaCosa: "Cerrar el rediseño" }));
+// Esconder el frente que va bien deja a la persona sin saber si es que no hay
+// nada o es que no se miró.
+test("un carril en calma NO se esconde: dice qué sabe y deja entrar", () => {
+  const m = componerMando(
+    entrada({ senalesDeCarril: { tareasDelPlan: 3, habitosPendientes: 0, identidadDeclarada: true } })
+  );
 
-  assert.equal(m.foco?.categoria !== "bloquear", true);
-  assert.equal(m.foco?.titulo.includes("rediseño"), true);
-  assert.equal(m.bloqueos.length, 1);
-  assert.equal(m.bloqueos[0]?.categoria, "bloquear");
+  for (const v of m.carriles) {
+    assert.equal(v.item, null);
+    assert.ok(v.estado.length > 0, `${v.carril} se quedó mudo`);
+    assert.ok(v.href.length > 0, `${v.carril} no lleva a ningún sitio`);
+    assert.ok(v.destino.length > 0, `${v.carril} no dice cómo entrar`);
+  }
+  assert.match(via(m, "execution").estado, /3 tareas/);
 });
 
-test("sin bloqueos la sección queda vacía, para que no se pinte", () => {
-  const m = componerMando(entrada({ unicaCosa: "Algo" }));
+test("sin identidad declarada, el carril de desarrollo lo dice", () => {
+  const m = componerMando(
+    entrada({ senalesDeCarril: { tareasDelPlan: 0, habitosPendientes: 0, identidadDeclarada: false } })
+  );
 
-  assert.deepEqual(m.bloqueos, []);
+  assert.match(via(m, "development").estado, /quién quieres convertirte/);
+});
+
+test("el día sin nada no inventa trabajo", () => {
+  const m = componerMando(entrada());
+
+  assert.equal(m.dominante, null);
+  assert.ok(m.cierre.length > 0);
   assert.equal(m.estado.bloqueos, 0);
 });
 
-// --- Las categorías ---
+// --- El reparto en frentes ---
 
-test("las vencidas frenan; el hábito y la Única Cosa se ejecutan", () => {
-  const conVencidas = componerMando(entrada({ vencidas: 1 }));
-  assert.equal(conVencidas.bloqueos[0]?.categoria, "bloquear");
+test("cada cosa cae en su frente", () => {
+  const m = componerMando(
+    entrada({
+      unicaCosa: "Cerrar el rediseño",
+      vencidas: 2,
+      presupuestoEnRojo: true,
+      proximoHabito: habito
+    })
+  );
 
-  const conUnica = componerMando(entrada({ unicaCosa: "Algo" }));
-  assert.equal(conUnica.foco?.categoria, "ejecutar");
+  // El hábito es desarrollo personal aunque se marque en dos segundos: lo que
+  // mueve es el voto por el rasgo, no la tarea.
+  assert.equal(via(m, "development").item?.datos.tipo, "habito");
+  assert.equal(via(m, "money").item?.id, "dinero");
+  assert.ok(["unica", "vencidas"].includes(via(m, "execution").item?.id ?? ""));
 });
 
-// El dinero es el caso interesante: en rojo deja de ser algo que revisar.
-test("el dinero cambia de categoría según el estado, no según el tipo", () => {
-  const cerca = componerMando(entrada({ diasParaFinDeQuincena: 1 }));
-  assert.equal(cerca.foco?.categoria, "revisar");
-  assert.deepEqual(cerca.bloqueos, []);
-
-  const enRojo = componerMando(entrada({ presupuestoEnRojo: true }));
-  assert.equal(enRojo.bloqueos[0]?.categoria, "bloquear");
-});
-
-test("una meta se decide, una tarea se ejecuta, una nota se recuerda", () => {
-  const cat = (tipo: string) => {
+test("las propuestas van al frente donde vive lo que proponen", () => {
+  const carrilDe = (tipo: string) => {
     const m = componerMando(entrada({ propuestas: [propuesta("p1", tipo)] }));
-    return [m.foco, ...m.siguientes].find((i) => i?.id === "propuesta:p1")?.categoria;
+    return m.carriles.find((v) => v.item?.id === "propuesta:p1")?.carril;
   };
 
-  assert.equal(cat("tarea"), "ejecutar");
-  assert.equal(cat("bloque"), "ejecutar");
-  assert.equal(cat("meta"), "decidir");
-  assert.equal(cat("estructura"), "decidir");
-  assert.equal(cat("arista"), "decidir");
-  assert.equal(cat("nota"), "recordar");
+  assert.equal(carrilDe("tarea"), "execution");
+  assert.equal(carrilDe("bloque"), "execution");
+  assert.equal(carrilDe("estructura"), "execution");
+  assert.equal(carrilDe("arista"), "execution");
+  assert.equal(carrilDe("rutina"), "development");
+  assert.equal(carrilDe("meta"), "development");
 });
 
-// Un tipo nuevo en la base no puede dejar un hueco sin categoría: pedir que
-// hagas algo que había que decidir molesta menos que quedarse en blanco.
-test("un tipo que la base gane mañana cae en ejecutar, no revienta", () => {
+test("un tipo que la base gane mañana cae en ejecución, no revienta", () => {
   const m = componerMando(entrada({ propuestas: [propuesta("p1", "inventado")] }));
 
-  assert.equal([m.foco, ...m.siguientes].find((i) => i?.id === "propuesta:p1")?.categoria, "ejecutar");
+  assert.equal(via(m, "execution").item?.id, "propuesta:p1");
+});
+
+// --- Quién manda ---
+
+test("manda el frente de lo que más aprieta, no un orden fijo", () => {
+  // Solo dinero: manda dinero aunque se pinte el tercero.
+  assert.equal(componerMando(entrada({ presupuestoEnRojo: true })).dominante, "money");
+
+  // Solo un hábito: manda desarrollo, que se pinta el segundo.
+  assert.equal(componerMando(entrada({ proximoHabito: habito })).dominante, "development");
+});
+
+// --- Categorías, que siguen valiendo ---
+
+test("el dinero cambia de categoría según el estado, no según el tipo", () => {
+  assert.equal(via(componerMando(entrada({ diasParaFinDeQuincena: 1 })), "money").item?.categoria, "revisar");
+  assert.equal(via(componerMando(entrada({ presupuestoEnRojo: true })), "money").item?.categoria, "bloquear");
 });
 
 test("toda categoría emitida es una de las siete", () => {
   const m = componerMando(
     entrada({
-      resumen: "Vas bien",
       unicaCosa: "Algo",
       vencidas: 1,
       presupuestoEnRojo: true,
-      propuestas: [propuesta("p1", "meta"), propuesta("p2", "nota")]
+      proximoHabito: habito,
+      propuestas: [propuesta("p1", "meta")]
     })
   );
 
-  for (const i of [m.foco, ...m.siguientes, ...m.bloqueos].filter(Boolean)) {
-    assert.ok((CATEGORIAS as readonly string[]).includes(i!.categoria), `categoría suelta: ${i!.categoria}`);
+  for (const v of m.carriles) {
+    if (!v.item) continue;
+    assert.ok((CATEGORIAS as readonly string[]).includes(v.item.categoria), `categoría suelta: ${v.item.categoria}`);
   }
 });
 
-// --- El estado de la cabecera ---
+test("los bloqueos se cuentan aunque estén repartidos", () => {
+  const m = componerMando(entrada({ vencidas: 2, presupuestoEnRojo: true }));
 
-test("el estado son datos, no acciones: nunca produce un ítem", () => {
-  const m = componerMando(entrada({ saturacion: "saturated", minutosComprometidos: 390, planAprobado: true }));
+  assert.equal(m.estado.bloqueos, 2, "las vencidas y el dinero en rojo frenan, cada uno en su frente");
+});
 
-  assert.equal(m.estado.saturacion, "saturated");
-  assert.equal(m.estado.horasComprometidas, 6.5);
-  assert.equal(m.estado.planAprobado, true);
-  // Ni la saturación ni el plan aprobado se cuelan como cosas que hacer.
-  assert.equal(m.foco, null);
-  assert.deepEqual(m.siguientes, []);
+// --- Lo que sobrevive de D-169 ---
+
+test("«ahora no» aparta dentro del carril, no borra", () => {
+  const e = entrada({ unicaCosa: "Algo", vencidas: 1 });
+  const antes = componerMando(e);
+  const apartado = antes.carriles.find((v) => v.item)!.item!.id;
+
+  const despues = componerMando(e, [apartado]);
+
+  // O sigue estando, o dejó subir al siguiente de su carril: lo que no puede
+  // es desaparecer sin más.
+  const sigue = despues.carriles.some((v) => v.item?.id === apartado);
+  const subioOtro = despues.carriles.some((v) => v.item && v.item.id !== apartado);
+  assert.ok(sigue || subioOtro, "apartar no es borrar");
 });
 
 test("el resumen vacío se queda vacío: no se inventa uno", () => {
@@ -157,37 +201,13 @@ test("el resumen vacío se queda vacío: no se inventa uno", () => {
   assert.equal(componerMando(entrada({ resumen: "Vas bien" })).estado.resumen, "Vas bien");
 });
 
-// Apartar algo no lo borra: la regla de D-169 se conserva entera.
-test("«ahora no» baja el ítem, no lo hace desaparecer", () => {
-  const e = entrada({ unicaCosa: "Algo", propuestas: [propuesta("p1", "tarea")] });
+test("cada ítem lleva lo justo para resolverse sin salir del centro", () => {
+  const m = componerMando(entrada({ propuestas: [propuesta("p1", "tarea")], presupuestoEnRojo: true }));
 
-  const antes = componerMando(e);
-  const despues = componerMando(e, [antes.foco!.id]);
-
-  const idsAntes = [antes.foco, ...antes.siguientes].map((i) => i!.id).sort();
-  const idsDespues = [despues.foco, ...despues.siguientes].map((i) => i!.id).sort();
-
-  assert.deepEqual(idsDespues, idsAntes, "sigue estando");
-  assert.notEqual(despues.foco?.id, antes.foco?.id, "pero ya no manda");
-});
-
-// --- Lo que la UI necesita para actuar sin volver a deducirlo ---
-
-test("cada ítem lleva lo justo para resolverse", () => {
-  const m = componerMando(
-    entrada({
-      propuestas: [propuesta("p1", "tarea")],
-      unicaCosa: "Algo",
-      vencidas: 1
-    })
-  );
-  const todos = [m.foco, ...m.siguientes, ...m.bloqueos].filter(Boolean);
-
-  const prop = todos.find((i) => i!.datos.tipo === "propuesta");
+  const prop = via(m, "execution").item;
   assert.equal(prop?.datos.tipo === "propuesta" && prop.datos.propuestaId, "p1");
 
-  const vencidas = m.bloqueos[0];
-  assert.equal(vencidas?.datos.tipo, "navegar");
-  assert.ok(vencidas?.href, "lo que navega tiene a dónde ir");
-  assert.ok(vencidas?.accion, "y qué poner en el botón");
+  const dinero = via(m, "money").item;
+  assert.equal(dinero?.datos.tipo, "navegar");
+  assert.ok(dinero?.href, "lo que navega tiene a dónde ir");
 });

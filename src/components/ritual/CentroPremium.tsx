@@ -6,10 +6,10 @@ import { fdate } from "@/lib/format";
 import { abrirFoco, atraparFoco } from "@/lib/dom/ritual-focus.ts";
 import { temaDelRitual } from "@/lib/domain/ritual/tema.ts";
 import { construirSecuencia } from "@/lib/domain/ritual/secuencia.ts";
-import type { EntradaLienzo } from "@/lib/domain/centro/lienzo.ts";
+import type { EntradaDeMando } from "@/lib/domain/comando/componer.ts";
 import type { ContenidoDelRitual } from "@/lib/data/ritual";
 import type { SugerenciaView } from "@/lib/centro/sugerencias";
-import Lienzo from "./Lienzo";
+import Navegacion from "@/components/comando/Navegacion";
 import BarraCaptura from "./BarraCaptura";
 
 /**
@@ -111,7 +111,7 @@ export default function CentroPremium({
    * hereda la regla de la hora de D-165 —una rutina de la noche no se propone
    * por la mañana— en vez de escribir una segunda versión de ella.
    */
-  const entrada: EntradaLienzo | null = useMemo(() => {
+  const entrada: EntradaDeMando | null = useMemo(() => {
     if (!contenido) return null;
     const pasos = construirSecuencia({
       ...contenido,
@@ -141,7 +141,22 @@ export default function CentroPremium({
       unicaCosa: contenido.plan?.oneThing ?? null,
       vencidas: contenido.senales.vencidas,
       diasParaFinDeQuincena: contenido.senales.diasParaFinDeQuincena,
-      presupuestoEnRojo: contenido.senales.presupuestoEnRojo
+      presupuestoEnRojo: contenido.senales.presupuestoEnRojo,
+
+      // Lo que la cabecera del centro no usaba y los carriles sí (D-177). Nada
+      // de esto es una consulta nueva: son cifras que `loadRitualContent` ya
+      // trae en la misma pasada.
+      senalesDeCarril: {
+        tareasDelPlan: contenido.plan?.tareas.length ?? 0,
+        // TODOS los hábitos pendientes de hoy, no solo el que toca ahora: el
+        // carril dice cómo va el frente, y para eso «te quedan tres» informa y
+        // «te queda el de las siete» no.
+        habitosPendientes: construirSecuencia({
+          ...contenido,
+          settings: { ...contenido.settings, steps: ["routineStep"], maxRoutineSteps: 99 }
+        }).filter((x) => x.kind === "routineStep").length,
+        identidadDeclarada: Boolean(contenido.identidadDeclarada)
+      }
     };
   }, [contenido, sugerencias, resumen]);
 
@@ -169,7 +184,7 @@ export default function CentroPremium({
 
       <div className="rit-main">
         {entrada ? (
-          <Lienzo
+          <Navegacion
             entrada={entrada}
             today={cabecera.dateISO}
             workspaceId={workspaceId}

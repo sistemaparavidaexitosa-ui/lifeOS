@@ -20,7 +20,16 @@
 // Las tres son deterministas y ninguna consulta al modelo.
 
 import { tarjetasDelCentro, type EntradaLienzo, type Tarjeta } from "../centro/lienzo.ts";
-import type { Categoria, EstadoDeMando, ItemDeMando, Mando } from "./tipos.ts";
+import {
+  CARRILES,
+  CARRIL_INICIO,
+  type Carril,
+  type CarrilDelCentro,
+  type Categoria,
+  type EstadoDeMando,
+  type ItemDeMando,
+  type Mando
+} from "./tipos.ts";
 
 /**
  * Lo que el centro necesita saber, además de lo que ya pide el lienzo.
@@ -31,11 +40,40 @@ import type { Categoria, EstadoDeMando, ItemDeMando, Mando } from "./tipos.ts";
  * cabecera y nunca produce un ítem.
  */
 export interface EntradaDeMando extends EntradaLienzo {
-  planAprobado: boolean;
-  saturacion: "ok" | "warn" | "saturated";
-  minutosComprometidos: number;
-  minutosDisponibles: number;
+  /**
+   * Lo que hace falta para que un carril en calma diga algo verdadero.
+   *
+   * Son cifras que YA existen en el contenido del centro; ninguna se calcula
+   * aquí ni se le pregunta al modelo. Un carril sin señales dice lo genérico y
+   * sigue llevándote a su sitio: es peor callar que decir menos.
+   */
+  senalesDeCarril: {
+    /** Las del plan de hoy. NO son «todas las abiertas»: el contenido del
+     *  centro no las trae, y decir una cifra por otra es cómo se pierde la
+     *  confianza en una pantalla que presume de saber. */
+    tareasDelPlan: number;
+    habitosPendientes: number;
+    identidadDeclarada: boolean;
+  };
 }
+
+/**
+ * En qué frente cuenta cada tipo de propuesta.
+ *
+ * Espejo del `check` de `coach_proposals.tipo`. `rutina` y `meta` van a
+ * desarrollo personal porque es donde viven —`routines` y `personal_goals`—, y
+ * `arista` a ejecución porque el grafo se usa para desatascar proyectos.
+ */
+const CARRIL_POR_TIPO: Record<string, Carril> = {
+  tarea: "execution",
+  bloque: "execution",
+  estructura: "execution",
+  arista: "execution",
+  foco: "execution",
+  rutina: "development",
+  meta: "development",
+  nota: "development"
+};
 
 /**
  * De qué tipo de propuesta se trata, en categoría.
@@ -88,6 +126,33 @@ function categoriaDe(t: Tarjeta, e: EntradaDeMando): Categoria {
   }
 }
 
+/**
+ * A qué frente pertenece una tarjeta.
+ *
+ * El hábito es desarrollo personal aunque se marque en dos segundos: lo que
+ * mueve no es la tarea, es el voto por el rasgo (`habit_identity_traits`, 0064).
+ * Las vencidas y la Única Cosa son ejecución. El dinero, dinero.
+ */
+function carrilDe(t: Tarjeta, e: EntradaDeMando): Carril {
+  switch (t.kind) {
+    case "habito":
+      return "development";
+    case "dinero":
+      return "money";
+    case "vencidas":
+    case "unicaCosa":
+      return "execution";
+    case "propuesta": {
+      const propuesta = e.propuestas.find((p) => p.id === t.propuestaId);
+      return (propuesta && CARRIL_POR_TIPO[propuesta.tipo]) ?? "execution";
+    }
+    case "apertura":
+    case "cierre":
+      // El resumen y el cierre no son de ningún frente: van a la cabecera.
+      return "execution";
+  }
+}
+
 /** El texto del botón y a dónde lleva, según el tipo de tarjeta. */
 function accionDe(t: Tarjeta): { accion: string | null; href: string | null; datos: ItemDeMando["datos"] } {
   switch (t.kind) {
@@ -108,10 +173,47 @@ function accionDe(t: Tarjeta): { accion: string | null; href: string | null; dat
 
 function itemDe(t: Tarjeta, e: EntradaDeMando): ItemDeMando {
   const { accion, href, datos } = accionDe(t);
-  return { id: t.id, categoria: categoriaDe(t, e), voz: t.voz, titulo: t.titulo, accion, href, datos };
+  return {
+    id: t.id,
+    carril: carrilDe(t, e),
+    categoria: categoriaDe(t, e),
+    voz: t.voz,
+    titulo: t.titulo,
+    accion,
+    href,
+    datos
+  };
 }
 
-const minutosAHoras = (m: number): number => Math.round((m / 60) * 10) / 10;
+/**
+ * Qué decir de un frente que no tiene nada urgente.
+ *
+ * Nunca «todo bien» a secas: eso no se puede comprobar y suena a relleno. Se
+ * dice lo que SÍ se sabe, con su cifra, y se ofrece entrar igualmente — un
+ * carril en calma sigue siendo navegación.
+ */
+function estadoDeCalma(carril: Carril, e: EntradaDeMando): { estado: string; destino: string } {
+  const s = e.senalesDeCarril;
+  if (carril === "execution") {
+    return s.tareasDelPlan > 0
+      ? {
+          estado: `${s.tareasDelPlan} ${s.tareasDelPlan === 1 ? "tarea" : "tareas"} en tu plan de hoy, nada vencido`,
+          destino: "Ver el tablero"
+        }
+      : { estado: "Nada vencido y sin plan para hoy", destino: "Abrir Ejecución" };
+  }
+  if (carril === "development") {
+    if (s.habitosPendientes > 0) {
+      return { estado: `${s.habitosPendientes} ${s.habitosPendientes === 1 ? "hábito pendiente" : "hábitos pendientes"} hoy`, destino: "Ver rutinas" };
+    }
+    return s.identidadDeclarada
+      ? { estado: "Tus hábitos de hoy están hechos", destino: "Ver tu identidad" }
+      : { estado: "Aún no dices en quién quieres convertirte", destino: "Escribirlo" };
+  }
+  return e.diasParaFinDeQuincena > 0
+    ? { estado: `${e.diasParaFinDeQuincena} ${e.diasParaFinDeQuincena === 1 ? "día" : "días"} de quincena, presupuesto en verde`, destino: "Ver Dinero" }
+    : { estado: "Presupuesto en verde", destino: "Ver Dinero" };
+}
 
 /**
  * Lo que el centro te pide hoy, repartido en pantalla.
@@ -124,33 +226,34 @@ export function componerMando(e: EntradaDeMando, pospuestas: readonly string[] =
   const tarjetas = tarjetasDelCentro(e, [...pospuestas]);
 
   // `tarjetasDelCentro` SIEMPRE cierra con la tarjeta de cierre. Aquí se
-  // separa: es el texto del día vacío, no una cosa más que hacer.
+  // separa: es el texto del día vacío, no una cosa más que hacer. La apertura
+  // tampoco entra: su sitio es la cabecera, como resumen.
   const cierre = tarjetas.find((t) => t.kind === "cierre");
-  const accionables = tarjetas.filter((t) => t.kind !== "cierre").map((t) => itemDe(t, e));
+  const accionables = tarjetas
+    .filter((t) => t.kind !== "cierre" && t.kind !== "apertura")
+    .map((t) => itemDe(t, e));
 
-  const bloqueos = accionables.filter((i) => i.categoria === "bloquear");
-  const resto = accionables.filter((i) => i.categoria !== "bloquear");
+  // UN SOLO ÍTEM POR CARRIL, Y ES EL PRIMERO. Como `accionables` ya viene en el
+  // orden de caducidad de D-169, quedarse con el primero de cada frente
+  // significa que dentro del carril manda el mismo criterio de siempre. Lo que
+  // no cabe no se pierde: sigue ahí cuando se resuelva o se aparte lo de
+  // encima. Tres cosas a la vista y no nueve es lo que impide que esto vuelva a
+  // ser la bandeja que D-169 mató.
+  const carriles: CarrilDelCentro[] = CARRILES.map((carril) => {
+    const item = accionables.find((i) => i.carril === carril) ?? null;
+    if (item) return { carril, item, estado: "", href: item.href ?? CARRIL_INICIO[carril], destino: item.accion ?? "Abrir" };
+    const calma = estadoDeCalma(carril, e);
+    return { carril, item: null, estado: calma.estado, href: CARRIL_INICIO[carril], destino: calma.destino };
+  });
 
-  // EL FOCO NO SALE DE LOS BLOQUEOS, y es deliberado. Lo que te frena ya tiene
-  // su propio sitio con su propio peso visual; si además ocupara el hueco de
-  // «hoy deberías», un día con dos tareas vencidas te diría que tu única
-  // prioridad es ponerte al día, que es justo lo contrario de avanzar.
-  const [foco = null, ...siguientes] = resto;
+  // El que manda es el del ítem más urgente de todos, no un orden fijo: si hoy
+  // lo que aprieta es el dinero, el dinero manda aunque se pinte el tercero.
+  const dominante = accionables[0]?.carril ?? null;
 
   const estado: EstadoDeMando = {
     resumen: e.resumen,
-    bloqueos: bloqueos.length,
-    horasComprometidas: minutosAHoras(e.minutosComprometidos),
-    horasDisponibles: minutosAHoras(e.minutosDisponibles),
-    saturacion: e.saturacion,
-    planAprobado: e.planAprobado
+    bloqueos: accionables.filter((i) => i.categoria === "bloquear").length
   };
 
-  return {
-    estado,
-    foco,
-    bloqueos,
-    siguientes,
-    cierre: cierre?.titulo ?? "Ya está. ¿Algo más?"
-  };
+  return { estado, carriles, dominante, cierre: cierre?.titulo ?? "Ya está. ¿Algo más?" };
 }
