@@ -122,7 +122,6 @@ export default function RitualHost({
       <CentroPremium
         cabecera={cabecera}
         hourLocal={hourLocal}
-        currency={currency}
         locale={locale}
         onCerrar={() => setVista(null)}
         onIrA={() => setVista(null)}

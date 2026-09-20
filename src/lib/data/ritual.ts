@@ -12,7 +12,6 @@ import { hechosDeContexto } from "@/lib/domain/ritual/contexto.ts";
 import { esTipoPaso, type RitualSettings, type TipoPaso } from "@/lib/domain/ritual/types.ts";
 import { esModoNavegacion, type ModoNavegacion } from "@/lib/domain/centro/apertura.ts";
 import type { EntradaSecuencia } from "@/lib/domain/ritual/secuencia.ts";
-import type { SenalesDelDia } from "@/lib/domain/centro/destacados.ts";
 import { quincenaFor } from "@/lib/domain/quincena.ts";
 import { diffDays } from "@/lib/domain/datetime.ts";
 import type { Frequency } from "@/lib/domain/development/routines.ts";
@@ -126,12 +125,15 @@ export const loadRitualGate = cache(async (): Promise<PuertaDelRitual | null> =>
 });
 
 /**
- * Las señales con las que se arma «Sigue por aquí» (D-168). Se calculan con lo
- * que el centro ya lee, más una consulta de actividad reciente por proyecto:
- * quince días es la ventana en la que «he estado trabajando en esto» todavía
- * significa algo.
+ * Las cifras que el lienzo convierte en tarjetas cuando aprietan (D-169). Solo
+ * estas tres: el resto de lo que el centro enseñaba —destinos, atajos, la
+ * rejilla— se fue con el menú.
  */
-export const DIAS_DE_ACTIVIDAD = 15;
+export interface SenalesDelDia {
+  vencidas: number;
+  diasParaFinDeQuincena: number;
+  presupuestoEnRojo: boolean;
+}
 
 export interface ContenidoDelRitual extends EntradaSecuencia {
   /**
@@ -161,8 +163,7 @@ export const loadRitualContent = cache(async (puerta: PuertaDelRitual): Promise<
     if (!user) return null;
 
     const supabase = await createClient();
-    const desdeActividad = new Date(Date.now() - DIAS_DE_ACTIVIDAD * 86_400_000).toISOString();
-    const [home, brief, rutinas, identidad, { data: run }, { data: actividad }] = await Promise.all([
+    const [home, brief, rutinas, identidad, { data: run }] = await Promise.all([
       getHomeData(user.id),
       loadTodayBrief(),
       loadRoutinesForToday(),
@@ -172,27 +173,8 @@ export const loadRitualContent = cache(async (puerta: PuertaDelRitual): Promise<
         .select("brief_attempted")
         .eq("user_id", user.id)
         .eq("local_date", puerta.dateISO)
-        .maybeSingle(),
-      // Qué proyecto concentra el movimiento. La RLS ya limita a lo que esta
-      // persona puede ver, así que no hace falta filtrar por dueño aquí.
-      supabase
-        .from("workspace_activity")
-        .select("project_id, projects(title)")
-        .not("project_id", "is", null)
-        .gte("created_at", desdeActividad)
-        .limit(200)
+        .maybeSingle()
     ]);
-
-    // El proyecto con más movimiento, contado aquí y no por el modelo.
-    const cuenta = new Map<string, { title: string; n: number }>();
-    for (const fila of actividad ?? []) {
-      const id = fila.project_id;
-      if (!id) continue;
-      const proyecto = fila.projects as { title?: string } | null;
-      const previo = cuenta.get(id);
-      cuenta.set(id, { title: previo?.title || proyecto?.title || "Proyecto", n: (previo?.n ?? 0) + 1 });
-    }
-    const top = [...cuenta.entries()].sort((a, b) => b[1].n - a[1].n)[0];
 
     const quincena = quincenaFor(puerta.dateISO);
 
@@ -261,11 +243,7 @@ export const loadRitualContent = cache(async (puerta: PuertaDelRitual): Promise<
       },
 
       senales: {
-        proyectoActivo: top ? { id: top[0], title: top[1].title, movimientos: top[1].n } : null,
         vencidas: home.overdueCount,
-        habitosPendientes: rutinas.rows
-          .filter((r) => r.due && r.routine.active)
-          .reduce((n, r) => n + r.habits.filter((h) => h.todayEntry === null).length, 0),
         diasParaFinDeQuincena: diffDays(puerta.dateISO, quincena.toISO),
         presupuestoEnRojo: home.hasBudget && home.budgetRemaining <= 0
       },
