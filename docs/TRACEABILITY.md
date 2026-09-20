@@ -127,3 +127,80 @@ uno de ellos.
 | «Ahora no» aparta; nada se pierde | — (estado en el cliente) | — | — | contador «Quedan N» | `centro-lienzo.test.ts`: lo pospuesto va al final sin duplicarse (✅) · navegador (✅) |
 | Un día sin nada no miente | — | — | — | tarjeta de cierre | `centro-lienzo.test.ts`: día vacío abre en el cierre (✅) · navegador (✅) |
 | El menú desaparece del centro | — | — | — | `destinos.ts`, `destacados.ts`, `componer.ts` y `Sugerencias.tsx` **borrados** | navegador: ni lista de módulos, ni atajos, ni rejilla (✅) |
+
+## Agent Runtime mínimo (D-170, sin migración)
+
+Las columnas vacías no son un descuido: **son el resultado del sprint**. El
+núcleo entra sin tocar base, sin rutas y sin pantallas.
+
+| Requisito | Tablas | RLS / GRANT | Server Actions y rutas | UI | Pruebas |
+|---|---|---|---|---|---|
+| Existe un vocabulario común de agente | — | — | — (puro) | — | `types.ts` compila bajo `strict` (✅) |
+| El registro da de alta y devuelve por id | — | — | — (puro) | — | `agents-registro.test.ts` (12, ✅) |
+| Listar es estable, no depende del orden de import | — | — | — | — | `agents-registro.test.ts`: orden por id (✅) |
+| Un contrato inválido no entra, con motivo pintable | — | — | — | — | `agents-registro.test.ts`: id, versión, descripción, `ejecutar` (✅) |
+| Un id duplicado se rechaza y gana el primero | — | — | — | — | `agents-registro.test.ts`: el que ya estaba queda intacto (✅) |
+| El registro no lanza nunca (D-021) | — | — | — | — | `agents-registro.test.ts`: id desconocido → `null` (✅) |
+| El runtime no entra en el bundle de cliente | — | — | `runtime.ts` con `server-only` | — | `pnpm build` (✅) · `git diff --stat` vacío (✅) |
+| Preparado para ejecutar, sin ejecutar | — | — | — | — | `AgentDefinition.ejecutar` en el tipo; el runtime no lo expone (✅) |
+
+## Agentic Kernel, Fase 1 (D-171, sin migración)
+
+Las columnas vacías siguen siendo el resultado: el Kernel crece sin tocar base,
+rutas ni pantallas. La diferencia con D-170 es que ahora hay reglas que probar.
+
+| Requisito | Tablas | RLS / GRANT | Server Actions y rutas | UI | Pruebas |
+|---|---|---|---|---|---|
+| Cada agente declara qué dominios necesita | — | — | — (puro) | — | `agents-registro.test.ts`: sin dominios no entra (✅) |
+| La puerta de privacidad se aplica al agente | — | — | — (puro) | — | `agents-contexto.test.ts`: estrecha y nunca ensancha (✅) |
+| Un dominio apagado deja al agente fuera | — | — | — | — | `agents-seleccion.test.ts` + `agents-contexto.test.ts`: corta con motivo (✅) |
+| Los hechos se filtran por dominio del agente | — | — | — | — | `agents-contexto.test.ts`: el de hábitos no ve dinero (✅) |
+| Cada agente dice a qué versión de ti sirve | — | — | — | — | `agents-registro.test.ts`: solo las 7 `AREAS` (✅) |
+| Identidades incompatibles se detectan | — | — | — | — | `agents-politicas.test.ts`: gana el primero, el otro calla (✅) |
+| **Por defecto NO se actúa** | — | — | — | — | `agents-politicas.test.ts`: el que solo resume, calla (✅) |
+| Un descarte de hoy silencia al agente | — | — | — | — | `agents-politicas.test.ts` (✅) |
+| Riesgo alto interrumpe menos, no más | — | — | — | — | `agents-politicas.test.ts`: topes por franja (✅) |
+| Todo silencio lleva motivo legible | — | — | — | — | `agents-politicas.test.ts`: motivo que nombra al agente (✅) |
+| La selección es determinista y estable | — | — | — | — | `agents-seleccion.test.ts`: prioridad, desempate por id (✅) |
+| Solo se permite la autonomía «propone» | — | — | — | — | `agents-registro.test.ts`: `autonomo` rechazado (✅) |
+| No se llama al modelo sin presupuesto | — | — | — | — | `agents-registro.test.ts`: pensar ≥ tope se rechaza (✅) |
+| Un agente que falla no tumba a quien lo llamó | — | — | `ejecutarAgente` con `server-only` | — | `pnpm build` (✅); sin agente real todavía (⚠️) |
+| Ningún módulo importa el Kernel | — | — | — | — | `git diff` acotado a Kernel + mudanza de `Budget` (✅) |
+
+## Agentic Kernel, Fase 2 — el coach (D-172, sin migración)
+
+Primer agente real. Las columnas de datos siguen vacías porque registrar no es
+conectar: el coach de producción sigue siendo el de `/api/push/dispatch`.
+
+| Requisito | Tablas | RLS / GRANT | Server Actions y rutas | UI | Pruebas |
+|---|---|---|---|---|---|
+| El coach cumple el contrato de agente | — | — | — | — | `agents-coach.test.ts`: `validarAgente` lo acepta (✅) |
+| Entra en el registro al arrancar | — | — | `runtime.ts` (`server-only`) | — | `agents-coach.test.ts` (✅) · `problemasDeArranque()` vacío (✅ typecheck) |
+| Responde a las dos citas del día y a nada más | — | — | — | — | `agents-coach.test.ts`: mañana y noche sí; centro y hábito no (✅) |
+| Una vez por franja | — | — | — | — | `agents-coach.test.ts`: riesgo medio → tope 1 (✅) |
+| Pide ocho dominios, ve solo los encendidos | `profiles.ai_domains` | la de 0048 | — | — | `agents-coach.test.ts` (✅) |
+| Sabe qué dominios pidió y no puede ver | — | — | — | — | `agents-coach.test.ts`: `skippedDomains` incluye lo apagado (✅) |
+| Con todo apagado, no corre | — | — | — | — | `agents-coach.test.ts` (✅) — misma regla que ya aplicaba `daily.ts` |
+| No choca con ningún especialista futuro | — | — | — | — | `agents-coach.test.ts`: sirve las 7 áreas (✅) |
+| Un disparo que no es suyo no se interpreta | — | — | — | — | `agents-coach.test.ts`: `momentoDelDisparo` → `null` (✅) |
+| El agente no escribe | `ai_chat_messages`, `coach_proposals` | sin cambios | envuelve `generarMensajeCoach`, no `…Guardar…` | — | por construcción: la función envuelta no importa Supabase (✅) |
+| No se filtra al bundle de cliente | — | — | `server-only` | — | `pnpm build`: First Load JS 102 kB, sin cambio (✅) |
+| `ejecutar` con un agente real | — | — | — | — | **sin ejercitar** (⚠️): nadie lo llama todavía |
+| Paridad de conducta con el camino actual | — | — | — | — | **no** (⚠️): sin `CajaDeHerramientas`, ver CHECKS |
+
+## Agentic Kernel, Fase 3 — el disparo real (D-173, sin migración)
+
+Primera vez que el Kernel puede cambiar el comportamiento de producción. Por eso
+la columna que importa es la última: todo depende de una variable apagada.
+
+| Requisito | Tablas | RLS / GRANT | Server Actions y rutas | UI | Pruebas |
+|---|---|---|---|---|---|
+| El agente recibe la caja de herramientas | — | — | `daily.ts` → `acotarContexto` | — | `agents-contexto.test.ts`: pasa entera (✅) |
+| Un agente sin caja sigue funcionando | — | — | — | — | `agents-contexto.test.ts`: no la inventa (✅) |
+| La forma de la caja vive en el dominio | — | — | fábrica intacta en `lib/ai/tools.ts` | — | `pnpm typecheck`: 8 consumidores sin tocar (✅) |
+| Sin la variable, nada cambia | — | — | `coachPorElKernel()` → `false` | — | `pnpm build` (✅) · en producción **sin ejercitar** (⚠️) |
+| Con la variable, el Kernel decide y ejecuta | — | — | `daily.ts` · `/api/push/dispatch` | — | **sin ejercitar** (⚠️): requiere `GEMINI_API_KEY` |
+| El contexto es el mismo por los dos caminos | — | — | — | — | por construcción: se sustituyen 4 líneas (✅ lectura) |
+| El coach puede callarse, con motivo | — | — | el motivo va a `audit_log` | — | `agents-politicas.test.ts` (✅) · de punta a punta **no** (⚠️) |
+| Lo que devuelve el agente se comprueba | — | — | `esSalidaCoach()` | — | `pnpm typecheck`: sin `as` (✅) |
+| Volver atrás no requiere desplegar | — | — | borrar `AGENT_KERNEL_COACH` | — | por construcción (✅) |

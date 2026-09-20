@@ -3167,3 +3167,215 @@ implementa:
     «Ahora no» significa apartarla; dos botones con la misma etiqueta y distinto
     efecto en la misma pantalla es una trampa. Lo encontró la prueba de
     navegador tropezando con ella, no la lectura del código.
+
+- **D-170 · Un runtime de agentes que todavía no ejecuta nada.** LifeOS ya tiene
+  piezas que piensan —Coach, Manifestation, Insights, Automations, el chat con
+  sus herramientas— y ninguna sabe de las otras. Cada una se invoca desde su
+  propio sitio con su propia firma, así que «conectar dos» siempre ha
+  significado escribir el pegamento otra vez. Lo que falta no es inteligencia:
+  es un nombre común. Este sprint añade sólo eso.
+  - **El sistema se comporta exactamente igual.** Cuatro archivos nuevos, cero
+    líneas modificadas en código existente, ninguna migración, ninguna API,
+    ninguna pantalla. El registro arranca vacío. Es una entrega que no se nota,
+    y esa es la prueba de que salió bien: la infraestructura entra cuando no
+    tiene consumidores, porque entonces equivocarse es barato.
+  - **Un `Map` donde el repo siempre usó `switch`.** Hasta hoy el patrón ha sido
+    unión discriminada más despacho explícito (`ejecutar()` en `lib/ai/tools.ts`,
+    `decide()` en `domain/automations/rules.ts`), y es mejor casi siempre porque
+    el compilador obliga a cubrir cada caso. Aquí no sirve: un `switch` exige
+    que el archivo que despacha CONOZCA a todos los candidatos, que es
+    justamente lo que impediría a Coach o Insights sumarse sin tocar un archivo
+    central. El registro invierte la dependencia. Se paga con la pérdida de
+    exhaustividad, y por eso existe `contrato.ts`.
+  - **`ejecutar` está en el TIPO, no en el runtime.** Un agente se puede escribir
+    entero desde hoy porque `AgentDefinition.ejecutar` ya fija la firma. Lo que
+    falta es quién lo llama, con qué presupuesto, qué se guarda de cada corrida
+    y qué pasa cuando uno tarda demasiado: cuatro decisiones que no se toman
+    bien en abstracto, sin un agente real delante. Escribir `ejecutar()` ahora
+    sería inventar la respuesta a preguntas que nadie ha hecho aún.
+  - **El registro no lanza (D-021).** Un id duplicado o una definición rota
+    devuelven `{ ok: false, reason }` con texto pintable. Que la aplicación
+    entera no arranque porque un agente secundario está mal escrito es peor que
+    arrancar sin él y poder decirlo. Gana el primero que se registró: reemplazar
+    en silencio haría que el comportamiento dependiera del orden de los imports.
+  - **Sin zod, a propósito.** En este repo zod vive en la frontera —rutas,
+    Server Actions, salida del modelo— donde el dato es ajeno. Un agente no es
+    dato ajeno: es código propio que se comprueba al arrancar. `validarAgente()`
+    copia la firma de `validateAction()` (`string | null`) y no añade peso.
+  - **Nada se conectó.** Coach, Manifestation, Insights, Automations, AI Chat,
+    Knowledge Graph, Graphify y Memory quedan intactos. El centro y la barra
+    lateral, también: la idea de una navegación que refleje lo que hay que hacer
+    se aplaza hasta que haya agentes que la alimenten. Conviene anotar lo que se
+    vio al mirar: la priorización ya existe y es pura (`tarjetasDelCentro()`), y
+    `GET /api/centro` lee media aplicación porque está pensado para pedirse sólo
+    al abrir el centro — no sirve para alimentar una barra que se pinta en cada
+    navegación.
+
+- **D-171 · El Kernel decide quién actúa y si conviene actuar; no sabe hacer
+  nada.** La Fase 1 del Agentic Kernel (`docs/AGENTIC_KERNEL_ARCHITECTURE.md`)
+  amplía el contrato de D-170 y añade las dos piezas que de verdad no existían:
+  selección y restraint. Todo lo demás que un Kernel necesita —contexto,
+  llamada al modelo, herramientas, memoria, grafo, reloj— ya estaba, y
+  envolverlo habría sido escribir el sistema dos veces con nombres nuevos.
+  - **Siete archivos, no trece.** Se descartaron con nombre `orchestrator.ts`
+    (es selección + políticas + runtime; un archivo así acaba siendo donde va lo
+    que no se supo colocar), `events.ts` (un `AgentEvent` es un tipo, no un
+    módulo), `memory.ts`, `graph.ts`, `tools.ts` y `scheduler.ts` (envoltorios
+    de `domain/insights/memory.ts`, `domain/graph/`, `CajaDeHerramientas` y
+    `pg_cron`). Y **`actions.ts` no debe existir**: la salida de un agente es
+    una propuesta en `coach_proposals`, y quien escribe es una Server Action con
+    la sesión de la persona (D-089, D-164). Es la invariante que hace que un
+    fallo del Kernel sea un silencio y no un daño.
+  - **El veredicto por defecto es NO actuar.** `politicas.ts` es el único
+    archivo del Kernel que no existiría en un sistema agentic normal. Hay que
+    argumentar para hablar, no para callar: sin `identityServed` y sin capacidad
+    de proponer o detectar, un agente genera actividad, no evidencia, y la
+    actividad no justifica interrumpir. Un agente de riesgo ALTO interrumpe
+    MENOS, no más. Generaliza lo que ya hacían `debeAnalizar()`,
+    `MAX_ARISTAS_POR_DIA = 3` y la guarda por franja de `centro_runs`.
+  - **La selección es determinista, y el modelo no participa.** Pedirle al
+    modelo que elija agente acertaría casi siempre, y «casi siempre» es el
+    problema: un sistema que no puede explicar por qué actuó no se puede
+    corregir. En un producto sobre identidad, «no sé por qué te dijo eso» es un
+    fallo de producto, no técnico. Por eso todo el que calla lleva motivo
+    legible: el silencio tiene que poder explicarse o es indistinguible de un
+    fallo.
+  - **`identityServed` son las siete `AREAS` de 0064, no texto libre.** Es lo
+    único que hace DETECTABLE la incompatibilidad entre agentes y probarla con
+    un test. Con texto libre habría que preguntarle al modelo, y una salvaguarda
+    que no se puede verificar no es una salvaguarda. Definición operativa
+    adoptada: dos agentes chocan si ambos proponen y no comparten NINGÚN área;
+    gana el de mayor prioridad, porque dejar pasar a los dos es la contradicción
+    que paraliza.
+  - **`domains` es obligatorio, y ahí está la puerta de privacidad.** Ata cada
+    agente a D-027: `agente.domains ∩ profiles.ai_domains`, y si queda vacío el
+    agente no corre —antes de tocar ninguna tabla—. `acotarContexto()` estrecha
+    y nunca ensancha; los hechos se filtran por dominio además de los dominios,
+    porque «autorizado para la persona» no es «declarado por este agente». El
+    Kernel NO construye contexto: eso sigue siendo `buildContext()`, y escribir
+    aquí un segundo ensamblador habría creado la quinta copia de una puerta de
+    privacidad que ya está repetida cuatro veces.
+  - **Tres autonomías en el tipo, una permitida por la política.** Que el
+    vocabulario nombre lo que la regla prohíbe es deliberado: así el rechazo de
+    `autonomo` vive en un sitio y se puede probar, en vez de que alguien invente
+    su propio nombre dentro de seis meses porque el suyo no cabía.
+  - **`Budget` se mudó al dominio, y con ello la Fase 1 dejó de tener «cero
+    líneas modificadas».** Era un tipo puro —dos números— declarado en
+    `src/lib/ai/gemini-provider.ts`, que lleva `server-only`; el dominio no podía
+    nombrarlo sin invertir las capas. Vive ahora en `domain/ai/model-chain.ts` y
+    el proveedor lo reexporta, así que sus ocho consumidores no se enteraron. La
+    alternativa —duplicar la interfaz en el dominio— dejaba que las dos copias
+    derivaran en silencio, que es peor que tocar dos archivos con el compilador
+    vigilando.
+  - **`AgentInput` no lleva `InsightContext`,** aunque el diseño lo proponía.
+    Importarlo habría hecho que el dominio dependiera de la capa de aplicación
+    —cosa que hoy no hace ningún archivo de `domain/`— y habría atado el
+    contrato de TODO agente al vocabulario del Intelligence OS. El agente recibe
+    los datos (`domains`, `facts`, `memory`, `rejections`), no el envase.
+  - **Sigue sin haber agentes.** El registro arranca vacío, ningún módulo
+    importa el Kernel y no se creó ninguna tabla. `ejecutarAgente` invoca y
+    traduce fallos: no mide, no reintenta y no guarda la corrida. La
+    persistencia llega en la Fase 4, con su migración, cuando se sepa qué merece
+    guardarse.
+
+- **D-172 · El coach como primer agente: se envuelve lo que piensa, no lo que
+  escribe.** Fase 2 del Agentic Kernel. Un solo agente real, para responder la
+  única pregunta que la Fase 1 no podía: ¿el contrato le queda bien a algo de
+  verdad?
+  - **El punto de envoltura es `generarMensajeCoach`, no
+    `generarYGuardarMensajeDiario`.** El orquestador reúne contexto, piensa y
+    ESCRIBE —turno, propuestas, rastro—. Un agente no escribe (D-171). La mitad
+    de en medio encajó sin forzar nada porque ya estaba escrita con esa
+    frontera: su cabecera decía, desde antes del Kernel, «recibe hechos ya
+    calculados y devuelve texto; quien la llama decide si algo se guarda». Esa
+    es la respuesta a la pregunta de la fase: el contrato sirve, y sirve porque
+    el repositorio ya separaba pensar de escribir.
+  - **El contrato SÍ tuvo que cambiar, y en un punto que importa.**
+    `AgentInput` gana `skippedDomains`. El prompt del coach ya decía «el usuario
+    apagó estos dominios, no especules sobre ellos», y sin ese campo el agente
+    habría redactado como si tuviera la foto completa. Se calcula desde
+    `agente.domains`, no desde el contexto base: al agente no le sirve saber qué
+    apagó la persona en general, sino qué le falta a ÉL. Un agente de hábitos no
+    debe disculparse por no ver el dinero que nunca pidió.
+  - **Metadatos en el dominio, `ejecutar` en los efectos.** Un agente tiene dos
+    mitades con destinos distintos: lo que declara se puede probar, lo que hace
+    lleva `server-only` y llama al modelo. Separarlas (`domain/agents/coach.ts`
+    frente a `lib/agents/coach-diario.ts`) es lo que permite que
+    `tests/domain/agents-coach.test.ts` compruebe qué datos ve el agente y
+    cuándo se le deja hablar. Es el patrón que deben copiar los siguientes.
+    `COACH_METADATOS` se tipa como `Omit<AnyAgentDefinition, "ejecutar">`: si el
+    contrato gana un campo obligatorio, deja de compilar en vez de quedarse
+    viejo en silencio.
+  - **El coach pide los ocho dominios y las siete áreas**, y no es pereza: por
+    eso usa `MAX_FACTS_COACH = 120` y no los 40 del chat, y por eso existe. El
+    efecto secundario buscado es que **nunca choca con nadie**
+    —`identidadesIncompatibles` exige no compartir NINGÚN área—, que es lo
+    correcto para el agente que mira el conjunto: si pudiera chocar, bloquearía
+    a cualquier especialista que llegara después.
+  - **NO se ejecuta en sombra dentro del despachador**, aunque el documento de
+    arquitectura lo proponía. Envolver `generarMensajeCoach` significa una
+    llamada REAL al modelo: correrlo en paralelo al camino actual duplicaría la
+    llamada más cara del sistema, por persona y por franja, sobre una cuota
+    gratuita que ya gestiona 429 saltando de modelo. Y compararía dos salidas
+    que por construcción vienen de la misma función. La comparación honesta es
+    la sustitución de la Fase 3, detrás de una condición reversible.
+  - **Registrar no es conectar.** El registro ya no está vacío, y aun así nada
+    cambió: nadie llama a `ejecutarAgente`, así que el coach de verdad sigue
+    siendo el de `/api/push/dispatch`. Lo que se gana es que el contrato tiene
+    un consumidor real que lo pone a prueba en cada `pnpm typecheck`.
+  - **El alta no lanza.** `runtime.ts` registra al coach y expone
+    `problemasDeArranque()` en vez de comprobar con un `throw`. Si el coach no
+    entrara, lo correcto es que LifeOS arranque sin coach y lo diga, no que la
+    aplicación deje de responder. Es la regla de D-021 sostenida justo donde
+    sería tentador romperla.
+  - **Diferencia de conducta conocida:** el agente no recibe
+    `CajaDeHerramientas`, así que no puede pedir más hechos con `leer_hechos` a
+    mitad de razonar; el camino actual sí se la pasa. Hay que cerrarlo antes de
+    sustituir a nadie, y el obstáculo es de capas: `CajaDeHerramientas` lleva
+    `server-only` y no puede viajar en un `AgentInput` puro.
+
+- **D-173 · El coach pasa por el Kernel, detrás de una variable.** Fase 3. Dos
+  cosas: cerrar la diferencia de conducta que dejó D-172 y dar al Kernel su
+  primer disparo real.
+  - **Las herramientas cruzan la frontera moviendo tipos, no copiándolos.** El
+    agente no podía recibir `CajaDeHerramientas` porque vivía en
+    `src/lib/ai/tools.ts`, detrás de `server-only`, y un `AgentInput` puro no
+    puede nombrarla. Se movieron al dominio la FORMA —`GeminiSchema`,
+    `FunctionDeclaration` y la interfaz `CajaDeHerramientas`, a
+    `domain/ai/tools.ts`— y se dejó donde estaba la FÁBRICA,
+    `crearCajaDeHerramientas`, que sí toca Supabase. Ninguno de los tipos
+    movidos tenía nada de servidor: describen un formato de wire y estaban en la
+    capa de efectos por costumbre. Los sitios originales los reexportan, así que
+    sus consumidores no se enteraron.
+  - **Y con eso murió `EsquemaLike`.** Era una copia mínima de `GeminiSchema` en
+    `model-chain.ts`, con un comentario que decía por qué: «para no arrastrar el
+    tipo completo de `gemini-provider.ts` —que es `server-only`— hasta el
+    dominio». Ese motivo dejó de existir, así que la copia también: conservarla
+    habría sido mantener la deriva sin mantener la razón.
+  - **`AgentInput.herramientas` es OPCIONAL, y la opcionalidad es el contrato.**
+    Un agente tiene que saber trabajar sin caja, porque quien lo invoca puede no
+    poder construirla — el despachador nocturno corre sin sesión y ya le quita
+    `consultar` por eso mismo. Un agente que sin caja no sabe qué hacer está mal
+    escrito.
+  - **El disparo real vive detrás de `AGENT_KERNEL_COACH`, apagado por
+    defecto.** Sin la variable, el despacho se comporta exactamente igual que
+    antes. Encenderla es una decisión de operación y apagarla también: volver
+    atrás es borrar una variable, no desplegar. Es por instalación y no por
+    persona, porque el coach corre en un bucle sobre todo el mundo en la misma
+    pasada y un reparto por usuario haría que un fallo se viera en unos y no en
+    otros — el peor escenario para diagnosticar.
+  - **La sustitución es de cuatro líneas, y esa estrechez es el diseño.** Todo
+    lo de antes —perfil, opt-in, hechos, cadenas, `buildContext`, la caja sin
+    `consultar`— y todo lo de después —guardar el turno, las propuestas, el
+    rastro— es el mismo código. Solo cambia quién decide que hay que hablar y
+    quién llama al modelo. Si el Kernel construyera su propio contexto, una
+    diferencia en el mensaje no diría si piensa distinto o si mira datos
+    distintos, y no habría forma de saberlo sin repetir la llamada.
+  - **La novedad visible es que ahora el coach puede callarse.** `convieneActuar`
+    manda en este camino: el Kernel puede decidir que hoy no toca y devolver el
+    motivo, que acaba en `audit_log` como cualquier otro. El camino viejo no
+    sabía callarse —`claveDelCoach` evitaba repetir, no evitaba decir algo—.
+  - **Nada de `as`.** `ejecutarAgente` devuelve `datos: unknown` porque el
+    registro guarda `AnyAgentDefinition` y el tipo se pierde. Se comprueba con
+    `esSalidaCoach()` en vez de afirmarlo: es la misma regla que hace pasar por
+    `sanearBrief` lo que devuelve el agente de Python (D-164).

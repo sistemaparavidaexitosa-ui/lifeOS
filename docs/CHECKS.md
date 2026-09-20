@@ -2055,3 +2055,214 @@ módulos.
   semilla rara vez hay seis cosas compitiendo.
 - WebKit/iPhone, lectores de pantalla y PWA instalada: igual que en D-165 a
   D-168.
+
+## Agent Runtime mínimo (D-170, sin migración) — 20-sep-2026
+
+Un sprint cuya entrega es que **no se note nada**. Lo que hay que comprobar, por
+tanto, no es que algo nuevo funcione: es que nada viejo cambió.
+
+### Lo que sí se probó
+
+- `pnpm test:unit`: **1225/1225** ✅, de las cuales 12 nuevas en
+  `tests/domain/agents-registro.test.ts` — alta y lectura por id, registro vacío
+  al nacer, orden por id, id duplicado rechazado con el primero intacto,
+  definición sin `ejecutar` rechazada y registro todavía usable, dos registros
+  sin estado compartido, y los motivos de `validarAgente()` uno a uno (objeto,
+  forma del id, versión, descripción).
+- `pnpm typecheck` ✅ · `pnpm lint` ✅ (sin avisos) · `pnpm build` ✅, con el
+  mismo conjunto de rutas y el mismo *First Load JS* compartido (102 kB) que
+  antes del sprint: el núcleo, al no tener consumidores, no entra en ningún
+  bundle.
+- `git diff --stat` **vacío**. Los únicos cambios son archivos nuevos bajo
+  `src/lib/agents/`, `src/lib/domain/agents/` y `tests/domain/`. Ésta es la
+  verificación central del sprint, y conviene repetirla antes de fusionar.
+
+### Lo que la escritura encontró y la lectura del plan no
+
+- El plan daba por bueno importar `ActionResult` con el alias `@/…` desde el
+  dominio. **Habría roto la suite**: los tests corren con Node a secas y Node no
+  resuelve el alias. Ningún otro archivo de `src/lib/domain/` lo usa — la regla
+  estaba ahí, sin escribir. En `domain/` se importa con ruta relativa y
+  extensión `.ts`; en la capa de efectos (`lib/agents/runtime.ts`), con `@/`.
+- El plan preveía un `eslint-disable` para `any` en `AnyAgentDefinition`. No
+  hizo falta: `ejecutar` se declara con sintaxis de método, que TypeScript
+  comprueba de forma bivariante, así que `AgentDefinition<MiSalida>` encaja sin
+  forzar nada. Se quitó también el genérico de ENTRADA: si cada agente pudiera
+  pedir la suya, no habría contrato común que registrar.
+
+### Lo que NO se ha ejercitado, y hay que saberlo
+
+- **No hay ni un agente registrado.** El registro arranca vacío y se queda
+  vacío. Todo lo probado es la maquinaria; que el contrato sea el ADECUADO para
+  un agente real sigue sin verificar, y no se sabrá hasta el primero.
+- **Nada se ha ejecutado.** El runtime no expone `ejecutar()`. Presupuesto,
+  tiempo máximo, qué se guarda de cada corrida y qué pasa con un agente que
+  cuelga: cuatro preguntas abiertas.
+- **`AgentInput` sólo lleva `userId`.** Contexto, memoria y grafo no están, y su
+  forma es exactamente lo que este sprint se negó a adivinar.
+- **No se ha tocado el navegador**, y es correcto: no hay superficie que mirar.
+  Sigue pendiente todo lo de D-165 a D-169 (WebKit/iPhone, lectores de pantalla,
+  PWA instalada) y **la llamada real al modelo sigue sin verse**, cinco ciclos
+  seguidos.
+
+## Agentic Kernel, Fase 1 (D-171, sin migración) — 20-sep-2026
+
+Segunda entrega seguida cuyo éxito es que no se note nada. Pero ésta ya tiene
+reglas con criterio dentro, así que lo que hay que comprobar no es solo que nada
+viejo cambió: es que las reglas dicen lo que creemos que dicen.
+
+### Lo que sí se probó
+
+- `pnpm test:unit`: **1265/1265** ✅, con **40 tests nuevos** repartidos en cuatro
+  suites (`agents-registro`, `agents-seleccion`, `agents-politicas`,
+  `agents-contexto`).
+- **El test que más importa de toda la entrega** es `agents-politicas.test.ts`
+  → «EL CASO POR DEFECTO: un agente que solo resume, calla». Si algún día ese
+  test se «arregla» para que pase actuando, el producto habrá cambiado de
+  naturaleza sin que nadie lo decida.
+- Restraint probado pieza a pieza: apagado, disparo ajeno, descarte del día,
+  tope por franja (con riesgo alto más estricto que riesgo bajo), evidencia vs
+  actividad, e identidades incompatibles con el conflicto resuelto a favor del
+  primero.
+- Privacidad probada en los dos puntos: la selección deja fuera al agente con
+  todos sus dominios apagados, y `acotarContexto` estrecha sin ensanchar —el
+  agente de hábitos no ve el hecho de dinero aunque la persona tenga dinero
+  encendido para otra cosa.
+- `pnpm typecheck` ✅ · `pnpm lint` ✅ sin avisos · `pnpm build` ✅ con las
+  **mismas 39 páginas estáticas** y el **mismo First Load JS compartido
+  (102 kB)** que antes de la entrega.
+
+### Lo que la escritura encontró y el documento de arquitectura no
+
+- **`Budget` no se podía importar desde el dominio.** El diseño daba por hecho
+  que `AgentDefinition.budget` usaría el tipo de `gemini-provider.ts`, que lleva
+  `server-only`. Hubo que mudarlo a `domain/ai/model-chain.ts` y reexportarlo.
+  **Consecuencia honesta: la Fase 1 ya NO cumple «cero líneas modificadas en
+  código existente»**, que era su criterio de éxito escrito. Se modificaron dos
+  archivos ajenos al Kernel, sin cambio de conducta, y el build lo confirma.
+- **`AgentInput` no puede llevar `InsightContext`.** El diseño (§9) lo proponía;
+  habría sido el primer archivo de `src/lib/domain/` que importa la capa de
+  aplicación. Se cambió por los datos sueltos.
+- **`contexto.ts` acabó en el dominio, no en la capa de efectos.** Como Fase 1
+  no tiene llamador, un adaptador con `server-only` habría sido justo el
+  «envoltorio sin consumidor» contra el que advierte el propio documento.
+
+### Lo que NO se ha ejercitado, y hay que saberlo
+
+- **Sigue sin haber un solo agente registrado.** Todo lo probado son reglas
+  sobre agentes de mentira. Que el contrato sea el ADECUADO no se sabrá hasta la
+  Fase 2, y ahí es donde puede tener que cambiar.
+- **`ejecutarAgente` no se ha ejecutado nunca con un agente real.** Su `try/catch`
+  está probado por lectura, no por un fallo de verdad.
+- **El restraint no se ha calibrado con datos reales.** Los topes por franja
+  (2 / 1 / 1) son un punto de partida conservador elegido a mano, no medido. La
+  proporción de silencios no se puede leer todavía: no hay dónde guardarla.
+- **`identidadesIncompatibles` nunca ha visto dos agentes de verdad.** La regla
+  —ambos proponen y no comparten área— es razonable sobre el papel y no se ha
+  enfrentado a un caso incómodo.
+- **Ninguna llamada real al modelo**, sexto ciclo seguido. Y sigue pendiente todo
+  lo de D-165 a D-169: WebKit/iPhone, lectores de pantalla, PWA instalada.
+
+## Agentic Kernel, Fase 2 — el coach (D-172, sin migración) — 20-sep-2026
+
+La fase existía para responder una pregunta: **¿el contrato del Kernel le queda
+bien a un agente de verdad?** La respuesta es sí, con una costura y una
+diferencia de conducta que conviene no olvidar.
+
+### Lo que sí se probó
+
+- `pnpm test:unit`: **1276/1276** ✅, con **11 tests nuevos** en
+  `agents-coach.test.ts`.
+- El coach pasa `validarAgente()` con sus catorce campos, entra en el registro,
+  responde a `cron.manana` y `cron.noche` y a nada más, y el tope de riesgo
+  medio le da **una vez por franja** — que es justo lo que el camino actual ya
+  hacía con `claveDelCoach`.
+- Privacidad: pide los ocho dominios y recibe solo los encendidos; con todo
+  apagado **no corre** (la misma regla que `daily.ts` aplicaba a mano); y sabe
+  qué pidió y no puede ver.
+- `pnpm typecheck` ✅ · `pnpm lint` ✅ · `pnpm build` ✅ con las mismas 39
+  páginas y **First Load JS 102 kB, sin cambio**. Esto último importa más de lo
+  que parece: `runtime.ts` ahora arrastra `coach-diario` → `coach/generar` →
+  `gemini-provider`, y el bundle de cliente no se enteró. `server-only` cumplió.
+- `git diff` acotado: solo archivos del Kernel. Esta vez sí, a diferencia de la
+  Fase 1.
+
+### Lo que la escritura encontró y el diseño no
+
+- **El contrato tuvo que cambiar, y estuvo bien que fuera ahora.** `AgentInput`
+  no tenía `skippedDomains`, y el prompt del coach ya decía «el usuario apagó
+  estos dominios, no especules sobre ellos». Sin ese campo el primer agente real
+  habría redactado como si tuviera la foto completa. Es exactamente el tipo de
+  hueco que solo aparece al envolver algo de verdad.
+- **Hizo falta una costura `AgentInput → InsightContext`**, en
+  `coach-diario.ts`. No recalcula nada —solo vuelve a poner los mismos datos en
+  la caja que `generarMensajeCoach` espera—, pero es una traducción, y existe
+  porque el contrato del Kernel deliberadamente no habla el vocabulario de
+  Insights. Vive en el agente y no en el Kernel; si un segundo agente la
+  necesita, se sube.
+- **La «sombra» del documento de arquitectura no se hizo, y se decidió no
+  hacerla.** Envolver `generarMensajeCoach` implica una llamada real al modelo:
+  correrla en paralelo duplicaría la llamada más cara del sistema por persona y
+  franja, sobre una cuota gratuita que ya gestiona 429 saltando de modelo, para
+  comparar dos salidas que vienen de la misma función. **Es una desviación del
+  plan aprobado**, y está aquí escrita para que se vea.
+
+### Lo que NO se ha ejercitado, y hay que saberlo
+
+- **`ejecutarAgente` sigue sin haberse llamado nunca.** El agente existe,
+  compila y está registrado; que funcione de punta a punta no se sabrá hasta la
+  Fase 3. Todo lo verde de arriba prueba lo que rodea a `ejecutar`, no `ejecutar`.
+- **No hay paridad de conducta con el camino actual.** El agente no recibe
+  `CajaDeHerramientas`, así que no puede pedir más hechos con `leer_hechos` a
+  mitad de razonar. El coach de producción sí puede. **Sustituirlo hoy sería una
+  regresión**, y el obstáculo es de capas: la caja lleva `server-only` y no cabe
+  en un `AgentInput` puro. Es la primera decisión de la Fase 3.
+- **Los topes por franja siguen sin calibrarse con datos reales** (D-171), y la
+  proporción de silencios sigue sin poder leerse: no hay dónde guardarla.
+- **Ninguna llamada real al modelo**, séptimo ciclo seguido — y ahora con un
+  agente escrito que solo se puede probar llamándolo. Sigue pendiente todo lo de
+  D-165 a D-169: WebKit/iPhone, lectores de pantalla, PWA instalada.
+
+## Agentic Kernel, Fase 3 — el disparo real (D-173, sin migración) — 20-sep-2026
+
+La primera entrega del Kernel que PUEDE cambiar lo que le pasa a una persona. No
+lo hace todavía, porque la variable está apagada, y esa distinción es todo lo que
+separa esta entrega de un riesgo real.
+
+### Lo que sí se probó
+
+- `pnpm test:unit`: **1279/1279** ✅, con 3 tests nuevos para el paso de la caja.
+- **La mudanza de tipos no rompió a nadie.** `GeminiSchema`, `FunctionDeclaration`
+  y la interfaz `CajaDeHerramientas` cambiaron de archivo y sus consumidores no
+  se enteraron: `pnpm typecheck` ✅, `pnpm lint` ✅, `pnpm build` ✅ con las
+  mismas 39 páginas y **First Load JS 102 kB**, sin cambio por cuarta entrega
+  consecutiva.
+- `EsquemaLike` desapareció y `problemasDeEsquema` pasó a `GeminiSchema` sin que
+  su suite (`ai-model-chain.test.ts`) necesitara un solo cambio — que es la
+  prueba de que era la misma forma.
+- El camino nuevo está escrito y compila entero, con la salida del agente
+  comprobada por `esSalidaCoach()` en vez de afirmada con un `as`.
+
+### Lo que NO se ha ejercitado, y es lo importante de esta entrega
+
+- **El camino del Kernel NO se ha ejecutado ni una vez.** Ni en local ni en
+  producción. Está detrás de `AGENT_KERNEL_COACH`, que no está puesta en ningún
+  sitio. Todo lo verde de arriba prueba que compila y que el camino viejo sigue
+  intacto; **no prueba que el camino nuevo funcione**.
+- **Y no se puede probar aquí:** en local no hay `GEMINI_API_KEY`, octavo ciclo
+  seguido. La primera ejecución real será también la primera vez que se llame al
+  modelo desde el Kernel.
+- **Cómo encenderlo con red:** poner `AGENT_KERNEL_COACH=1`, esperar al despacho
+  de la mañana o forzarlo, y mirar `audit_log` con `action = 'ai.coach'`. Si el
+  Kernel decidió callar, el motivo estará en `MensajeCoach.reason` y **no** habrá
+  fila: eso es lo primero que hay que distinguir de un fallo. Volver atrás es
+  borrar la variable; no hace falta desplegar.
+- **La paridad de conducta es por lectura, no medida.** Los dos caminos
+  comparten contexto, hechos, caja y opt-in, y solo se sustituyen cuatro líneas.
+  Eso hace que una diferencia sea atribuible al Kernel, pero **nadie ha
+  comparado dos mensajes de verdad**.
+- **`timeZone: "UTC"` en el camino del Kernel** es un valor de relleno: el coach
+  recibe `today` ya resuelto y no vuelve a calcular fechas, así que hoy no lo usa
+  nadie. El día que un agente lo necesite, esto es una mentira esperando.
+- Sigue pendiente todo lo de D-165 a D-169: WebKit/iPhone, lectores de pantalla,
+  PWA instalada.
