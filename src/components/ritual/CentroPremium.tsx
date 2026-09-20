@@ -15,6 +15,7 @@ import type { HabitLogEntry } from "@/lib/domain/development/habit-analytics.ts"
 import type { HechoRitual } from "@/lib/domain/ritual/types.ts";
 import type { SugerenciaView } from "@/lib/centro/sugerencias";
 import Sugerencias from "./Sugerencias";
+import BarraCaptura from "./BarraCaptura";
 
 /**
  * El centro premium (D-166): la puerta de la aplicación.
@@ -250,6 +251,11 @@ export default function CentroPremium({
               </div>
             ))}
           </div>
+
+          {/* La barra va al final y no arriba: el centro se abre para ver cómo
+              vas y a dónde ir; escribir una idea es lo que se hace DESPUÉS, y
+              arriba competiría con el saludo. */}
+          <BarraCaptura workspaceId={workspaceId} onNavegar={onIrA} />
 
           <div className="rit-centro-pie">
             {onRepetirRitual && (

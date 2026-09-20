@@ -20,6 +20,7 @@ import { requireUser } from "@/lib/data/session";
 import { actionFailed, actionOk, type ActionResult } from "@/lib/supabase/errors";
 import { sanearPropuesta, type PropuestaSaneada } from "@/lib/domain/coach/proposals.ts";
 import { quickAddTask } from "@/lib/search/quick-add";
+import { createNote, saveNote } from "@/app/(app)/notebooks/actions";
 import { upsertOccupation } from "@/app/(app)/time/actions";
 import { upsertRoutine } from "@/app/(app)/development/routines/actions";
 import { upsertPersonalGoal } from "@/app/(app)/development/goals/actions";
@@ -95,6 +96,18 @@ async function ejecutar(p: PropuestaSaneada, workspaceId: string | null): Promis
 
     case "estructura":
       return { ...actionOk, href: `/execution?project=${p.payload.projectId}` };
+
+    case "nota": {
+      // La idea que se escribió en la barra del centro (D-168). Se crea con las
+      // dos acciones de siempre —`createNote` deja la nota vacía y `saveNote` le
+      // pone el texto—, y no con un `insert` a mano: así hereda su validación,
+      // su concurrencia optimista y su registro.
+      const creada = await createNote(p.payload.notebookId ?? "");
+      if (!creada.ok || !creada.id) return { ok: false, reason: creada.reason ?? "No se pudo crear la nota." };
+      const guardada = await saveNote(creada.id, p.titulo, p.payload.cuerpo ?? "", 0);
+      if (!guardada.ok) return { ok: false, reason: guardada.reason ?? "No se pudo guardar la nota." };
+      return { ...actionOk, href: `/notebooks?notebook=${p.payload.notebookId}` };
+    }
 
     case "foco":
       // NO CREA NADA, igual que `estructura` y por un motivo parecido: «sigue
