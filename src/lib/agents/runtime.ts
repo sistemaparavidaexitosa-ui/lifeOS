@@ -33,6 +33,7 @@ import "server-only";
 
 import { crearRegistro } from "@/lib/domain/agents/registro.ts";
 import { coachDiario } from "./coach-diario.ts";
+import { insightsNocturno } from "./insights-nocturno.ts";
 import type { AgentId, AgentInput, AgentResult, AnyAgentDefinition } from "@/lib/domain/agents/types.ts";
 import type { ActionResult } from "@/lib/supabase/errors";
 
@@ -49,16 +50,20 @@ const registro = crearRegistro();
  * El alta de los agentes del sistema.
  *
  * Se hace aquí, al evaluarse el módulo, y NO se comprueba el resultado con un
- * `throw`: si el coach no entrara —contrato roto tras un cambio de tipos—, lo
- * correcto es que LifeOS arranque sin coach y lo diga, no que la aplicación
- * entera deje de responder. Es la misma regla que aplica el registro al no
- * lanzar (D-021), sostenida en el único sitio donde sería tentador romperla.
+ * `throw`: si uno no entrara —contrato roto tras un cambio de tipos—, lo
+ * correcto es que LifeOS arranque sin ese agente y lo diga, no que la
+ * aplicación entera deje de responder. Es la misma regla que aplica el registro
+ * al no lanzar (D-021), sostenida en el único sitio donde sería tentador
+ * romperla.
  *
- * El motivo no se pierde: `listarAgentes()` no lo incluirá y `ejecutarAgente`
- * dirá «no hay ningún agente ...». Cuando exista el segundo agente, esto pasa a
- * ser un bucle sobre una lista.
+ * Pasó a ser un bucle en D-175, como estaba previsto al escribir el segundo
+ * agente. El orden de esta lista NO importa: `listar()` ordena por id y la
+ * ejecución la ordena `seleccion.ts` por prioridad, justamente para que mover
+ * una línea de aquí no cambie el comportamiento de nadie.
  */
-const altaDelCoach = registro.registrar(coachDiario);
+const AGENTES = [coachDiario, insightsNocturno];
+
+const altas = AGENTES.map((agente) => ({ id: agente.id, resultado: registro.registrar(agente) }));
 
 /**
  * Da de alta un agente. No lanza: devuelve `{ ok: false, reason }` con un
@@ -90,7 +95,9 @@ export function listarAgentes(): AnyAgentDefinition[] {
  * esto es lo que hay que mirar antes que el registro.
  */
 export function problemasDeArranque(): string[] {
-  return altaDelCoach.ok ? [] : [altaDelCoach.reason ?? "El coach diario no se pudo registrar."];
+  return altas
+    .filter((a) => !a.resultado.ok)
+    .map((a) => a.resultado.reason ?? `«${a.id}» no se pudo registrar.`);
 }
 
 /**

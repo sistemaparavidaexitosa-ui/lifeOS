@@ -259,6 +259,21 @@ export function coachPorElKernel(): boolean {
 }
 
 /**
+ * ¿El análisis nocturno lo decide el Agentic Kernel? (D-175)
+ *
+ * Variable propia y no la misma del coach, a propósito: dos agentes que se
+ * encienden juntos no se pueden diagnosticar por separado, y el primero en
+ * fallar se llevaría la culpa del otro. Se encienden de uno en uno.
+ *
+ * Solo afecta al camino NOCTURNO. El botón «Analizar» nunca pasa por el Kernel:
+ * ahí la persona está mirando la pantalla y esperando una respuesta, y un
+ * restraint que decidiera callarse sería un botón que no hace nada.
+ */
+export function insightsPorElKernel(): boolean {
+  return process.env.AGENT_KERNEL_INSIGHTS?.trim() === "1";
+}
+
+/**
  * Lee el JWK completo, la forma antigua de `VAPID_PRIVATE_JWK`.
  *
  * Se conserva para no invalidar las instalaciones que ya lo tienen puesto, pero

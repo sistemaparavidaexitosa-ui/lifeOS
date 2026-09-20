@@ -3427,3 +3427,56 @@ implementa:
     los `fact_ids` citados y evaluar a 7/14/30 días si mejoraron— sí necesita
     migración, pide semanas de datos y mide algo distinto (si la propuesta
     FUNCIONÓ, no si gustó). No se empieza antes de ver una ejecución real.
+
+- **D-175 · El segundo agente es el análisis nocturno, y lo eligió el contrato.**
+  Fase 5, que según el propio plan consiste en migrar módulos de uno en uno con
+  una regla: **un módulo que no mejore al migrarse no se migra**. De cinco
+  candidatos se migra uno.
+  - **Ganó Insights porque no pidió nada.** El centro parecía el candidato
+    natural —mismo patrón, misma cola de propuestas— hasta que se miró su punto
+    de envoltura: `generarSugerencias` necesita `franja`, `destinos`, `proyectos`
+    y `yaPropuestas`, cuatro entradas que obligarían a ensanchar el contrato de
+    TODOS los agentes para que quepa uno. `recommend(context)` encaja **sin
+    cambiar el contrato ni una línea**.
+  - **Y eso era lo que había que averiguar.** El coach obligó a añadir
+    `skippedDomains` (D-172) y después `herramientas` (D-173). Un contrato que
+    crece con cada agente nuevo no es un contrato, es una lista de peticiones.
+    Con un solo agente no se podía saber si el `AgentInput` era común o era el
+    del coach con otro nombre. Ahora se sabe.
+  - **Declara cinco áreas, no siete, y ahí está el beneficio real.** El coach
+    sirve a las siete porque mira el conjunto; el análisis no tiene ni un hecho
+    sobre relaciones ni sobre lo espiritual, y declararlas sería fingir
+    cobertura. La consecuencia es que `identidadesIncompatibles` **deja de ser
+    inerte**: un futuro agente de Relaciones ya puede entrar en conflicto con él
+    y el Kernel lo detecta. Con todos declarando las siete, eso nunca habría
+    pasado.
+  - **El aprendizaje también deja de ser inerte.** `enRechazoSostenido` compara
+    un agente contra los demás, y hasta hoy no había «los demás». Se añadió
+    `leerDecisionesDeInsights`, porque las decisiones sobre recomendaciones viven
+    en `recommendations` con otra máquina de estados. Deuda honesta: esa tabla no
+    tiene `resolved_at` (0008), así que se agrupa por el día en que se PROPUSO.
+    Para contar días con actividad es inocuo; medir cuánto tarda alguien en
+    decidir exigiría una columna.
+  - **Variable propia, `AGENT_KERNEL_INSIGHTS`.** Dos agentes que se encienden
+    con la misma variable no se pueden diagnosticar por separado y el primero en
+    fallar carga con la culpa del otro.
+  - **El botón «Analizar» NO pasa por el Kernel.** Solo el camino `nocturno`.
+    Cuando la persona pulsa y espera, un restraint que decidiera callarse sería
+    un botón que no hace nada. Es la misma razón por la que `centro.abierto`
+    concede evidencia sin discutir (D-171): lo que se pide explícitamente no se
+    negocia.
+  - **Lo que NO se migra, con su motivo, para que nadie lo reabra sin uno nuevo:**
+    - **Manifestation.** D-164 ya resolvió autoridad, respaldo, saneado, tope
+      diario, token HMAC y un bucle de aprendizaje medido. Migrarlo sería
+      cambiar una máquina que funciona por otra más joven: regresión.
+    - **Automations.** Motor de reglas determinista, sin IA y a propósito
+      («una automatización que dispara según lo que un modelo entendió de una
+      frase no es reproducible»). Un envoltorio de agente no le añade nada.
+    - **AI Chat.** La persona está delante esperando una respuesta. El restraint
+      —la aportación principal del Kernel— sería exactamente lo contrario de lo
+      que ahí hace falta.
+    - **El centro.** El único descarte reabrible: encajaría si algún día
+      `AgentInput` necesita hora local y dedupe por su cuenta. Hoy ensancharía el
+      contrato de todos para acomodar a uno, y además ya tiene su propio
+      restraint más fino que el del Kernel (`centro_runs` por franja con
+      `facts_hash`).

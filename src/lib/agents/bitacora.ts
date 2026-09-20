@@ -38,6 +38,17 @@ const AGENTE_POR_ORIGEN: Record<string, AgentId> = {
 };
 
 /**
+ * Los estados de `recommendations` que SON una decisión de la persona.
+ *
+ * `Presented` queda fuera: es una decisión que todavía no ha ocurrido. Es más
+ * fino que `REJECTION_STATUSES` de `domain/insights/states.ts`, que solo
+ * distingue lo que realimenta el prompt; aquí hace falta el reparto completo
+ * entre aceptar y rechazar.
+ */
+const ACEPTA = new Set(["Accepted", "Applied", "Edited"]);
+const RECHAZA = new Set(["Dismissed", "Suppressed", "Reported"]);
+
+/**
  * Deja constancia de que un agente pudo hablar y no lo hizo.
  *
  * `object` lleva el id del agente y no el motivo: es lo que se agrupa al contar.
@@ -101,6 +112,62 @@ export async function leerDecisiones(supabase: Db, userId: string): Promise<Deci
   } catch {
     return [];
   }
+}
+
+/**
+ * Lo que la persona decidió sobre las RECOMENDACIONES del análisis nocturno.
+ *
+ * Vive en otra tabla y con otra máquina de estados que las propuestas del
+ * coach, así que hace falta esta segunda lectura. Sin ella, `enRechazoSostenido`
+ * —que compara un agente contra los demás— seguiría siendo inerte por mucho que
+ * existiera un segundo agente: no habría decisiones suyas con las que comparar.
+ *
+ * **La fecha es `created_at`, no la de la decisión**, porque `recommendations`
+ * no tiene `resolved_at` (0008). Agrupa por el día en que se PROPUSO, no por
+ * aquel en que se resolvió. Para `minDias` —contar días distintos con
+ * actividad— la diferencia es inocua; si algún día se quiere medir cuánto tarda
+ * alguien en decidir, hará falta una columna y una migración.
+ */
+export async function leerDecisionesDeInsights(supabase: Db, userId: string): Promise<DecisionTomada[]> {
+  try {
+    const { data, error } = await supabase
+      .from("recommendations")
+      .select("type, status, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(500);
+
+    if (error || !data) return [];
+
+    return data.flatMap((fila): DecisionTomada[] => {
+      const acepta = ACEPTA.has(fila.status);
+      if (!acepta && !RECHAZA.has(fila.status)) return [];
+      return [
+        {
+          agenteId: "insights-nocturno",
+          tipo: fila.type,
+          status: acepta ? "accepted" : "dismissed",
+          decididaEl: fila.created_at.slice(0, 10)
+        }
+      ];
+    });
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Todo lo que la persona ha decidido, de todos los agentes, en una sola lista.
+ *
+ * Es lo que `enRechazoSostenido` necesita para poder comparar: un agente solo
+ * «se acepta poco» en relación con lo que sí se acepta.
+ */
+export async function leerTodasLasDecisiones(supabase: Db, userId: string): Promise<DecisionTomada[]> {
+  const [propuestas, recomendaciones] = await Promise.all([
+    leerDecisiones(supabase, userId),
+    leerDecisionesDeInsights(supabase, userId)
+  ]);
+  return [...propuestas, ...recomendaciones];
 }
 
 /**

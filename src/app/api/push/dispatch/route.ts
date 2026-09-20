@@ -542,7 +542,11 @@ async function despacharInsightsHabitos(supabase: Admin, ahora: Date, inicio: nu
         userId: perfil.user_id,
         scope: "habits",
         context: preparado.context,
-        origen: "nocturno"
+        origen: "nocturno",
+        // El día local de la persona, el mismo que ya deduplica `ai_job_runs`.
+        // Solo lo usa el camino del Kernel (D-175), que no debe recalcular
+        // fechas: `new Date()` en el servidor es otro huso.
+        today: hoy
       });
       await supabase
         .from("ai_job_runs")
