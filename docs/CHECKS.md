@@ -2364,3 +2364,41 @@ nombre.
   scope, hay dos sitios que recordar en vez de uno.
 - Y ninguna llamada real al modelo, décimo ciclo. Pendiente todo lo de D-165 a
   D-169: WebKit/iPhone, lectores de pantalla, PWA instalada.
+
+## La sonda contra la base local (D-175bis) — 20-sep-2026
+
+Diez ciclos diciendo «estas consultas no han leído una sola fila». Se ejercitaron
+contra el Supabase local, sin modelo: solo las cuatro consultas del Kernel,
+sembrando filas con marcador `SONDA-KERNEL` y borrándolas después.
+
+### Lo que encontró, y no era el código que se sospechaba
+
+- **`leerDecisionesDeInsights` traía las recomendaciones `Presented`.** El filtro
+  estaba en JavaScript, después del `.limit(500)`, así que el tope se aplicaba
+  ANTES de descartarlas: alguien con quinientas recomendaciones sin abrir se
+  habría quedado sin una sola decisión que aprender, y el aprendizaje habría
+  parecido «no hay datos suficientes» para siempre. `leerDecisiones` sí filtraba
+  en la consulta; eran dos criterios para el mismo trabajo. **Corregido**: el
+  filtro va en la consulta, y la comprobación en JS se queda como cinturón.
+- Lo encontró la sonda, no la lectura del código ni `tsc`: los nombres de columna
+  estaban bien —`database.types.ts` se genera del esquema— y el tipo no dice nada
+  del ORDEN en que se aplican `limit` y filtro.
+
+### Lo que quedó verificado contra el esquema real
+
+- `leerDecisiones`: devuelve las decididas y **excluye** la `pending`. ✅
+- `leerDecisionesDeInsights`: tras la corrección, `Presented` no sale. ✅
+- `ultimaRevisionDeIdentidad`: devuelve la revisión **más reciente** de dos. ✅
+- `anotarSilencio`: `HTTP 201` y la fila se relee con su `meta`. ✅ **Es la
+  primera vez que `agente.silencio` existe en una base.**
+- Base local sin residuos al terminar: las cinco tablas tocadas a cero.
+
+### Lo que sigue sin probarse
+
+- **Ninguna ejecución de agente, ninguna llamada al modelo.** Esto prueba las
+  consultas que rodean al Kernel, no el Kernel. En local sigue sin haber
+  `GEMINI_API_KEY`.
+- Las consultas se ejercitaron por PostgREST con la llave de servicio,
+  **replicando** los filtros de supabase-js; el código TypeScript no llegó a
+  ejecutarse (lleva `server-only` y alias `@/`, que Node no resuelve).
+- `AGENT_KERNEL_COACH` y `AGENT_KERNEL_INSIGHTS` siguen apagadas.
