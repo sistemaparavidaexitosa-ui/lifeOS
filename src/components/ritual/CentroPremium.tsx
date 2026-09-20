@@ -9,6 +9,7 @@ import { abrirFoco, atraparFoco } from "@/lib/dom/ritual-focus.ts";
 import { temaDelRitual } from "@/lib/domain/ritual/tema.ts";
 import { componerCentro, type BloqueCentro } from "@/lib/domain/centro/componer.ts";
 import { destinosDelCentro } from "@/lib/domain/centro/destinos.ts";
+import { destacadosDelCentro } from "@/lib/domain/centro/destacados.ts";
 import type { ContenidoDelRitual } from "@/lib/data/ritual";
 import type { HabitLogEntry } from "@/lib/domain/development/habit-analytics.ts";
 import type { HechoRitual } from "@/lib/domain/ritual/types.ts";
@@ -53,22 +54,33 @@ export default function CentroPremium({
 }) {
   const [contenido, setContenido] = useState<ContenidoDelRitual | null>(null);
   const [sugerencias, setSugerencias] = useState<SugerenciaView[]>([]);
+  const [resumen, setResumen] = useState("");
   const [marcados, setMarcados] = useState<Record<string, HabitLogEntry | null>>({});
   const shellRef = useRef<HTMLDivElement | null>(null);
 
   const grupos = useMemo(() => destinosDelCentro(NAV_ITEMS), []);
+  // Sin IA y al vuelo: en cuanto llega el contenido, la fila ya está.
+  const destacados = useMemo(
+    () => (contenido ? destacadosDelCentro(contenido.senales, sugerencias.map((s) => s.href ?? "")) : []),
+    [contenido, sugerencias]
+  );
   const bloques: BloqueCentro[] = useMemo(() => (contenido ? componerCentro(contenido) : []), [contenido]);
   const tema = temaDelRitual(hourLocal);
 
   useEffect(() => {
     let vivo = true;
     void fetch("/api/centro")
-      .then((r) => (r.ok ? (r.json() as Promise<{ contenido: ContenidoDelRitual; sugerencias?: SugerenciaView[] }>) : null))
+      .then((r) =>
+        r.ok
+          ? (r.json() as Promise<{ contenido: ContenidoDelRitual; sugerencias?: SugerenciaView[]; resumen?: string }>)
+          : null
+      )
       .catch(() => null)
       .then((r) => {
         if (!vivo || !r) return;
         if (r.contenido) setContenido(r.contenido);
         if (r.sugerencias?.length) setSugerencias(r.sugerencias);
+        if (r.resumen) setResumen(r.resumen);
       });
     return () => {
       vivo = false;
@@ -140,6 +152,11 @@ export default function CentroPremium({
             {cabecera.saludo}, {cabecera.nombre}.
           </h2>
 
+          {/* El «cómo voy» va pegado al saludo: es lo primero que se lee, y sin
+              él la pantalla daba cifras sin contar nada. Si está vacío no se
+              pinta: un hueco bajo el titular se lee como un error de carga. */}
+          {resumen && <p className="rit-lead">{resumen}</p>}
+
           {bloques.length > 0 && (
             <div className="rit-centro-bloques">
               {bloques.map((b) => {
@@ -186,6 +203,22 @@ export default function CentroPremium({
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* «Sigue por aquí»: los destinos que hoy importan, deducidos de tu
+              actividad. Van encima de la lista completa, que no se mueve. */}
+          {destacados.length > 0 && (
+            <div>
+              <p className="rit-eyebrow">Sigue por aquí</p>
+              <div className="rit-destacados">
+                {destacados.map((d) => (
+                  <Link key={d.href} href={d.href} className="rit-destacado" onClick={onIrA}>
+                    <b>{d.label}</b>
+                    <span>{d.motivo}</span>
+                  </Link>
+                ))}
+              </div>
             </div>
           )}
 

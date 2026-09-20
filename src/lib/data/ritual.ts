@@ -12,6 +12,9 @@ import { hechosDeContexto } from "@/lib/domain/ritual/contexto.ts";
 import { esTipoPaso, type RitualSettings, type TipoPaso } from "@/lib/domain/ritual/types.ts";
 import { esModoNavegacion, type ModoNavegacion } from "@/lib/domain/centro/apertura.ts";
 import type { EntradaSecuencia } from "@/lib/domain/ritual/secuencia.ts";
+import type { SenalesDelDia } from "@/lib/domain/centro/destacados.ts";
+import { quincenaFor } from "@/lib/domain/quincena.ts";
+import { diffDays } from "@/lib/domain/datetime.ts";
 import type { Frequency } from "@/lib/domain/development/routines.ts";
 
 /**
@@ -122,6 +125,14 @@ export const loadRitualGate = cache(async (): Promise<PuertaDelRitual | null> =>
   }
 });
 
+/**
+ * Las señales con las que se arma «Sigue por aquí» (D-168). Se calculan con lo
+ * que el centro ya lee, más una consulta de actividad reciente por proyecto:
+ * quince días es la ventana en la que «he estado trabajando en esto» todavía
+ * significa algo.
+ */
+export const DIAS_DE_ACTIVIDAD = 15;
+
 export interface ContenidoDelRitual extends EntradaSecuencia {
   /**
    * La identidad que la persona escribió, para el hueco del paso de afirmación
@@ -132,6 +143,8 @@ export interface ContenidoDelRitual extends EntradaSecuencia {
   hayBriefDeHoy: boolean;
   /** Si el respaldo ya se intentó hoy: un intento por persona y día. */
   briefIntentadoHoy: boolean;
+  /** Para la fila «Sigue por aquí». Sin IA: se deducen. */
+  senales: SenalesDelDia;
 }
 
 /**
@@ -148,7 +161,8 @@ export const loadRitualContent = cache(async (puerta: PuertaDelRitual): Promise<
     if (!user) return null;
 
     const supabase = await createClient();
-    const [home, brief, rutinas, identidad, { data: run }] = await Promise.all([
+    const desdeActividad = new Date(Date.now() - DIAS_DE_ACTIVIDAD * 86_400_000).toISOString();
+    const [home, brief, rutinas, identidad, { data: run }, { data: actividad }] = await Promise.all([
       getHomeData(user.id),
       loadTodayBrief(),
       loadRoutinesForToday(),
@@ -158,8 +172,29 @@ export const loadRitualContent = cache(async (puerta: PuertaDelRitual): Promise<
         .select("brief_attempted")
         .eq("user_id", user.id)
         .eq("local_date", puerta.dateISO)
-        .maybeSingle()
+        .maybeSingle(),
+      // Qué proyecto concentra el movimiento. La RLS ya limita a lo que esta
+      // persona puede ver, así que no hace falta filtrar por dueño aquí.
+      supabase
+        .from("workspace_activity")
+        .select("project_id, projects(title)")
+        .not("project_id", "is", null)
+        .gte("created_at", desdeActividad)
+        .limit(200)
     ]);
+
+    // El proyecto con más movimiento, contado aquí y no por el modelo.
+    const cuenta = new Map<string, { title: string; n: number }>();
+    for (const fila of actividad ?? []) {
+      const id = fila.project_id;
+      if (!id) continue;
+      const proyecto = fila.projects as { title?: string } | null;
+      const previo = cuenta.get(id);
+      cuenta.set(id, { title: previo?.title || proyecto?.title || "Proyecto", n: (previo?.n ?? 0) + 1 });
+    }
+    const top = [...cuenta.entries()].sort((a, b) => b[1].n - a[1].n)[0];
+
+    const quincena = quincenaFor(puerta.dateISO);
 
     return {
       settings: puerta.settings,
@@ -223,6 +258,16 @@ export const loadRitualContent = cache(async (puerta: PuertaDelRitual): Promise<
         // La «Única Cosa» del día, que es el campo que Home ya pinta arriba.
         oneThing: home.dailyPlan?.one_thing || null,
         tareas: home.impactTasks.map((t) => ({ id: t.id, title: t.title }))
+      },
+
+      senales: {
+        proyectoActivo: top ? { id: top[0], title: top[1].title, movimientos: top[1].n } : null,
+        vencidas: home.overdueCount,
+        habitosPendientes: rutinas.rows
+          .filter((r) => r.due && r.routine.active)
+          .reduce((n, r) => n + r.habits.filter((h) => h.todayEntry === null).length, 0),
+        diasParaFinDeQuincena: diffDays(puerta.dateISO, quincena.toISO),
+        presupuestoEnRojo: home.hasBudget && home.budgetRemaining <= 0
       },
 
       identidadDeclarada: identidad?.profile?.desiredIdentity || null,

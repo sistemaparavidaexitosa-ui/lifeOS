@@ -36,7 +36,11 @@ function system(franja: Franja, destinos: string[]): string {
     "   Para un proyecto concreto: /execution?project=<id del proyecto, copiado de los hechos>.",
     "   Si no estás seguro del destino, no propongas `foco`.",
     "5. El título es lo que la persona haría, no una descripción: «Sigue con Rediseño», «Abre Dinero».",
-    "6. No repitas lo que ya está en «ya propuesto hoy»."
+    "6. No repitas lo que ya está en «ya propuesto hoy».",
+    "7. Escribe además un `resumen`: DOS O TRES FRASES sobre cómo va el día, como se lo dirías a alguien",
+    "   que vuelve a su mesa. Qué se movió, qué lleva parado, dónde está su atención. Máximo 280 caracteres.",
+    "   Vale la misma regla: cada cifra que cites tiene que estar en los hechos. Si no hay nada que contar,",
+    "   devuelve el resumen vacío — mejor callarse que rellenar."
   ].join("\n");
 }
 
@@ -50,6 +54,10 @@ function prompt(context: InsightContext, yaPropuestas: string[], proyectos: { id
 const ESQUEMA: GeminiSchema = {
   type: "OBJECT",
   properties: {
+    resumen: {
+      type: "STRING",
+      description: "Dos o tres frases sobre cómo va el día, máximo 280 caracteres. Vacío si no hay nada que contar."
+    },
     sugerencias: {
       type: "ARRAY",
       description: "Como mucho tres. Vacío si no hay nada que valga la pena decir.",
@@ -68,10 +76,11 @@ const ESQUEMA: GeminiSchema = {
       }
     }
   },
-  required: ["sugerencias"]
+  required: ["sugerencias", "resumen"]
 };
 
 const Respuesta = z.object({
+  resumen: z.string().optional(),
   sugerencias: z
     .array(
       z.object({
@@ -85,8 +94,11 @@ const Respuesta = z.object({
 });
 
 export type ResultadoGeneracion =
-  | { ok: true; crudas: PropuestaCruda[] }
+  | { ok: true; crudas: PropuestaCruda[]; resumen: string }
   | { ok: false; reason: string };
+
+/** Lo que cabe bajo el saludo sin empujar el resto de la pantalla fuera. */
+const MAX_RESUMEN = 280;
 
 export async function generarSugerencias(input: {
   context: InsightContext;
@@ -112,6 +124,7 @@ export async function generarSugerencias(input: {
 
   return {
     ok: true,
+    resumen: (result.data.resumen ?? "").trim().replace(/\s+/g, " ").slice(0, MAX_RESUMEN),
     crudas: result.data.sugerencias.map(
       (s): PropuestaCruda => ({ tipo: s.tipo, titulo: s.titulo, detalle: s.detalle ?? "", datos: s.datos ?? "{}" })
     )
