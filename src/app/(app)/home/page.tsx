@@ -11,11 +11,6 @@ import RemindersCard from "./RemindersCard";
 import InsightSection from "@/components/InsightSection";
 import { loadRitualGate } from "@/lib/data/ritual";
 import ActivarPremium from "@/components/ritual/ActivarPremium";
-import { centroDeMando } from "@/config/env";
-import { getPersonalWorkspace } from "@/lib/data/workspaces";
-import { quincenaFor } from "@/lib/domain/quincena.ts";
-import { diffDays } from "@/lib/domain/datetime.ts";
-import CentroDeMando, { type BaseDeMando } from "@/components/comando/CentroDeMando";
 
 export default async function HomePage() {
   const user = await getSessionUser();
@@ -35,51 +30,6 @@ export default async function HomePage() {
   const greet = greetingFor(hourInTimeZone(timeZone));
   const sat = data.saturation;
   const satKind = sat.status === "saturated" ? "bad" : sat.status === "warn" ? "warn" : "ok";
-
-  // EL CENTRO DE MANDO (D-176). Con la bandera apagada, todo lo de abajo queda
-  // exactamente igual que antes: el tablero no se tocó, se bifurca antes de él.
-  //
-  // Las señales se calculan aquí con las MISMAS expresiones que `data/ritual.ts`
-  // usa para el centro premium —`diffDays` hasta el fin de quincena, presupuesto
-  // en rojo cuando hay presupuesto y no queda nada—, para que las dos puertas de
-  // la aplicación no discrepen sobre si hoy el dinero aprieta.
-  if (centroDeMando()) {
-    const ws = await getPersonalWorkspace();
-    const base: BaseDeMando = {
-      // El resumen de la franja vive en `centro_runs` y llega por
-      // `GET /api/centro`, que lee media aplicación y está pensado para pedirse
-      // una vez al abrir el overlay. La home se pinta en cada navegación, así
-      // que aquí va vacío y la cabecera simplemente no lo enseña. Inventarlo
-      // sería peor que no tenerlo.
-      resumen: "",
-      // Las rutinas no están en `getHomeData`. El hábito seguirá saliendo en el
-      // arranque guiado, que sí las carga; aquí se degrada en silencio en vez
-      // de pagar otra consulta en cada visita.
-      proximoHabito: null,
-      unicaCosa: data.dailyPlan?.one_thing || null,
-      vencidas: data.overdueCount,
-      diasParaFinDeQuincena: diffDays(today, quincenaFor(today).toISO),
-      presupuestoEnRojo: data.hasBudget && data.budgetRemaining <= 0,
-      planAprobado: Boolean(data.dailyPlan?.approved),
-      saturacion: sat.status,
-      minutosComprometidos: sat.totalCommitted,
-      minutosDisponibles: sat.availableMinutes
-    };
-
-    return (
-      <>
-        {puertaRitual?.navMode === "habitual" && <ActivarPremium />}
-        <CentroDeMando
-          base={base}
-          today={today}
-          workspaceId={ws?.id ?? null}
-          saludo={greet}
-          nombre={data.profile.name.split(" ")[0] ?? ""}
-          fecha={`${fdate(today)} · ${timeZone}`}
-        />
-      </>
-    );
-  }
 
   return (
     <div className="flex flex-col gap-3.5">

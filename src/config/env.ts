@@ -273,20 +273,6 @@ export function insightsPorElKernel(): boolean {
   return process.env.AGENT_KERNEL_INSIGHTS?.trim() === "1";
 }
 
-/**
- * ¿La home es el centro de mando? (D-176)
- *
- * APAGADA si la variable no está, y entonces `/home` es exactamente el tablero
- * de siempre: el código viejo no se movió, se bifurca antes. Volver atrás es
- * borrar la variable.
- *
- * No depende de las banderas del Kernel ni ellas de ésta. El centro de mando se
- * alimenta de lo que ya funciona en producción —`getHomeData`,
- * `coach_proposals`, el chat—, no de un camino que todavía no se ha ejecutado.
- */
-export function centroDeMando(): boolean {
-  return process.env.COMMAND_CENTER?.trim() === "1";
-}
 
 /**
  * Lee el JWK completo, la forma antigua de `VAPID_PRIVATE_JWK`.

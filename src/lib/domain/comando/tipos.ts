@@ -1,5 +1,6 @@
 // src/lib/domain/comando/tipos.ts
-// El vocabulario del centro de mando (D-176) — puro, sin React ni Supabase.
+// El vocabulario de la capa de navegación del Centro (D-176, reorientado en
+// D-177) — puro, sin React ni Supabase.
 //
 // POR QUÉ EXISTE
 // El centro dejó de ser un tablero de secciones para convertirse en algo que
@@ -55,8 +56,47 @@ export const ETIQUETA: Record<Categoria, string> = {
 // `domain/`—. Están en `src/components/comando/categoria.ts`, junto a quien los
 // pinta, y el compilador obliga a que cubran las siete.
 
+/**
+ * Los tres frentes, y lo que la IA intenta mover en cada uno.
+ *
+ * NO son las secciones de la aplicación: son los tres OBJETIVOS. Un carril
+ * puede llevarte a `/planning` o a `/execution` según qué mueva hoy la aguja,
+ * y por eso esto es navegación generada y no un menú — el menú se borró en
+ * D-169 y no vuelve.
+ *
+ * El orden del array es el orden en pantalla, y es deliberado: lo que tienes
+ * que terminar, luego en quién te estás convirtiendo, luego el dinero. Los tres
+ * se ven siempre, aunque uno esté en calma; esconder el que va bien deja a la
+ * persona sin saber si es que no hay nada o es que no se miró.
+ */
+export const CARRILES = ["execution", "development", "money"] as const;
+
+export type Carril = (typeof CARRILES)[number];
+
+export const CARRIL_NOMBRE: Record<Carril, string> = {
+  execution: "Execution OS",
+  development: "Personal Development OS",
+  money: "Money OS"
+};
+
+/** Para qué existe cada carril. Se pinta pequeño, debajo del nombre. */
+export const CARRIL_OBJETIVO: Record<Carril, string> = {
+  execution: "Terminar lo que empezaste",
+  development: "Acercarte a quien quieres ser",
+  money: "Cumplir tus metas de dinero"
+};
+
+/** A dónde lleva el carril cuando no hay nada urgente que hacer en él. */
+export const CARRIL_INICIO: Record<Carril, string> = {
+  execution: "/execution",
+  development: "/development",
+  money: "/money"
+};
+
 /** Una cosa que el centro te está pidiendo. */
 export interface ItemDeMando {
+  /** En qué frente cuenta. Lo asigna `componer.ts`, no el modelo. */
+  carril: Carril;
   /** El mismo id que la `Tarjeta` de la que sale: estable entre repintados. */
   id: string;
   categoria: Categoria;
@@ -89,23 +129,33 @@ export interface ItemDeMando {
 export interface EstadoDeMando {
   /** El resumen de la franja, si lo hay. Vacío = no se inventa uno. */
   resumen: string;
-  /** Cuántas cosas te frenan. Cero se dice, no se esconde. */
+  /** Cuántas cosas te frenan, en los tres frentes. Cero se dice, no se esconde. */
   bloqueos: number;
-  horasComprometidas: number;
-  horasDisponibles: number;
-  saturacion: "ok" | "warn" | "saturated";
-  /** El plan del día está aprobado. */
-  planAprobado: boolean;
+}
+
+/** Un frente, con lo que toca en él o con el estado en que está. */
+export interface CarrilDelCentro {
+  carril: Carril;
+  /** Lo más consecuente ahora en este frente. `null` = está en calma. */
+  item: ItemDeMando | null;
+  /**
+   * Qué decir cuando no hay nada urgente. NUNCA vacío y nunca inventado: sale
+   * de cifras que ya existen («8 días de quincena», «3 tareas abiertas»). Un
+   * carril en calma sigue siendo navegación —te dice dónde estás y te deja
+   * entrar—, no un hueco.
+   */
+  estado: string;
+  /** A dónde entrar en este frente. */
+  href: string;
+  destino: string;
 }
 
 export interface Mando {
   estado: EstadoDeMando;
-  /** La acción dominante. `null` en un día sin nada que pedir. */
-  foco: ItemDeMando | null;
-  /** Lo que te frena, aparte. Vacío = la sección no se pinta. */
-  bloqueos: ItemDeMando[];
-  /** El resto, en orden de caducidad, sin el foco ni los bloqueos. */
-  siguientes: ItemDeMando[];
-  /** Qué decir cuando no queda nada. Nunca se inventa trabajo. */
+  /** Los TRES, siempre, en el orden de `CARRILES`. */
+  carriles: CarrilDelCentro[];
+  /** Cuál manda ahora mismo. `null` si los tres están en calma. */
+  dominante: Carril | null;
+  /** Qué decir cuando no queda nada en ningún frente. */
   cierre: string;
 }

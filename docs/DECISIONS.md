@@ -3537,3 +3537,48 @@ implementa:
     contraste, la densidad y los micro-iconos.
   - **Detrás de `COMMAND_CENTER`, apagada.** Sin la variable, `/home` es el
     tablero de siempre con su código intacto: la bifurcación ocurre antes de él.
+
+- **D-177 · El Centro es una capa de navegación con tres puertas, una por
+  objetivo.** Corrige D-176, que se aplicó en el sitio equivocado: «el centro de
+  la pantalla» se leyó como el área central del `AppShell` y lo que se pedía era
+  la capa que abre el botón flotante «Centro». La home volvió a ser la home; el
+  overlay es lo que cambia.
+  - **Tres carriles, y son OBJETIVOS, no secciones.** Execution OS («terminar lo
+    que empezaste»), Personal Development OS («acercarte a quien quieres ser») y
+    Money OS («cumplir tus metas de dinero»). Un carril puede llevarte a
+    `/planning` o a `/execution` según qué mueva hoy la aguja: por eso es
+    navegación generada y no el menú de veintitrés destinos que D-169 borró y
+    que no vuelve.
+  - **El criterio sigue siendo el de D-169.** `componerMando` llama a
+    `tarjetasDelCentro` —que ordena por lo que caduca antes, con sus catorce
+    pruebas intactas— y se queda con el PRIMERO de cada frente. Dentro de un
+    carril manda el mismo criterio de siempre; lo único nuevo es el reparto en
+    tres. No hay un segundo criterio de prioridad en el repositorio, y el test
+    que lo protege se llama «NO REORDENA».
+  - **Tres cosas a la vista, no nueve.** Es el compromiso con D-169: suficiente
+    para notar que llevas una semana sin tocar el dinero, poco para que vuelva a
+    ser una bandeja de entrada. Lo que no cabe no se pierde: sube cuando se
+    resuelve o se aparta lo de encima.
+  - **Un carril en calma NO se esconde.** Dice qué sabe del frente, con su cifra
+    —«10 días de quincena, presupuesto en verde»—, y te deja entrar igual.
+    Esconder el que va bien deja a la persona sin saber si es que no hay nada o
+    es que no se miró. Y nunca dice «todo bien» a secas: eso no se puede
+    comprobar y suena a relleno.
+  - **Manda el frente de lo que más aprieta, no un orden fijo.** Si hoy lo
+    urgente es el dinero, el dinero se destaca aunque se pinte el tercero.
+  - **El Lienzo de D-169 se retira** (`Lienzo.tsx` y sus dos clases CSS). Su
+    componente se va; su criterio se queda, que es lo que importaba. También
+    sobrevive «Ahora no» apartando sin borrar y el cierre honesto del día vacío.
+  - **La IA ya era generativa y no hacía falta tocarla.** `/api/centro` llama a
+    `sugerenciasDelCentro()`, que usa el modelo y deja propuestas y resumen en
+    `centro_runs`. La novedad es encaminar esa salida a los carriles: cero
+    llamadas nuevas, cero presupuesto nuevo, cero prompts nuevos. Lo determinista
+    decide QUÉ frente y QUÉ gana; el modelo pone el porqué y el resumen. Si el
+    modelo falla, los tres carriles siguen siendo navegables.
+  - **Aquí `GET /api/centro` sí es el endpoint correcto**, y en la home no lo
+    era: lee media aplicación y está pensado para pedirse UNA vez al abrir el
+    overlay, no en cada navegación.
+  - **Límite conocido:** `pendientes()` filtra `origen = 'centro'`, así que las
+    propuestas del coach (`origen = 'coach'`) siguen viviendo solo en el rail y
+    no entran en los carriles. Es conducta de D-167, no un descuido, y cambiarla
+    es una decisión de producto aparte.

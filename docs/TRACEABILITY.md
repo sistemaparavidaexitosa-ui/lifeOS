@@ -256,3 +256,18 @@ que `/home` ya pagaba más las propuestas que el chat ya cargaba.
 | Un solo chat: en la home no hay rail | — | — | — | `AppShell` | navegador 1440 px: `.ai-rail` = 0 (✅) |
 | El rail sigue intacto fuera de la home | — | — | — | `AiChatRail` | navegador `/execution`: rail y composer (✅) |
 | Con la bandera apagada, nada cambia | — | — | `centroDeMando()` → `false` | tablero | navegador: `.cmd` = 0, 10 `.card` (✅) |
+
+## El Centro, capa de navegación (D-177, sin migración)
+
+| Requisito | Tablas | RLS / GRANT | Server Actions y rutas | UI | Pruebas |
+|---|---|---|---|---|---|
+| Tres carriles, siempre, en su orden | — | — | — (puro) | `Carril.tsx` | `comando-componer.test.ts` (✅) · navegador (✅) |
+| El orden dentro del carril lo decide D-169 | — | — | — | — | «NO REORDENA» (✅) |
+| Cada cosa cae en su frente | `coach_proposals.tipo` | la de 0053 | — | — | `comando-componer.test.ts` (✅) |
+| Un carril en calma dice algo verdadero | — | — | — | `.cmd-carril-calma` | `comando-componer.test.ts` (✅) · navegador: quincena e identidad (✅) |
+| Manda lo que más aprieta, no un orden fijo | — | — | — | `.cmd-carril-manda` | `comando-componer.test.ts` (✅) · navegador (✅) |
+| «Ahora no» aparta, no borra | — | — | — | — | `comando-componer.test.ts` (✅) · navegador **sin pulsar** (⚠️) |
+| El día vacío no inventa trabajo | — | — | — | `.cmd-cierre` | `comando-componer.test.ts` (✅) |
+| El Lienzo se retira sin llevarse su criterio | — | — | — | `Lienzo.tsx` **borrado** | `centro-lienzo.test.ts` sigue verde (✅) |
+| La home no se toca | — | — | — | — | navegador: `.cmd-nav` = 0, `.card` presentes (✅) |
+| Se entra por el botón flotante | — | — | — | `BotonCentro` | navegador: clic abre el overlay (✅) |

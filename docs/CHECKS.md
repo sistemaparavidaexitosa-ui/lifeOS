@@ -2462,3 +2462,76 @@ con datos sembrados y borrados después.
   entradas a lo mismo y habrá que decidir cuál manda.
 - Móvil real, WebKit/iPhone, lectores de pantalla y PWA instalada: sin probar,
   como desde D-165.
+
+## El Centro, capa de navegación (D-177, sin migración) — 20-sep-2026
+
+Segunda vez que se ve en navegador, y esta vez abriendo el Centro **por su botón
+flotante**, que es de lo que iba el encargo.
+
+### Lo que sí se probó
+
+- `pnpm test:unit`: **1319/1319** ✅, con 15 tests en `comando-componer.test.ts`
+  reescritos para carriles. El que sostiene el diseño sigue llamándose
+  **«NO REORDENA»**.
+- `pnpm typecheck` ✅ · `pnpm lint` ✅ · `pnpm build` ✅, **First Load JS 102 kB**
+  sin cambio por octava entrega consecutiva.
+- **En navegador** (Chromium, sesión real, 1280 px, datos sembrados y borrados):
+  - La home **intacta**: `.cmd-nav` = 0 y sus tarjetas en su sitio.
+  - Clic en el botón flotante → overlay con **tres carriles**, sus nombres y sus
+    objetivos: Execution OS / Personal Development OS / Money OS.
+  - El dominante destacado con borde de acento; los otros dos en calma diciendo
+    **«Aún no dices en quién quieres convertirte»** y **«10 días de quincena,
+    presupuesto en verde»** — cifras reales, no relleno.
+  - Con una propuesta de tipo `meta` pendiente, **pasa a mandar ella** y cae en
+    el carril de desarrollo, como dice el dominio.
+  - `.rit-lienzo` = 0: el Lienzo se retiró de verdad.
+  - **Cero errores de página.**
+- Datos sembrados (`CENTRO-DEMO`) borrados: residuos a cero.
+
+### Lo que la prueba encontró y el diseño no
+
+- **Las propuestas del coach no entran en los carriles.** `pendientes()` filtra
+  `origen = 'centro'`, así que lo que el coach deja por la mañana
+  (`origen = 'coach'`) sigue viviendo solo en el rail. Es conducta de D-167, no
+  un descuido; se descubrió sembrando una y viendo que no aparecía. **Decisión de
+  producto pendiente**: si el Centro debe enrutar también lo del coach, hay que
+  cambiar ese filtro y decidir qué pasa con el tope de tres.
+- **Sobra aire vertical.** `.rit-main` centra el contenido y con tres carriles
+  cortos queda mucho hueco arriba. Funciona, pero se lee algo perdido en
+  pantallas altas.
+
+### Lo que NO se ha ejercitado
+
+- **«Ahora no» y aceptar una propuesta no se pulsaron a mano.** Probados en el
+  dominio y por construcción.
+- **Sin `GEMINI_API_KEY`, `sugerenciasDelCentro()` no generó nada**: las
+  propuestas de la prueba se sembraron a mano y el resumen fue vacío. La parte
+  generativa del Centro **sigue sin verse funcionar**, duodécimo ciclo.
+- **`delegar` e `investigar`** siguen sin fuente ni pantalla.
+- Móvil real, WebKit/iPhone, lectores de pantalla y PWA: sin probar desde D-165.
+
+### Lo que encontró la revisión de Codex (PR #62)
+
+Dos hallazgos, los dos ciertos, sobre código escrito en esta misma sesión.
+
+- **Importante, y era un bug de verdad.** `Navegacion.tsx` anulaba el ítem YA
+  ELEGIDO cuando lo resolvías, en vez de filtrarlo antes de elegir. Con dos
+  tarjetas compitiendo en el mismo frente —la Única Cosa y las vencidas—,
+  resolver la primera dejaba el carril en **falsa calma** con la segunda
+  esperando turno, y `dominante` seguía apuntando a algo que ya no se veía.
+  Peor: el comentario de ese `useMemo` **afirmaba** que «el siguiente de su
+  carril sube solo», que es exactamente lo que no hacía. Un comentario que
+  describe la conducta deseada en vez de la real es peor que no tener ninguno.
+  Arreglado moviendo el filtro al dominio: `componerMando(e, pospuestas,
+  resueltas)`. Tres pruebas nuevas, la principal se llama **«RESOLVER
+  PROMUEVE»**.
+- **Menor.** `components/comando/Tarjeta.tsx` quedó sin consumidor al retirar la
+  superficie de la home: D-177 borró `CentroDeMando` y `Cabecera` y se dejó
+  ésta. Borrado. Es justo el «envoltorio sin consumidor» del que advierte el
+  documento de arquitectura, cometido por quien lo escribió.
+
+Ninguna de las dos la habrían encontrado los 1319 tests anteriores: la primera
+vivía en la transición de estado de React, que el dominio no cubría; la segunda
+no rompe nada, solo sobra.
+
+`pnpm test:unit` **1322/1322** ✅ · typecheck ✅ · lint ✅ · build ✅ 102 kB.
