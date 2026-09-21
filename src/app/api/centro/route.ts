@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { loadRitualGate, loadRitualContent } from "@/lib/data/ritual";
 import { sugerenciasDelCentro } from "@/lib/centro/sugerencias";
+import { costumbreDeAhora } from "@/lib/comando/costumbre";
+import { getUserTimeZone } from "@/lib/data/profile";
+import { hourInTimeZone } from "@/lib/domain/datetime.ts";
+import { franjaDeHoy } from "@/lib/domain/centro/franja.ts";
 
 /**
  * El contenido del centro premium (D-166).
@@ -26,11 +30,24 @@ export async function GET() {
   // Las dos mitades van en paralelo, y las SUGERENCIAS NO MANDAN: si su promesa
   // falla o el modelo no contesta, se devuelve la lista vacía y el centro se
   // pinta igual. Es un extra, no el contenido.
-  const [contenido, pensado] = await Promise.all([
+  const timeZone = await getUserTimeZone();
+  const franja = franjaDeHoy(hourInTimeZone(timeZone));
+
+  // La costumbre (D-185) viaja con las sugerencias y por el mismo motivo: es un
+  // extra que NO manda. Si falla, el centro se pinta igual, solo que sin
+  // ofrecerte lo que sueles mirar a esta hora.
+  const [contenido, pensado, costumbre] = await Promise.all([
     loadRitualContent(puerta),
-    sugerenciasDelCentro().catch(() => ({ sugerencias: [], resumen: "" }))
+    sugerenciasDelCentro().catch(() => ({ sugerencias: [], resumen: "" })),
+    costumbreDeAhora(franja).catch(() => null)
   ]);
   if (!contenido) return NextResponse.json({ ok: false, reason: "No se pudo preparar el centro." }, { status: 503 });
 
-  return NextResponse.json({ ok: true, contenido, sugerencias: pensado.sugerencias, resumen: pensado.resumen });
+  return NextResponse.json({
+    ok: true,
+    contenido,
+    sugerencias: pensado.sugerencias,
+    resumen: pensado.resumen,
+    costumbre
+  });
 }

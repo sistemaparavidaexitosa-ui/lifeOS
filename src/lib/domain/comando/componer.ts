@@ -55,6 +55,23 @@ export interface EntradaDeMando extends EntradaLienzo {
     habitosPendientes: number;
     identidadDeclarada: boolean;
   };
+
+  /**
+   * Lo que sueles hacer a esta hora, si el sistema ya lo aprendió (D-185).
+   *
+   * Llega ya resuelto —ruta, etiqueta y frente— porque deducir el frente de una
+   * ruta es cosa de quien conoce el menú, y el menú vive en `components/`. El
+   * dominio no lo mira: solo decide DÓNDE va.
+   *
+   * Opcional a propósito: hacen falta catorce días de uso para que exista, así
+   * que lo normal al principio es que no esté.
+   */
+  preferencia?: {
+    ruta: string;
+    /** Cómo se llama en el menú: «Watchlist», «Rutinas y Hábitos». */
+    etiqueta: string;
+    carril: Carril;
+  };
 }
 
 /**
@@ -256,6 +273,40 @@ export function componerMando(
   // Cómo está cada frente. Solo lo usa el cierre, para poder navegar cuando ya
   // no queda nada pendiente: un día resuelto no puede ser un callejón sin
   // salida.
+  // LO QUE SUELES HACER A ESTA HORA (D-185), si ya se aprendió.
+  //
+  // Va DESPUÉS de lo que te frena y ANTES del resto, y las dos mitades de esa
+  // frase importan. Antes del resto porque a las siete de la mañana lo que
+  // vienes a mirar pesa más que una sugerencia genérica. Después de los
+  // bloqueos porque una costumbre no puede tapar algo que te está frenando —
+  // eso sería optimizar por comodidad en vez de por avance.
+  // Se respetan `resueltas` y `pospuestas` igual que con cualquier otro ítem:
+  // insertarla después de esos filtros la habría hecho inmune a los dos, que
+  // es exactamente el fallo que una revisión anterior encontró en la promoción
+  // del siguiente paso.
+  const idCostumbre = e.preferencia ? `costumbre:${e.preferencia.ruta}` : null;
+  if (e.preferencia && idCostumbre && !resueltas.includes(idCostumbre)) {
+    const p = e.preferencia;
+    const habito: ItemDeMando = {
+      id: idCostumbre,
+      carril: p.carril,
+      categoria: "revisar",
+      voz: "Lo que sueles mirar a esta hora",
+      titulo: p.etiqueta,
+      accion: "Abrir",
+      href: p.ruta,
+      datos: { tipo: "navegar" }
+    };
+    if (pospuestas.includes(idCostumbre)) {
+      // Apartada baja al final, como hace `tarjetasDelCentro` con las suyas:
+      // apartar no es borrar, ni siquiera una costumbre.
+      items.push(habito);
+    } else {
+      const corte = items.findIndex((i) => i.categoria !== "bloquear");
+      items.splice(corte < 0 ? items.length : corte, 0, habito);
+    }
+  }
+
   const frentes: CarrilDelCentro[] = CARRILES.map((carril) => {
     const calma = estadoDeCalma(carril, e);
     return { carril, item: null, estado: calma.estado, href: CARRIL_INICIO[carril], destino: calma.destino };

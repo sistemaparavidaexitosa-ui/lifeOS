@@ -10,6 +10,7 @@ import { franjaDeHoy } from "@/lib/domain/centro/franja.ts";
 import type { EntradaDeMando } from "@/lib/domain/comando/componer.ts";
 import type { ContenidoDelRitual } from "@/lib/data/ritual";
 import type { SugerenciaView } from "@/lib/centro/sugerencias";
+import type { Costumbre } from "@/lib/comando/costumbre";
 import Navegacion from "@/components/comando/Navegacion";
 import BarraCaptura from "./BarraCaptura";
 
@@ -48,6 +49,7 @@ export default function CentroPremium({
   const [contenido, setContenido] = useState<ContenidoDelRitual | null>(null);
   const [sugerencias, setSugerencias] = useState<SugerenciaView[]>([]);
   const [resumen, setResumen] = useState("");
+  const [costumbre, setCostumbre] = useState<Costumbre | null>(null);
   const shellRef = useRef<HTMLDivElement | null>(null);
   const tema = temaDelRitual(hourLocal);
   const diaSemana = new Date(`${cabecera.dateISO}T00:00:00Z`).getUTCDay();
@@ -58,7 +60,7 @@ export default function CentroPremium({
     void fetch("/api/centro")
       .then((r) =>
         r.ok
-          ? (r.json() as Promise<{ contenido: ContenidoDelRitual; sugerencias?: SugerenciaView[]; resumen?: string }>)
+          ? (r.json() as Promise<{ contenido: ContenidoDelRitual; sugerencias?: SugerenciaView[]; resumen?: string; costumbre?: Costumbre | null }>)
           : null
       )
       .catch(() => null)
@@ -67,6 +69,7 @@ export default function CentroPremium({
         if (r.contenido) setContenido(r.contenido);
         if (r.sugerencias?.length) setSugerencias(r.sugerencias);
         if (r.resumen) setResumen(r.resumen);
+        if (r.costumbre) setCostumbre(r.costumbre);
       });
     return () => {
       vivo = false;
@@ -149,6 +152,10 @@ export default function CentroPremium({
       // Lo que la cabecera del centro no usaba y los carriles sí (D-177). Nada
       // de esto es una consulta nueva: son cifras que `loadRitualContent` ya
       // trae en la misma pasada.
+      // Lo que sueles mirar a esta hora (D-185). `undefined` y no `null`: el
+      // campo del dominio es opcional, y pasar null obligaría a comprobarlo
+      // en dos sitios.
+      ...(costumbre ? { preferencia: costumbre } : {}),
       senalesDeCarril: {
         tareasDelPlan: contenido.plan?.tareas.length ?? 0,
         // TODOS los hábitos pendientes de hoy, no solo el que toca ahora: el
@@ -161,7 +168,7 @@ export default function CentroPremium({
         identidadDeclarada: Boolean(contenido.identidadDeclarada)
       }
     };
-  }, [contenido, sugerencias, resumen]);
+  }, [contenido, sugerencias, resumen, costumbre]);
 
   return (
     <div

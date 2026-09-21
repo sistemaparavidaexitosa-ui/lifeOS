@@ -2713,3 +2713,35 @@ propia entrega con sus pruebas de grants.
 - El plan Starter sirve datos con retraso; la pantalla **no lo dice todavía**.
   Conviene que lo diga antes de que alguien tome una decisión creyendo que ve el
   precio de ahora.
+
+## El Centro usa lo aprendido (D-185, sin migración) — 21-sep-2026
+
+### Lo que sí se probó
+
+- `pnpm typecheck` ✅ · `pnpm lint` ✅ · `pnpm test:unit` **1352/1352** (6 nuevas)
+  · `pnpm build` ✅ **102 kB**, decimoquinta entrega sin cambio.
+- **En navegador, con dieciséis días de visitas sembradas**: `/money/watchlist`
+  por las noches, `/execution` por las mañanas, `/planning` por las tardes. Un
+  lunes por la mañana, el Centro ofreció **«Proyectos y Tareas · Lo que sueles
+  mirar a esta hora»** y **NO** la watchlist. Aprendió el ritmo por franja, no
+  el volumen a secas. Cero errores de página.
+- Las pruebas que fijan la regla: la costumbre va antes del resto, **nunca tapa
+  un bloqueo**, y se aparta y se resuelve como cualquier paso.
+
+### El fallo que se repitió
+
+La primera versión insertaba la costumbre **después** de los filtros de
+`resueltas` y `pospuestas`, haciéndola inmune a los dos. Es exactamente el mismo
+fallo que la revisión de Codex encontró en la promoción del siguiente paso
+(D-181), cometido otra vez en el mismo archivo. Lo atrapó una prueba escrita a
+la vez que el código, no una revisión.
+
+### Lo que NO se ha ejercitado
+
+- **Nadie ha acumulado catorce días de uso real.** Todo lo probado usa visitas
+  fabricadas con `generate_series`. La primera costumbre de verdad tardará dos
+  semanas en existir.
+- **El botón de borrar el historial no se ha pulsado en el navegador**; la
+  acción sí se probó contra la base en D-183.
+- **Ninguna llamada real a Polygon** sigue pendiente (D-184), así que la
+  watchlist se ofrece pero nunca se ha visto con precios dentro.

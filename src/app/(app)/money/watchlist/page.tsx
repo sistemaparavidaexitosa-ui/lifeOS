@@ -22,7 +22,8 @@ export default async function WatchlistPage() {
           Watchlist
         </h2>
         <p className="text-sm" style={{ color: "var(--muted)" }}>
-          Lo que sigues del mercado. Los precios llegan de Polygon en cada visita; no se guardan.
+          Lo que sigues del mercado. Los precios llegan de Polygon en cada visita y <b>van con retraso</b>: sirven
+          para saber cómo va el día, no para decidir una operación al segundo. No se guardan.
         </p>
       </div>
 

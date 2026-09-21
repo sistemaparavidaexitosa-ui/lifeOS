@@ -6,6 +6,7 @@ import { Card, Chip, EmptyState } from "@/components/ui";
 import { todayForUser } from "@/lib/data/profile";
 import { isExpired, type MemoryItemLike, type MemoryScope } from "@/lib/domain/insights/memory.ts";
 import MemoryForm from "./MemoryForm";
+import HistorialDeNavegacion from "./HistorialDeNavegacion";
 import { getSessionUser } from "@/lib/data/session";
 
 const SCOPE_LABEL: Record<MemoryScope, string> = {
@@ -31,6 +32,21 @@ export default async function MemoryPage() {
 
   const today = await todayForUser();
   const { data: items } = await supabase.from("memory_items").select("*").order("created_at", { ascending: false });
+
+  // Cuántas visitas hay guardadas y desde cuándo (D-185). Se cuenta con `head`
+  // para no traerse miles de filas solo para enseñar un número.
+  const { count: visitas } = await supabase
+    .from("nav_visitas")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id);
+  const { data: masVieja } = await supabase
+    .from("nav_visitas")
+    .select("local_date")
+    .eq("user_id", user.id)
+    .order("local_date", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  const desdeVisitas = masVieja?.local_date ?? null;
 
   const rows: MemoryItemLike[] = (items ?? []).map((m) => ({
     id: m.id,
@@ -84,6 +100,12 @@ export default async function MemoryPage() {
           </Card>
         );
       })}
+
+      {/* Lo que el sistema aprendió de por dónde navegas (D-185). Va aquí y no
+          en Configuración porque es lo mismo que la memoria —lo que cree saber
+          de ti— y separarlas haría que quien viene a borrar una no supiera que
+          existe la otra. */}
+      <HistorialDeNavegacion visitas={visitas ?? 0} desde={desdeVisitas} />
     </div>
   );
 }

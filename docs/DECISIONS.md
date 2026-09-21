@@ -3784,3 +3784,33 @@ implementa:
   - El tope de 20 se comprueba en la acción y no con un `check`: no es una
     invariante de integridad, es una decisión de producto que puede cambiar sin
     migración.
+
+- **D-185 · El Centro ofrece lo que sueles mirar a esta hora.** D-183 guardaba
+  por dónde navegas y sabía deducir el ritmo, pero nadie lo llamaba. Aquí se
+  juntan las dos mitades: si abres la watchlist cada noche, a la noche siguiente
+  el Centro te la ofrece.
+  - **Va DESPUÉS de lo que te frena y ANTES del resto**, y las dos mitades de
+    esa frase son la decisión. Antes del resto, porque a las siete de la mañana
+    lo que vienes a mirar pesa más que una sugerencia genérica. Después de los
+    bloqueos, porque **una costumbre no puede tapar algo que te está frenando**
+    — eso sería optimizar por comodidad en vez de por avance, que es justo lo
+    que el principio de identidad prohíbe.
+  - **Se aparta y se resuelve como cualquier otro paso.** La primera versión la
+    insertaba después de los filtros de `resueltas` y `pospuestas`, lo que la
+    hacía inmune a los dos: el mismo fallo que una revisión de Codex encontró en
+    la promoción del siguiente paso, cometido otra vez en el mismo archivo.
+  - **Sin frente o sin nombre, no se ofrece.** Una ruta que no encaja en ninguno
+    de los tres OS, o que no está en el menú, no produce costumbre. Enseñarla en
+    el frente equivocado haría dudar de la etiqueta en todos los demás; y una
+    costumbre que no sabe cómo se llama no es una sugerencia, es un enlace.
+  - **Viaja con las sugerencias en `/api/centro` y NO manda**: si su promesa
+    falla, el Centro se pinta igual, solo que sin ofrecerte lo que sueles mirar.
+  - **El historial se puede ver y borrar**, en `/intelligence/memory` y no en
+    Configuración: es lo mismo que la memoria —lo que el sistema cree saber de
+    ti— y separarlas haría que quien viene a borrar una no supiera que existe la
+    otra. La tarjeta dice **para qué sirve antes** de ofrecer borrarlo: un botón
+    de borrar sobre un dato cuyo propósito no se explica invita a borrarlo
+    siempre.
+  - **La watchlist avisa de que sus precios van con retraso.** El plan Starter
+    los sirve así, y no decirlo dejaría que alguien decidiera una operación
+    creyendo que ve el precio de ahora.

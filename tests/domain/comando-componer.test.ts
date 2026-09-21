@@ -262,3 +262,61 @@ test("resolver lo último deja el cierre, y el cierre sigue navegando", () => {
     assert.ok(f.estado.length > 0 && f.href.length > 0, `${f.carril} se quedó mudo en el cierre`);
   }
 });
+
+// --- Lo que sueles hacer a esta hora (D-185) ---
+
+const costumbre = { ruta: "/money/watchlist", etiqueta: "Watchlist", carril: "money" as const };
+
+test("sin preferencia aprendida, el Centro no inventa una costumbre", () => {
+  const m = componerMando(entrada({ unicaCosa: "Algo" }));
+
+  assert.ok(!m.items.some((i) => i.id.startsWith("costumbre:")));
+});
+
+test("la costumbre entra como un paso más, con su frente y su destino", () => {
+  const m = componerMando(entrada({ preferencia: costumbre }));
+  const item = m.items.find((i) => i.id === "costumbre:/money/watchlist");
+
+  assert.equal(item?.carril, "money");
+  assert.equal(item?.titulo, "Watchlist");
+  assert.equal(item?.href, "/money/watchlist");
+  assert.match(item!.voz, /sueles/);
+});
+
+// Las dos mitades de la regla, y las dos importan.
+test("la costumbre va ANTES del resto: a esa hora es a lo que vienes", () => {
+  const m = componerMando(entrada({ unicaCosa: "Cerrar el rediseño", preferencia: costumbre }));
+
+  assert.equal(m.items[0]?.id, "costumbre:/money/watchlist");
+});
+
+test("pero NUNCA tapa un bloqueo: una costumbre no vale más que algo que te frena", () => {
+  const m = componerMando(entrada({ vencidas: 2, presupuestoEnRojo: true, preferencia: costumbre }));
+
+  const iCostumbre = m.items.findIndex((i) => i.id.startsWith("costumbre:"));
+  const bloqueos = m.items.filter((i) => i.categoria === "bloquear");
+
+  assert.ok(bloqueos.length > 0);
+  for (const b of bloqueos) {
+    assert.ok(m.items.indexOf(b) < iCostumbre, `«${b.titulo}» debería ir antes que la costumbre`);
+  }
+});
+
+test("la costumbre también se puede apartar y resolver", () => {
+  const e = entrada({ preferencia: costumbre });
+  const id = "costumbre:/money/watchlist";
+
+  assert.ok(!componerMando(e, [], [id]).items.some((i) => i.id === id), "resuelta desaparece");
+  // Apartada sigue en la lista: apartar no es borrar, ni siquiera una costumbre.
+  assert.ok(componerMando(e, [id]).items.some((i) => i.id === id));
+});
+
+test("apartar la costumbre la baja al final, no la borra", () => {
+  const e = entrada({ unicaCosa: "Algo", preferencia: costumbre });
+  const id = "costumbre:/money/watchlist";
+
+  const m = componerMando(e, [id]);
+
+  assert.ok(m.items.some((i) => i.id === id), "sigue ahí");
+  assert.notEqual(m.items[0]?.id, id, "pero ya no manda");
+});
