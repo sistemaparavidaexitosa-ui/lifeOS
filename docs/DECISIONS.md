@@ -3687,3 +3687,32 @@ implementa:
   - La rama `ia-apagada` sigue sin arrastrar a propósito: si los dominios se
     apagaron, enseñar un resumen que escribió el modelo con datos que ya no se
     autorizan sería justo lo contrario de respetar el interruptor.
+
+- **D-182 · Un respaldo detrás de Gemini, y D-087 se revierte solo a medias.**
+  D-087 fijó «un solo proveedor y sin SDK», y su argumento sigue siendo bueno:
+  dos proveedores para DOS features eran dos facturas y dos SDK que mantener.
+  Esto es otra cosa — **un solo camino, `generateJson`, con un segundo
+  proveedor DETRÁS del primero**.
+  - **Responde a un problema medido, no teórico.** Gemini corre sobre el free
+    tier, que devuelve 429 por diseño —lo dice el propio D-087: «no es una
+    anomalía, es el plan gratuito haciendo su trabajo»—, y el `audit_log` de
+    producción enseña el coach corriendo **dos veces en once segundos**. Cuando
+    la cadena se agotaba, el usuario se quedaba sin respuesta.
+  - **La parte de D-087 que NO se revierte: sin SDK.** Groq habla la API de
+    OpenAI, así que es el mismo `fetch` y cero dependencias nuevas (D-008).
+  - **Solo al final de la cadena.** Gemini sigue siendo el proveedor de la casa
+    —tiene `responseSchema`, herramientas y grounding—; Groq no lo sustituye,
+    lo cubre. Sin `GROQ_API_KEY`, `intentarConGroq` devuelve `null` y todo se
+    comporta exactamente como antes de que existiera.
+  - **Groq trabaja sin `responseSchema`, y da igual.** Se le pide JSON con
+    `response_format` y el esquema va serializado en el prompt. En este repo el
+    esquema GUÍA y `input.validate` GARANTIZA —está escrito así en
+    `GenerateJsonInput`— así que la forma se sigue exigiendo con el mismo
+    `safeParse` de zod. Lo único que cambia es cuánto acierta a la primera.
+  - **Y sin herramientas, a propósito.** Mapear `FunctionDeclaration` de Gemini
+    a las de OpenAI es trabajo de verdad y esto es un respaldo. Hay precedente
+    exacto: la red de seguridad del 400 ya reintenta sin herramientas porque
+    «vale mil veces más una respuesta sin datos frescos que un rail roto».
+  - **El motivo del fallo mejora.** Si el respaldo también cae, se devuelve SU
+    motivo y no «se agotó la cuota»: ya no es cierto que no quedaran opciones,
+    es que la última tampoco pudo.

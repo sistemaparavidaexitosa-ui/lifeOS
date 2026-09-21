@@ -2,6 +2,7 @@ import "server-only";
 import { requireGeminiApiKey } from "@/config/env";
 import { debeSaltarDeModelo, motivoCadenaAgotada, problemasDeEsquema, type Budget } from "@/lib/domain/ai/model-chain.ts";
 import type { GeminiSchema, FunctionDeclaration } from "@/lib/domain/ai/tools.ts";
+import { intentarConGroq } from "./groq-provider";
 
 /**
  * EL ÚNICO SITIO DEL PROYECTO QUE HABLA CON UN MODELO.
@@ -591,7 +592,37 @@ export async function generateJson<T>(input: GenerateJsonInput<T>): Promise<Gene
     }
   }
 
+  // AGOTADA LA CADENA DE GEMINI, EL RESPALDO (D-182).
+  //
+  // Solo aquí, al final: Gemini sigue siendo el proveedor de la casa —tiene
+  // `responseSchema`, herramientas y grounding— y Groq no lo sustituye, lo
+  // cubre. Si no hay `GROQ_API_KEY`, `intentarConGroq` devuelve `null` y todo
+  // se comporta exactamente como antes de que existiera.
+  //
+  // Sin herramientas, a propósito: es el mismo criterio que ya aplica la red de
+  // seguridad del 400 más arriba —vale mil veces más una respuesta sin datos
+  // frescos que un rail roto—.
+  const respaldo = await intentarConGroq({
+    system: input.system,
+    prompt: input.prompt,
+    esquema: input.schema,
+    budget: input.budget
+  });
+
+  if (respaldo?.ok) {
+    // `validate` es lo que GARANTIZA la forma, y por eso Groq puede trabajar
+    // sin `responseSchema`: si devolvió algo que no encaja, se cae aquí igual
+    // que se caería lo de Gemini.
+    const comprobado = input.validate(respaldo.raw);
+    if (comprobado.ok) {
+      return { ok: true, data: comprobado.value, model: respaldo.model, toolRounds: 0, toolsDisabled: true };
+    }
+    return { ok: false, reason: comprobado.reason, model: respaldo.model };
+  }
+
   // Si TODOS cayeron por cuota, el mensaje de un solo modelo sería mentira.
   const reason = agotadosPorCuota === modelos.length ? motivoCadenaAgotada(modelos.length) : ultimo.reason;
-  return { ok: false, reason };
+  // El motivo del respaldo, cuando lo hubo, dice más que «se agotó la cuota»:
+  // ya no es cierto que no quedaran opciones, es que la última tampoco pudo.
+  return { ok: false, reason: respaldo?.reason ?? reason };
 }

@@ -2616,3 +2616,31 @@ conviene saber que la cuota se agota en unas pocas tareas.
 - Sábado y domingo por la mañana comparten frase de contexto con los días
   laborables. Se ve al leer las cinco salidas; no es falso, pero el fin de semana
   podría merecer voz propia.
+
+## El respaldo de la cadena (D-182, sin migración) — 20-sep-2026
+
+### Lo que sí se probó
+
+- `pnpm typecheck` ✅ · `pnpm lint` ✅ · `pnpm test:unit` **1331/1331** (3 nuevas
+  en `ai-groq.test.ts`) · `pnpm build` ✅ **102 kB**, duodécima entrega sin cambio.
+- Lo puro: que la cadena de Groq tenga más de un modelo y sin repetidos, que el
+  esquema viaje **serializado** y no traducido a prosa —una traducción a mano
+  sería un segundo sitio donde quedarse viejo— y que el prompt prohíba
+  explícitamente el bloque de código, sin lo cual Groq envuelve el JSON en
+  ```json y `JSON.parse` revienta.
+- Sin `GROQ_API_KEY`, `groqApiKey()` devuelve `null` y el respaldo ni se
+  intenta: el sistema queda idéntico a antes.
+
+### Lo que NO se ha ejercitado, y es casi todo
+
+- **No se ha hecho ni una llamada real a Groq.** Ni en local ni en producción.
+  Todo lo verde de arriba prueba la forma del prompt y el cableado; **no prueba
+  que Groq conteste, ni que su JSON pase `validate`**.
+- **El camino solo se recorre cuando Gemini se agota**, que es precisamente el
+  caso que no se puede provocar a voluntad. La primera vez que el respaldo
+  trabaje será en producción, un día que Gemini devuelva 429 en todos sus
+  modelos.
+- Los ids de modelo (`llama-3.3-70b-versatile`, `llama-3.1-8b-instant`) están
+  escritos de memoria y **no verificados contra la API**. Si Groq los retira, el
+  síntoma será un 404 y el arreglo es esa línea — el mismo episodio que ya vivió
+  `gemini-2.5-flash`.
