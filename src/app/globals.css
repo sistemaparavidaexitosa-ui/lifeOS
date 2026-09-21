@@ -4469,69 +4469,79 @@ html[data-theme="dark"] .rit-boton-centro { color: #0b0b12; background: #f6f6fa;
   margin: 0;
 }
 
-.centro-vias {
+/* EL PASO (D-180). Una cosa, enorme, con su frente como etiqueta.
+   D-177 enseñaba los tres frentes a la vez y saturaba: tres encabezados
+   simultáneos son el panel que D-169 mató, solo que con mejor tipografía. Los
+   tres objetivos se cubren a lo largo de la sesión, no en la misma pantalla. */
+.centro-paso,
+.centro-cierre {
   display: flex;
   flex-direction: column;
-  gap: 40px;
+  gap: 10px;
+  padding: 4px 0 0;
 }
 
-.centro-via {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding-top: 40px;
-  border-top: 1px solid var(--rit-line);
-}
-
-.centro-via:first-child {
-  padding-top: 0;
-  border-top: 0;
-}
-
-.centro-via-dominante {
-  gap: 18px;
-}
-
-.centro-via-frente {
+.centro-paso-frente {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
+  margin: 0;
   flex-wrap: wrap;
 }
 
-.centro-via-icono {
-  flex: 0 0 auto;
+.centro-paso-objetivo {
+  font-weight: 600;
+  opacity: 0.72;
 }
 
-.centro-via-objetivo {
-  color: var(--rit-muted);
-}
-
-.centro-via-title {
-  color: var(--rit-text);
-  font-size: clamp(1.15rem, 2.6vw, 1.4rem) !important;
-  line-height: 1.12;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+/* Grande de verdad: es lo único que hay que leer. Algo por debajo de
+   `.rit-title` (4.5rem) porque encima sigue estando la pregunta de apertura. */
+.centro-paso-titulo {
   margin: 0;
-  overflow-wrap: anywhere;
-}
-
-.centro-via-title-dominante {
-  font-size: clamp(1.5rem, 4vw, 2.25rem) !important;
+  font-size: clamp(1.9rem, 6.5vw, 3rem) !important;
   font-weight: 800;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+  color: var(--rit-text);
 }
 
-.centro-via-acciones {
+.centro-paso-voz {
+  margin: 0;
+  font-size: 15px;
+}
+
+.centro-paso-acciones {
   display: flex;
   align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+/* Un contador discreto, no pasos numerados: el Centro se abre veinte veces al
+   día y numerar convertiría cada visita en una tarea de cinco pasos (D-169). */
+.centro-paso-quedan {
+  margin: 6px 0 0;
+  font-size: 13px;
+}
+
+/* El cierre navega: un día resuelto no puede ser un callejón sin salida. */
+.centro-cierre-frentes {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.centro-cierre-frentes li {
+  display: flex;
+  align-items: baseline;
   gap: 10px;
   flex-wrap: wrap;
-}
-
-.centro-via-calma {
-  max-width: 52ch;
+  padding-top: 10px;
+  border-top: 1px solid var(--rit-line);
 }
 
 .centro-error {
@@ -4550,12 +4560,4 @@ html[data-theme="dark"] .rit-boton-centro { color: #0b0b12; background: #f6f6fa;
 
 @media (max-width: 640px) {
   .centro-nav { gap: 22px; }
-  .centro-vias { gap: 30px; }
-  .centro-via { padding-top: 30px; }
-  .rit-shell .centro-via-title {
-    font-size: clamp(1.15rem, 5vw, 1.4rem) !important;
   }
-  .rit-shell .centro-via-title-dominante {
-    font-size: clamp(1.5rem, 7vw, 2rem) !important;
-  }
-}
