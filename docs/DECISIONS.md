@@ -3665,3 +3665,25 @@ implementa:
     Centro se abre veinte veces al día y numerar convertiría cada visita en una
     tarea de cinco pasos (D-169).
   - Se borran `Carril.tsx` y sus clases `.centro-via*`, sin consumidor.
+
+- **D-181 · El resumen arrastrado se guarda, no solo se devuelve.** Cuando nada
+  cambió desde la franja anterior, el Centro arrastra el resumen que ya se
+  escribió —lo dicho entonces sigue siendo verdad y pedir otro sería pagar dos
+  veces por lo mismo—. Pero lo devolvía **sin guardarlo en la fila**, y ahí
+  estaba el fallo: la siguiente apertura en esa misma franja entra por la guarda
+  de `deEstaFranja` y lee el `resumen` vacío que ese mismo `insert` acababa de
+  escribir.
+  - **En la práctica: el arrastre funcionaba UNA sola vez.** Desde la segunda
+    apertura de la tarde, el Centro ya no decía nada. Y el Centro se abre veinte
+    veces al día, así que lo normal era encontrárselo mudo.
+  - **Lo encontraron los datos de producción, no el código.** `centro_runs`
+    mostraba `manana → hecho:2` con su resumen y `tarde`/`noche` →
+    `sin-cambios` con el campo vacío. Sin esas cuatro filas, leyendo el archivo,
+    el arrastre de la línea 127 parece correcto — porque lo es; lo que faltaba
+    era persistirlo.
+  - **No es un fallo del modelo ni de la cuota**, que era la sospecha razonable
+    tras trece ciclos sin `GEMINI_API_KEY` en local. El modelo llevaba
+    funcionando en producción desde el principio.
+  - La rama `ia-apagada` sigue sin arrastrar a propósito: si los dominios se
+    apagaron, enseñar un resumen que escribió el modelo con datos que ya no se
+    autorizan sería justo lo contrario de respetar el interruptor.
