@@ -2323,6 +2323,33 @@ export type Database = {
         }
         Relationships: []
       }
+      nav_visitas: {
+        Row: {
+          created_at: string
+          franja: string
+          id: string
+          local_date: string
+          ruta: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          franja: string
+          id?: string
+          local_date: string
+          ruta: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          franja?: string
+          id?: string
+          local_date?: string
+          ruta?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       net_worth_snapshots: {
         Row: {
           as_of: string

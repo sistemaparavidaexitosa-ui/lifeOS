@@ -2644,3 +2644,40 @@ conviene saber que la cuota se agota en unas pocas tareas.
   escritos de memoria y **no verificados contra la API**. Si Groq los retira, el
   síntoma será un 404 y el arreglo es esa línea — el mismo episodio que ya vivió
   `gemini-2.5-flash`.
+
+## Aprender el ritmo de navegación (D-183, migración 0072) — 20-sep-2026
+
+### Lo que sí se probó
+
+- `pnpm typecheck` ✅ · `pnpm lint` ✅ · `pnpm test:unit` **1339/1339** (8 nuevas)
+  · `pnpm build` ✅ **102 kB**, decimotercera entrega sin cambio.
+- **De punta a punta, en navegador**: sesión real, cinco navegaciones
+  (`/money`, `/execution`, `/money`, `/development/routines`, `/money`) y las
+  cinco quedaron en `nav_visitas` con su ruta, su franja y el día local. Cero
+  errores de página.
+- **El borrado es posible de verdad**, que era la condición para guardar rutas
+  completas: `nav_visitas` concede DELETE a `authenticated` con política `ALL`;
+  `audit_log` solo INSERT y SELECT. Comprobado contra el catálogo.
+- La prueba que sostiene el diseño: **«lo que abres a todas horas NO produce
+  preferencia de franja»**. Si algún día pasa, el sistema estará inventando
+  ritmos a partir de volumen.
+
+### Hallazgo de seguridad, ajeno a esta entrega
+
+`alter default privileges` (migración 0010) concede **`TRUNCATE` y `UPDATE` a
+`authenticated` en TODAS las tablas** —comprobado en `tasks`, `memory_items`,
+`centro_runs` y la nueva—. **TRUNCATE ignora la RLS.** No es alcanzable por la
+vía normal, porque PostgREST no lo expone, pero es un permiso que no debería
+existir. No se toca aquí: arreglarlo afecta a todas las tablas y merece su
+propia entrega con sus pruebas de grants.
+
+### Lo que NO se ha ejercitado
+
+- **Ninguna preferencia se ha aprendido de verdad**: hacen falta 14 días de uso
+  y la base local se sembró hoy. Lo probado es la función pura con datos
+  fabricados.
+- **Nada consume todavía `libroDeNavegacion`**: el Centro aún no ofrece lo que
+  aprendió. Eso es la entrega siguiente, junto con la watchlist.
+- **No hay pantalla para ver ni borrar el historial.** La acción existe y
+  funciona; falta el sitio donde pulsarla, que debería ir junto a
+  `/intelligence/memory`, que ya hace exactamente eso con la memoria.

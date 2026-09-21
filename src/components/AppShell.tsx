@@ -7,6 +7,7 @@ import { NAV_ITEMS } from "./nav-items";
 import CommandPalette from "./CommandPalette";
 import AiChatRail from "./AiChatRail";
 import { usePathname } from "next/navigation";
+import { registrarVisita } from "@/lib/comando/visitas";
 import { Suspense } from "react";
 
 function TitleFromPath() {
@@ -37,6 +38,16 @@ export default function AppShell({
   // táctil: evita que el menú quede abierto tapando la nueva vista).
   useEffect(() => {
     setOpen(false);
+  }, [pathname]);
+
+  // POR DÓNDE PASAS, para aprender tu ritmo (D-183). Se apunta aquí y no en
+  // cada página porque `AppShell` es el único ancestro de todas —el mismo
+  // motivo por el que viven aquí la paleta y el chat—. `registrarVisita` nunca
+  // lanza y no se espera: una visita sin apuntar es peor estadística, no un
+  // fallo, y bloquear una navegación por contabilidad sería absurdo.
+  useEffect(() => {
+    if (!pathname) return;
+    void registrarVisita(pathname + window.location.search);
   }, [pathname]);
 
   return (
