@@ -17,12 +17,10 @@ import { useRouter } from "next/navigation";
 import {
   CARRIL_NOMBRE,
   CARRIL_OBJETIVO,
-  ETIQUETA,
   type CarrilDelCentro
 } from "@/lib/domain/comando/tipos.ts";
-import { ICONO, TONO } from "./categoria";
+import { ICONO_CARRIL } from "./categoria";
 import { NAV_ICONS } from "@/components/icons";
-import { Chip } from "@/components/ui";
 import HabitCheckbox from "@/components/habits/HabitCheckbox";
 
 export default function Carril({
@@ -48,6 +46,7 @@ export default function Carril({
   const router = useRouter();
   const [navegando, startTransition] = useTransition();
   const item = via.item;
+  const Icono = NAV_ICONS[ICONO_CARRIL[via.carril]];
 
   function ir(href: string) {
     onNavegar();
@@ -55,42 +54,38 @@ export default function Carril({
   }
 
   return (
-    <article className={dominante ? "cmd-carril cmd-carril-manda" : "cmd-carril"}>
-      <header className="cmd-carril-cab">
-        <span className="cmd-carril-nombre">{CARRIL_NOMBRE[via.carril]}</span>
-        <span className="cmd-carril-objetivo">{CARRIL_OBJETIVO[via.carril]}</span>
+    <article className={`rit-step centro-via${dominante ? " centro-via-dominante" : ""}`}>
+      <header className="rit-eyebrow centro-via-frente">
+        <Icono className="centro-via-icono" width={14} height={14} aria-hidden />
+        <span>{CARRIL_NOMBRE[via.carril]}</span>
+        <span className="centro-via-objetivo">· {CARRIL_OBJETIVO[via.carril]}</span>
       </header>
 
       {item ? (
         <>
-          <div className="cmd-item-meta">
-            {(() => {
-              const Icono = NAV_ICONS[ICONO[item.categoria]];
-              return <Icono width={14} height={14} aria-hidden />;
-            })()}
-            <Chip kind={TONO[item.categoria]}>{ETIQUETA[item.categoria]}</Chip>
-            {item.voz && <span className="cmd-voz">{item.voz}</span>}
-          </div>
+          <h3 className={`centro-via-title${dominante ? " centro-via-title-dominante" : ""}`}>{item.titulo}</h3>
+          {item.voz && <p className="rit-muted">{item.voz}</p>}
 
-          <h3 className={dominante ? "cmd-titulo cmd-titulo-heroe" : "cmd-titulo"}>{item.titulo}</h3>
-
-          <div className="cmd-acciones">
+          <div className="centro-via-acciones">
             {item.datos.tipo === "habito" && (
-              <HabitCheckbox
-                routineId={item.datos.routineId}
-                habitId={item.datos.habitId}
-                today={today}
-                entry={null}
-                size={dominante ? 48 : 34}
-                onResult={(nuevo, err) => {
-                  if (!err && nuevo) onResuelto(item.id);
-                }}
-              />
+              <>
+                <HabitCheckbox
+                  routineId={item.datos.routineId}
+                  habitId={item.datos.habitId}
+                  today={today}
+                  entry={null}
+                  size={dominante ? 48 : 34}
+                  onResult={(nuevo, err) => {
+                    if (!err && nuevo) onResuelto(item.id);
+                  }}
+                />
+                <span className="rit-muted">Tócalo cuando lo hayas hecho</span>
+              </>
             )}
 
             {item.datos.tipo === "propuesta" && item.accion && (
               <button
-                className="btn-primary btn-sm"
+                className="rit-sug-si"
                 disabled={pendiente}
                 onClick={() =>
                   onAceptar(item.datos.tipo === "propuesta" ? item.datos.propuestaId : "", item.href, item.id)
@@ -101,22 +96,22 @@ export default function Carril({
             )}
 
             {item.datos.tipo === "navegar" && item.accion && item.href && (
-              <button className="btn-primary btn-sm" disabled={navegando} onClick={() => ir(item.href!)}>
+              <button className="rit-sug-si" disabled={navegando} onClick={() => ir(item.href!)}>
                 {item.accion}
               </button>
             )}
 
             {/* «Ahora no» aparta, no borra: la regla de D-169 sobrevive. */}
-            <button className="btn-ghost btn-sm" disabled={pendiente} onClick={() => onAhoraNo(item.id)}>
+            <button className="rit-skip" disabled={pendiente} onClick={() => onAhoraNo(item.id)}>
               Ahora no
             </button>
           </div>
         </>
       ) : (
         <>
-          <p className="cmd-carril-calma">{via.estado}</p>
-          <div className="cmd-acciones">
-            <button className="btn-ghost btn-sm" disabled={navegando} onClick={() => ir(via.href)}>
+          <p className="rit-muted centro-via-calma">{via.estado}</p>
+          <div className="centro-via-acciones">
+            <button className="rit-skip" disabled={navegando} onClick={() => ir(via.href)}>
               {via.destino}
             </button>
           </div>

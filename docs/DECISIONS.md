@@ -3582,3 +3582,29 @@ implementa:
     propuestas del coach (`origen = 'coach'`) siguen viviendo solo en el rail y
     no entran en los carriles. Es conducta de D-167, no un descuido, y cambiarla
     es una decisión de producto aparte.
+
+- **D-178 · El Centro habla el idioma visual del ritual.** D-177 le dio tres
+  puertas, pero las pintó como tarjetas con borde y chips: se leía como un
+  panel. Ahora usa el vocabulario de `.rit-shell` —versalitas, tipografía
+  grande, iconos de 14px, líneas de pelo, botones fantasma— y entra con la
+  animación `rit-in` de los pasos del ritual.
+  - **No es maquillaje: es que ya compartían capa.** El Centro vive dentro de
+    `.rit-shell`, que invierte sus colores según la hora local y remapea
+    `--line`, `--text`, `--muted` y `--surface2`. Pintar tarjetas de la
+    aplicación ahí dentro era ignorar un sistema que ya estaba puesto. Salieron
+    **64 líneas netas** de CSS y de JSX al dejar de mantener dos idiomas.
+  - **El dominante NO usa `.rit-title`.** Fue el primer intento y se vio mal:
+    su `clamp()` llega a 4.5rem porque se diseñó para UNA cosa sola en pantalla.
+    Con tres carriles apilados aplastaba a los otros dos, y como el dominante no
+    siempre es el primero, el ojo iba al sitio equivocado — no se leía como
+    prioridad sino como fallo de tamaño. Tamaños propios: el dominante destaca
+    por peso y aire, no por escala tres veces mayor.
+  - **El icono es del FRENTE, no de la categoría.** `ICONO_CARRIL` sustituye al
+    mapa por categoría: con el anterior, un carril en calma —sin ítem, sin
+    categoría— se quedaba sin icono y la línea de versalitas salía desigual.
+  - **Los chips de categoría desaparecen.** En este lenguaje sobraban: la
+    etiqueta la da el nombre del frente y el porqué lo da `item.voz`. Lo que
+    quedó sin uso en `categoria.ts` se borró el mismo día.
+  - **Lo encontró el navegador, no la suite.** Las 1322 pruebas, el `typecheck`
+    y el `lint` pasaron con la jerarquía invertida y con Money OS sin icono. Que
+    una pantalla se lea mal no lo atrapa ningún test: hay que mirarla.
