@@ -2681,3 +2681,35 @@ propia entrega con sus pruebas de grants.
 - **No hay pantalla para ver ni borrar el historial.** La acción existe y
   funciona; falta el sitio donde pulsarla, que debería ir junto a
   `/intelligence/memory`, que ya hace exactamente eso con la memoria.
+
+## La watchlist de Money OS (D-184, migración 0073) — 20-sep-2026
+
+### Lo que sí se probó
+
+- `pnpm typecheck` ✅ · `pnpm lint` ✅ · `pnpm test:unit` **1346/1346** (7 nuevas)
+  · `pnpm build` ✅, `/money/watchlist` en 2.31 kB y **102 kB compartidos**, sin
+  cambio por decimocuarta entrega.
+- **En navegador, SIN `POLYGON_API_KEY`**, que es el caso que más importaba: la
+  página carga, el estado vacío se lee, aparece en el menú de Money OS, y al
+  buscar dice **«Falta POLYGON_API_KEY: la watchlist necesita una fuente de
+  mercado configurada»** en vez de romperse. Cero errores de página.
+- Lo puro: normalización de símbolos reales (`BRK.B`, `RDS-A`), rechazo de lo
+  que no lo es (`DROP TABLE`, `1AAPL`), que el patrón coincide con el `check` de
+  la migración, y que **lo casi plano no se pinta de color**.
+
+### Lo que NO se ha ejercitado, y hay que saberlo
+
+- **No se ha hecho ni una llamada real a Polygon.** No hay llave en local. Las
+  dos rutas (`/v3/reference/tickers` y `/v2/snapshot/…`) y la forma de sus
+  respuestas están escritas **de memoria contra la documentación** y sin
+  verificar. Es el mismo riesgo que los ids de modelo de Groq (D-182).
+- **Si Polygon cambió algo, el síntoma será `ok: false` con el motivo de la API
+  dentro** —nunca un precio inventado— y el arreglo son esas dos URL. Eso está
+  garantizado por construcción: `cotizaciones()` solo emite un precio si vino en
+  la respuesta.
+- **Nada del Centro consume todavía la watchlist.** Que aparezca por las mañanas
+  si la visitas por las mañanas es la entrega siguiente: `libroDeNavegacion`
+  (D-183) ya sabe deducirlo, pero nadie lo llama.
+- El plan Starter sirve datos con retraso; la pantalla **no lo dice todavía**.
+  Conviene que lo diga antes de que alguien tome una decisión creyendo que ve el
+  precio de ahora.

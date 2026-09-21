@@ -266,6 +266,18 @@ export function groqApiKey(): string | null {
   return key ? key : null;
 }
 
+/**
+ * La llave de la fuente de mercado (D-184). OPCIONAL.
+ *
+ * Devuelve `null` en vez de lanzar: sin ella la watchlist dice que falta
+ * configurarla, que es información útil, en vez de romper la página de dinero
+ * entera — que se usa sin precios todos los días.
+ */
+export function polygonApiKey(): string | null {
+  const key = process.env.POLYGON_API_KEY?.trim();
+  return key ? key : null;
+}
+
 export function coachPorElKernel(): boolean {
   return process.env.AGENT_KERNEL_COACH?.trim() === "1";
 }

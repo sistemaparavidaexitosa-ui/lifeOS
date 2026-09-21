@@ -3753,3 +3753,34 @@ implementa:
   - Los umbrales son los mismos que `UMBRALES_DECISION` y que los de
     `estilo.ts`. Tres calibraciones distintas para el mismo tipo de inferencia
     serían tres cosas que ajustar y dos que nadie recordaría por qué difieren.
+
+- **D-184 · La watchlist: se guarda QUÉ sigues, nunca CUÁNTO vale.** Primera
+  fuente de datos externa del producto. Hasta ahora todo lo que LifeOS sabía
+  salía de LifeOS; un ticker es un puntero a un mercado que no controlamos.
+  - **Los precios NO se guardan en la base, y es la decisión que ordena todo lo
+    demás.** Un precio guardado envejece en segundos y el sistema lo enseñaría
+    como propio sin poder responder por él — exactamente lo que
+    `validateAnchoring` impide en el otro extremo. O el precio viene de Polygon
+    en esta petición, o no se enseña. Sin dato **no se pinta un cero**: un
+    precio que no se tiene no es cero, es que no se tiene.
+  - **Sin `POLYGON_API_KEY` la watchlist sigue funcionando.** Guardas qué
+    quieres seguir y la pantalla dice que falta la fuente. Romper la página de
+    dinero —que se usa sin precios todos los días— porque falta una llave sería
+    desproporcionado, e inventar una cifra en un producto sobre el dinero de
+    alguien es el peor sitio posible para hacerlo.
+  - **Un solo punto que habla con Polygon**, con `fetch`, timeout y sin SDK:
+    mismo contrato que `gemini-provider.ts`, incluido el no lanzar nunca. Y una
+    sola petición para toda la lista: una por ticker convertiría una watchlist
+    de veinte en veinte viajes cada vez que se pinta la página.
+  - **La búsqueda es una Server Action y exige sesión.** La llave es de la
+    instalación, no de la persona: sin ese guarda, cualquiera con la URL gastaría
+    la cuota.
+  - **Un ticker que Polygon no conoce sigue apareciendo en la lista**, sin
+    precio. Lo que sigues es tuyo; desaparecer sin explicación sería peor que no
+    tener el dato.
+  - **El umbral de «plano» (0,1 %) no es cosmético.** El ojo lee color antes que
+    número: un 0,03 % en verde son diez señales falsas en una lista de diez
+    tickers, todas las mañanas.
+  - El tope de 20 se comprueba en la acción y no con un `check`: no es una
+    invariante de integridad, es una decisión de producto que puede cambiar sin
+    migración.

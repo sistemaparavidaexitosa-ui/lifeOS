@@ -3512,6 +3512,30 @@ export type Database = {
         }
         Relationships: []
       }
+      watchlist: {
+        Row: {
+          created_at: string
+          id: string
+          nombre: string
+          ticker: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          nombre?: string
+          ticker: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          nombre?: string
+          ticker?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       weekly_reviews: {
         Row: {
           blocked_count: number

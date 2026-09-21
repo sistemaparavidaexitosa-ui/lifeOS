@@ -69,6 +69,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/intelligence/memory", label: "Memoria", group: "Intelligence OS", icon: "memory", color: "var(--c-teal)", hidden: true },
   { href: "/money", label: "Dashboard y Gastos", group: "Money OS (privado)", icon: "money", color: "var(--c-green)" },
   { href: "/money/budget", label: "Presupuesto", group: "Money OS (privado)", icon: "budget", color: "var(--c-green)" },
+  { href: "/money/watchlist", label: "Watchlist", group: "Money OS (privado)", icon: "investments", color: "var(--c-green)" },
   { href: "/investments", label: "Inversiones", group: "Money OS (privado)", icon: "investments", color: "var(--c-green)" },
   { href: "/savings", label: "Ahorros", group: "Money OS (privado)", icon: "savings", color: "var(--c-green)" },
   { href: "/debt", label: "Deudas", group: "Money OS (privado)", icon: "debt", color: "var(--c-green)" },
