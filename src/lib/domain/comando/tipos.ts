@@ -152,10 +152,22 @@ export interface CarrilDelCentro {
 
 export interface Mando {
   estado: EstadoDeMando;
-  /** Los TRES, siempre, en el orden de `CARRILES`. */
-  carriles: CarrilDelCentro[];
-  /** Cuál manda ahora mismo. `null` si los tres están en calma. */
-  dominante: Carril | null;
-  /** Qué decir cuando no queda nada en ningún frente. */
+  /**
+   * Todo lo accionable, en orden de caducidad, mezclando los tres frentes.
+   *
+   * SE ENSEÑA DE UNO EN UNO (D-180). Enseñar los tres frentes a la vez fue el
+   * error de D-177: tres encabezados simultáneos son el panel que D-169 mató,
+   * solo que con mejor tipografía. Los tres objetivos se cubren a lo largo de
+   * la sesión —«Ahora no» trae el siguiente, que puede ser de otro frente— no
+   * en la misma pantalla.
+   */
+  items: ItemDeMando[];
+  /**
+   * Cómo está cada frente. Solo se usa AL FINAL, cuando ya no queda nada que
+   * hacer: el cierre ofrece las tres entradas para que se pueda navegar sin
+   * tener nada pendiente.
+   */
+  frentes: CarrilDelCentro[];
+  /** Qué decir cuando no queda nada. Nunca se inventa trabajo. */
   cierre: string;
 }

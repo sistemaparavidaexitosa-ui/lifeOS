@@ -40,8 +40,13 @@ const habito = {
   durationMin: 20
 };
 
-const via = (m: ReturnType<typeof componerMando>, c: (typeof CARRILES)[number]) =>
-  m.carriles.find((v) => v.carril === c)!;
+/** El primer ítem de ese frente en la lista, que es lo que subiría al pasar. */
+const via = (m: ReturnType<typeof componerMando>, c: (typeof CARRILES)[number]) => ({
+  ...m.frentes.find((f) => f.carril === c)!,
+  // Después del spread: `CarrilDelCentro.item` es siempre null en `frentes`
+  // —solo describen el cierre— y pisaría al que de verdad buscamos.
+  item: m.items.find((i) => i.carril === c) ?? null
+});
 
 // LA PRUEBA QUE SOSTIENE EL DISEÑO. Si falla, alguien escribió un segundo
 // criterio de prioridad y el Centro dejó de ser una cara de D-169.
@@ -57,27 +62,37 @@ test("NO REORDENA: dentro de un carril manda el orden de tarjetasDelCentro", () 
   const orden = tarjetasDelCentro(e, [])
     .filter((t) => t.kind !== "cierre" && t.kind !== "apertura")
     .map((t) => t.id);
-  const m = componerMando(e);
 
-  const primeroDeEjecucion = orden.find((id) => id !== "dinero" && !id.startsWith("r1:"));
-  assert.equal(via(m, "execution").item?.id, primeroDeEjecucion);
+  // La lista es EXACTAMENTE la del lienzo, sin reordenar ni agrupar.
+  assert.deepEqual(componerMando(e).items.map((i) => i.id), orden);
 });
 
-test("siempre son los tres carriles, en su orden", () => {
+test("el cierre ofrece siempre los tres frentes, en su orden", () => {
   const m = componerMando(entrada());
 
-  assert.deepEqual(m.carriles.map((v) => v.carril), [...CARRILES]);
+  assert.deepEqual(m.frentes.map((f) => f.carril), [...CARRILES]);
+});
+
+// D-180: se enseña de uno en uno. Si algún día esto devuelve los tres a la vez,
+// el Centro volvió a ser el panel que satura.
+test("UNA COSA A LA VEZ: los ítems son una lista, no tres grupos", () => {
+  const m = componerMando(entrada({ unicaCosa: "Algo", presupuestoEnRojo: true, proximoHabito: habito }));
+
+  assert.ok(Array.isArray(m.items));
+  assert.ok(m.items.length >= 3, "los tres frentes conviven en la lista");
+  // Y ninguno de los frentes del cierre lleva ítem: el cierre solo navega.
+  for (const f of m.frentes) assert.equal(f.item, null);
 });
 
 // Esconder el frente que va bien deja a la persona sin saber si es que no hay
 // nada o es que no se miró.
-test("un carril en calma NO se esconde: dice qué sabe y deja entrar", () => {
+test("en el cierre, cada frente dice qué sabe y deja entrar", () => {
   const m = componerMando(
     entrada({ senalesDeCarril: { tareasDelPlan: 3, habitosPendientes: 0, identidadDeclarada: true } })
   );
 
-  for (const v of m.carriles) {
-    assert.equal(v.item, null);
+  assert.deepEqual(m.items, [], "sin nada pendiente no hay paso que enseñar");
+  for (const v of m.frentes) {
     assert.ok(v.estado.length > 0, `${v.carril} se quedó mudo`);
     assert.ok(v.href.length > 0, `${v.carril} no lleva a ningún sitio`);
     assert.ok(v.destino.length > 0, `${v.carril} no dice cómo entrar`);
@@ -96,7 +111,7 @@ test("sin identidad declarada, el carril de desarrollo lo dice", () => {
 test("el día sin nada no inventa trabajo", () => {
   const m = componerMando(entrada());
 
-  assert.equal(m.dominante, null);
+  assert.deepEqual(m.items, []);
   assert.ok(m.cierre.length > 0);
   assert.equal(m.estado.bloqueos, 0);
 });
@@ -123,7 +138,7 @@ test("cada cosa cae en su frente", () => {
 test("las propuestas van al frente donde vive lo que proponen", () => {
   const carrilDe = (tipo: string) => {
     const m = componerMando(entrada({ propuestas: [propuesta("p1", tipo)] }));
-    return m.carriles.find((v) => v.item?.id === "propuesta:p1")?.carril;
+    return m.items.find((i) => i.id === "propuesta:p1")?.carril;
   };
 
   assert.equal(carrilDe("tarea"), "execution");
@@ -142,12 +157,9 @@ test("un tipo que la base gane mañana cae en ejecución, no revienta", () => {
 
 // --- Quién manda ---
 
-test("manda el frente de lo que más aprieta, no un orden fijo", () => {
-  // Solo dinero: manda dinero aunque se pinte el tercero.
-  assert.equal(componerMando(entrada({ presupuestoEnRojo: true })).dominante, "money");
-
-  // Solo un hábito: manda desarrollo, que se pinta el segundo.
-  assert.equal(componerMando(entrada({ proximoHabito: habito })).dominante, "development");
+test("el primero de la lista es el que más aprieta, sea del frente que sea", () => {
+  assert.equal(componerMando(entrada({ presupuestoEnRojo: true })).items[0]?.carril, "money");
+  assert.equal(componerMando(entrada({ proximoHabito: habito })).items[0]?.carril, "development");
 });
 
 // --- Categorías, que siguen valiendo ---
@@ -168,9 +180,8 @@ test("toda categoría emitida es una de las siete", () => {
     })
   );
 
-  for (const v of m.carriles) {
-    if (!v.item) continue;
-    assert.ok((CATEGORIAS as readonly string[]).includes(v.item.categoria), `categoría suelta: ${v.item.categoria}`);
+  for (const i of m.items) {
+    assert.ok((CATEGORIAS as readonly string[]).includes(i.categoria), `categoría suelta: ${i.categoria}`);
   }
 });
 
@@ -185,15 +196,12 @@ test("los bloqueos se cuentan aunque estén repartidos", () => {
 test("«ahora no» aparta dentro del carril, no borra", () => {
   const e = entrada({ unicaCosa: "Algo", vencidas: 1 });
   const antes = componerMando(e);
-  const apartado = antes.carriles.find((v) => v.item)!.item!.id;
+  const apartado = antes.items[0]!.id;
 
   const despues = componerMando(e, [apartado]);
 
-  // O sigue estando, o dejó subir al siguiente de su carril: lo que no puede
-  // es desaparecer sin más.
-  const sigue = despues.carriles.some((v) => v.item?.id === apartado);
-  const subioOtro = despues.carriles.some((v) => v.item && v.item.id !== apartado);
-  assert.ok(sigue || subioOtro, "apartar no es borrar");
+  assert.ok(despues.items.some((i) => i.id === apartado), "sigue en la lista: apartar no es borrar");
+  assert.notEqual(despues.items[0]?.id, apartado, "pero ya no es el primero");
 });
 
 test("el resumen vacío se queda vacío: no se inventa uno", () => {
@@ -217,38 +225,40 @@ test("cada ítem lleva lo justo para resolverse sin salir del centro", () => {
 // La primera versión anulaba el ítem YA ELEGIDO en el componente, así que el
 // carril se quedaba en falsa calma con una segunda tarjeta suya esperando. El
 // comentario del componente afirmaba la conducta que el código no tenía.
-test("RESOLVER PROMUEVE: al caer un ítem sube el siguiente de SU carril", () => {
-  // Dos de ejecución compitiendo: la Única Cosa y las vencidas.
+test("RESOLVER PROMUEVE: al caer el primero sube el siguiente", () => {
+  // Dos compitiendo: la Única Cosa y las vencidas.
   const e = entrada({ unicaCosa: "Cerrar el rediseño", vencidas: 2 });
 
   const antes = componerMando(e);
-  const primero = via(antes, "execution").item!;
+  const primero = antes.items[0]!;
 
   const despues = componerMando(e, [], [primero.id]);
-  const segundo = via(despues, "execution").item;
 
-  assert.ok(segundo, "el carril NO puede quedarse en calma con otra tarjeta suya esperando");
-  assert.notEqual(segundo!.id, primero.id);
+  assert.ok(despues.items[0], "no puede quedarse vacío con otra tarjeta esperando");
+  assert.notEqual(despues.items[0]!.id, primero.id);
+  assert.ok(!despues.items.some((i) => i.id === primero.id), "lo resuelto sí desaparece");
 });
 
-test("resolver recalcula quién manda", () => {
-  // Ejecución manda; al resolver su único ítem, manda el dinero.
+test("resolver puede cambiar de frente sin despeinarse", () => {
+  // Ejecución primero; al resolverla, sube el dinero.
   const e = entrada({ unicaCosa: "Algo", presupuestoEnRojo: true });
 
   const antes = componerMando(e);
-  assert.equal(antes.dominante, "execution");
+  assert.equal(antes.items[0]?.carril, "execution");
 
-  const despues = componerMando(e, [], [via(antes, "execution").item!.id]);
-  assert.equal(despues.dominante, "money", "el dominante no puede apuntar a algo que ya no se ve");
+  const despues = componerMando(e, [], [antes.items[0]!.id]);
+  assert.equal(despues.items[0]?.carril, "money");
 });
 
-test("resolver lo último de un carril lo deja en calma, no mudo", () => {
+test("resolver lo último deja el cierre, y el cierre sigue navegando", () => {
   const e = entrada({ presupuestoEnRojo: true });
-  const dinero = via(componerMando(e), "money").item!;
+  const unico = componerMando(e).items[0]!;
 
-  const v = via(componerMando(e, [], [dinero.id]), "money");
+  const m = componerMando(e, [], [unico.id]);
 
-  assert.equal(v.item, null);
-  assert.ok(v.estado.length > 0, "sin ítem sigue diciendo qué sabe");
-  assert.ok(v.href.length > 0, "y sigue dejando entrar");
+  assert.deepEqual(m.items, []);
+  assert.ok(m.cierre.length > 0);
+  for (const f of m.frentes) {
+    assert.ok(f.estado.length > 0 && f.href.length > 0, `${f.carril} se quedó mudo en el cierre`);
+  }
 });

@@ -241,34 +241,30 @@ export function componerMando(
 
   // `tarjetasDelCentro` SIEMPRE cierra con la tarjeta de cierre. Aquí se
   // separa: es el texto del día vacío, no una cosa más que hacer. La apertura
-  // tampoco entra: su sitio es la cabecera, como resumen.
+  // tampoco entra: su sitio es la cabecera del Centro, como resumen.
   const cierre = tarjetas.find((t) => t.kind === "cierre");
-  const accionables = tarjetas
+
+  // TODO lo accionable, en el orden de caducidad de D-169, sin agrupar por
+  // frente. Agruparlos fue el error de D-177: la UI enseña de uno en uno y el
+  // siguiente puede ser de otro frente, que es como los tres objetivos se
+  // cubren sin saturar la pantalla.
+  const items = tarjetas
     .filter((t) => t.kind !== "cierre" && t.kind !== "apertura")
     .map((t) => itemDe(t, e))
     .filter((i) => !resueltas.includes(i.id));
 
-  // UN SOLO ÍTEM POR CARRIL, Y ES EL PRIMERO. Como `accionables` ya viene en el
-  // orden de caducidad de D-169, quedarse con el primero de cada frente
-  // significa que dentro del carril manda el mismo criterio de siempre. Lo que
-  // no cabe no se pierde: sigue ahí cuando se resuelva o se aparte lo de
-  // encima. Tres cosas a la vista y no nueve es lo que impide que esto vuelva a
-  // ser la bandeja que D-169 mató.
-  const carriles: CarrilDelCentro[] = CARRILES.map((carril) => {
-    const item = accionables.find((i) => i.carril === carril) ?? null;
-    if (item) return { carril, item, estado: "", href: item.href ?? CARRIL_INICIO[carril], destino: item.accion ?? "Abrir" };
+  // Cómo está cada frente. Solo lo usa el cierre, para poder navegar cuando ya
+  // no queda nada pendiente: un día resuelto no puede ser un callejón sin
+  // salida.
+  const frentes: CarrilDelCentro[] = CARRILES.map((carril) => {
     const calma = estadoDeCalma(carril, e);
     return { carril, item: null, estado: calma.estado, href: CARRIL_INICIO[carril], destino: calma.destino };
   });
 
-  // El que manda es el del ítem más urgente de todos, no un orden fijo: si hoy
-  // lo que aprieta es el dinero, el dinero manda aunque se pinte el tercero.
-  const dominante = accionables[0]?.carril ?? null;
-
   const estado: EstadoDeMando = {
     resumen: e.resumen,
-    bloqueos: accionables.filter((i) => i.categoria === "bloquear").length
+    bloqueos: items.filter((i) => i.categoria === "bloquear").length
   };
 
-  return { estado, carriles, dominante, cierre: cierre?.titulo ?? "Ya está. ¿Algo más?" };
+  return { estado, items, frentes, cierre: cierre?.titulo ?? "Ya está. ¿Algo más?" };
 }

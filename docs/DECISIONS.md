@@ -3643,3 +3643,25 @@ implementa:
     Inventar el precio de una acción en un producto sobre el dinero de alguien es
     el peor sitio posible para fingir un dato, y es justo lo que
     `validateAnchoring` existe para impedir. Queda pendiente de elegir proveedor.
+
+- **D-180 · Una cosa a la vez, otra vez.** D-177 convirtió los tres objetivos en
+  tres carriles SIMULTÁNEOS. Era el error: tres encabezados a la vez
+  —EXECUTION OS, PERSONAL DEVELOPMENT OS, MONEY OS— son el panel que D-169 mató,
+  solo que con mejor tipografía. En un teléfono empujaban además la barra de
+  captura fuera de la pantalla, así que el Centro **dejaba de pedir nada**.
+  - **Los tres objetivos no se abandonan: se cubren a lo largo de la sesión.**
+    `componerMando` devuelve ahora una LISTA plana en el orden de caducidad de
+    D-169, y la pantalla enseña el primero. «Ahora no» trae el siguiente, que
+    puede ser de otro frente, y la etiqueta de arriba dice en cuál estás.
+  - **Es la forma del Lienzo que D-177 retiró.** Conviene decirlo claro: se quitó
+    algo que estaba bien para meter tres columnas, y la vuelta atrás es admitir
+    que la densidad era el problema, no el tamaño. Lo que sí se conserva de
+    D-177 es la etiqueta de frente, que el Lienzo no tenía y que es lo que hace
+    visible el objetivo detrás de cada cosa.
+  - **El cierre navega.** Cuando no queda nada, la pantalla ofrece los tres
+    frentes con su estado —«10 días de quincena, presupuesto en verde»— y su
+    entrada. Un día resuelto no puede ser un callejón sin salida.
+  - **El contador vuelve a ser discreto:** «Quedan 2», sin numerar pasos. El
+    Centro se abre veinte veces al día y numerar convertiría cada visita en una
+    tarea de cinco pasos (D-169).
+  - Se borran `Carril.tsx` y sus clases `.centro-via*`, sin consumidor.

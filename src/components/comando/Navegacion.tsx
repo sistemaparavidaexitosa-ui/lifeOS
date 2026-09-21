@@ -27,7 +27,7 @@ import type { Franja } from "@/lib/domain/centro/franja.ts";
 import { aperturaDelCentro } from "@/lib/domain/comando/voz.ts";
 import { acceptProposal } from "@/lib/coach/actions";
 import Apertura from "./Apertura";
-import Carril from "./Carril";
+import Paso from "./Paso";
 
 export default function Navegacion({
   entrada,
@@ -87,29 +87,55 @@ export default function Navegacion({
     hayPlanDeManana: entrada?.unicaCosa !== null && entrada?.unicaCosa !== undefined,
     bloqueos: mando?.estado.bloqueos ?? 0
   });
-  const enCalma = mando?.carriles.every((v) => !v.item) ?? false;
+  // Mientras no hay contenido, el Centro ya te habla: la apertura es
+  // determinista y no espera a nadie. Lo único que falta debajo es lo que se
+  // está buscando, y los tres puntos lo dicen.
+  if (!mando) {
+    return (
+      <div className="centro-nav">
+        <Apertura apertura={apertura} pensando resumen="" />
+      </div>
+    );
+  }
+
+  // El primero de la lista es el que se enseña. Los demás esperan detrás: al
+  // resolverlo o apartarlo, sube el siguiente — que puede ser de otro frente.
+  const actual = mando.items[0] ?? null;
 
   return (
     <div className="centro-nav">
-      <Apertura apertura={apertura} pensando={pensando} resumen={mando?.estado.resumen ?? ""} />
+      <Apertura apertura={apertura} pensando={pensando} resumen={mando.estado.resumen} />
 
-      {enCalma && mando && <p className="centro-cierre">{mando.cierre}</p>}
-
-      {mando && <div className="centro-vias">
-        {mando.carriles.map((via) => (
-          <Carril
-            key={via.carril}
-            via={via}
-            today={today}
-            dominante={mando.dominante === via.carril}
-            pendiente={pendiente}
-            onResuelto={(id) => setResueltas((prev) => (prev.includes(id) ? prev : [...prev, id]))}
-            onAhoraNo={(id) => setPospuestas((prev) => (prev.includes(id) ? prev : [...prev, id]))}
-            onAceptar={aceptar}
-            onNavegar={onNavegar}
-          />
-        ))}
-      </div>}
+      {actual ? (
+        <Paso
+          key={actual.id}
+          item={actual}
+          today={today}
+          quedan={mando.items.length - 1}
+          pendiente={pendiente}
+          onResuelto={(id) => setResueltas((prev) => (prev.includes(id) ? prev : [...prev, id]))}
+          onAhoraNo={(id) => setPospuestas((prev) => (prev.includes(id) ? prev : [...prev, id]))}
+          onAceptar={aceptar}
+          onNavegar={onNavegar}
+        />
+      ) : (
+        // Un día resuelto no puede ser un callejón sin salida: el cierre ofrece
+        // las tres entradas con el estado de cada frente, para poder navegar sin
+        // tener nada pendiente.
+        <section className="rit-step centro-cierre">
+          <h2 className="centro-paso-titulo">{mando.cierre}</h2>
+          <ul className="centro-cierre-frentes">
+            {mando.frentes.map((f) => (
+              <li key={f.carril}>
+                <span className="rit-muted">{f.estado}</span>
+                <a className="rit-skip" href={f.href} onClick={onNavegar}>
+                  {f.destino}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {error && (
         <p className="centro-error" role="alert">
