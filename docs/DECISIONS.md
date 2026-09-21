@@ -3608,3 +3608,38 @@ implementa:
   - **Lo encontró el navegador, no la suite.** Las 1322 pruebas, el `typecheck`
     y el `lint` pasaron con la jerarquía invertida y con Money OS sin icono. Que
     una pantalla se lea mal no lo atrapa ningún test: hay que mirarla.
+
+- **D-179 · El Centro abre hablándote, y la frase la calcula el código.** Al
+  abrir el botón flotante, lo primero ya no es una lista: es una pregunta por tu
+  nombre que sabe qué día y qué hora es. «Luis, es domingo por la noche. ¿Planeamos
+  mañana?»
+  - **La voz es DETERMINISTA, y es la decisión que sostiene todo lo demás.**
+    `domain/comando/voz.ts` compone saludo, contexto y pregunta a partir de
+    cuatro datos —nombre, franja, día de la semana, si hay bloqueos y si hay plan
+    de mañana— sin consultar al modelo. Si la escribiera el modelo, sin
+    `GEMINI_API_KEY` el Centro se quedaría mudo justo en su primera línea, que es
+    el peor sitio para enmudecer. El modelo enriquece debajo, con el `resumen`
+    que ya escribe en `centro_runs`; si no está, no se rellena con nada.
+  - **La pregunta se adapta al estado, y ese es el «agentic» que se puede
+    probar**: con bloqueos pendientes pregunta por ellos; de noche y sin plan,
+    propone planear mañana; si no, abre. Cinco pruebas lo fijan.
+  - **Grande la pregunta, pequeño el contexto.** El primer intento puso las dos
+    en tipografía de titular y la apertura ocupaba cuatro líneas y media
+    pantalla: había que bajar para ver una sola acción. Una pregunta que no cabe
+    de un vistazo deja de ser una pregunta.
+  - **Se revela palabra a palabra, y solo una vez.** El revelado no es adorno:
+    es la diferencia entre «cargando» y «componiendo» mientras se espera a
+    `/api/centro`. Pero cuando llegan los datos la pregunta puede cambiar
+    —`bloqueos` deja de ser cero— y volver a teclearla parpadea y parece un
+    fallo; se cruza con un fundido de 200 ms, que lo lee como lo que es: se lo
+    pensó mejor al saber más.
+  - **Mientras piensa de verdad, respira.** Opacidad 0.55↔1 en ciclo de 1.8 s y
+    tres puntos en secuencia. **Sin spinner**: no hay ninguno en este repositorio
+    y es deliberado. Con `prefers-reduced-motion`, todo aparece de golpe.
+  - **Lo que NO se hizo: los tickers de mercado.** Se pidieron explícitamente.
+    LifeOS no tiene ni una fuente de datos de mercado —ni tabla, ni integración;
+    la watchlist quedó planeada y sin empezar— y la alternativa era pedírselos al
+    modelo con `buscar_en_internet`, que devuelve prosa y no cifras verificables.
+    Inventar el precio de una acción en un producto sobre el dinero de alguien es
+    el peor sitio posible para fingir un dato, y es justo lo que
+    `validateAnchoring` existe para impedir. Queda pendiente de elegir proveedor.
