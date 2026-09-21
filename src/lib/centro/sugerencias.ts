@@ -119,12 +119,20 @@ export async function sugerenciasDelCentro(): Promise<CentroPensado> {
     const anterior = (corridas ?? []).find((c) => c.facts_hash)?.facts_hash ?? null;
     const decision = debeAnalizar(preparado.context.facts.length, huella, anterior);
     if (decision !== "analizar") {
-      await supabase
-        .from("centro_runs")
-        .insert({ user_id: user.id, local_date: today, franja, facts_hash: huella, outcome: decision });
       // Se arrastra el resumen de la franja anterior: si nada cambió, lo que se
       // dijo entonces sigue siendo verdad, y pedir otro sería pagar por lo mismo.
       const previo = (corridas ?? []).find((c) => c.resumen)?.resumen ?? "";
+
+      // Y SE GUARDA EN LA FILA, que es lo que faltaba (D-181). Sin esto, el
+      // arrastre funcionaba UNA sola vez: la siguiente apertura en la misma
+      // franja entraba por la guarda de arriba —`deEstaFranja`— y leía el
+      // `resumen` vacío que este mismo insert acababa de escribir. Como el
+      // Centro se abre veinte veces al día, en la práctica significaba que
+      // desde la segunda apertura de la tarde ya no decía nada.
+      await supabase
+        .from("centro_runs")
+        .insert({ user_id: user.id, local_date: today, franja, facts_hash: huella, outcome: decision, resumen: previo });
+
       return { sugerencias: await pendientes(supabase, user.id), resumen: previo };
     }
 
