@@ -254,6 +254,18 @@ export function manifestationAgentTimeoutMs(): number {
  * un fallo del Kernel se viera en unos y no en otros, que es el peor escenario
  * para diagnosticar. O todos o ninguno, y el salto atrás es una variable.
  */
+/**
+ * La llave del respaldo de la cadena (D-182).
+ *
+ * Devuelve `null` en vez de lanzar, al contrario que `requireGeminiApiKey`: no
+ * tener respaldo configurado NO es un error, es no tenerlo. Sin ella el
+ * sistema se comporta exactamente como antes de que Groq existiera.
+ */
+export function groqApiKey(): string | null {
+  const key = process.env.GROQ_API_KEY?.trim();
+  return key ? key : null;
+}
+
 export function coachPorElKernel(): boolean {
   return process.env.AGENT_KERNEL_COACH?.trim() === "1";
 }

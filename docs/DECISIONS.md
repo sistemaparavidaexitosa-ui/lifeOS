@@ -3687,3 +3687,69 @@ implementa:
   - La rama `ia-apagada` sigue sin arrastrar a propósito: si los dominios se
     apagaron, enseñar un resumen que escribió el modelo con datos que ya no se
     autorizan sería justo lo contrario de respetar el interruptor.
+
+- **D-182 · Un respaldo detrás de Gemini, y D-087 se revierte solo a medias.**
+  D-087 fijó «un solo proveedor y sin SDK», y su argumento sigue siendo bueno:
+  dos proveedores para DOS features eran dos facturas y dos SDK que mantener.
+  Esto es otra cosa — **un solo camino, `generateJson`, con un segundo
+  proveedor DETRÁS del primero**.
+  - **Responde a un problema medido, no teórico.** Gemini corre sobre el free
+    tier, que devuelve 429 por diseño —lo dice el propio D-087: «no es una
+    anomalía, es el plan gratuito haciendo su trabajo»—, y el `audit_log` de
+    producción enseña el coach corriendo **dos veces en once segundos**. Cuando
+    la cadena se agotaba, el usuario se quedaba sin respuesta.
+  - **La parte de D-087 que NO se revierte: sin SDK.** Groq habla la API de
+    OpenAI, así que es el mismo `fetch` y cero dependencias nuevas (D-008).
+  - **Solo al final de la cadena.** Gemini sigue siendo el proveedor de la casa
+    —tiene `responseSchema`, herramientas y grounding—; Groq no lo sustituye,
+    lo cubre. Sin `GROQ_API_KEY`, `intentarConGroq` devuelve `null` y todo se
+    comporta exactamente como antes de que existiera.
+  - **Groq trabaja sin `responseSchema`, y da igual.** Se le pide JSON con
+    `response_format` y el esquema va serializado en el prompt. En este repo el
+    esquema GUÍA y `input.validate` GARANTIZA —está escrito así en
+    `GenerateJsonInput`— así que la forma se sigue exigiendo con el mismo
+    `safeParse` de zod. Lo único que cambia es cuánto acierta a la primera.
+  - **Y sin herramientas, a propósito.** Mapear `FunctionDeclaration` de Gemini
+    a las de OpenAI es trabajo de verdad y esto es un respaldo. Hay precedente
+    exacto: la red de seguridad del 400 ya reintenta sin herramientas porque
+    «vale mil veces más una respuesta sin datos frescos que un rail roto».
+  - **El motivo del fallo mejora.** Si el respaldo también cae, se devuelve SU
+    motivo y no «se agotó la cuota»: ya no es cierto que no quedaran opciones,
+    es que la última tampoco pudo.
+
+- **D-183 · El sistema aprende tu ritmo, y puedes borrarlo.** LifeOS registra
+  por dónde navegas para saber qué ofrecerte y cuándo: si abres la watchlist
+  cada mañana, te la pone por la mañana.
+  - **Ritmo y volumen, pero no hacen el mismo trabajo.** Decisión del dueño del
+    sistema. El RITMO decide si hay preferencia —«esto es de tus mañanas» solo
+    es cierto si lo abres por las mañanas MÁS de lo que abres cualquier otra
+    cosa por las mañanas—; el VOLUMEN ordena entre las que ya pasaron ese
+    filtro. Sin el filtro del ritmo, una ruta que abres a todas horas se
+    anunciaría como «lo tuyo de las mañanas», que es inventarse un patrón.
+  - **El contrafactual de D-174 NO se copia tal cual, y es deliberado.** Allí se
+    exigen días SIN el rasgo porque sin contraste un lift no significa nada.
+    Aquí sería absurdo: si abres la watchlist todas las mañanas sin faltar una,
+    es exactamente cuando más seguro está el sistema de que la quieres. Lo que
+    sí se conserva es que la preferencia no sea permanente, y eso aquí lo da la
+    **ventana móvil de 30 días**: deja de abrir algo y desaparece de tus
+    preferencias sin que nadie tenga que retirarlo.
+  - **Tabla propia y no `audit_log`, y esta es la parte que importa.**
+    `audit_log` tiene la forma exacta y habría sido gratis. Pero es append-only
+    a propósito (0009: solo `select_own` e `insert_own`), porque un rastro de
+    auditoría que se puede borrar no sirve para auditar. Y esto NO es
+    auditoría: es tu historial de navegación **con la ruta completa y sus
+    parámetros**, así que queda escrito a qué proyecto entraste. La regla de
+    esta casa para lo que el sistema cree saber de ti es que puedas verlo y
+    borrarlo —es el motivo por el que la memoria es `memory_items` editable y no
+    un almacén de vectores—. Guardarlo en `audit_log` habría significado que tu
+    navegación es inmutable para siempre.
+  - `borrarHistorialDeNavegacion()` borra TODO, sin filtros: si alguien quiere
+    que el sistema deje de saber por dónde anda, la respuesta no puede ser
+    «borra los últimos siete días».
+  - **Se apunta en `AppShell`** porque es el único ancestro de todas las
+    pantallas —el mismo motivo por el que viven ahí la paleta y el chat— y nunca
+    se espera a que termine: bloquear una navegación por contabilidad sería
+    absurdo.
+  - Los umbrales son los mismos que `UMBRALES_DECISION` y que los de
+    `estilo.ts`. Tres calibraciones distintas para el mismo tipo de inferencia
+    serían tres cosas que ajustar y dos que nadie recordaría por qué difieren.
