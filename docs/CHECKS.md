@@ -2535,3 +2535,42 @@ vivía en la transición de estado de React, que el dominio no cubría; la segun
 no rompe nada, solo sobra.
 
 `pnpm test:unit` **1322/1322** ✅ · typecheck ✅ · lint ✅ · build ✅ 102 kB.
+
+## El Centro en el idioma del ritual (D-178, sin migración) — 20-sep-2026
+
+Primera entrega con trabajo delegado a Codex y supervisado aquí.
+
+### Lo que sí se probó
+
+- `pnpm typecheck` ✅ · `pnpm lint` ✅ · `pnpm test:unit` **1322/1322** ✅ ·
+  `pnpm build` ✅ con **First Load JS 102 kB**, sin cambio por novena entrega.
+- **En navegador**, dos vueltas, abriendo por el botón flotante con datos
+  sembrados y borrados: tres carriles con sus versalitas e iconos, el dominante
+  destacado por peso, el carril en calma con su cifra y su entrada, la casilla
+  del hábito con su texto de ayuda. **Cero errores de página.**
+- Residuos de la siembra a cero.
+
+### Lo que encontró la supervisión y las pruebas no
+
+La primera vuelta de Codex pasó `typecheck`, `lint` y las 1322 pruebas **con la
+jerarquía invertida**: el carril dominante usaba `.rit-title` (hasta 4.5rem) y
+aplastaba a los otros dos, y Money OS se quedaba sin icono porque el icono
+dependía de la categoría del ítem. Ninguna de las dos cosas rompe nada
+comprobable. Se vieron mirando la captura.
+
+### Sobre delegar a Codex
+
+- **Su sandbox no tiene red NI puede escribir en `.git`.** El primer intento se
+  gastó entero fallando al crear la rama. El reparto que funciona: la rama y los
+  commits los hace Claude Code, Codex edita archivos y corre las pruebas.
+- Reportó «101 archivos de prueba, 0 fallos». Es otra forma de contar lo mismo,
+  pero **el número se verificó aquí**: 1322 pruebas.
+
+### Lo que NO se ha ejercitado
+
+- «Ahora no» y aceptar una propuesta siguen sin pulsarse a mano.
+- **Sin `GEMINI_API_KEY`, el Centro no generó nada por sí mismo** — las
+  propuestas se sembraron. Decimotercer ciclo.
+- El orden de los carriles es FIJO y el dominante se marca solo con peso. Si la
+  prioridad debe además subir al primer puesto, es una decisión de producto sin
+  tomar: el orden fijo es lo que hace que el frente se reconozca de un vistazo.

@@ -72,15 +72,15 @@ export default function Navegacion({
   const enCalma = mando.carriles.every((v) => !v.item);
 
   return (
-    <div className="cmd-nav">
+    <div className="centro-nav">
       {/* El resumen de la franja, que ya escribe el modelo en `centro_runs`.
           Vacío no se rellena: inventar un «vas bien» que nadie calculó es lo
           que `validateAnchoring` existe para impedir en el otro extremo. */}
-      {mando.estado.resumen && <p className="cmd-resumen">{mando.estado.resumen}</p>}
+      {mando.estado.resumen && <p className="rit-muted centro-resumen">{mando.estado.resumen}</p>}
 
-      {enCalma && <p className="cmd-cierre">{mando.cierre}</p>}
+      {enCalma && <p className="centro-cierre">{mando.cierre}</p>}
 
-      <div className="cmd-carriles">
+      <div className="centro-vias">
         {mando.carriles.map((via) => (
           <Carril
             key={via.carril}
@@ -97,7 +97,7 @@ export default function Navegacion({
       </div>
 
       {error && (
-        <p className="cmd-error" role="alert">
+        <p className="centro-error" role="alert">
           {error}
         </p>
       )}

@@ -4356,137 +4356,109 @@ html[data-theme="dark"] .rit-boton-centro { color: #0b0b12; background: #f6f6fa;
    tarjeta se retiró con su componente cuando el Centro pasó a ser navegación
    por carriles. Su criterio NO se fue: `tarjetasDelCentro` lo sigue decidiendo. */
 
-/* ============================================================================
-   LA CAPA DE NAVEGACIÓN DEL CENTRO (D-176, reorientada en D-177)
-   ============================================================================
-   Tres puertas, una por objetivo, dentro del overlay que abre el botón
-   flotante «Centro». No es una pantalla: vive sobre `.rit-shell`, que ya
-   invierte sus colores según la hora local y REMAPEA `--line`, `--text`,
-   `--muted` y `--surface2`. Por eso aquí se usan esos cuatro y no se declara
-   una paleta propia: cualquier componente traído de la aplicación —`Chip`,
-   `HabitCheckbox`— se adapta solo, y a mediodía en claro la capa sigue siendo
-   legible sin una sola regla extra.
-
-   El ancho lo pone `.rit-main` (680px). Aquí no se toca. */
-
-.cmd-nav {
+/* El Centro conserva tres frentes, pero se lee como tres pasos del ritual:
+   jerarquía y aire, nunca tarjetas ni etiquetas. */
+.centro-nav {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 28px;
   width: 100%;
+  /* El Centro comparte `.rit-main` con el ritual, que centra su único paso.
+     Este margen consume el espacio libre inferior para que sus tres carriles
+     arranquen arriba sin cambiar ese comportamiento compartido. */
+  margin-bottom: auto;
 }
 
-.cmd-resumen {
-  font-size: 15px;
-  line-height: 1.5;
-  color: var(--rit-muted);
-  margin: 0;
+.centro-resumen {
   max-width: 60ch;
 }
 
-.cmd-cierre {
+.centro-cierre {
   font-size: clamp(1.2rem, 3.5vw, 1.6rem);
   font-weight: 700;
   color: var(--rit-muted);
   margin: 0;
 }
 
-.cmd-carriles {
+.centro-vias {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+}
+
+.centro-via {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  padding-top: 40px;
+  border-top: 1px solid var(--rit-line);
 }
 
-.cmd-carril {
-  border: 1px solid var(--rit-line);
-  border-radius: var(--r2);
-  padding: 14px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.centro-via:first-child {
+  padding-top: 0;
+  border-top: 0;
 }
 
-/* EL QUE MANDA. Uno solo, y lo decide lo que más aprieta hoy, no un orden fijo:
-   si hoy el dinero es lo urgente, el dinero se destaca aunque se pinte el
-   tercero. Si algún día hay dos así, la jerarquía se rompió. */
-.cmd-carril-manda {
-  border-color: var(--rit-accent);
-  border-width: 2px;
-  padding: 18px 16px;
+.centro-via-dominante {
+  gap: 18px;
 }
 
-.cmd-carril-cab {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.cmd-carril-nombre {
-  font-size: 11.5px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--rit-text);
-}
-
-/* Para qué existe el carril. Pequeño: se lee una vez y luego se reconoce. */
-.cmd-carril-objetivo {
-  font-size: 12px;
-  color: var(--rit-muted);
-}
-
-.cmd-carril-calma {
-  font-size: 14px;
-  color: var(--rit-muted);
-  margin: 0;
-}
-
-.cmd-item-meta {
+.centro-via-frente {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   flex-wrap: wrap;
+}
+
+.centro-via-icono {
+  flex: 0 0 auto;
+}
+
+.centro-via-objetivo {
   color: var(--rit-muted);
 }
 
-.cmd-voz {
-  font-size: 12px;
-  color: var(--rit-muted);
-}
-
-.cmd-titulo {
-  font-size: 16px !important;
+.centro-via-title {
+  color: var(--rit-text);
+  font-size: clamp(1.15rem, 2.6vw, 1.4rem) !important;
+  line-height: 1.12;
   font-weight: 700;
-  line-height: 1.35;
+  letter-spacing: -0.02em;
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
-.cmd-titulo-heroe {
-  font-size: clamp(1.25rem, 3.4vw, 1.6rem) !important;
+.centro-via-title-dominante {
+  font-size: clamp(1.5rem, 4vw, 2.25rem) !important;
   font-weight: 800;
   letter-spacing: -0.02em;
-  line-height: 1.2;
 }
 
-.cmd-acciones {
+.centro-via-acciones {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
-.cmd-error {
+.centro-via-calma {
+  max-width: 52ch;
+}
+
+.centro-error {
   font-size: 13px;
   color: var(--danger);
   margin: 0;
 }
 
 @media (max-width: 640px) {
-  .cmd-nav {
-    gap: 14px;
+  .centro-nav { gap: 22px; }
+  .centro-vias { gap: 30px; }
+  .centro-via { padding-top: 30px; }
+  .rit-shell .centro-via-title {
+    font-size: clamp(1.15rem, 5vw, 1.4rem) !important;
   }
-  .cmd-carril-manda {
-    padding: 14px;
+  .rit-shell .centro-via-title-dominante {
+    font-size: clamp(1.5rem, 7vw, 2rem) !important;
   }
 }
