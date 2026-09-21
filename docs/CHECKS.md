@@ -2574,3 +2574,45 @@ comprobable. Se vieron mirando la captura.
 - El orden de los carriles es FIJO y el dominante se marca solo con peso. Si la
   prioridad debe además subir al primer puesto, es una decisión de producto sin
   tomar: el orden fijo es lo que hace que el frente se reconozca de un vistazo.
+
+## La apertura viva del Centro (D-179, sin migración) — 20-sep-2026
+
+### Lo que sí se probó
+
+- `pnpm typecheck` ✅ · `pnpm lint` ✅ · `pnpm test:unit` **1327/1327** (5 nuevas
+  en `comando-voz.test.ts`) · `pnpm build` ✅ **102 kB**, décima entrega sin
+  cambio.
+- **La voz, leída en cinco momentos distintos** ejecutando el dominio a mano:
+  domingo noche sin plan → «Luis, es domingo por la noche. ¿Planeamos mañana?
+  Mañana empieza la semana.»; miércoles tarde con dos bloqueos → «¿Quitamos lo
+  que te frena?». Ninguna frase vacía, ninguna cifra inventada.
+- **En navegador, los DOS estados**, ralentizando `/api/centro` seis segundos
+  para poder ver el pensante: la pregunta revelándose con los tres puntos
+  pulsando, y después el estado resuelto con los tres carriles. **Cero errores
+  de página.** Datos sembrados y borrados.
+
+### Lo que la captura encontró y las pruebas no
+
+La primera versión pintaba `contexto` y `pregunta` **las dos** en tipografía de
+titular: cuatro líneas, media pantalla, y había que bajar para ver una acción.
+Pasó `typecheck`, `lint` y las 1327 pruebas. Se arregló invirtiendo la forma
+—pregunta grande, contexto de apoyo— que es además la de la referencia de
+diseño que se pidió.
+
+### Sobre la delegación a Codex
+
+Construyó el dominio de la voz, el componente y el CSS. **A mitad de la segunda
+corrección agotó su cuota de uso** («usage limit», hasta el 13-oct-2026 o con
+suscripción Plus), así que los tres ajustes finales se hicieron aquí. La
+especificación ya estaba escrita, de modo que no se perdió trabajo — pero
+conviene saber que la cuota se agota en unas pocas tareas.
+
+### Lo que NO se ha ejercitado
+
+- **El `resumen` del modelo nunca se ha visto bajo la pregunta**: sin
+  `GEMINI_API_KEY`, `sugerenciasDelCentro()` no genera nada. Decimocuarto ciclo.
+- El cambio de pregunta con fundido se comprobó por lectura y por los dos
+  estados capturados, **no viendo la transición en vivo**.
+- Sábado y domingo por la mañana comparten frase de contexto con los días
+  laborables. Se ve al leer las cinco salidas; no es falso, pero el fin de semana
+  podría merecer voz propia.

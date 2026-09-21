@@ -23,17 +23,28 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { componerMando, type EntradaDeMando } from "@/lib/domain/comando/componer.ts";
+import type { Franja } from "@/lib/domain/centro/franja.ts";
+import { aperturaDelCentro } from "@/lib/domain/comando/voz.ts";
 import { acceptProposal } from "@/lib/coach/actions";
+import Apertura from "./Apertura";
 import Carril from "./Carril";
 
 export default function Navegacion({
   entrada,
   today,
+  nombre,
+  diaSemana,
+  franja,
+  pensando,
   workspaceId,
   onNavegar
 }: {
-  entrada: EntradaDeMando;
+  entrada: EntradaDeMando | null;
   today: string;
+  nombre: string;
+  diaSemana: number;
+  franja: Franja;
+  pensando: boolean;
   workspaceId: string | null;
   onNavegar: () => void;
 }) {
@@ -47,7 +58,7 @@ export default function Navegacion({
   // otra tarjeta suya esperando turno, y `dominante` seguiría apuntando a algo
   // que ya no se ve.
   const mando = useMemo(
-    () => componerMando(entrada, pospuestas, resueltas),
+    () => (entrada ? componerMando(entrada, pospuestas, resueltas) : null),
     [entrada, pospuestas, resueltas]
   );
 
@@ -69,18 +80,22 @@ export default function Navegacion({
     });
   }
 
-  const enCalma = mando.carriles.every((v) => !v.item);
+  const apertura = aperturaDelCentro({
+    nombre,
+    franja,
+    diaSemana,
+    hayPlanDeManana: entrada?.unicaCosa !== null && entrada?.unicaCosa !== undefined,
+    bloqueos: mando?.estado.bloqueos ?? 0
+  });
+  const enCalma = mando?.carriles.every((v) => !v.item) ?? false;
 
   return (
     <div className="centro-nav">
-      {/* El resumen de la franja, que ya escribe el modelo en `centro_runs`.
-          Vacío no se rellena: inventar un «vas bien» que nadie calculó es lo
-          que `validateAnchoring` existe para impedir en el otro extremo. */}
-      {mando.estado.resumen && <p className="rit-muted centro-resumen">{mando.estado.resumen}</p>}
+      <Apertura apertura={apertura} pensando={pensando} resumen={mando?.estado.resumen ?? ""} />
 
-      {enCalma && <p className="centro-cierre">{mando.cierre}</p>}
+      {enCalma && mando && <p className="centro-cierre">{mando.cierre}</p>}
 
-      <div className="centro-vias">
+      {mando && <div className="centro-vias">
         {mando.carriles.map((via) => (
           <Carril
             key={via.carril}
@@ -94,7 +109,7 @@ export default function Navegacion({
             onNavegar={onNavegar}
           />
         ))}
-      </div>
+      </div>}
 
       {error && (
         <p className="centro-error" role="alert">

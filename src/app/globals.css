@@ -4369,6 +4369,95 @@ html[data-theme="dark"] .rit-boton-centro { color: #0b0b12; background: #f6f6fa;
   margin-bottom: auto;
 }
 
+/* LA APERTURA (D-179). La PREGUNTA es lo grande; el contexto, apoyo.
+   El primer intento puso las dos en tipografía de titular y la apertura se
+   comía media pantalla: cuatro líneas antes de ver una sola acción. Una
+   pregunta que no cabe de un vistazo deja de ser una pregunta. */
+.centro-apertura {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.centro-apertura-saludo {
+  margin: 0;
+}
+
+/* Deliberadamente MENOR que `.rit-title` (que llega a 4.5rem y se diseñó para
+   una sola cosa en pantalla): aquí abajo vienen tres carriles. */
+.centro-apertura-pregunta {
+  margin: 0;
+  font-size: clamp(1.75rem, 5.5vw, 2.6rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--rit-text);
+}
+
+.centro-apertura-palabra {
+  opacity: 0;
+  transition: opacity 180ms ease-out;
+}
+
+.centro-apertura-palabra[data-visible="true"] {
+  opacity: 1;
+}
+
+/* Un cambio de pregunta se cruza con un fundido, no se vuelve a teclear:
+   re-teclear parpadea y parece un fallo. */
+.centro-apertura-pregunta[data-cambiando="true"] {
+  opacity: 0;
+  transition: opacity 200ms ease-in;
+}
+
+/* Respira mientras el sistema espera de verdad. Sin spinner: no hay ninguno en
+   este repositorio, y es deliberado. */
+.centro-apertura-pregunta[data-pensando="true"] {
+  animation: centro-respira 1.8s ease-in-out infinite;
+}
+
+.centro-apertura-apoyo,
+.centro-apertura-resumen {
+  margin: 0;
+  opacity: 0;
+  transition: opacity 260ms ease-out;
+}
+
+.centro-apertura-apoyo[data-visible="true"],
+.centro-apertura-resumen[data-visible="true"] {
+  opacity: 1;
+}
+
+.centro-apertura-puntos {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  margin-top: 2px;
+}
+
+.centro-apertura-puntos i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--rit-muted);
+  opacity: 0.45;
+  animation: centro-punto 1.4s ease-in-out infinite;
+}
+
+.centro-apertura-puntos i:nth-child(2) { animation-delay: 0.2s; }
+.centro-apertura-puntos i:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes centro-respira {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+@keyframes centro-punto {
+  0%, 100% { opacity: 0.35; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
 .centro-resumen {
   max-width: 60ch;
 }
@@ -4449,6 +4538,14 @@ html[data-theme="dark"] .rit-boton-centro { color: #0b0b12; background: #f6f6fa;
   font-size: 13px;
   color: var(--danger);
   margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .centro-apertura-apoyo,
+  .centro-apertura-resumen,
+  .centro-apertura-palabra { opacity: 1; transition: none; }
+  .centro-apertura-pregunta,
+  .centro-apertura-puntos i { animation: none; }
 }
 
 @media (max-width: 640px) {

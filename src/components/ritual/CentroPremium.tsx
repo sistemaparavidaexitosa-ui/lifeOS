@@ -6,6 +6,7 @@ import { fdate } from "@/lib/format";
 import { abrirFoco, atraparFoco } from "@/lib/dom/ritual-focus.ts";
 import { temaDelRitual } from "@/lib/domain/ritual/tema.ts";
 import { construirSecuencia } from "@/lib/domain/ritual/secuencia.ts";
+import { franjaDeHoy } from "@/lib/domain/centro/franja.ts";
 import type { EntradaDeMando } from "@/lib/domain/comando/componer.ts";
 import type { ContenidoDelRitual } from "@/lib/data/ritual";
 import type { SugerenciaView } from "@/lib/centro/sugerencias";
@@ -49,6 +50,8 @@ export default function CentroPremium({
   const [resumen, setResumen] = useState("");
   const shellRef = useRef<HTMLDivElement | null>(null);
   const tema = temaDelRitual(hourLocal);
+  const diaSemana = new Date(`${cabecera.dateISO}T00:00:00Z`).getUTCDay();
+  const franja = franjaDeHoy(hourLocal);
 
   useEffect(() => {
     let vivo = true;
@@ -183,20 +186,16 @@ export default function CentroPremium({
       </div>
 
       <div className="rit-main">
-        {entrada ? (
-          <Navegacion
-            entrada={entrada}
-            today={cabecera.dateISO}
-            workspaceId={workspaceId}
-            onNavegar={onIrA}
-          />
-        ) : (
-          // Sin esqueleto a propósito: un bloque gris parpadeando es peor que un
-          // momento de silencio, y el saludo de arriba ya está pintado.
-          <p className="rit-muted" data-ritual-title tabIndex={-1}>
-            Mirando cómo va tu día…
-          </p>
-        )}
+        <Navegacion
+          entrada={entrada}
+          today={cabecera.dateISO}
+          nombre={cabecera.nombre}
+          diaSemana={diaSemana}
+          franja={franja}
+          pensando={!contenido}
+          workspaceId={workspaceId}
+          onNavegar={onIrA}
+        />
       </div>
 
       <div className="rit-bottom">
