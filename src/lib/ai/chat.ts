@@ -3,7 +3,7 @@ import { z } from "zod";
 import { generateJson, CHAT_BUDGET, type GeminiSchema } from "./gemini-provider";
 import { sanitizeProposedMemory, sanitizeProposedTask, type ChatMessageLike } from "@/lib/domain/ai/chat.ts";
 import { MEMORY_SCOPES, type MemoryScope } from "@/lib/domain/insights/memory.ts";
-import type { InsightContext } from "@/lib/insights/context";
+import { textoDelContexto, type InsightContext } from "@/lib/insights/context";
 import type { CajaDeHerramientas } from "./tools";
 
 /**
@@ -162,25 +162,10 @@ export interface ChatResult {
 }
 
 function buildPrompt(input: ChatInput): string {
-  const partes: string[] = [];
-
-  if (input.context.facts.length) {
-    partes.push(`HECHOS:\n${input.context.facts.map((f) => `- id: ${f.id} | ${f.label}`).join("\n")}`);
-  } else {
-    // Decirlo explícitamente y no callarlo: sin esto el modelo redacta como si
-    // tuviera la foto completa y se inventa el resto (§4.2).
-    partes.push("HECHOS: ninguno. No tienes datos del usuario en este turno.");
-  }
-
-  if (input.context.memory.length) {
-    partes.push(`Lo que el usuario te ha dicho y debes respetar:\n${input.context.memory.map((m) => `- ${m}`).join("\n")}`);
-  }
-
-  if (input.context.skippedDomains.length) {
-    partes.push(
-      `(El usuario no autorizó estos dominios, así que no tienes sus datos: ${input.context.skippedDomains.join(", ")}. No especules sobre ellos.)`
-    );
-  }
+  // El bloque de HECHOS + memoria + dominios saltados vive en
+  // `textoDelContexto` (src/lib/insights/context.ts): lo comparte con el
+  // Centro-agente para que los dos hablen con el mismo contexto (D-194).
+  const partes: string[] = [textoDelContexto(input.context)];
 
   if (input.history.length) {
     partes.push(

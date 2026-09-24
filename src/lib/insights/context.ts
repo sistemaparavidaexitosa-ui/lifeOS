@@ -290,6 +290,41 @@ export interface InsightContext {
 }
 
 /**
+ * El texto de HECHOS + memoria + dominios saltados, tal cual lo escribía
+ * `buildPrompt` en `src/lib/ai/chat.ts` antes de que el Centro-agente
+ * necesitara el mismo contexto (D-194). Vive aquí — pura, sin `server-only` —
+ * para que ambos lo compartan byte a byte: una segunda copia de este texto es
+ * justo la deriva que `sendChatMessage` ya evitó una vez con `prepararCerebro`.
+ *
+ * NO incluye la conversación previa ni la pregunta: esas las añade quien
+ * arma el prompt completo, porque el Centro-agente las representa distinto
+ * (su propio hilo, sin guardar).
+ */
+export function textoDelContexto(context: InsightContext): string {
+  const partes: string[] = [];
+
+  if (context.facts.length) {
+    partes.push(`HECHOS:\n${context.facts.map((f) => `- id: ${f.id} | ${f.label}`).join("\n")}`);
+  } else {
+    // Decirlo explícitamente y no callarlo: sin esto el modelo redacta como si
+    // tuviera la foto completa y se inventa el resto (§4.2).
+    partes.push("HECHOS: ninguno. No tienes datos del usuario en este turno.");
+  }
+
+  if (context.memory.length) {
+    partes.push(`Lo que el usuario te ha dicho y debes respetar:\n${context.memory.map((m) => `- ${m}`).join("\n")}`);
+  }
+
+  if (context.skippedDomains.length) {
+    partes.push(
+      `(El usuario no autorizó estos dominios, así que no tienes sus datos: ${context.skippedDomains.join(", ")}. No especules sobre ellos.)`
+    );
+  }
+
+  return partes.join("\n\n");
+}
+
+/**
  * Arma el contexto que se enviará al modelo. En orden: allowlist, ordenar por
  * peso, recortar.
  */

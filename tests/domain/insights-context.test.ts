@@ -7,6 +7,7 @@ import {
   allowedDomains,
   buildContext,
   tablaConsultable,
+  textoDelContexto,
   MAX_FACTS,
   MAX_FACTS_COACH,
   TABLAS_CONSULTABLES
@@ -228,4 +229,38 @@ test("TABLAS_CONSULTABLES: cada tabla declara columnas explícitas, nunca un '*'
     assert.ok(meta.select.length > 0, `${tabla} sin select`);
     assert.ok(!meta.select.includes("*"), `${tabla} usa '*' y crecería solo`);
   }
+});
+
+// textoDelContexto: extraído de `buildPrompt` del chat (src/lib/ai/chat.ts) para
+// que el Centro-agente use el MISMO texto de contexto. Estas pruebas fijan su
+// forma: si cambian, el prompt del chat cambia con ellas.
+test("textoDelContexto: sin hechos, lo dice explícitamente", () => {
+  const ctx = buildContext({
+    scope: "money",
+    facts: [],
+    previousRejections: [],
+    enabledDomains: ["money"],
+    todayISO: "2026-09-24",
+    memory: []
+  });
+  assert.strictEqual(textoDelContexto(ctx), "HECHOS: ninguno. No tienes datos del usuario en este turno.");
+});
+
+test("textoDelContexto: hechos, memoria y dominios saltados, en ese orden", () => {
+  const ctx = buildContext({
+    scope: "global",
+    facts: [fact("money.f1", "money", 10, "Presupuesto vencido")],
+    previousRejections: [],
+    enabledDomains: ["money"],
+    todayISO: "2026-09-24",
+    memory: [{ id: "m1", scope: "preference", origin: "user", text: "Odia el café.", validUntil: null }]
+  });
+  const t = textoDelContexto(ctx);
+  assert.ok(t.startsWith("HECHOS:\n- id: money.f1 | Presupuesto vencido"));
+  assert.ok(t.includes("Lo que el usuario te ha dicho y debes respetar:\n- Odia el café."));
+  assert.ok(t.includes("no autorizó estos dominios"));
+  const iHechos = t.indexOf("HECHOS:");
+  const iMemoria = t.indexOf("Lo que el usuario");
+  const iSaltados = t.indexOf("no autorizó estos dominios");
+  assert.ok(iHechos < iMemoria && iMemoria < iSaltados);
 });
