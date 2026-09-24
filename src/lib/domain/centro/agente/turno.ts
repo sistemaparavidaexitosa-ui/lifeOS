@@ -26,3 +26,16 @@ export function componerTurno(e: EntradaComponer): { texto: string; secciones: A
   const r = validarScreen(screen, { proyectos: e.proyectos });
   return r.ok ? { texto: e.texto, secciones: r.screen.sections } : { texto: e.texto, secciones: [] };
 }
+
+/**
+ * Las secciones de una capacidad llevan un id fijo (`mercado-watchlist`…):
+ * basta para UNA sola vez por turno, pero si el modelo pide la misma
+ * capacidad dos veces —dos «mercado» con vistas distintas, por ejemplo— los
+ * ids chocan y `validarScreen` tira la pantalla ENTERA por sección repetida.
+ * Anteponer el id del bloque (`b0-mercado-watchlist`, `b1-mercado-watchlist`)
+ * los vuelve a hacer únicos sin que la capacidad tenga que saber en qué
+ * bloque vive.
+ */
+export function prefijarSecciones(secciones: AnySection[], prefijo: string): AnySection[] {
+  return secciones.map((s) => ({ ...s, id: `${prefijo}-${s.id}` }) as AnySection);
+}

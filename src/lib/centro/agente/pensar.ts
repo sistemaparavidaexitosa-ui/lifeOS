@@ -7,10 +7,10 @@ import { prepararCerebro, type Cerebro } from "@/lib/ai-chat/cerebro";
 import { parsearRespuesta, ESQUEMA_RESPUESTA, type BloqueDelAgente } from "@/lib/domain/centro/agente/contrato.ts";
 import { resolverBloque, proyectosVistos } from "@/lib/domain/centro/agente/resolver.ts";
 import { SYSTEM_AGENTE, promptDelTurno } from "@/lib/domain/centro/agente/prompt.ts";
-import { componerTurno } from "@/lib/domain/centro/agente/turno.ts";
+import { componerTurno, prefijarSecciones } from "@/lib/domain/centro/agente/turno.ts";
 import { tieneCifras } from "@/lib/domain/centro/agente/texto.ts";
 import { destinoValido } from "@/lib/domain/centro/sugerencias.ts";
-import { sanearPropuesta } from "@/lib/domain/coach/proposals.ts";
+import { sanearRecomendacion } from "@/lib/domain/centro/agente/recomendaciones.ts";
 import { textoDelContexto } from "@/lib/insights/context";
 import { conLimite } from "@/lib/domain/centro/runtime/ensamblar.ts";
 import type { AnySection } from "@/lib/domain/centro/runtime/types.ts";
@@ -20,41 +20,53 @@ const CENTRO_AGENTE_BUDGET: Budget = { maxOutputTokens: 3000, thinkingBudget: 25
 const TIEMPO_CAPACIDAD_MS = 8000;
 export const DISCULPA = "No pude pensar esto ahora; inténtalo de nuevo.";
 
+/**
+ * NUNCA LANZA (mismo contrato que `chatReply` y el resto de llamadas al
+ * modelo, D-021): una excepción inesperada —`prepararCerebro` sin red, un
+ * `throw` que ninguna de las puertas de abajo esperaba— tiene que acabar en
+ * la disculpa de siempre, con 200, no en un 500 que la ruta no sabría cómo
+ * explicar.
+ */
 export async function pensarTurno(input: { texto: string; historial: { rol: "persona" | "agente"; texto: string }[] }) {
   const id = randomUUID();
-  const cerebro = await prepararCerebro();
-  if (!cerebro) return { id, texto: DISCULPA, secciones: [] as AnySection[] };
+  try {
+    const cerebro = await prepararCerebro();
+    if (!cerebro) return { id, texto: DISCULPA, secciones: [] as AnySection[] };
 
-  const r = await generateJson({
-    system: SYSTEM_AGENTE,
-    prompt: promptDelTurno({ contexto: textoDelContexto(cerebro.context), historial: input.historial, texto: input.texto }),
-    schema: ESQUEMA_RESPUESTA,
-    validate: (raw) => parsearRespuesta(raw),
-    budget: CENTRO_AGENTE_BUDGET,
-    ...(cerebro.herramientas
-      ? { tools: cerebro.herramientas.declaraciones, executeTool: cerebro.herramientas.ejecutar }
-      : {})
-  });
-  if (!r.ok || !r.data) {
-    console.warn("[centro-agente] el modelo no contestó:", r.reason);
+    const r = await generateJson({
+      system: SYSTEM_AGENTE,
+      prompt: promptDelTurno({ contexto: textoDelContexto(cerebro.context), historial: input.historial, texto: input.texto }),
+      schema: ESQUEMA_RESPUESTA,
+      validate: (raw) => parsearRespuesta(raw),
+      budget: CENTRO_AGENTE_BUDGET,
+      ...(cerebro.herramientas
+        ? { tools: cerebro.herramientas.declaraciones, executeTool: cerebro.herramientas.ejecutar }
+        : {})
+    });
+    if (!r.ok || !r.data) {
+      console.warn("[centro-agente] el modelo no contestó:", r.reason);
+      return { id, texto: DISCULPA, secciones: [] as AnySection[] };
+    }
+    for (const d of r.data.descartados) console.warn("[centro-agente] bloque descartado:", d);
+
+    const filas = cerebro.herramientas?.filasEntregadas() ?? new Map();
+    const proyectos = proyectosVistos(filas);
+    const ctx = { filas, moneda: cerebro.moneda, locale: cerebro.locale };
+
+    const porBloque = await Promise.all(
+      r.data.bloques.map((b, i) =>
+        resolverUno(b, `b${i}`, ctx, proyectos, cerebro).catch((e: unknown) => {
+          console.warn("[centro-agente] bloque falló:", e);
+          return [{ id: `b${i}`, kind: "error", data: { mensaje: "No se pudo cargar esta parte." } } as AnySection];
+        })
+      )
+    );
+
+    return { id, ...componerTurno({ texto: r.data.texto, secciones: porBloque.flat(), proyectos }) };
+  } catch (e) {
+    console.warn("[centro-agente] el turno falló:", e);
     return { id, texto: DISCULPA, secciones: [] as AnySection[] };
   }
-  for (const d of r.data.descartados) console.warn("[centro-agente] bloque descartado:", d);
-
-  const filas = cerebro.herramientas?.filasEntregadas() ?? new Map();
-  const proyectos = proyectosVistos(filas);
-  const ctx = { filas, moneda: cerebro.moneda, locale: cerebro.locale };
-
-  const porBloque = await Promise.all(
-    r.data.bloques.map((b, i) =>
-      resolverUno(b, `b${i}`, ctx, proyectos, cerebro).catch((e: unknown) => {
-        console.warn("[centro-agente] bloque falló:", e);
-        return [{ id: `b${i}`, kind: "error", data: { mensaje: "No se pudo cargar esta parte." } } as AnySection];
-      })
-    )
-  );
-
-  return { id, ...componerTurno({ texto: r.data.texto, secciones: porBloque.flat(), proyectos }) };
 }
 
 async function resolverUno(
@@ -65,8 +77,14 @@ async function resolverUno(
   cerebro: Cerebro
 ): Promise<AnySection[]> {
   switch (b.kind) {
-    case "capacidad":
-      return conLimite(CAPACIDADES_REGISTRADAS[b.nombre](b.parametros, cerebro), TIEMPO_CAPACIDAD_MS);
+    case "capacidad": {
+      const secciones = await conLimite(CAPACIDADES_REGISTRADAS[b.nombre](b.parametros, cerebro), TIEMPO_CAPACIDAD_MS);
+      // El id de sección de una capacidad es fijo (`mercado-watchlist`…): si el
+      // modelo pide la misma capacidad dos veces en el turno, dos ids iguales
+      // tiran la pantalla ENTERA (`validarScreen` rechaza secciones
+      // repetidas). Anteponer el id del bloque los vuelve a hacer únicos.
+      return prefijarSecciones(secciones, id);
+    }
     case "ir_a": {
       const destinos = b.destinos.filter((d) => destinoValido(d.href, proyectos));
       return destinos.length ? [{ id, kind: "irA", data: { destinos } }] : [];
@@ -76,10 +94,9 @@ async function resolverUno(
     case "recomendaciones": {
       const items: { propuestaId: string; titulo: string; motivo: string }[] = [];
       for (const it of b.items) {
-        if (tieneCifras(it.motivo)) continue;
-        const limpia = sanearPropuesta({ tipo: it.tipo, titulo: it.titulo, detalle: it.motivo, datos: it.datos });
+        const limpia = sanearRecomendacion(it, proyectos);
         if (!limpia) continue;
-        const { data } = await cerebro.supabase
+        const { data, error } = await cerebro.supabase
           .from("coach_proposals")
           .insert({
             user_id: cerebro.user.id,
@@ -93,6 +110,7 @@ async function resolverUno(
           .select("id")
           .single();
         if (data) items.push({ propuestaId: data.id, titulo: limpia.titulo, motivo: limpia.detalle });
+        else console.warn("[centro-agente] no se pudo guardar la recomendación:", error);
       }
       return items.length ? [{ id, kind: "recomendaciones", data: { items } }] : [];
     }

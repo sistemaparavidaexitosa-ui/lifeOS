@@ -1,7 +1,7 @@
 // tests/domain/centro-agente-turno.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { componerTurno } from "../../src/lib/domain/centro/agente/turno.ts";
+import { componerTurno, prefijarSecciones } from "../../src/lib/domain/centro/agente/turno.ts";
 
 const P = "11111111-1111-4111-8111-111111111111";
 
@@ -37,4 +37,19 @@ test("Enlaces a tus proyectos pasan", () => {
     proyectos: [{ id: P }]
   });
   assert.strictEqual(r.secciones.length, 1);
+});
+
+test("prefijarSecciones antepone el prefijo del bloque a cada id de sección", () => {
+  const r = prefijarSecciones(
+    [{ id: "mercado-watchlist", kind: "emptyState", data: { mensaje: "x" } } as const],
+    "b0"
+  );
+  assert.deepStrictEqual(r.map((s) => s.id), ["b0-mercado-watchlist"]);
+});
+
+test("Dos capacidades con el mismo id de sección no chocan si cada una lleva el prefijo de SU bloque", () => {
+  const deLaPrimera = prefijarSecciones([{ id: "mercado-watchlist", kind: "emptyState", data: { mensaje: "x" } } as const], "b0");
+  const deLaSegunda = prefijarSecciones([{ id: "mercado-watchlist", kind: "emptyState", data: { mensaje: "y" } } as const], "b1");
+  const r = componerTurno({ texto: "x", secciones: [...deLaPrimera, ...deLaSegunda], proyectos: [] });
+  assert.strictEqual(r.secciones.length, 2);
 });

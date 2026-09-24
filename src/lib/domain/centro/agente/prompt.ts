@@ -21,7 +21,7 @@ Bloques de datos (anclados a filas):
 
 Bloques de acción:
 - «ir_a»: { "destinos": [{ "etiqueta", "href" }] } (1–3). Solo rutas de la app: /execution, /planning, /time, /development, /development/routines, /development/goals, /development/library, /development/nutrition, /money, /money/budget, /money/watchlist, /investments, /savings, /debt, /cashback, /wealth, /goals, /household, /reports, o /execution?project=<uuid de un proyecto que leíste>.
-- «recomendaciones»: { "items": [{ "tipo": "foco"|"tarea"|"bloque", "titulo", "motivo", "datos": JSON en texto }] } (1–3). Propones; la persona acepta con un clic. "foco" lleva {"href","motivo"}; "tarea" lleva {"projectId"} de un proyecto leído; "bloque" lleva {"fecha","inicio","fin","categoria"}. Sin cifras en "motivo".
+- «recomendaciones»: { "items": [{ "tipo": "foco"|"tarea"|"bloque", "titulo", "motivo", "datos": JSON en texto }] } (1–3). Propones; la persona acepta con un clic. "foco" lleva {"href","motivo"} (el href tiene que ser una ruta real de la app, de las que puede llevar «ir_a»); "tarea": "datos" va vacío ("{}"), el título YA es la tarea; "bloque" lleva {"start","end"} en "HH:MM" de 24 horas, y opcionalmente {"title","category"}. Sin cifras en "motivo" (ni en el que va dentro de "datos").
 - «insight»: { "texto" } una observación breve, sin cifras.
 
 Capacidades (el sistema trae los datos):
