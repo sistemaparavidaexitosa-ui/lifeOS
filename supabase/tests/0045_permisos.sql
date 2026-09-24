@@ -11,7 +11,7 @@
 -- migración (ver el comentario final de la 0074). La garantía es esta prueba.
 
 begin;
-select plan(6);
+select plan(8);
 
 -- 1) LA CLASE DE FALLO QUE SE ENCONTRÓ
 --
@@ -106,6 +106,53 @@ select is_empty(
   $$,
   'ninguna politica concede nada al rol anon'
 );
+
+-- 7) EL FUTURO, NO SOLO EL PRESENTE (D-187)
+--
+-- Esto es lo que la 0074 no miró y por lo que hizo falta la 0075: quitó
+-- TRUNCATE de las 85 tablas de entonces mientras los privilegios por defecto
+-- seguían concediéndoselo a la 86. Un arreglo que no sobrevive a la siguiente
+-- migración no es un arreglo, es una limpieza.
+--
+-- `defaclobjtype = 'r'` son tablas. Se desmenuza el ACL con `aclexplode` en vez
+-- de buscar letras dentro del texto: la primera versión de esta prueba hacía
+-- `like '%authenticated=%D%'` y fallaba porque la `D` que encontraba era la de
+-- `service_role`, más adelante en la misma cadena.
+--
+-- Se mira solo el juego de `postgres`, que es el rol con el que corren las
+-- migraciones. Hay otro de `supabase_admin` que sigue concediéndolo todo y que
+-- no es nuestro para cambiarlo; aplica a objetos creados por él, no por
+-- nosotros. Quien comprueba eso de verdad es el caso 8.
+select is_empty(
+  $$
+    select pg_get_userbyid(d.defaclrole) || ' → ' || a.grantee::regrole::text || ': ' || a.privilege_type
+    from pg_default_acl d
+    join pg_namespace n on n.oid = d.defaclnamespace
+    cross join lateral aclexplode(d.defaclacl) a
+    where n.nspname = 'public'
+      and d.defaclobjtype = 'r'
+      and pg_get_userbyid(d.defaclrole) = 'postgres'
+      and (a.grantee::regrole::text = 'anon'
+           or (a.grantee::regrole::text = 'authenticated' and a.privilege_type = 'TRUNCATE'))
+  $$,
+  'por defecto: nada para anon, y ningun TRUNCATE para authenticated'
+);
+
+-- 8) LA PRUEBA DE VERDAD: CREAR UNA TABLA Y MIRARLA
+--
+-- Las dos comprobaciones anteriores leen lo que la base DICE que hará. Esta
+-- lo hace. Vive dentro del `begin … rollback` de la prueba, así que la tabla
+-- no llega a existir fuera de ella.
+create table public.zz_tabla_del_futuro (id int);
+select is_empty(
+  $$
+    select privilege_type from information_schema.role_table_grants
+    where table_schema = 'public' and table_name = 'zz_tabla_del_futuro'
+      and (grantee = 'anon' or (grantee = 'authenticated' and privilege_type = 'TRUNCATE'))
+  $$,
+  'una tabla creada AHORA no concede nada a anon ni TRUNCATE a authenticated'
+);
+
 
 select * from finish();
 rollback;

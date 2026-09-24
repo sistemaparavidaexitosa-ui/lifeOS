@@ -3857,3 +3857,33 @@ implementa:
   - **La prueba se probó fallando.** Se recreó `debug_rls_policies` y los dos
     casos saltaron; luego se retiró. Un cable trampa que nunca ha saltado no
     prueba nada.
+
+- **D-187 · La 0074 limpió el presente y dejó el futuro roto.** Verificando la
+  0074 **contra producción** —no contra la base local— salieron dos cosas que la
+  dejaban a medias.
+  - **Los privilegios por defecto seguían concediendo `TRUNCATE` a
+    `authenticated` y `INSERT, DELETE, UPDATE, TRUNCATE` a `anon` en toda tabla
+    FUTURA.** La 0074 solo les quitó `select`. Limpiaba las 85 tablas de
+    entonces y la 86 volvía a nacer con el permiso recién quitado. **Un arreglo
+    que no sobrevive a la siguiente migración no es un arreglo, es una
+    limpieza.**
+  - **`revoke … from public` no quita la concesión EXPLÍCITA.** La 0010 dio
+    `grant execute on all functions … to anon`; quitar la herencia de PUBLIC
+    deja intacta esa línea. Hacen falta las dos, y la 0074 solo tenía una.
+  - **Por qué no se vio en local, que es la parte que importa.** La base local
+    había corrido una versión intermedia de la 0074 —la que revocaba
+    `from anon`— sustituida después por la de `from public`. Local quedó limpio
+    por un `revoke` que ya no estaba en el archivo, y la verificación decía
+    «anon pasó de `t` a `f`», que era verdad. **Comprobar el efecto en la base
+    donde uno acaba de correr experimentos no comprueba la migración: comprueba
+    el rastro de los experimentos.** La comprobación buena fue `db dump` del
+    esquema remoto, antes y después.
+  - **La prueba pasa a vigilar el futuro**, que es lo que faltaba: además de
+    leer los privilegios por defecto, **crea una tabla dentro del `rollback` y
+    la mira**. Las dos versiones saltaron al reponer el defecto a propósito.
+  - **Y la prueba tenía un falso fallo**: la primera versión del caso 7 hacía
+    `like '%authenticated=%D%'` sobre el texto del ACL, y la `D` que encontraba
+    era la de `service_role`, más adelante en la misma cadena. Se reescribió con
+    `aclexplode`. Comparar permisos como texto es la misma clase de error que
+    revocar de `anon` creyendo que se revoca de PUBLIC: parece que miras lo que
+    crees que miras.

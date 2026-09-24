@@ -328,3 +328,13 @@ hoy, no lo que se recuerda.
 | RLS activa en todas las tablas | las 85 | — | — | — | `0045_permisos.sql` (✅) |
 | Ninguna política permisiva con `true` | — | — | — | — | `0045_permisos.sql` (✅) |
 | La prueba FALLA cuando vuelve el defecto | — | — | — | — | se recreó la función: saltaron 1 y 2 (✅) |
+
+## El futuro, no solo el presente (D-187 · migración 0075)
+
+| Requisito | Tablas | RLS / GRANT | Server Actions y rutas | UI | Pruebas |
+|---|---|---|---|---|---|
+| Una tabla FUTURA no concede nada a `anon` | — | `alter default privileges revoke all` | — | — | `0045_permisos.sql` caso 8: tabla creada de verdad (✅) |
+| Una tabla FUTURA no concede `TRUNCATE` | — | `revoke truncate … from authenticated` | — | — | `0045_permisos.sql` casos 7 y 8 (✅) |
+| Las ayudantes no las invoca `anon` **en producción** | — | `revoke … from anon` (además de `from public`) | — | — | `db dump` remoto (⚠️ pendiente de aplicar) |
+| Las pruebas 7 y 8 FALLAN con el defecto puesto | — | — | — | — | se repuso el `grant`: saltaron las dos (✅) |
+| Verificar en producción, no en local | — | — | — | — | `db dump --linked` antes y después (✅) |
