@@ -252,6 +252,8 @@ git push -u origin main
    | `GROQ_API_KEY` | https://console.groq.com/keys (gratis). **Opcional**: es el RESPALDO de la IA, detrás de Gemini. Sin ella, cuando Gemini agota su cuota gratuita (429) no hay respuesta; con ella, la hay (D-182) | Production, Preview |
    | `POLYGON_API_KEY` | https://massive.com → Dashboard → API Keys. **Opcional**: sin ella `/money/watchlist` lo dice y no rompe; con ella hay búsqueda de tickers y precios (D-184). La marca cambió de Polygon a Massive, pero la llave y el host `api.polygon.io` siguen sirviendo | Production, Preview |
    | `AGENT_KERNEL_COACH` / `AGENT_KERNEL_INSIGHTS` | Pon `1` para que el coach o los insights pasen por el Agentic Kernel. **Opcional, apagadas por defecto y se encienden de una en una**: sin ellas el camino viejo sigue intacto (D-172, D-175) | Production |
+   | `AGENTIC_CENTER_RUNTIME` | Pon `1` para que el Centro pinte pantallas del runtime (D-188). **Opcional y apagada por defecto**: sin ella `/api/centro` responde lo de siempre y el Centro pinta el lienzo. Si la pantalla falla, también cae al lienzo | Production |
+   | `AGENTIC_GENERATED_SCREENS` / `AGENTIC_LAYOUT_ENGINE` / `AGENTIC_DYNAMIC_NAVIGATION` | Reservadas (D-191). **En Fase 1 no hacen nada**, y solo cuentan con `AGENTIC_CENTER_RUNTIME=1`. Solo `1` enciende; apagar = borrar y redesplegar | — |
 
    Esta tabla no listaba ninguna llave opcional y por eso se desplegaba sin
    ellas sin saber que faltaban. **Las cuatro primeras son obligatorias**; todas

@@ -4587,9 +4587,10 @@ html[data-theme="dark"] .rit-boton-centro { color: #0b0b12; background: #f6f6fa;
 .rt-lista-texto { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .rt-chevron { flex: none; width: 18px; height: 18px; color: var(--rit-muted); }
 .rt-atajos { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-.rt-atajo { display: flex; flex-direction: column; gap: 4px; padding: 16px 12px; border-radius: 16px; background: color-mix(in srgb, var(--rit-text) 3%, transparent); color: inherit; text-decoration: none; font-size: 14px; }
+.rt-atajo { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 14px 10px; border-radius: 16px; background: color-mix(in srgb, var(--rit-text) 3%, transparent); color: inherit; text-decoration: none; font-size: 14px; }
 .rt-atajo svg { margin-bottom: 10px; }
 .rt-vacio { margin: 0; color: var(--rit-muted); font-size: 14px; }
 .rt-vacio-error { color: var(--danger); }
 .rt-fila:focus-visible, .rt-atajo:focus-visible, .rt-narrativa:focus-visible { outline: 2px solid var(--rit-accent); outline-offset: 2px; }
-@media (max-width: 380px) { .rt-atajos { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* Cuatro en fila solo caben con la tipografía del ritual a partir de ~480 px. */
+@media (max-width: 480px) { .rt-atajos { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
