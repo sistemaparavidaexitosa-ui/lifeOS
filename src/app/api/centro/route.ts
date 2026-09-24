@@ -5,6 +5,10 @@ import { costumbreDeAhora } from "@/lib/comando/costumbre";
 import { getUserTimeZone } from "@/lib/data/profile";
 import { hourInTimeZone } from "@/lib/domain/datetime.ts";
 import { franjaDeHoy } from "@/lib/domain/centro/franja.ts";
+import { flagsDelRuntime } from "@/config/env";
+import { armarPantalla } from "@/lib/centro/runtime/pantalla";
+import { respuestaDelCentro } from "@/lib/domain/centro/runtime/respuesta.ts";
+import type { Intent } from "@/lib/domain/centro/runtime/types.ts";
 
 /**
  * El contenido del centro premium (D-166).
@@ -43,11 +47,26 @@ export async function GET() {
   ]);
   if (!contenido) return NextResponse.json({ ok: false, reason: "No se pudo preparar el centro." }, { status: 503 });
 
-  return NextResponse.json({
-    ok: true,
-    contenido,
-    sugerencias: pensado.sugerencias,
-    resumen: pensado.resumen,
-    costumbre
-  });
+  // El runtime (D-188) va DESPUÉS y tampoco manda: sin el flag no se toca nada
+  // —la respuesta es campo por campo la de siempre, y lo fija la prueba
+  // «FLAG APAGADO = HOY»—, y con él, si algo falla, `screen: null` y el Centro
+  // pinta el lienzo.
+  const flags = flagsDelRuntime();
+  // AGENTIC_GENERATED_SCREENS: aquí entrará `interpretarIntencion(texto)` cuando
+  // la barra mande lo que se escribió. En Fase 1 abrir el Centro es siempre «hoy».
+  const intent: Intent = { kind: "hoy" };
+  const screen = flags.runtime
+    ? await armarPantalla(intent, { puerta, contenido, resumen: pensado.resumen, flags }).catch((e: unknown) => {
+        console.warn("[centro-runtime] no se pudo armar la pantalla", e);
+        return null;
+      })
+    : null;
+
+  return NextResponse.json(
+    respuestaDelCentro(
+      { contenido, sugerencias: pensado.sugerencias, resumen: pensado.resumen, costumbre },
+      flags,
+      screen
+    )
+  );
 }
