@@ -2766,3 +2766,52 @@ el día que se pusieran las llaves. Comprobado:
 **Lo que sigue sin ejercitarse** es lo único que una llave puede dar: una
 respuesta **con datos dentro**. Un 401 prueba que la puerta es la correcta, no
 que lo que hay detrás se lea bien.
+
+## Los permisos que nadie concedió (D-186 · migración 0074) — 23-sep-2026
+
+### Cómo se encontró
+
+No por una sospecha: al aplicar la 0072 y la 0073 a producción se comprobó si
+sus `grant` deliberados —solo `select, insert, delete`— eran los que la base
+tenía de verdad. No lo eran. De ahí salió todo lo demás.
+
+### Lo que se probó, y con qué
+
+- **Con la llave pública del navegador, sin iniciar sesión**:
+  `POST /rest/v1/rpc/debug_rls_policies` devolvía las condiciones exactas de las
+  políticas de `projects`, `workspaces`, `memberships` y `project_shares`.
+  Después de la 0074 devuelve `PGRST202` (no existe). ✅
+- **`TRUNCATE`**: 85 tablas lo concedían a `authenticated`; ahora 0. El código
+  no usa TRUNCATE en ningún sitio (`grep` en `src/` y `supabase/`). ✅
+- **Las dos ayudantes de políticas**: `anon` pasó de `t` a `f`. ✅
+- **Una tabla creada después de la migración** no concede `select` a `anon`. ✅
+- **`0045_permisos.sql`**: 6 de 6. Y se comprobó **fallando**: se recreó
+  `debug_rls_policies` y saltaron los casos 1 y 2; luego se retiró. ✅
+- `typecheck` ✅ · `lint` ✅ — `database.types.ts` regenerado, 10 líneas menos.
+
+### El error que estuvo escrito en esta misma entrega
+
+La primera versión revocaba `execute … from anon`. **Al probarlo, la función
+seguía invocándose**: PostgreSQL concede EXECUTE a PUBLIC por defecto y `anon`
+hereda de ahí. El `revoke` quitaba una línea de la ACL y ningún permiso. Se vio
+porque se comprobó el resultado en vez de dar por hecho que el `revoke` revocaba.
+
+### Lo que NO se arregló, a propósito
+
+- **Toda función nueva seguirá naciendo con EXECUTE para PUBLIC.** Hay dos
+  juegos de privilegios por defecto, el de `postgres` y el de `supabase_admin`,
+  y el segundo no es nuestro para cambiarlo. Por eso la garantía es la prueba.
+- **`anon` conserva `select` sobre las tablas que ya existían.** No le da acceso
+  a nada mientras ninguna política diga `true` ni lo nombre — las dos cosas las
+  vigila la prueba. Quitárselo a 85 tablas merece su propia entrega.
+- **`authenticated` conserva `update` donde la migración no lo pedía** (0072,
+  0073 y muchas más). La RLS lo limita a tus propias filas, así que no es una
+  fuga; es una diferencia entre lo escrito y lo aplicado, y corregirla tabla por
+  tabla es otra entrega.
+
+### Lo que esta prueba no puede ver
+
+Una función `security definer` que delegue la comprobación de identidad en otra,
+en vez de escribir `auth.uid()` ella misma, pasaría el filtro. Es un cable
+trampa para la clase de error que ya ocurrió, no una demostración de que no
+queda ninguno.

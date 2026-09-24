@@ -3667,16 +3667,6 @@ export type Database = {
         Args: { p_subject_id: string; p_subject_type: string }
         Returns: boolean
       }
-      debug_rls_policies: {
-        Args: never
-        Returns: {
-          cmd: string
-          policyname: string
-          qual: string
-          tablename: string
-          with_check: string
-        }[]
-      }
       enqueue_notification: {
         Args: {
           p_body: string
