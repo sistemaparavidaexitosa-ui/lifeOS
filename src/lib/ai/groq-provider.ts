@@ -1,7 +1,7 @@
 import "server-only";
 import { groqApiKey } from "@/config/env";
 import type { Budget } from "@/lib/domain/ai/model-chain.ts";
-import { GROQ_MODELS, promptConEsquema } from "@/lib/domain/ai/groq.ts";
+import { cuerpoDeGroq, debeProbarSiguiente, GROQ_MODELS } from "@/lib/domain/ai/groq.ts";
 
 // EL RESPALDO DE LA CADENA (D-182).
 //
@@ -65,27 +65,23 @@ export async function intentarConGroq(input: {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
         signal: AbortSignal.timeout(TIMEOUT_MS),
-        body: JSON.stringify({
-          model,
-          // `thinkingBudget` no tiene equivalente aquí: el tope de salida es lo
-          // único que se traslada, y es el que evita respuestas interminables.
-          max_tokens: input.budget.maxOutputTokens,
-          temperature: 0.7,
-          response_format: { type: "json_object" },
-          messages: [
-            { role: "system", content: promptConEsquema(input.system, input.esquema) },
-            { role: "user", content: input.prompt }
-          ]
-        })
+        body: JSON.stringify(
+          cuerpoDeGroq({
+            model,
+            system: input.system,
+            prompt: input.prompt,
+            esquema: input.esquema,
+            maxOutputTokens: input.budget.maxOutputTokens
+          })
+        )
       });
 
       if (!res.ok) {
         const detalle = await res.text().catch(() => "");
         ultimo = `El respaldo respondió ${res.status}. ${detalle.slice(0, 200)}`.trim();
-        // 429 y 5xx: el siguiente modelo de Groq puede estar bien. El resto
-        // —llave, petición mal formada— fallaría igual, y probar otro solo
-        // añade espera antes del mismo mensaje.
-        if (res.status === 429 || res.status >= 500) continue;
+        // 429, 5xx o modelo retirado: el siguiente de la cadena puede estar
+        // bien. La llave o una petición mal formada fallarían igual.
+        if (debeProbarSiguiente(res.status, detalle)) continue;
         return { ok: false, reason: ultimo, model };
       }
 
