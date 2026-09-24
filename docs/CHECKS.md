@@ -2815,3 +2815,45 @@ Una función `security definer` que delegue la comprobación de identidad en otr
 en vez de escribir `auth.uid()` ella misma, pasaría el filtro. Es un cable
 trampa para la clase de error que ya ocurrió, no una demostración de que no
 queda ninguno.
+
+## La 0074 limpió el presente (D-187 · migración 0075) — 23-sep-2026
+
+### Cómo se encontró: mirando producción, no local
+
+Tras aplicar la 0074, `supabase db dump --linked` del esquema remoto **antes y
+después**. El «antes» confirmó que la fuga era real en producción y no un
+artefacto local: `GRANT ALL ON FUNCTION public.debug_rls_policies() TO anon`.
+El «después» enseñó lo que faltaba.
+
+| | antes | después de 0074 | después de 0075 |
+|---|---|---|---|
+| `debug_rls_policies` en producción | existe, abierta a `anon` | **no existe** | — |
+| `GRANT ALL ON TABLE … TO authenticated` | **80** | **0** | 0 |
+| por defecto, tabla nueva → `anon` | todo | todo menos `select` | **nada** |
+| por defecto, tabla nueva → `authenticated` | todo | todo (con `TRUNCATE`) | **sin `TRUNCATE`** |
+| las dos ayudantes → `anon` | concedidas | **seguían concedidas** | revocadas |
+
+### Los dos errores míos de esta entrega
+
+1. **La 0074 solo revocó `select` por defecto.** Miré el ACL
+   (`anon=awdDxtm`) y no lo leí letra a letra: la `D` es TRUNCATE.
+2. **Local mentía.** Tenía corrida una versión intermedia de la 0074 que luego
+   borré del archivo. La verificación local decía «`anon` pasó de `t` a `f`» y
+   era cierta — pero por un `revoke` que ya no existía en la migración.
+
+### La prueba, ahora 8 de 8
+
+Los casos 7 y 8 vigilan el futuro: el 7 lee los privilegios por defecto, el 8
+**crea una tabla dentro del `rollback` y la mira**. Se comprobaron **fallando**:
+se repuso el defecto con `alter default privileges … grant truncate`, saltaron
+los dos, y se restauró.
+
+El caso 7 tuvo un falso fallo primero: `like '%authenticated=%D%'` capturaba la
+`D` de `service_role`. Reescrito con `aclexplode`.
+
+### Lo que sigue sin arreglarse
+
+El juego de privilegios por defecto de **`supabase_admin`** concede todo a
+`anon` y no es nuestro para cambiarlo. Aplica a objetos creados por ese rol, no
+por nuestras migraciones — que corren como `postgres`—, y por eso el caso 8
+crea una tabla de verdad en vez de fiarse del ACL.
