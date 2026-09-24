@@ -20,17 +20,19 @@
 import { z } from "zod";
 import { destinoValido } from "../sugerencias.ts";
 import { sanearAccion } from "./acciones.ts";
-import { SECTION_KINDS, type SectionKind } from "./secciones.ts";
+import { LIMITES, SECTION_KINDS, type SectionKind } from "./secciones.ts";
 import { INTENT_KINDS, type Action, type Screen } from "./types.ts";
 
 export const MAX_SECCIONES = 12;
 
 /**
- * Una etiqueta que abre (`<b>`, `<script `, `<Hero />`, `</div>`) o un
- * comentario. «gasto < ingreso» y «<3» no lo son: detrás del `<` no hay una
- * letra pegada seguida de espacio, `>` o `/`.
+ * Una etiqueta COMPLETA (`<b>`, `</div>`, `<Hero />`, `<img src=x …>`) o un
+ * comentario. Hace falta el `>` que la cierra: «gasto < ingreso», «<3» y
+ * «costo<limite y cerrar» son texto. React escapa todo lo que pinta, así que
+ * esto es defensa de más, no la barrera contra XSS; y un falso positivo cuesta
+ * la pantalla entera, por eso se pide la forma entera de una etiqueta.
  */
-const MARCADO = /<\/?[a-z][\w-]*[\s>/]|<!--/i;
+const MARCADO = /<\/?[a-z][\w-]*(?:\s[^<>]*)?\/?>|<!--/i;
 
 const texto = (max: number) => z.string().max(max);
 const fecha = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -43,14 +45,14 @@ const mensaje = z.object({ mensaje: texto(200) }).strict();
  * exista, traerá aquí su esquema.
  */
 const ESQUEMAS: Partial<Record<SectionKind, z.ZodTypeAny>> = {
-  hero: z.object({ saludo: texto(80), nombre: texto(80), fechaISO: fecha, frase: texto(200).nullable() }).strict(),
+  hero: z.object({ saludo: texto(80), nombre: texto(80), fechaISO: fecha, frase: texto(LIMITES.heroFrase).nullable() }).strict(),
   text: z.object({ texto: texto(2000) }).strict(),
   narrative: z.object({ titulo: texto(80), texto: texto(600), href: href.nullable() }).strict(),
   tasks: z
     .object({
       fechaISO: fecha,
       items: z
-        .array(z.object({ id: texto(80), titulo: texto(200), contexto: texto(120).nullable(), href: href.nullable() }).strict())
+        .array(z.object({ id: texto(80), titulo: texto(LIMITES.tareaTitulo), contexto: texto(LIMITES.tareaContexto).nullable(), href: href.nullable() }).strict())
         .max(7)
     })
     .strict(),

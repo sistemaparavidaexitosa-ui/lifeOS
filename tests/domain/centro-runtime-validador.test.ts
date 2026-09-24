@@ -154,3 +154,14 @@ test("sanearAccion recorta la etiqueta", () => {
   assert.deepStrictEqual(sanearAccion({ label: "  Dinero  ", href: "/money" }, []), { label: "Dinero", href: "/money" });
   assert.strictEqual(sanearAccion(null, []), null);
 });
+
+test("Un «<» pegado a una palabra no es marcado si nunca se cierra la etiqueta", () => {
+  const r = validarScreen(con((s) => (s.sections[1].data.items[0].titulo = "Revisar si costo<limite y cerrar")), ctx);
+  assert.strictEqual(r.ok, true, r.ok ? "" : r.reason);
+});
+
+test("Las etiquetas de verdad siguen fuera", () => {
+  for (const t of ["<b>hola</b>", "</div>", "<Hero />", "<img src=x onerror=alert(1)>", "<!-- x -->"]) {
+    assert.strictEqual(validarScreen(con((s) => (s.sections[1].data.items[0].titulo = t)), ctx).ok, false, t);
+  }
+});

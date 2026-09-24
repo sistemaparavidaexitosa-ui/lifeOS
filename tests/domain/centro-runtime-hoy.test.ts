@@ -93,6 +93,22 @@ test("Los atajos hablan en singular cuando toca", () => {
 
 test("Los atajos: rojo manda sobre quincena, y al día cuando no queda nada", () => {
   const a = accionesRapidas(fuentes({ senales: { vencidas: 0, diasParaFinDeQuincena: 2, presupuestoEnRojo: true }, habitosPendientes: 0 }));
-  assert.deepStrictEqual(a.map((x) => x.detalle), ["2 en el plan", "Al día", "Lectura", "Presupuesto en rojo"]);
+  assert.deepStrictEqual(a.map((x) => x.detalle), ["Sin vencidas", "Al día", "Lectura", "Presupuesto en rojo"]);
   assert.deepStrictEqual(a.map((x) => x.href), ["/execution", "/development/routines", "/development/library", "/money"]);
+});
+
+test("Textos larguísimos del usuario se recortan en vez de tumbar la pantalla", async () => {
+  const largo = (n: number) => "x".repeat(n);
+  const g: LectorDelGrafo = { proyectoDeTarea: async () => ({ id: MALPASO, titulo: largo(115) }) };
+  const s = await pantalla(fuentes({ unicaCosa: largo(190), tareas: [{ id: "t1", title: largo(250) }] }), g);
+  const r = validarScreen(s, { proyectos: [{ id: MALPASO }] });
+  assert.strictEqual(r.ok, true, r.ok ? "" : r.reason);
+  const foco = s.sections.find((x) => x.id === "foco");
+  assert.ok(foco && foco.kind === "tasks");
+  assert.ok(foco.data.items[1]!.titulo.endsWith("…"));
+});
+
+test("«Proyectos» no dice «en el plan»: esas tareas son las de impacto, no el plan", () => {
+  const a = accionesRapidas(fuentes({ tareas: [] }));
+  assert.ok(!a[0]!.detalle.includes("plan"));
 });

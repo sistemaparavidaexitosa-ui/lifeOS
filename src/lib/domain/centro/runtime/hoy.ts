@@ -14,7 +14,7 @@
 // grafo falla, la fila sale sin proyecto: es un adorno, no el contenido.
 
 import type { Hidratadores } from "./ensamblar.ts";
-import type { AccionRapida, ItemDeTarea } from "./secciones.ts";
+import { LIMITES, recortar, type AccionRapida, type ItemDeTarea } from "./secciones.ts";
 
 export interface LectorDelGrafo {
   /** El proyecto al que pertenece una tarea, o `null` si el grafo no lo sabe. */
@@ -46,7 +46,9 @@ export function accionesRapidas(f: FuentesDeHoy): AccionRapida[] {
   return [
     {
       etiqueta: "Proyectos",
-      detalle: s.vencidas > 0 ? plural(s.vencidas, "vencida", "vencidas") : `${f.tareas.length} en el plan`,
+      // Sin cifra cuando no hay vencidas: `tareas` son las de más impacto, no el
+      // plan del día, y «0 en el plan» decía algo falso.
+      detalle: s.vencidas > 0 ? plural(s.vencidas, "vencida", "vencidas") : "Sin vencidas",
       href: "/execution",
       icono: "proyectos"
     },
@@ -76,7 +78,7 @@ export function hidratadoresDeHoy(f: FuentesDeHoy, grafo: LectorDelGrafo): Hidra
       saludo: f.saludo,
       nombre: f.nombre,
       fechaISO: f.fechaISO,
-      frase: f.unicaCosa ? `Lo que importa hoy: ${f.unicaCosa}` : null
+      frase: f.unicaCosa ? recortar(`Lo que importa hoy: ${f.unicaCosa}`, LIMITES.heroFrase) : null
     }),
 
     narrative: async () => {
@@ -89,13 +91,17 @@ export function hidratadoresDeHoy(f: FuentesDeHoy, grafo: LectorDelGrafo): Hidra
       const proyectos = await Promise.all(tareas.map((t) => grafo.proyectoDeTarea(t.id).catch(() => null)));
 
       const items: ItemDeTarea[] = [];
-      if (f.unicaCosa) items.push({ id: "una-cosa", titulo: f.unicaCosa, contexto: "Una cosa", href: null });
+      // Lo que escribió la persona se RECORTA al tope del validador: un título
+      // largo no puede tumbar la pantalla entera.
+      if (f.unicaCosa) {
+        items.push({ id: "una-cosa", titulo: recortar(f.unicaCosa, LIMITES.tareaTitulo), contexto: "Una cosa", href: null });
+      }
       tareas.forEach((t, i) => {
         const p = proyectos[i];
         items.push({
           id: t.id,
-          titulo: t.title,
-          contexto: p ? `Proyecto · ${p.titulo}` : null,
+          titulo: recortar(t.title, LIMITES.tareaTitulo),
+          contexto: p ? recortar(`Proyecto · ${p.titulo}`, LIMITES.tareaContexto) : null,
           href: p ? `/execution?project=${p.id}` : "/execution"
         });
       });

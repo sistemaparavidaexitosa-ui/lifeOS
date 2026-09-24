@@ -51,6 +51,24 @@ export function esSectionKind(v: unknown): v is SectionKind {
 // enlaces van en campos llamados `href`, que el validador revisa uno por uno.
 // ---------------------------------------------------------------------------
 
+/**
+ * Los topes de longitud de los textos que el validador exige. Viven aquí, en el
+ * contrato, porque los usan los DOS lados: el validador para rechazar y los
+ * hidratadores para recortar lo que escribió la persona. Si se separaran, un
+ * título largo tumbaría la pantalla entera todos los días (lo encontró la
+ * revisión final: nada en la base limita un título de tarea).
+ */
+export const LIMITES = {
+  heroFrase: 200,
+  tareaTitulo: 200,
+  tareaContexto: 120
+} as const;
+
+/** Recorta a `max` caracteres con puntos suspensivos. Lo usan los hidratadores. */
+export function recortar(texto: string, max: number): string {
+  return texto.length <= max ? texto : `${texto.slice(0, max - 1).trimEnd()}…`;
+}
+
 export interface DatosHero {
   saludo: string;
   nombre: string;
