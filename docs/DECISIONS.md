@@ -3942,6 +3942,10 @@ implementa:
   `reasoning_format: "hidden"` y 1 024 tokens de reserva, que el razonamiento
   cuenta contra el tope. `RETIRADOS_DE_GROQ` y su prueba impiden volver a poner
   un modelo apagado.
+  **Y el motivo ya no se tapa.** En producción el Centro-agente contestaba «No
+  pude pensar esto ahora» y el log solo decía «El respaldo respondió 404»: el
+  motivo de Gemini —por qué se llegó al respaldo— se sobrescribía con el del
+  respaldo. Ahora se guardan los dos (`motivoConRespaldo`).
 
 - **D-194 · El Centro como agente de interfaz: referencias, no valores.** La
   Fase 1 se rechazó por no agéntica y por mezclarse con el Centro viejo. Ahora

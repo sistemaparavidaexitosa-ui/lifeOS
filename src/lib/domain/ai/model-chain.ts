@@ -112,3 +112,16 @@ export interface Budget {
   /** Cuánto de ese tope puede gastar pensando. 0 lo desactiva. */
   thinkingBudget: number;
 }
+
+/**
+ * El motivo final cuando Gemini y el respaldo fallan los dos.
+ *
+ * Antes se devolvía solo el del respaldo, y eso escondía justo lo que había que
+ * saber: POR QUÉ se llegó al respaldo. Pasó en producción el 2026-09-24 —el log
+ * del Centro decía «El respaldo respondió 404» y nada sobre Gemini—. Se
+ * conservan los dos, Gemini primero, que es la causa; el respaldo después, que
+ * es por qué tampoco hubo plan B.
+ */
+export function motivoConRespaldo(motivoGemini: string, motivoRespaldo: string | undefined): string {
+  return motivoRespaldo ? `${motivoGemini} · Respaldo: ${motivoRespaldo}` : motivoGemini;
+}
