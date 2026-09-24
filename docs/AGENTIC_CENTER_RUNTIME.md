@@ -219,3 +219,83 @@ dejar de usar algo lo borre solo. Sin migración en Fase 1 a propósito.
 - Que `lectorDelGrafo` encuentre el proyecto de tareas reales: depende de que
   `graph_sources` proyecte `belongs_to` tarea → proyecto.
 - Cuánto tarda el grafo de verdad frente al límite de 1,5 s.
+
+---
+
+## 13. Fase 2: el agente de interfaz (D-194 a D-196)
+
+**Por qué.** La Fase 1 se probó y el usuario la rechazó: «no se siente para nada
+agéntico… se mezcla con el antiguo centro». Tenía razón en las dos cosas: «Hoy»
+salía de reglas fijas y lo escrito en la barra seguía yendo a la captura vieja;
+y solo se había sustituido el lienzo. Lo que pidió no son pantallas por tema,
+sino un **agente de interfaz general**: cualquier pregunta sobre cualquier
+módulo produce texto, la interfaz que esa pregunta necesita, navegación y
+recomendaciones. Mercado es UNA capacidad. Spec en
+`docs/superpowers/specs/2026-09-24-centro-agente-design.md`.
+
+### La superficie
+
+Con `AGENTIC_CENTER_RUNTIME=1`, `RitualHost` monta `CentroAgente`
+(`src/components/centro-agente/`) en lugar de `CentroPremium`: nada del armazón
+viejo se pinta. Es una conversación: abre con «Hoy» (la pantalla de la Fase 1),
+y cada envío añade un turno —burbuja de la persona, respuesta con ✓, texto y
+bloques—. El (+) abre la captura rápida de siempre en una hoja. El hilo vive
+mientras el Centro está abierto y no se guarda. Tema propio `--ag-*`, claro por
+defecto.
+
+### El turno
+
+`POST /api/centro/turno { texto, historial }` → `pensarTurno`
+(`src/lib/centro/agente/pensar.ts`):
+
+1. `prepararCerebro()` (`src/lib/ai-chat/cerebro.ts`): el MISMO contexto,
+   memoria y herramientas que el chat de IA. Se extrajo de `sendChatMessage`;
+   el prompt del chat quedó idéntico byte a byte (`textoDelContexto`, con prueba).
+2. `generateJson` con `SYSTEM_AGENTE` y `ESQUEMA_RESPUESTA`: el modelo devuelve
+   `{ texto, bloques: [{ kind, datos: "<JSON>" }] }`, parseado bloque a bloque
+   (`contrato.ts`). Un bloque malo se descarta con motivo; el turno sigue.
+3. Cada bloque se resuelve:
+   - **genéricos** (`lista`, `metricas`, `tabla`, `grafica`, `tarjetas`,
+     `linea`) → `resolver.ts`: el modelo escribe REFERENCIAS
+     `fila:<tabla>:<uuid>` + columna, y el valor se lee de las filas que
+     `consultar` entregó EN ESTE TURNO (`filasEntregadas`). Fila no leída o
+     campo inexistente: fuera ese ítem. El enlace lo deriva el servidor de la
+     tabla y pasa por `destinoValido`;
+   - **`ir_a`** → `destinoValido`;
+   - **`recomendaciones`** → `sanearRecomendacion` (destino validado, sin cifras,
+     también dentro de `datos`) y fila pendiente en `coach_proposals` (origen
+     `centro`); Aceptar es `acceptProposal`;
+   - **`insight`** → sin cifras;
+   - **capacidades** (`mercado`, `hoy`) → `capacidades.ts`, 8 s de límite, ids
+     prefijados con el del bloque.
+4. `componerTurno` → `validarScreen`. Si no valida, el turno queda en texto.
+5. Cualquier fallo inesperado → «No pude pensar esto ahora; inténtalo de
+   nuevo.», HTTP 200. El hilo sigue.
+
+### La regla que no se cruza
+
+El agente **no escribe cifras dentro de los bloques**. Todo número sale de una
+fila leída, de un hidratador o de Polygon. El `texto` del turno sí puede
+mencionarlas, y el prompt le exige citar solo lo que leyó.
+
+### Añadir una capacidad
+
+Una entrada en `CAPACIDADES_REGISTRADAS` (`src/lib/centro/agente/capacidades.ts`)
+con su hidratador, su nombre en `CAPACIDADES` (`contrato.ts`) y su descripción en
+`SYSTEM_AGENTE`. El renderer la pinta con los componentes registrados.
+
+### Mercado
+
+`seccionesDeMercado` (puro) + `serieDe` (Polygon `/v2/aggs`). Portafolio = suma
+de tus `investments.valuation` en tu moneda (no se valora en vivo: la tabla no
+guarda ticker ni cantidad). Sin `POLYGON_API_KEY`, los tickers se ven y las
+cifras no: «Falta conectar la fuente de mercado».
+
+### Lo que NO está demostrado (Fase 2)
+
+- **Ninguna respuesta real del modelo se ha visto en el navegador**: en local no
+  hay `GEMINI_API_KEY`. Se verificó la superficie, «Hoy», el camino de fallo
+  (disculpa) y el flag apagado. Que Gemini siga el contrato de referencias
+  `fila:` + columna con datos reales es la primera prueba pendiente.
+- Polygon con datos: sin llave en ningún entorno.
+- El respaldo de Groq para este turno depende de D-193 (rama aparte).
