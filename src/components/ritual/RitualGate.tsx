@@ -1,7 +1,7 @@
 import { loadRitualGate, loadRitualContent } from "@/lib/data/ritual";
 import { debeMostrarseHoy } from "@/lib/domain/ritual/decidir.ts";
 import { construirSecuencia, hayContenido } from "@/lib/domain/ritual/secuencia.ts";
-import { publicEnv } from "@/config/env";
+import { publicEnv, flagsDelRuntime } from "@/config/env";
 import { getPersonalWorkspace } from "@/lib/data/workspaces";
 import { headers } from "next/headers";
 import { greetingFor } from "@/lib/domain/datetime.ts";
@@ -104,6 +104,9 @@ export default async function RitualGate() {
       datos={await datosDeHoy()}
       abrirCentro={abrirCentro}
       navMode={puerta.navMode}
+      // D-194: con el runtime encendido, el Centro es el agente — su propia
+      // superficie, sin nada del armazón premium.
+      agente={flagsDelRuntime().runtime}
       ritualPermitido={puerta.settings.enabled}
       workspaceId={(await getPersonalWorkspace())?.id ?? null}
       hourLocal={puerta.hourLocal}
