@@ -74,7 +74,128 @@ const ESQUEMAS: Partial<Record<SectionKind, z.ZodTypeAny>> = {
     .strict(),
   emptyState: mensaje,
   error: mensaje,
-  loading: mensaje
+  loading: mensaje,
+  // --- Fase 2 (D-194): la forma resuelta de los bloques del agente ---------
+  lista: z
+    .object({
+      titulo: texto(80),
+      items: z
+        .array(
+          z
+            .object({
+              id: texto(120),
+              titulo: texto(LIMITES.itemTitulo),
+              detalle: texto(LIMITES.itemDetalle).nullable(),
+              estado: texto(LIMITES.itemEstado).nullable(),
+              href: href.nullable()
+            })
+            .strict()
+        )
+        .min(1)
+        .max(8)
+    })
+    .strict(),
+  metricas: z
+    .object({
+      titulo: texto(80).nullable(),
+      items: z.array(z.object({ etiqueta: texto(60), valor: texto(LIMITES.metricaValor) }).strict()).min(1).max(4)
+    })
+    .strict(),
+  table: z
+    .object({
+      titulo: texto(80),
+      columnas: z.array(texto(LIMITES.columna)).min(1).max(4),
+      filas: z
+        .array(z.object({ id: texto(120), celdas: z.array(texto(LIMITES.celda)).max(4), href: href.nullable() }).strict())
+        .min(1)
+        .max(10)
+    })
+    .strict(),
+  chart: z
+    .object({
+      titulo: texto(80),
+      tipo: z.enum(["linea", "barras"]),
+      unidad: texto(8),
+      puntos: z.array(z.object({ x: texto(LIMITES.fechaCorta), y: z.number().finite() }).strict()).min(2).max(400)
+    })
+    .strict(),
+  cards: z
+    .object({
+      titulo: texto(80),
+      items: z
+        .array(z.object({ id: texto(120), titulo: texto(LIMITES.itemTitulo), detalle: texto(LIMITES.itemDetalle).nullable(), href: href.nullable() }).strict())
+        .min(1)
+        .max(4)
+    })
+    .strict(),
+  timeline: z
+    .object({
+      titulo: texto(80),
+      items: z
+        .array(z.object({ id: texto(120), fecha: texto(LIMITES.fechaCorta), titulo: texto(LIMITES.itemTitulo), href: href.nullable() }).strict())
+        .min(1)
+        .max(8)
+    })
+    .strict(),
+  irA: z
+    .object({ destinos: z.array(z.object({ etiqueta: texto(40), href }).strict()).min(1).max(3) })
+    .strict(),
+  recomendaciones: z
+    .object({
+      items: z
+        .array(z.object({ propuestaId: z.string().uuid(), titulo: texto(90), motivo: texto(160) }).strict())
+        .min(1)
+        .max(3)
+    })
+    .strict(),
+  insight: z.object({ texto: texto(240) }).strict(),
+  portfolio: z
+    .object({
+      total: texto(40),
+      nota: texto(160),
+      serie: z.array(z.object({ x: texto(40), y: z.number().finite() }).strict()).max(400)
+    })
+    .strict(),
+  movimientos: z
+    .object({
+      configurado: z.boolean(),
+      items: z
+        .array(
+          z
+            .object({
+              ticker: texto(12),
+              nombre: texto(80),
+              precio: texto(24).nullable(),
+              variacion: texto(12).nullable(),
+              tono: z.enum(["ok", "bad", "info"]).nullable(),
+              nota: texto(80).nullable()
+            })
+            .strict()
+        )
+        .min(1)
+        .max(8)
+    })
+    .strict(),
+  watchlist: z
+    .object({
+      configurado: z.boolean(),
+      items: z
+        .array(
+          z
+            .object({
+              ticker: texto(12),
+              nombre: texto(80),
+              precio: texto(24).nullable(),
+              variacion: texto(12).nullable(),
+              tono: z.enum(["ok", "bad", "info"]).nullable(),
+              serie: z.array(z.number().finite()).max(400)
+            })
+            .strict()
+        )
+        .min(1)
+        .max(20)
+    })
+    .strict()
 };
 
 const DATOS_SIN_ESQUEMA = z.record(z.unknown());

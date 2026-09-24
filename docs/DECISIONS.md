@@ -3928,3 +3928,25 @@ implementa:
   cuánto dura lo aprendido, y el precedente (`nav_visitas`, D-183) dice 30 días
   y DELETE concedido. `accionIgnorada` está declarado y no se emite: saber qué se
   ignoró exige saber qué se vio.
+
+- **D-194 · El Centro como agente de interfaz: referencias, no valores.** La
+  Fase 1 se rechazó por no agéntica y por mezclarse con el Centro viejo. Ahora
+  cada pregunta produce texto + bloques que el modelo elige, sobre cualquier
+  módulo. El modelo no escribe valores en los bloques: escribe
+  `fila:<tabla>:<uuid>` + columna, y el servidor lee el valor de las filas que
+  las herramientas entregaron en ese turno. Lo que no se leyó no se enseña, y el
+  enlace de cada ítem lo deriva el servidor de la tabla y pasa por
+  `destinoValido`. Mismo cerebro que el chat (`prepararCerebro`, extraído sin
+  cambiar el prompt del chat); hilo propio que no se guarda.
+
+- **D-195 · Capacidades enchufables; mercado es una.** Lo que no vive en la
+  base entra como capacidad registrada con su hidratador (`mercado`, `hoy`).
+  Mercado usa Polygon (cotización + serie) y la suma de tus inversiones; sin
+  llave enseña los tickers y dice que falta la fuente, nunca ceros.
+
+- **D-196 · La superficie sustituye entera; recomendaciones con un clic.** Con
+  el flag, `CentroAgente` reemplaza a `CentroPremium` (nada del armazón viejo),
+  abre con «Hoy» y la captura rápida pasa al (+). Las recomendaciones se guardan
+  como `coach_proposals` pendientes tras validar destino y cifras
+  (`sanearRecomendacion`); escribir es siempre un clic de la persona. La revisión
+  encontró —y se arregló— que un `foco` podía guardar un enlace fuera de la app.

@@ -4594,3 +4594,296 @@ html[data-theme="dark"] .rit-boton-centro { color: #0b0b12; background: #f6f6fa;
 .rt-fila:focus-visible, .rt-atajo:focus-visible, .rt-narrativa:focus-visible { outline: 2px solid var(--rit-accent); outline-offset: 2px; }
 /* Cuatro en fila solo caben con la tipografía del ritual a partir de ~480 px. */
 @media (max-width: 480px) { .rt-atajos { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ─── Bloques del agente (D-194) ──────────────────────────────────────────
+   Blanco, tipografía negra, mucho aire, casi sin bordes: la misma maqueta que
+   `.rt-*`, con su propio juego de tokens porque este vocabulario es del
+   agente y no del ritual. Verde y rojo SOLO para `tono`. */
+.ag-shell {
+  --ag-bg: #fff;
+  --ag-surface: #fff;
+  --ag-soft: #f5f5f7;
+  --ag-text: #0b0b0c;
+  --ag-muted: #6e6e73;
+  --ag-line: rgba(0, 0, 0, 0.06);
+
+  /* El turno «Hoy» se pinta con los componentes `.rt-*` de la Fase 1, que
+     hablan en `--rit-*`; esos tokens solo existen dentro de `.rit-shell`.
+     Puente aquí, en toda la superficie, y no solo en `.ag-hoja`: sin él el
+     número de la tarea perdía su círculo, los atajos su fondo y los grises y
+     separadores desaparecían. Se declaran con `var(--ag-…)`, así que el bloque
+     oscuro de abajo —que solo redefine `--ag-*`— también los alcanza. */
+  --rit-bg: var(--ag-bg);
+  --rit-text: var(--ag-text);
+  --rit-muted: var(--ag-muted);
+  --rit-line: var(--ag-line);
+  --rit-accent: var(--ag-text);
+}
+@media (prefers-color-scheme: dark) {
+  .ag-shell {
+    --ag-bg: #0b0b0c;
+    --ag-surface: #161618;
+    --ag-soft: #1c1c1f;
+    --ag-text: #f5f5f7;
+    --ag-muted: #a1a1a6;
+    --ag-line: rgba(255, 255, 255, 0.08);
+  }
+}
+
+.ag-card { background: var(--ag-surface); color: var(--ag-text); border-radius: 18px; padding: 20px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.04); }
+.ag-card-cabecera { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.ag-card-titulo { margin: 0; font-size: 15px; font-weight: 600; }
+.ag-muted { color: var(--ag-muted); font-size: 13px; }
+.ag-aviso { margin: 4px 0 12px; color: var(--ag-muted); font-size: 13px; }
+.ag-cifra-grande { margin: 4px 0 0; font-size: 32px; font-weight: 600; letter-spacing: -0.01em; }
+
+.ag-filas { list-style: none; margin: 0; padding: 0; }
+.ag-filas li + li.ag-fila { border-top: 1px solid var(--ag-line); }
+.ag-fila { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
+.ag-fila-enlace { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; color: inherit; text-decoration: none; }
+.ag-avatar { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--ag-soft); color: var(--ag-text); font-size: 11px; font-weight: 600; text-transform: uppercase; }
+.ag-fila-texto { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ag-fila-cifra { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 14px; }
+.ag-chevron { flex: none; width: 18px; height: 18px; color: var(--ag-muted); }
+.ag-card-pie { display: flex; align-items: center; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--ag-line); color: inherit; text-decoration: none; font-size: 13px; }
+.ag-fila:focus-visible, .ag-fila-enlace:focus-visible, .ag-card-pie:focus-visible, .ag-tarjeta:focus-visible, .ag-boton:focus-visible, .ag-tabla-fila-enlace:focus-visible { outline: 2px solid var(--ag-text); outline-offset: 2px; }
+
+.ag-tono-ok { color: #16a34a; }
+.ag-tono-bad { color: #dc2626; }
+.ag-tono-info { color: var(--ag-muted); }
+.ag-spark { display: block; }
+
+.ag-portafolio-linea { display: block; margin-top: 8px; }
+.ag-grafica { display: block; margin: 8px 0 4px; }
+
+.ag-tabla { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ag-tabla th { text-align: left; color: var(--ag-muted); font-weight: 500; padding: 6px 8px; }
+.ag-tabla td { padding: 10px 8px; border-top: 1px solid var(--ag-line); }
+.ag-tabla-fila-enlace { cursor: pointer; }
+.ag-tabla-fila-enlace:hover { background: var(--ag-soft); }
+
+.ag-tarjetas { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.ag-tarjeta { display: flex; flex-direction: column; gap: 4px; padding: 14px; border-radius: 14px; background: var(--ag-soft); color: inherit; text-decoration: none; font-size: 14px; }
+
+.ag-linea-tiempo { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.ag-linea-tiempo-item { display: flex; flex-direction: column; gap: 2px; padding-left: 16px; border-left: 2px solid var(--ag-line); }
+.ag-linea-tiempo-enlace { display: flex; flex-direction: column; gap: 2px; color: inherit; text-decoration: none; }
+
+.ag-botones { display: flex; flex-wrap: wrap; gap: 8px; }
+.ag-boton { display: inline-flex; align-items: center; padding: 10px 18px; border-radius: 999px; background: var(--ag-text); color: var(--ag-bg); text-decoration: none; font-size: 14px; font-weight: 500; }
+
+.ag-insight { display: flex; align-items: flex-start; gap: 12px; padding: 16px 18px; border-radius: 16px; background: var(--ag-soft); color: var(--ag-text); }
+.ag-insight-icono { flex: none; width: 20px; height: 20px; margin-top: 2px; }
+.ag-insight-texto { margin: 0; font-size: 14px; line-height: 1.5; }
+
+.ag-metricas { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 16px; }
+.ag-metrica { display: flex; flex-direction: column; gap: 4px; }
+.ag-metrica-valor { font-size: 24px; font-weight: 600; }
+
+.ag-fila-recomendacion { justify-content: space-between; }
+.ag-acciones { flex: none; display: flex; gap: 8px; }
+.ag-boton-chico { border: none; border-radius: 999px; padding: 6px 14px; background: var(--ag-text); color: var(--ag-bg); font-size: 13px; cursor: pointer; }
+.ag-boton-chico-suave { background: var(--ag-soft); color: var(--ag-text); }
+.ag-boton-chico:disabled { opacity: 0.5; cursor: default; }
+
+/* ─── La superficie del Centro-agente (D-194) ─────────────────────────────
+   UNA CONVERSACIÓN, NO UN PANEL: fondo blanco, sin bordes, mucho aire. Usa
+   SOLO los tokens `--ag-*` de arriba; los `--rit-*` existen aquí únicamente
+   como puente para los componentes `.rt-*` que se reutilizan. */
+.ag-shell {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-ritual);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  background: var(--ag-bg);
+  color: var(--ag-text);
+  padding: env(safe-area-inset-top, 0px) 16px env(safe-area-inset-bottom, 0px);
+  overflow: hidden;
+}
+
+.ag-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 0;
+}
+
+.ag-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* La marca ✓: cuadrado negro redondeado con el visto blanco. Se reutiliza tal
+   cual delante de cada respuesta del agente, y pulsando en `.ag-pensando`. */
+.ag-logo-marca {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: var(--ag-text);
+  color: var(--ag-bg);
+  font-size: 13px;
+  line-height: 1;
+}
+
+.ag-cerrar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ag-muted);
+  cursor: pointer;
+}
+.ag-cerrar:hover { background: var(--ag-soft); color: var(--ag-text); }
+
+/* El hilo: la única parte que hace scroll. 640px porque el aire es el punto,
+   no el ancho de línea editorial del ritual (680px). */
+.ag-hilo {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 4px 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.ag-burbuja {
+  align-self: flex-end;
+  max-width: 85%;
+  margin: 0;
+  background: var(--ag-soft);
+  color: var(--ag-text);
+  border-radius: 18px;
+  padding: 12px 16px;
+  font-size: 15px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.ag-turno { display: flex; flex-direction: column; gap: 12px; }
+
+.ag-respuesta {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.ag-respuesta .ag-logo-marca { margin-top: 1px; }
+
+@keyframes ag-pulso { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.ag-pensando { color: var(--ag-muted); }
+.ag-pensando .ag-logo-marca { animation: ag-pulso 1.1s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .ag-pensando .ag-logo-marca { animation: none; }
+}
+
+/* El esqueleto de «Hoy» mientras carga: bloques que laten, no una rueda. */
+@keyframes ag-shimmer { 0% { opacity: 0.55; } 50% { opacity: 1; } 100% { opacity: 0.55; } }
+.ag-esqueleto {
+  height: 120px;
+  border-radius: 18px;
+  background: var(--ag-soft);
+  animation: ag-shimmer 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ag-esqueleto { animation: none; }
+}
+
+/* El pie: la píldora del compositor, centrada con el hilo. */
+.ag-pie {
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 10px 0 14px;
+}
+
+.ag-composer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 28px;
+  background: var(--ag-surface);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.08);
+  padding: 6px 6px 6px 8px;
+}
+
+.ag-mas, .ag-enviar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+.ag-mas { background: var(--ag-soft); color: var(--ag-text); }
+.ag-mas:hover { background: var(--ag-line); }
+.ag-enviar { background: var(--ag-text); color: var(--ag-bg); }
+.ag-enviar:disabled { opacity: 0.4; cursor: default; }
+
+.ag-campo {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  border: 0;
+  background: transparent;
+  color: var(--ag-text);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.4;
+  padding: 8px 4px;
+  max-height: 120px;
+}
+.ag-campo::placeholder { color: var(--ag-muted); }
+.ag-campo:focus { outline: none; }
+.ag-campo:disabled { opacity: 0.6; }
+
+/* La hoja del «+»: la misma `BarraCaptura` de siempre, en una tarjeta que
+   sube desde abajo sobre un fondo que la cierra al tocarlo fuera. */
+.ag-hoja-fondo {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-ritual) + 1);
+  background: rgba(0, 0, 0, 0.32);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.ag-hoja {
+  width: 100%;
+  max-width: 640px;
+  background: var(--ag-surface);
+  color: var(--ag-text);
+  border-radius: 24px 24px 0 0;
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.12);
+  padding: 20px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+
+  /* `BarraCaptura` habla en `--rit-*`: el puente general vive en `.ag-shell`;
+     aquí solo cambia el fondo, que en la hoja es la superficie y no el lienzo. */
+  --rit-bg: var(--ag-surface);
+}
+
+.ag-shell :focus-visible { outline: 2px solid var(--ag-text); outline-offset: 2px; }

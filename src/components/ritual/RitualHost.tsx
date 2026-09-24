@@ -6,6 +6,7 @@ import type { ModoNavegacion } from "@/lib/domain/centro/apertura.ts";
 import { contenidoParaRepetir, setNavMode } from "@/lib/ritual/actions";
 import RitualOverlay from "./RitualOverlay";
 import CentroPremium from "./CentroPremium";
+import CentroAgente from "@/components/centro-agente/CentroAgente";
 import BotonCentro from "./BotonCentro";
 import { EVENTO_ABRIR_CENTRO } from "./eventos";
 
@@ -36,7 +37,8 @@ export default function RitualHost({
   ritualPermitido,
   workspaceId,
   currency,
-  locale
+  locale,
+  agente
 }: {
   datos: DatosDelRitual | null;
   /**
@@ -54,6 +56,8 @@ export default function RitualHost({
   workspaceId: string | null;
   currency: string;
   locale: string;
+  /** AGENTIC_CENTER_RUNTIME (D-194): con esto encendido, el Centro es el agente. */
+  agente: boolean;
 }) {
   const [ritual, setRitual] = useState<DatosDelRitual | null>(datos);
   const [modo, setModo] = useState<ModoNavegacion>(navMode);
@@ -118,6 +122,18 @@ export default function RitualHost({
   }
 
   if (vista === "centro") {
+    // Fase 2 (D-194): con el runtime encendido, el Centro es el agente —
+    // superficie propia, nada del armazón viejo. Apagado, CentroPremium de siempre.
+    if (agente) {
+      return (
+        <CentroAgente
+          onCerrar={() => setVista(null)}
+          onIrA={() => setVista(null)}
+          workspaceId={workspaceId}
+          locale={locale}
+        />
+      );
+    }
     return (
       <CentroPremium
         cabecera={cabecera}

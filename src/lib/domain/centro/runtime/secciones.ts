@@ -37,7 +37,14 @@ export const SECTION_KINDS = [
   "quickActions",
   "emptyState",
   "error",
-  "loading"
+  "loading",
+  // Fase 2 (D-194): el vocabulario del agente de interfaz.
+  "lista",
+  "metricas",
+  "irA",
+  "recomendaciones",
+  "insight",
+  "movimientos"
 ] as const;
 
 export type SectionKind = (typeof SECTION_KINDS)[number];
@@ -61,7 +68,17 @@ export function esSectionKind(v: unknown): v is SectionKind {
 export const LIMITES = {
   heroFrase: 200,
   tareaTitulo: 200,
-  tareaContexto: 120
+  tareaContexto: 120,
+  // Fase 2 (D-194): lo que el resolver del agente lee de una fila. Un valor de
+  // la base no tiene tope; el campo que lo pinta, sí.
+  itemTitulo: 160,
+  itemDetalle: 160,
+  itemEstado: 60,
+  metricaValor: 40,
+  celda: 80,
+  /** El contrato admite etiquetas de 60; la cabecera de una tabla, 40. */
+  columna: 40,
+  fechaCorta: 40
 } as const;
 
 /** Recorta a `max` caracteres con puntos suspensivos. Lo usan los hidratadores. */
@@ -91,35 +108,94 @@ export interface DatosChat {
   mensajes: { rol: "persona" | "centro"; texto: string }[];
 }
 
-/** Precio y variación pueden faltar: la watchlist guarda QUÉ sigues, nunca CUÁNTO vale (D-184). */
-export interface Posicion {
-  simbolo: string;
-  nombre: string;
-  precio: number | null;
-  variacionPct: number | null;
-  nota: string | null;
+/** Verde, rojo o neutro. Solo las variaciones llevan color. */
+export type Tono = "ok" | "bad" | "info";
+
+/**
+ * FORMA RESUELTA (Fase 2, D-194). Lo que llega al renderer ya viene formateado
+ * por el servidor —«$18,742.32», «24 sep 2026»—: el componente pinta cadenas y
+ * no sabe de monedas ni de locales. Las gráficas son la excepción: necesitan
+ * el número para dibujar.
+ */
+export interface DatosLista {
+  titulo: string;
+  items: { id: string; titulo: string; detalle: string | null; estado: string | null; href: string | null }[];
 }
 
-export interface DatosPortfolio {
-  moneda: string;
-  total: number | null;
-  variacionPct: number | null;
-  posiciones: Posicion[];
+export interface DatosMetricas {
+  titulo: string | null;
+  items: { etiqueta: string; valor: string }[];
 }
 
-export interface DatosWatchlist {
-  /** `false` = falta la llave de mercado; la sección lo dice en vez de enseñar ceros. */
-  configurado: boolean;
-  simbolos: Posicion[];
+export interface DatosTable {
+  titulo: string;
+  columnas: string[];
+  filas: { id: string; celdas: string[]; href: string | null }[];
 }
 
 export interface DatosChart {
+  titulo: string;
+  tipo: "linea" | "barras";
+  /** «MXN», «%», «» — para el eje, no para calcular. */
   unidad: string;
-  serie: { x: string; y: number }[];
+  puntos: { x: string; y: number }[];
+}
+
+export interface DatosCards {
+  titulo: string;
+  items: { id: string; titulo: string; detalle: string | null; href: string | null }[];
 }
 
 export interface DatosTimeline {
-  hitos: { fechaISO: string; titulo: string; estado: "hecho" | "pendiente" | "riesgo" }[];
+  titulo: string;
+  items: { id: string; fecha: string; titulo: string; href: string | null }[];
+}
+
+export interface DatosIrA {
+  destinos: { etiqueta: string; href: string }[];
+}
+
+export interface DatosRecomendaciones {
+  /** `propuestaId` es la fila de `coach_proposals`: aceptar pasa por `acceptProposal`. */
+  items: { propuestaId: string; titulo: string; motivo: string }[];
+}
+
+export interface DatosInsight {
+  texto: string;
+}
+
+export interface DatosPortfolio {
+  total: string;
+  /** «Valuación al 12 sep 2026 · 2 inversiones en otra moneda no suman». */
+  nota: string;
+  /** Vacía = no hay historia suficiente, y no se dibuja. */
+  serie: { x: string; y: number }[];
+}
+
+export interface DatosMovimientos {
+  /** `false` = falta la llave de mercado: se enseñan los tickers sin cifras. */
+  configurado: boolean;
+  items: {
+    ticker: string;
+    nombre: string;
+    precio: string | null;
+    variacion: string | null;
+    tono: Tono | null;
+    nota: string | null;
+  }[];
+}
+
+export interface DatosWatchlist {
+  configurado: boolean;
+  items: {
+    ticker: string;
+    nombre: string;
+    precio: string | null;
+    variacion: string | null;
+    tono: Tono | null;
+    /** Cierres para la sparkline, del más viejo al más nuevo. Vacía = sin línea. */
+    serie: number[];
+  }[];
 }
 
 export interface DatosCalendar {
@@ -156,15 +232,6 @@ export interface DatosMoney {
   patrimonio: number | null;
   flujoDelMes: number | null;
   proximosPagos: { concepto: string; monto: number; fechaISO: string }[];
-}
-
-export interface DatosCards {
-  items: { titulo: string; detalle: string; href: string | null }[];
-}
-
-export interface DatosTable {
-  columnas: string[];
-  filas: string[][];
 }
 
 export interface DatosMetric {
@@ -230,6 +297,12 @@ export interface DatosPorKind {
   emptyState: DatosMensaje;
   error: DatosMensaje;
   loading: DatosMensaje;
+  lista: DatosLista;
+  metricas: DatosMetricas;
+  irA: DatosIrA;
+  recomendaciones: DatosRecomendaciones;
+  insight: DatosInsight;
+  movimientos: DatosMovimientos;
 }
 
 export type DatosDe<K extends SectionKind> = DatosPorKind[K];

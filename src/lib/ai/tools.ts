@@ -2,7 +2,7 @@ import "server-only";
 import { generateGroundedText, type FunctionDeclaration, type GeminiSchema } from "./gemini-provider";
 import { loadFacts, type Db, type FactsOverrides, type ProfileBits } from "@/lib/insights/facts-loader";
 import { tablaConsultable, TABLAS_CONSULTABLES, dominioDeTabla } from "@/lib/insights/context";
-import { idDeFila, limiteConsulta, ventanaConsulta, type CajaDeHerramientas } from "@/lib/domain/ai/tools.ts";
+import { limiteConsulta, registrarFilas, ventanaConsulta, type CajaDeHerramientas } from "@/lib/domain/ai/tools.ts";
 import { nodosParaModelo, type NodoCrudo } from "@/lib/domain/ai/graph-tool.ts";
 import type { Domain } from "@/lib/domain/insights/types.ts";
 
@@ -122,6 +122,7 @@ export interface OpcionesCaja {
 export function crearCajaDeHerramientas(opciones: OpcionesCaja): CajaDeHerramientas {
   const entregados = new Set<string>();
   const busquedas: string[] = [];
+  const filas = new Map<string, Record<string, unknown>>();
 
   const declaraciones: FunctionDeclaration[] = [
     {
@@ -205,17 +206,13 @@ export function crearCajaDeHerramientas(opciones: OpcionesCaja): CajaDeHerramien
 
     if (error) return { error: "No se pudo leer esa tabla." };
 
-    const filas = (data ?? []).map((fila) => {
-      const registro = fila as unknown as Record<string, unknown>;
-      // `nutrition_profiles` no tiene `id` —su PK es `user_id`, que no se
-      // trae—, así que la fila se cita por el nombre de su tabla. Sin un id
-      // citable, el modelo no podría respaldar nada de lo que dijera con ella.
-      const id = typeof registro.id === "string" ? idDeFila(tabla, registro.id) : idDeFila(tabla, "unica");
-      entregados.add(id);
-      return { id, ...registro };
-    });
+    // `nutrition_profiles` no tiene `id` —su PK es `user_id`, que no se trae—,
+    // así que la fila se cita por el nombre de su tabla. Sin un id citable, el
+    // modelo no podría respaldar nada de lo que dijera con ella.
+    const filasSalida = registrarFilas(filas, tabla, (data ?? []) as unknown as Record<string, unknown>[]);
+    for (const f of filasSalida) entregados.add(f.id);
 
-    return filas.length ? { filas } : { filas: [], nota: "No hay filas en esa ventana." };
+    return filasSalida.length ? { filas: filasSalida } : { filas: [], nota: "No hay filas en esa ventana." };
   }
 
   /**
@@ -293,6 +290,7 @@ export function crearCajaDeHerramientas(opciones: OpcionesCaja): CajaDeHerramien
   return {
     declaraciones,
     entregados: () => entregados,
+    filasEntregadas: () => filas,
     busquedas: () => [...busquedas],
     async ejecutar(name, args) {
       // NUNCA LANZA, como todo lo que rodea al modelo (D-021): una herramienta

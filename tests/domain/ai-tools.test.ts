@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { idDeFila, limiteConsulta, ventanaConsulta, MAX_DIAS_CONSULTA } from "../../src/lib/domain/ai/tools.ts";
+import { idDeFila, limiteConsulta, ventanaConsulta, registrarFilas, MAX_DIAS_CONSULTA } from "../../src/lib/domain/ai/tools.ts";
 import { MAX_FILAS_CONSULTA } from "../../src/lib/insights/context.ts";
 
 // Lo que el modelo pide NO es de fiar: son argumentos generados, no validados.
@@ -48,4 +48,21 @@ test("limiteConsulta: lo que pida el modelo se acota al tope, y un disparate cae
 
 test("idDeFila: el id que se le enseña al modelo dice de qué tabla salió, para poder auditar la cita", () => {
   assert.strictEqual(idDeFila("habit_logs", "abc"), "fila:habit_logs:abc");
+});
+
+// `consultar` (src/lib/ai/tools.ts) no se puede importar aquí: es `server-only`
+// y usa alias `@/`. `registrarFilas` es la parte pura de lo que hace con cada
+// fila que trae de Supabase, y es lo que hace falta probar (D-194).
+
+test("registrarFilas conserva el valor de cada fila entregada, no solo su id", () => {
+  const mapa = new Map<string, Record<string, unknown>>();
+  registrarFilas(mapa, "debts", [{ id: "d1", name: "Tarjeta", balance: 4000 }]);
+  assert.deepStrictEqual(mapa.get("fila:debts:d1"), { id: "d1", name: "Tarjeta", balance: 4000 });
+});
+
+test("registrarFilas: una fila sin id de cadena se cita como 'unica'", () => {
+  const mapa = new Map<string, Record<string, unknown>>();
+  const filas = registrarFilas(mapa, "nutrition_profiles", [{ meta: 2000 }]);
+  assert.strictEqual(filas[0].id, "fila:nutrition_profiles:unica");
+  assert.deepStrictEqual(mapa.get("fila:nutrition_profiles:unica"), { meta: 2000 });
 });

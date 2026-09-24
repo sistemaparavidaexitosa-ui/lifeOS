@@ -15,18 +15,13 @@ import { after } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/data/session";
-import { todayLocal } from "@/lib/data/dates";
-import { getUserTimeZone } from "@/lib/data/profile";
-import { loadFacts, type Db } from "@/lib/insights/facts-loader";
-import { allowedDomains, buildContext } from "@/lib/insights/context";
-import { loadChainFacts } from "@/lib/insights/graph-context";
+import { type Db } from "@/lib/insights/facts-loader";
 import { chatReply } from "@/lib/ai/chat";
-import { crearCajaDeHerramientas } from "@/lib/ai/tools";
+import { prepararCerebro } from "@/lib/ai-chat/cerebro";
 import { recortarHistorial, sanitizeProposedMemory, type ChatMessageLike } from "@/lib/domain/ai/chat.ts";
 import { quickAddTask } from "@/lib/search/quick-add";
 import { upsertMemoryItem } from "@/lib/insights/actions";
-import type { Domain } from "@/lib/domain/insights/types.ts";
-import type { MemoryItemLike, MemoryScope } from "@/lib/domain/insights/memory.ts";
+import type { MemoryScope } from "@/lib/domain/insights/memory.ts";
 import type { ActionResult } from "@/lib/supabase/errors";
 
 /**
@@ -124,89 +119,33 @@ export async function sendChatMessage(text: string): Promise<SendResult> {
     .select("id")
     .single();
 
-  // Ya no se leen `accounts` ni `family_members`: solo servían para construir
-  // el mapa de alias, que 0053 retiró. Dos viajes de red menos por turno.
-  const [zonaHoraria, { data: profile }, { data: memory }, historial] =
-    await Promise.all([
-      getUserTimeZone(),
-      supabase
-        .from("profiles")
-        .select("quincenal_income, ai_domains, activity_window_start, activity_window_end")
-        .eq("user_id", user.id)
-        .single(),
-      supabase.from("memory_items").select("*").order("created_at", { ascending: false }),
-      // `readHistory` y no `loadChatHistory`: esta función ya comprobó la
-      // sesión, y volver a preguntársela a Auth era otro viaje de red de más.
-      readHistory(supabase)
-    ]);
+  // El contexto y las herramientas viven en `prepararCerebro` (D-194): el
+  // Centro-agente los necesita igual que el chat, y esto es lo único que los
+  // arma. Va en paralelo con la escritura de la pregunta y con el historial,
+  // como antes.
+  const [cerebro, historial] = await Promise.all([
+    // Se le pasa la sesión que ya se tiene: sin esto, `prepararCerebro`
+    // repetiría `createClient()` y `getSessionUser()` —un `GET
+    // /auth/v1/user` real— antes de poder empezar sus propias lecturas.
+    prepararCerebro({ supabase, user: { id: user.id } }),
+    // `readHistory` y no `loadChatHistory`: esta función ya comprobó la
+    // sesión, y volver a preguntársela a Auth era otro viaje de red de más.
+    readHistory(supabase)
+  ]);
 
-  const today = todayLocal(zonaHoraria);
-
-  // El opt-in por dominio manda igual que en `analyze()` (§4.2), y el corte es
-  // igual de TEMPRANO: si el usuario no autorizó nada, sus tablas ni se tocan.
-  // A diferencia del motor, aquí no se aborta — un chat que se niega a hablar
-  // es peor que uno honesto sobre lo que no sabe. Se contesta sin hechos.
-  const enabledDomains = (profile?.ai_domains ?? []) as Domain[];
-  const permitidos = allowedDomains("global").filter((d) => enabledDomains.includes(d));
-
-  const facts = permitidos.length
-    ? await loadFacts(supabase, user.id, permitidos, today, {
-        quincenalIncome: profile?.quincenal_income ?? 0,
-        window: {
-          start: (profile?.activity_window_start ?? "08:00").slice(0, 5),
-          end: (profile?.activity_window_end ?? "18:00").slice(0, 5)
-        }
-      })
-    : [];
-
-  // Las cadenas del grafo van DESPUÉS de los hechos porque salen de ellos: se
-  // recorre hacia arriba desde lo que los sustenta. Van con la sesión, así que
-  // la regla de visibilidad es la de siempre.
-  if (facts.length) facts.push(...(await loadChainFacts(supabase, facts, permitidos, { modo: "sesion" })));
-
-  const context = buildContext({
-    scope: "global",
-    facts,
-    previousRejections: [],
-    enabledDomains,
-    todayISO: today,
-    memory: (memory ?? []).map(
-      (m): MemoryItemLike => ({
-        id: m.id,
-        scope: m.scope as MemoryScope,
-        origin: m.origin as MemoryItemLike["origin"],
-        text: m.text,
-        validUntil: m.valid_until
-      })
-    )
-  });
+  // No debería pasar —ya se comprobó la sesión arriba—, pero `prepararCerebro`
+  // sigue pudiendo devolver `null` (misma firma para quien no tiene sesión en
+  // la mano) y hay que cubrir el caso.
+  if (!cerebro) return { ok: false, reason: "No autenticado" };
 
   // Aquí sí se espera: si la pregunta no se pudo guardar, no se gasta una
   // llamada al modelo en un turno que no va a quedar registrado.
   const { data: pregunta, error: insertErr } = await guardarPregunta;
   if (insertErr) return { ok: false, reason: insertErr.message };
 
-  // La caja se crea SIEMPRE que haya algún dominio autorizado, y con los mismos
-  // permisos que ya se aplicaron a los hechos: no hay un segundo opt-in.
-  const herramientas = permitidos.length
-    ? crearCajaDeHerramientas({
-        supabase,
-        userId: user.id,
-        autorizados: permitidos,
-        today,
-        profile: {
-          quincenalIncome: profile?.quincenal_income ?? 0,
-          window: {
-            start: (profile?.activity_window_start ?? "08:00").slice(0, 5),
-            end: (profile?.activity_window_end ?? "18:00").slice(0, 5)
-          }
-        }
-      })
-    : undefined;
-
   const result = await chatReply({
-    context,
-    tools: herramientas,
+    context: cerebro.context,
+    tools: cerebro.herramientas ?? undefined,
     // El historial se leyó EN PARALELO con la escritura de la pregunta, así que
     // puede haberla pillado o no según cuál llegara antes. Se descarta por id y
     // no por posición: así la conversación previa es la misma pase lo que pase,
@@ -229,15 +168,15 @@ export async function sendChatMessage(text: string): Promise<SendResult> {
       // «contestó sin consultar nada» y «consultó y no había nada» se ven
       // idénticos desde fuera, y son problemas distintos.
       meta: {
-        domains: context.domains,
-        facts: context.facts.length,
+        domains: cerebro.context.domains,
+        facts: cerebro.context.facts.length,
         ok: result.ok,
         toolRounds: result.toolRounds ?? 0,
         toolsDisabled: result.toolsDisabled ?? false,
         // QUÉ se buscó, no solo que se buscó. Es lo único que sale hacia un
         // tercero distinto del proveedor del modelo, y sin el texto no hay
         // forma de comprobar después que no viajaron datos del usuario.
-        busquedas: herramientas?.busquedas() ?? []
+        busquedas: cerebro.herramientas?.busquedas() ?? []
       }
     });
   });

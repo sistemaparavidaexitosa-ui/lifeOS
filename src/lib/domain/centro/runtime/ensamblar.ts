@@ -28,7 +28,7 @@ export type Hidratadores = {
   [K in SectionKind]?: (hueco: HuecoDelPlan) => Promise<DatosDe<K> | null>;
 };
 
-function conLimite<T>(p: Promise<T>, ms: number): Promise<T> {
+export function conLimite<T>(p: Promise<T>, ms: number): Promise<T> {
   let reloj: ReturnType<typeof setTimeout> | undefined;
   const limite = new Promise<never>((_, rechazar) => {
     reloj = setTimeout(() => rechazar(new Error("tiempo agotado")), ms);
