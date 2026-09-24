@@ -1,6 +1,6 @@
 import "server-only";
 import { requireGeminiApiKey } from "@/config/env";
-import { debeSaltarDeModelo, motivoCadenaAgotada, problemasDeEsquema, type Budget } from "@/lib/domain/ai/model-chain.ts";
+import { debeSaltarDeModelo, motivoCadenaAgotada, motivoConRespaldo, problemasDeEsquema, type Budget } from "@/lib/domain/ai/model-chain.ts";
 import type { GeminiSchema, FunctionDeclaration } from "@/lib/domain/ai/tools.ts";
 import { intentarConGroq } from "./groq-provider";
 
@@ -622,7 +622,8 @@ export async function generateJson<T>(input: GenerateJsonInput<T>): Promise<Gene
 
   // Si TODOS cayeron por cuota, el mensaje de un solo modelo sería mentira.
   const reason = agotadosPorCuota === modelos.length ? motivoCadenaAgotada(modelos.length) : ultimo.reason;
-  // El motivo del respaldo, cuando lo hubo, dice más que «se agotó la cuota»:
-  // ya no es cierto que no quedaran opciones, es que la última tampoco pudo.
-  return { ok: false, reason: respaldo?.reason ?? reason };
+  // Los DOS motivos: el de Gemini dice por qué se llegó al respaldo; el del
+  // respaldo, por qué tampoco hubo plan B. Quedarse solo con el segundo
+  // escondió la causa en producción (ver `motivoConRespaldo`).
+  return { ok: false, reason: motivoConRespaldo(reason ?? "Gemini no respondió.", respaldo?.reason) };
 }

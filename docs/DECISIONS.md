@@ -3929,6 +3929,24 @@ implementa:
   y DELETE concedido. `accionIgnorada` está declarado y no se emite: saber qué se
   ignoró exige saber qué se vio.
 
+- **D-193 · El respaldo de Groq llevaba cinco semanas muerto.** Groq apagó
+  `llama-3.3-70b-versatile` y `llama-3.1-8b-instant` —los DOS modelos de la
+  cadena de D-182— el 16-ago-2026 para cuentas gratuitas y de desarrollador
+  (console.groq.com/docs/deprecations). Todo respaldo devolvía error. Dos fallos
+  juntos, y el segundo es el que importa: **un 400 de modelo retirado cortaba la
+  cadena**, porque solo 429 y 5xx pasaban al siguiente, así que tener dos
+  modelos no servía justo para lo que se pusieron. Ahora la cadena es
+  `openai/gpt-oss-120b` → `openai/gpt-oss-20b` (los sustitutos que nombra Groq),
+  un modelo retirado o inexistente salta al siguiente (`debeProbarSiguiente`), y
+  como `gpt-oss` razona antes de contestar, se pide `reasoning_effort: "low"`,
+  `reasoning_format: "hidden"` y 1 024 tokens de reserva, que el razonamiento
+  cuenta contra el tope. `RETIRADOS_DE_GROQ` y su prueba impiden volver a poner
+  un modelo apagado.
+  **Y el motivo ya no se tapa.** En producción el Centro-agente contestaba «No
+  pude pensar esto ahora» y el log solo decía «El respaldo respondió 404»: el
+  motivo de Gemini —por qué se llegó al respaldo— se sobrescribía con el del
+  respaldo. Ahora se guardan los dos (`motivoConRespaldo`).
+
 - **D-194 · El Centro como agente de interfaz: referencias, no valores.** La
   Fase 1 se rechazó por no agéntica y por mezclarse con el Centro viejo. Ahora
   cada pregunta produce texto + bloques que el modelo elige, sobre cualquier

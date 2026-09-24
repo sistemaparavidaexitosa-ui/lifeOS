@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { debeSaltarDeModelo, motivoCadenaAgotada, problemasDeEsquema } from "../../src/lib/domain/ai/model-chain.ts";
+import { debeSaltarDeModelo, motivoCadenaAgotada, motivoConRespaldo, problemasDeEsquema } from "../../src/lib/domain/ai/model-chain.ts";
 
 // La tabla de esta prueba ES la decisión de diseño: cuándo tiene sentido gastar
 // el siguiente modelo de la cadena y cuándo sería solo espera de más.
@@ -90,4 +90,18 @@ test("problemasDeEsquema: un esquema sano no da problemas", () => {
     }),
     []
   );
+});
+
+// 2026-09-24, producción: el Centro contestaba «No pude pensar esto ahora» y el
+// log solo decía «El respaldo respondió 404 … llama-3.3-70b-versatile». El
+// motivo de Gemini —el que explicaba POR QUÉ se llegó al respaldo— se perdía.
+test("motivoConRespaldo: si el respaldo también falla, conserva el motivo de Gemini", () => {
+  const m = motivoConRespaldo("Se agotó la cuota de hoy.", "El respaldo respondió 404.");
+  assert.match(m, /Se agotó la cuota de hoy\./);
+  assert.match(m, /El respaldo respondió 404\./);
+  assert.ok(m.indexOf("cuota") < m.indexOf("respaldo respondió"), "primero lo de Gemini");
+});
+
+test("motivoConRespaldo: sin respaldo, queda el de Gemini tal cual", () => {
+  assert.strictEqual(motivoConRespaldo("Se agotó la cuota de hoy.", undefined), "Se agotó la cuota de hoy.");
 });
