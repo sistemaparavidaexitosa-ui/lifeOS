@@ -3887,3 +3887,44 @@ implementa:
     `aclexplode`. Comparar permisos como texto es la misma clase de error que
     revocar de `anon` creyendo que se revoca de PUBLIC: parece que miras lo que
     crees que miras.
+
+- **D-188 · El Centro como runtime: una pantalla es JSON.** El Centro deja de
+  tener una sola pantalla fija. Un generador decide QUÉ enseñar como
+  `ScreenPlan` —secciones y orden, sin un solo dato—, el servidor lo llena y lo
+  valida, y un renderer genérico lo pinta pidiendo a un registro el componente
+  de cada `kind`. Nunca HTML ni JSX: el catálogo de 24 tipos es cerrado y el
+  validador (zod, en la frontera) rechaza marcado, kinds desconocidos y enlaces
+  fuera de la aplicación. Solo seis tipos tienen componente; el resto existe
+  como contrato y se pinta como `emptyState`. Spec en
+  `docs/superpowers/specs/2026-09-24-centro-runtime-design.md`, arquitectura en
+  `docs/AGENTIC_CENTER_RUNTIME.md`.
+
+- **D-189 · Se hidrata en el servidor, y cada sección cae sola.** La visión V2
+  pedía `hydrate()` en cada componente; se descartó porque un componente que
+  pide sus datos es un componente que consulta módulos. `/api/centro` devuelve
+  la pantalla ya llena y validada. Cada hidratador tiene 1,5 s: si lanza o se
+  pasa, SU sección pasa a `error` y el resto se pinta; si devuelve `null`, la
+  sección no sale. Si la pantalla entera no valida, `screen: null` y el Centro
+  pinta el lienzo de siempre: el camino viejo es el respaldo por diseño.
+
+- **D-190 · El grafo decide la estructura, no los valores.** El encargo pedía
+  que todo saliera del grafo. El grafo es una proyección de estructura: sabe que
+  una tarea pertenece a Malpaso, no el precio de NVDA (D-184) ni si hoy marcaste
+  un hábito. Los hidratadores reciben el grafo como puerto (`LectorDelGrafo`) y
+  sacan de él las relaciones; los valores salen de lo que la ruta ya cargó, con
+  nombre. Un grafo que falla deja la fila sin proyecto, no la pantalla sin foco.
+
+- **D-191 · Cuatro variables, una sola real.** `AGENTIC_CENTER_RUNTIME`
+  enciende el runtime; `AGENTIC_GENERATED_SCREENS`, `AGENTIC_LAYOUT_ENGINE` y
+  `AGENTIC_DYNAMIC_NAVIGATION` existen, se comprueban donde se enchufarán y hoy
+  no hacen nada. Los tres dependen del primero, y eso se resuelve en un sitio
+  (`resolverFlags`). El cliente no lee variables: recibe los flags en la
+  respuesta. Con el primero apagado la respuesta de `/api/centro` es campo por
+  campo la de antes (prueba «FLAG APAGADO = HOY»).
+
+- **D-192 · Aprendizaje: la forma, sin tabla.** El renderer ya emite pantalla
+  abierta, tiempo, descartada y acción aceptada a un `EventSink`; el que se
+  conecta es `sinkNulo`. Sin migración a propósito: guardar exige decidir
+  cuánto dura lo aprendido, y el precedente (`nav_visitas`, D-183) dice 30 días
+  y DELETE concedido. `accionIgnorada` está declarado y no se emite: saber qué se
+  ignoró exige saber qué se vio.

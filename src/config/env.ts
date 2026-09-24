@@ -9,6 +9,7 @@
 
 import { z } from "zod";
 import { jwkFromPrivateKey, normalizeVapidSubject } from "@/lib/domain/push/vapid.ts";
+import { resolverFlags, type FlagsDelRuntime } from "@/lib/domain/centro/runtime/flags.ts";
 
 const publicSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().url().default("http://localhost:54321"),
@@ -322,4 +323,16 @@ function parsearJwk(valor: string): JsonWebKey {
     throw new Error('VAPID_PRIVATE_JWK parsea pero no es una clave privada EC (falta `kty: "EC"` o el componente `d`).');
   }
   return jwk;
+}
+
+/**
+ * Los interruptores del runtime del Centro (D-191), ya resueltos.
+ *
+ * Una sola función para los cuatro, y no una por variable como las del Kernel,
+ * porque aquí hay una dependencia: los tres secundarios no significan nada sin
+ * `AGENTIC_CENTER_RUNTIME`, y esa regla vive en `resolverFlags`, que es pura y
+ * está probada.
+ */
+export function flagsDelRuntime(): FlagsDelRuntime {
+  return resolverFlags(process.env);
 }
