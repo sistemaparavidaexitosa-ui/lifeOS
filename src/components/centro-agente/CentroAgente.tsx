@@ -35,6 +35,9 @@ export default function CentroAgente({
   const [hilo, setHilo] = useState<Turno[]>([]);
   const [cargandoHoy, setCargandoHoy] = useState(true);
   const [pensando, setPensando] = useState(false);
+  // La hoja del «+» vive aquí y no en el compositor: Escape la cierra a ELLA
+  // primero, en vez de cerrar el Centro y perder la conversación.
+  const [hojaAbierta, setHojaAbierta] = useState(false);
   const shellRef = useRef<HTMLDivElement | null>(null);
   const finRef = useRef<HTMLDivElement | null>(null);
 
@@ -49,11 +52,12 @@ export default function CentroAgente({
         setCargandoHoy(false);
         // NUNCA una pantalla en blanco: si «Hoy» no llegó, el turno lo dice y
         // el compositor queda como el paso obvio que sigue.
-        setHilo([
-          r?.screen
-            ? { id: "hoy", rol: "agente", texto: "", secciones: r.screen.sections }
-            : { id: "hoy", rol: "agente", texto: "No pude preparar tu día ahora. Pregúntame lo que necesites.", secciones: [] }
-        ]);
+        const hoy: Turno = r?.screen
+          ? { id: "hoy", rol: "agente", texto: "", secciones: r.screen.sections }
+          : { id: "hoy", rol: "agente", texto: "No pude preparar tu día ahora. Pregúntame lo que necesites.", secciones: [] };
+        // «Hoy» va SIEMPRE primero, pero sin borrar lo que ya hubiera: la
+        // persona puede haber preguntado antes de que llegara.
+        setHilo((h) => [hoy, ...h]);
       });
     return () => {
       vivo = false;
@@ -69,14 +73,15 @@ export default function CentroAgente({
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.preventDefault();
-        onCerrar();
+        if (hojaAbierta) setHojaAbierta(false);
+        else onCerrar();
         return;
       }
       if (shellRef.current) atraparFoco(shellRef.current, e);
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onCerrar]);
+  }, [onCerrar, hojaAbierta]);
 
   // Mismo criterio que CentroPremium: la app de debajo deja de alcanzarse.
   useEffect(() => {
@@ -192,7 +197,14 @@ export default function CentroAgente({
           <div ref={finRef} />
         </main>
 
-        <Composer onEnviar={enviar} ocupado={pensando} workspaceId={workspaceId} onIrA={onIrA} />
+        <Composer
+          onEnviar={enviar}
+          ocupado={pensando}
+          workspaceId={workspaceId}
+          onIrA={onIrA}
+          hojaAbierta={hojaAbierta}
+          onHoja={setHojaAbierta}
+        />
       </div>
     </ContextoDelAgente.Provider>
   );

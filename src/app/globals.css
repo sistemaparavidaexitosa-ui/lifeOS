@@ -4606,6 +4606,18 @@ html[data-theme="dark"] .rit-boton-centro { color: #0b0b12; background: #f6f6fa;
   --ag-text: #0b0b0c;
   --ag-muted: #6e6e73;
   --ag-line: rgba(0, 0, 0, 0.06);
+
+  /* El turno «Hoy» se pinta con los componentes `.rt-*` de la Fase 1, que
+     hablan en `--rit-*`; esos tokens solo existen dentro de `.rit-shell`.
+     Puente aquí, en toda la superficie, y no solo en `.ag-hoja`: sin él el
+     número de la tarea perdía su círculo, los atajos su fondo y los grises y
+     separadores desaparecían. Se declaran con `var(--ag-…)`, así que el bloque
+     oscuro de abajo —que solo redefine `--ag-*`— también los alcanza. */
+  --rit-bg: var(--ag-bg);
+  --rit-text: var(--ag-text);
+  --rit-muted: var(--ag-muted);
+  --rit-line: var(--ag-line);
+  --rit-accent: var(--ag-text);
 }
 @media (prefers-color-scheme: dark) {
   .ag-shell {
@@ -4676,8 +4688,8 @@ html[data-theme="dark"] .rit-boton-centro { color: #0b0b12; background: #f6f6fa;
 
 /* ─── La superficie del Centro-agente (D-194) ─────────────────────────────
    UNA CONVERSACIÓN, NO UN PANEL: fondo blanco, sin bordes, mucho aire. Usa
-   SOLO los tokens `--ag-*` de arriba — nada de `--rit-*` aquí, es otro
-   vocabulario aunque ocupe el mismo lugar en pantalla. */
+   SOLO los tokens `--ag-*` de arriba; los `--rit-*` existen aquí únicamente
+   como puente para los componentes `.rt-*` que se reutilizan. */
 .ag-shell {
   position: fixed;
   inset: 0;
@@ -4869,15 +4881,8 @@ html[data-theme="dark"] .rit-boton-centro { color: #0b0b12; background: #f6f6fa;
   box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.12);
   padding: 20px 16px calc(20px + env(safe-area-inset-bottom, 0px));
 
-  /* `BarraCaptura` es la de siempre (D-168) y habla en tokens `--rit-*`, que
-     solo existen dentro de `.rit-shell`. Aquí NO vive dentro de `.rit-shell`,
-     así que se remapean uno a uno a su equivalente `--ag-*` — igual que
-     `.rit-shell` remapea `--line`/`--text`/`--muted` de la app en su momento.
-     Ningún token nuevo, solo un puente entre los dos vocabularios. */
-  --rit-text: var(--ag-text);
-  --rit-muted: var(--ag-muted);
-  --rit-line: var(--ag-line);
-  --rit-accent: var(--ag-text);
+  /* `BarraCaptura` habla en `--rit-*`: el puente general vive en `.ag-shell`;
+     aquí solo cambia el fondo, que en la hoja es la superficie y no el lienzo. */
   --rit-bg: var(--ag-surface);
 }
 

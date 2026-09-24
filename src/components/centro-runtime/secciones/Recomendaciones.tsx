@@ -1,6 +1,7 @@
 "use client";
 
 import { useContext, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { acceptProposal, dismissProposal } from "@/lib/coach/actions";
 import { registrarSeccion, type PropsDeSeccion } from "../registro";
 import { ContextoDelAgente } from "../contexto";
@@ -13,23 +14,40 @@ export default function SeccionRecomendaciones({ data, title, alAceptar }: Props
   const [ocultos, setOcultos] = useState<Set<string>>(new Set());
   const [estados, setEstados] = useState<Record<string, Estado>>({});
   const [pendiente, startTransition] = useTransition();
+  const router = useRouter();
 
+  const fallo = (propuestaId: string, motivo: string) =>
+    setEstados((e) => ({ ...e, [propuestaId]: { tipo: "error", motivo } }));
+
+  // Una Server Action que LANZA (sin red, sesión caducada) se queda en SU
+  // fila como error, no sube al error boundary y se lleva el Centro entero.
   function aceptar(propuestaId: string) {
     startTransition(async () => {
-      const r = await acceptProposal(propuestaId, workspaceId);
-      if (r.ok) {
+      try {
+        const r = await acceptProposal(propuestaId, workspaceId);
+        if (!r.ok) return fallo(propuestaId, r.reason ?? "No se pudo.");
         setEstados((e) => ({ ...e, [propuestaId]: { tipo: "hecho" } }));
-        if (r.href) alAceptar(r.href);
-      } else {
-        setEstados((e) => ({ ...e, [propuestaId]: { tipo: "error", motivo: r.reason ?? "No se pudo." } }));
+        // Un «foco» lleva a un sitio: se cierra el Centro Y se navega, como
+        // hacen BarraCaptura y Navegacion con el mismo `href`.
+        if (r.href) {
+          alAceptar(r.href);
+          router.push(r.href);
+        }
+      } catch {
+        fallo(propuestaId, "No se pudo. Inténtalo de nuevo.");
       }
     });
   }
 
   function descartar(propuestaId: string) {
     startTransition(async () => {
-      await dismissProposal(propuestaId);
-      setOcultos((o) => new Set(o).add(propuestaId));
+      try {
+        const r = await dismissProposal(propuestaId);
+        if (!r.ok) return fallo(propuestaId, r.reason ?? "No se pudo descartar.");
+        setOcultos((o) => new Set(o).add(propuestaId));
+      } catch {
+        fallo(propuestaId, "No se pudo descartar. Inténtalo de nuevo.");
+      }
     });
   }
 

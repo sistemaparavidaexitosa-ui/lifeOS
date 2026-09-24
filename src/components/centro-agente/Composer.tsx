@@ -15,15 +15,19 @@ export default function Composer({
   onEnviar,
   ocupado,
   workspaceId,
-  onIrA
+  onIrA,
+  hojaAbierta,
+  onHoja
 }: {
   onEnviar: (texto: string) => void;
   ocupado: boolean;
   workspaceId: string | null;
   onIrA: () => void;
+  /** La hoja del «+». La controla `CentroAgente` para que Escape la cierre primero. */
+  hojaAbierta: boolean;
+  onHoja: (abierta: boolean) => void;
 }) {
   const [texto, setTexto] = useState("");
-  const [hojaAbierta, setHojaAbierta] = useState(false);
   const [huboEnvio, setHuboEnvio] = useState(false);
 
   function enviar() {
@@ -44,7 +48,7 @@ export default function Composer({
   return (
     <div className="ag-pie">
       {hojaAbierta && (
-        <div className="ag-hoja-fondo" onClick={() => setHojaAbierta(false)}>
+        <div className="ag-hoja-fondo" onClick={() => onHoja(false)}>
           <div className="ag-hoja" onClick={(e) => e.stopPropagation()}>
             <BarraCaptura workspaceId={workspaceId} onNavegar={onIrA} />
           </div>
@@ -61,7 +65,7 @@ export default function Composer({
         <button
           type="button"
           className="ag-mas"
-          onClick={() => setHojaAbierta((v) => !v)}
+          onClick={() => onHoja(!hojaAbierta)}
           aria-label="Captura rápida"
           aria-expanded={hojaAbierta}
         >
@@ -76,7 +80,10 @@ export default function Composer({
           placeholder={huboEnvio ? "Escribe un mensaje…" : "¿Qué quieres hacer hoy?"}
           aria-label="Escribe un mensaje"
           rows={1}
-          disabled={ocupado}
+          // `readOnly` y no `disabled`: un campo deshabilitado pierde el foco
+          // en cada envío. `enviar` ya ignora lo que llegue mientras piensa.
+          readOnly={ocupado}
+          aria-busy={ocupado}
         />
 
         <button className="ag-enviar" type="submit" disabled={ocupado || !texto.trim()} aria-label="Enviar">
