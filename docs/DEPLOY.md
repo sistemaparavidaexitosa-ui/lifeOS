@@ -244,15 +244,19 @@ git push -u origin main
    | `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Project Settings → API → Project URL | Production, Preview, Development |
    | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Project Settings → API → anon public | Production, Preview, Development |
    | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API → service_role (⚠️ nunca la expongas con prefijo `NEXT_PUBLIC_`) | Production, Preview |
-   | `NEXT_PUBLIC_APP_URL` | Tu URL de Vercel, p. ej. `https://lifeos-app.vercel.app` | Production, Preview |
+   | `NEXT_PUBLIC_APP_URL` | La URL de TU proyecto en Vercel, la que sale en el panel. No copies el ejemplo de ningún sitio: `lifeos-app.vercel.app` existe y **es de otra persona** | Production, Preview |
    | `GEMINI_API_KEY` | https://aistudio.google.com/apikey (gratis). **Opcional**: sin ella la app despliega y funciona; solo las tres funciones de IA avisan de que no están configuradas (§1ter) | Production, Preview |
-| `USDA_API_KEY` | https://fdc.nal.usda.gov/api-key-signup (gratis, 1.000 pet./hora). **Opcional**: sin ella el buscador de alimentos cae en Open Food Facts —que no pide llave— y el módulo de Nutrición funciona igual | Production, Preview |
+   | `USDA_API_KEY` | https://fdc.nal.usda.gov/api-key-signup (gratis, 1.000 pet./hora). **Opcional**: sin ella el buscador de alimentos cae en Open Food Facts —que no pide llave— y el módulo de Nutrición funciona igual | Production, Preview |
    | `RESEND_API_KEY` | https://resend.com → API Keys. **Opcional**: sin ella la invitación se crea igual y se muestra el enlace para compartirlo a mano (§1bis) | Production, Preview |
    | `EMAIL_FROM` | El remitente de las invitaciones, p. ej. `LifeOS <no-reply@tudominio.com>`. Solo si pusiste `RESEND_API_KEY` | Production, Preview |
+   | `GROQ_API_KEY` | https://console.groq.com/keys (gratis). **Opcional**: es el RESPALDO de la IA, detrás de Gemini. Sin ella, cuando Gemini agota su cuota gratuita (429) no hay respuesta; con ella, la hay (D-182) | Production, Preview |
+   | `POLYGON_API_KEY` | https://massive.com → Dashboard → API Keys. **Opcional**: sin ella `/money/watchlist` lo dice y no rompe; con ella hay búsqueda de tickers y precios (D-184). La marca cambió de Polygon a Massive, pero la llave y el host `api.polygon.io` siguen sirviendo | Production, Preview |
+   | `AGENT_KERNEL_COACH` / `AGENT_KERNEL_INSIGHTS` | Pon `1` para que el coach o los insights pasen por el Agentic Kernel. **Opcional, apagadas por defecto y se encienden de una en una**: sin ellas el camino viejo sigue intacto (D-172, D-175) | Production |
 
    Esta tabla no listaba ninguna llave opcional y por eso se desplegaba sin
-   ellas sin saber que faltaban. Las cuatro primeras son **obligatorias**; las
-   tres últimas apagan su feature y nada más.
+   ellas sin saber que faltaban. **Las cuatro primeras son obligatorias**; todas
+   las demás apagan su feature y nada más — la app despliega y funciona sin
+   ninguna de ellas.
 
 3. Install/Build commands ya están fijados en `vercel.json`
    (`pnpm install --frozen-lockfile`, `pnpm build`); Node se toma de `.nvmrc`.
