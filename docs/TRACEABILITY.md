@@ -271,3 +271,45 @@ que `/home` ya pagaba más las propuestas que el chat ya cargaba.
 | El Lienzo se retira sin llevarse su criterio | — | — | — | `Lienzo.tsx` **borrado** | `centro-lienzo.test.ts` sigue verde (✅) |
 | La home no se toca | — | — | — | — | navegador: `.cmd-nav` = 0, `.card` presentes (✅) |
 | Se entra por el botón flotante | — | — | — | `BotonCentro` | navegador: clic abre el overlay (✅) |
+
+## Lo que el sistema aprende de ti (D-183 · migración 0072)
+
+Estas tres secciones llegan juntas y con retraso: la tabla se quedó en D-177 y
+las entregas D-178 a D-182 no se anotaron aquí. Se anota lo que es verificable
+hoy, no lo que se recuerda.
+
+| Requisito | Tablas | RLS / GRANT | Server Actions y rutas | UI | Pruebas |
+|---|---|---|---|---|---|
+| Se apunta por dónde pasas | `nav_visitas` | `nav_visitas_own` (0072) | `registrarVisita` | `AppShell` | `pnpm build` (✅) · filas reales en local (✅) |
+| Apuntar NUNCA rompe una navegación | — | — | `registrarVisita` no lanza ni se espera | — | por construcción (✅) |
+| Login, onboarding y ajustes no se apuntan | — | — | lista de exclusión | — | `comando-visitas.test.ts` (✅) |
+| El ritmo decide, el volumen ordena | — | — | — (puro) | — | `comando-preferencias.test.ts` (✅) |
+| Una ruta repartida por todo el día no es preferencia | — | — | `lift < minLift` | — | `comando-preferencias.test.ts` (✅) |
+| Con menos de 14 días no se afirma nada | — | — | `minDias` | — | `comando-preferencias.test.ts` (✅) |
+| Dejar de usar algo lo borra solo | — | — | `ventanaDias: 30` | — | `comando-preferencias.test.ts` (✅) |
+| Revisar tu identidad descarta lo anterior | `identity_revisions` | la de 0064 | `desdeLaRevision` | — | `comando-preferencias.test.ts` (✅) |
+| Se puede BORRAR | `nav_visitas` | **DELETE concedido** (0072) | `borrarHistorialDeNavegacion` | `HistorialDeNavegacion` | contra la base local (✅) · **sin pulsar en navegador** (⚠️) |
+
+## La watchlist (D-184 · migración 0073)
+
+| Requisito | Tablas | RLS / GRANT | Server Actions y rutas | UI | Pruebas |
+|---|---|---|---|---|---|
+| Se guarda QUÉ sigues, nunca CUÁNTO vale | `watchlist` (sin columna de precio) | `watchlist_own` (0073) | — | — | por construcción (✅) |
+| Un ticker imposible no entra | `check ~ '^[A-Z][A-Z0-9.-]{0,11}$'` | — | `watchlist-actions` | `Buscador` | `money-watchlist.test.ts` (✅) |
+| Un movimiento casi nulo no se pinta de color | — | — | `PLANO = 0.1` | `/money/watchlist` | `money-watchlist.test.ts` (✅) |
+| Sin llave, la página lo dice y no rompe | — | — | `polygonApiKey()` | estado vacío | navegador sin llave (✅) |
+| Los precios van con RETRASO y se avisa | — | — | — | aviso en la página | navegador (✅) |
+| Ninguna llamada real a Polygon | — | — | — | — | **nunca ejecutada** (⚠️) |
+
+## El Centro usa lo aprendido (D-185, sin migración)
+
+| Requisito | Tablas | RLS / GRANT | Server Actions y rutas | UI | Pruebas |
+|---|---|---|---|---|---|
+| Te ofrece lo que sueles mirar a esta hora | `nav_visitas` | la de 0072 | `costumbreDeAhora` → `GET /api/centro` | `Paso.tsx` | navegador con 16 días sembrados (✅) |
+| Aprende el RITMO, no el volumen | — | — | — | — | navegador: un lunes por la mañana salió `/execution`, **no** la watchlist (✅) |
+| Va después de los bloqueos | — | — | — (puro) | — | `comando-componer.test.ts` (✅) |
+| Va antes del resto | — | — | — | — | `comando-componer.test.ts` (✅) |
+| Se aparta y se resuelve como cualquier paso | — | — | `pospuestas` / `resueltas` | — | `comando-componer.test.ts` (✅) — **el fallo que ya se cometió una vez** |
+| Sin frente o sin nombre, no se ofrece | — | — | `carrilDeRuta` / `etiquetaDeRuta` | — | `comando-componer.test.ts` (✅) |
+| Si falla, el Centro se pinta igual | — | — | `.catch(() => null)` | — | por construcción (✅) |
+| Nadie ha acumulado 14 días de uso real | — | — | — | — | **ninguna preferencia aprendida de verdad** (⚠️) |
