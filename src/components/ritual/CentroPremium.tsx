@@ -13,6 +13,8 @@ import type { SugerenciaView } from "@/lib/centro/sugerencias";
 import type { Costumbre } from "@/lib/comando/costumbre";
 import Navegacion from "@/components/comando/Navegacion";
 import BarraCaptura from "./BarraCaptura";
+import RuntimeScreen from "@/components/centro-runtime/RuntimeScreen";
+import type { Screen } from "@/lib/domain/centro/runtime/types.ts";
 
 /**
  * El centro (D-166 a D-169): la puerta de LifeOS.
@@ -50,6 +52,9 @@ export default function CentroPremium({
   const [sugerencias, setSugerencias] = useState<SugerenciaView[]>([]);
   const [resumen, setResumen] = useState("");
   const [costumbre, setCostumbre] = useState<Costumbre | null>(null);
+  // La pantalla del runtime (D-188). Solo llega con AGENTIC_CENTER_RUNTIME; si
+  // no llega, o llega `null`, se pinta el lienzo de siempre.
+  const [screen, setScreen] = useState<Screen | null>(null);
   const shellRef = useRef<HTMLDivElement | null>(null);
   const tema = temaDelRitual(hourLocal);
   const diaSemana = new Date(`${cabecera.dateISO}T00:00:00Z`).getUTCDay();
@@ -60,7 +65,7 @@ export default function CentroPremium({
     void fetch("/api/centro")
       .then((r) =>
         r.ok
-          ? (r.json() as Promise<{ contenido: ContenidoDelRitual; sugerencias?: SugerenciaView[]; resumen?: string; costumbre?: Costumbre | null }>)
+          ? (r.json() as Promise<{ contenido: ContenidoDelRitual; sugerencias?: SugerenciaView[]; resumen?: string; costumbre?: Costumbre | null; screen?: Screen | null }>)
           : null
       )
       .catch(() => null)
@@ -70,6 +75,7 @@ export default function CentroPremium({
         if (r.sugerencias?.length) setSugerencias(r.sugerencias);
         if (r.resumen) setResumen(r.resumen);
         if (r.costumbre) setCostumbre(r.costumbre);
+        if (r.screen) setScreen(r.screen);
       });
     return () => {
       vivo = false;
@@ -193,16 +199,23 @@ export default function CentroPremium({
       </div>
 
       <div className="rit-main">
-        <Navegacion
-          entrada={entrada}
-          today={cabecera.dateISO}
-          nombre={cabecera.nombre}
-          diaSemana={diaSemana}
-          franja={franja}
-          pensando={!contenido}
-          workspaceId={workspaceId}
-          onNavegar={onIrA}
-        />
+        {/* El ÚNICO punto de corte del runtime: con pantalla, el renderer;
+            sin ella, el lienzo de siempre. Armazón, foco, barra y pie no
+            cambian. */}
+        {screen ? (
+          <RuntimeScreen screen={screen} onNavegar={onIrA} />
+        ) : (
+          <Navegacion
+            entrada={entrada}
+            today={cabecera.dateISO}
+            nombre={cabecera.nombre}
+            diaSemana={diaSemana}
+            franja={franja}
+            pensando={!contenido}
+            workspaceId={workspaceId}
+            onNavegar={onIrA}
+          />
+        )}
       </div>
 
       <div className="rit-bottom">
