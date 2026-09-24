@@ -4634,7 +4634,7 @@ html[data-theme="dark"] .rit-boton-centro { color: #0b0b12; background: #f6f6fa;
 .ag-fila-cifra { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 14px; }
 .ag-chevron { flex: none; width: 18px; height: 18px; color: var(--ag-muted); }
 .ag-card-pie { display: flex; align-items: center; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--ag-line); color: inherit; text-decoration: none; font-size: 13px; }
-.ag-fila:focus-visible, .ag-fila-enlace:focus-visible, .ag-card-pie:focus-visible, .ag-tarjeta:focus-visible, .ag-boton:focus-visible { outline: 2px solid var(--ag-text); outline-offset: 2px; }
+.ag-fila:focus-visible, .ag-fila-enlace:focus-visible, .ag-card-pie:focus-visible, .ag-tarjeta:focus-visible, .ag-boton:focus-visible, .ag-tabla-fila-enlace:focus-visible { outline: 2px solid var(--ag-text); outline-offset: 2px; }
 
 .ag-tono-ok { color: #16a34a; }
 .ag-tono-bad { color: #dc2626; }
@@ -4643,7 +4643,6 @@ html[data-theme="dark"] .rit-boton-centro { color: #0b0b12; background: #f6f6fa;
 
 .ag-portafolio-linea { display: block; margin-top: 8px; }
 .ag-grafica { display: block; margin: 8px 0 4px; }
-.ag-grafica-limites { display: flex; justify-content: space-between; }
 
 .ag-tabla { width: 100%; border-collapse: collapse; font-size: 13px; }
 .ag-tabla th { text-align: left; color: var(--ag-muted); font-weight: 500; padding: 6px 8px; }

@@ -53,10 +53,6 @@ export default function SeccionGrafica({ data, title }: PropsDeSeccion<"chart">)
           )}
         </svg>
       )}
-      <div className="ag-grafica-limites">
-        <span className="ag-muted">{min}</span>
-        <span className="ag-muted">{max}</span>
-      </div>
     </div>
   );
 }

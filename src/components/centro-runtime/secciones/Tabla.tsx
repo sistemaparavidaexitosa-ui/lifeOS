@@ -28,7 +28,19 @@ export default function SeccionTabla({ data, title, alAceptar }: PropsDeSeccion<
             <tr
               key={f.id}
               className={f.href ? "ag-tabla-fila-enlace" : undefined}
+              tabIndex={f.href ? 0 : undefined}
+              role={f.href ? "link" : undefined}
               onClick={f.href ? () => irA(f.href!) : undefined}
+              onKeyDown={
+                f.href
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        if (e.key === " ") e.preventDefault();
+                        irA(f.href!);
+                      }
+                    }
+                  : undefined
+              }
             >
               {f.celdas.map((c, i) => (
                 <td key={i}>{c}</td>
