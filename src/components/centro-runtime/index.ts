@@ -8,5 +8,17 @@ import "./secciones/Narrativa";
 import "./secciones/Tareas";
 import "./secciones/Atajos";
 import "./secciones/Mensajes";
+import "./secciones/Lista";
+import "./secciones/Metricas";
+import "./secciones/Tabla";
+import "./secciones/Grafica";
+import "./secciones/Tarjetas";
+import "./secciones/LineaDeTiempo";
+import "./secciones/IrA";
+import "./secciones/Recomendaciones";
+import "./secciones/Insight";
+import "./secciones/Portafolio";
+import "./secciones/Movimientos";
+import "./secciones/Watchlist";
 
 export { registroDeSecciones } from "./registro";

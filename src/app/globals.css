@@ -4594,3 +4594,83 @@ html[data-theme="dark"] .rit-boton-centro { color: #0b0b12; background: #f6f6fa;
 .rt-fila:focus-visible, .rt-atajo:focus-visible, .rt-narrativa:focus-visible { outline: 2px solid var(--rit-accent); outline-offset: 2px; }
 /* Cuatro en fila solo caben con la tipografía del ritual a partir de ~480 px. */
 @media (max-width: 480px) { .rt-atajos { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ─── Bloques del agente (D-194) ──────────────────────────────────────────
+   Blanco, tipografía negra, mucho aire, casi sin bordes: la misma maqueta que
+   `.rt-*`, con su propio juego de tokens porque este vocabulario es del
+   agente y no del ritual. Verde y rojo SOLO para `tono`. */
+.ag-shell {
+  --ag-bg: #fff;
+  --ag-surface: #fff;
+  --ag-soft: #f5f5f7;
+  --ag-text: #0b0b0c;
+  --ag-muted: #6e6e73;
+  --ag-line: rgba(0, 0, 0, 0.06);
+}
+@media (prefers-color-scheme: dark) {
+  .ag-shell {
+    --ag-bg: #0b0b0c;
+    --ag-surface: #161618;
+    --ag-soft: #1c1c1f;
+    --ag-text: #f5f5f7;
+    --ag-muted: #a1a1a6;
+    --ag-line: rgba(255, 255, 255, 0.08);
+  }
+}
+
+.ag-card { background: var(--ag-surface); color: var(--ag-text); border-radius: 18px; padding: 20px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.04); }
+.ag-card-cabecera { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.ag-card-titulo { margin: 0; font-size: 15px; font-weight: 600; }
+.ag-muted { color: var(--ag-muted); font-size: 13px; }
+.ag-aviso { margin: 4px 0 12px; color: var(--ag-muted); font-size: 13px; }
+.ag-cifra-grande { margin: 4px 0 0; font-size: 32px; font-weight: 600; letter-spacing: -0.01em; }
+
+.ag-filas { list-style: none; margin: 0; padding: 0; }
+.ag-filas li + li.ag-fila { border-top: 1px solid var(--ag-line); }
+.ag-fila { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
+.ag-fila-enlace { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; color: inherit; text-decoration: none; }
+.ag-avatar { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--ag-soft); color: var(--ag-text); font-size: 11px; font-weight: 600; text-transform: uppercase; }
+.ag-fila-texto { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ag-fila-cifra { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 14px; }
+.ag-chevron { flex: none; width: 18px; height: 18px; color: var(--ag-muted); }
+.ag-card-pie { display: flex; align-items: center; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--ag-line); color: inherit; text-decoration: none; font-size: 13px; }
+.ag-fila:focus-visible, .ag-fila-enlace:focus-visible, .ag-card-pie:focus-visible, .ag-tarjeta:focus-visible, .ag-boton:focus-visible { outline: 2px solid var(--ag-text); outline-offset: 2px; }
+
+.ag-tono-ok { color: #16a34a; }
+.ag-tono-bad { color: #dc2626; }
+.ag-tono-info { color: var(--ag-muted); }
+.ag-spark { display: block; }
+
+.ag-portafolio-linea { display: block; margin-top: 8px; }
+.ag-grafica { display: block; margin: 8px 0 4px; }
+.ag-grafica-limites { display: flex; justify-content: space-between; }
+
+.ag-tabla { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ag-tabla th { text-align: left; color: var(--ag-muted); font-weight: 500; padding: 6px 8px; }
+.ag-tabla td { padding: 10px 8px; border-top: 1px solid var(--ag-line); }
+.ag-tabla-fila-enlace { cursor: pointer; }
+.ag-tabla-fila-enlace:hover { background: var(--ag-soft); }
+
+.ag-tarjetas { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.ag-tarjeta { display: flex; flex-direction: column; gap: 4px; padding: 14px; border-radius: 14px; background: var(--ag-soft); color: inherit; text-decoration: none; font-size: 14px; }
+
+.ag-linea-tiempo { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.ag-linea-tiempo-item { display: flex; flex-direction: column; gap: 2px; padding-left: 16px; border-left: 2px solid var(--ag-line); }
+.ag-linea-tiempo-enlace { display: flex; flex-direction: column; gap: 2px; color: inherit; text-decoration: none; }
+
+.ag-botones { display: flex; flex-wrap: wrap; gap: 8px; }
+.ag-boton { display: inline-flex; align-items: center; padding: 10px 18px; border-radius: 999px; background: var(--ag-text); color: var(--ag-bg); text-decoration: none; font-size: 14px; font-weight: 500; }
+
+.ag-insight { display: flex; align-items: flex-start; gap: 12px; padding: 16px 18px; border-radius: 16px; background: var(--ag-soft); color: var(--ag-text); }
+.ag-insight-icono { flex: none; width: 20px; height: 20px; margin-top: 2px; }
+.ag-insight-texto { margin: 0; font-size: 14px; line-height: 1.5; }
+
+.ag-metricas { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 16px; }
+.ag-metrica { display: flex; flex-direction: column; gap: 4px; }
+.ag-metrica-valor { font-size: 24px; font-weight: 600; }
+
+.ag-fila-recomendacion { justify-content: space-between; }
+.ag-acciones { flex: none; display: flex; gap: 8px; }
+.ag-boton-chico { border: none; border-radius: 999px; padding: 6px 14px; background: var(--ag-text); color: var(--ag-bg); font-size: 13px; cursor: pointer; }
+.ag-boton-chico-suave { background: var(--ag-soft); color: var(--ag-text); }
+.ag-boton-chico:disabled { opacity: 0.5; cursor: default; }
