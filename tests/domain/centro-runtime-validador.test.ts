@@ -82,7 +82,7 @@ test("Un tipo de sección que no está en el catálogo: fuera", () => {
 
 test("Un tipo sin componente todavía, con datos, es legal", () => {
   const r = validarScreen(
-    con((s) => s.sections.push({ id: "p", kind: "portfolio", data: { moneda: "USD", total: null, variacionPct: null, posiciones: [] } })),
+    con((s) => s.sections.push({ id: "p", kind: "journal", data: { entradas: [] } })),
     ctx
   );
   assert.strictEqual(r.ok, true);

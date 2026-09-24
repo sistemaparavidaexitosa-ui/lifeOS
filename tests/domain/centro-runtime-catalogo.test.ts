@@ -9,9 +9,9 @@ import { resolverFlags, FLAGS_APAGADOS } from "../../src/lib/domain/centro/runti
 // modelo) y quien decide CÓMO (el renderer). Y los flags son lo que permite que
 // nada de esto exista en producción hasta que alguien lo encienda.
 
-test("El catálogo trae los 24 tipos del encargo, sin repetidos", () => {
-  assert.strictEqual(SECTION_KINDS.length, 24);
-  assert.strictEqual(new Set(SECTION_KINDS).size, 24);
+test("El catálogo trae los 30 tipos, sin repetidos", () => {
+  assert.strictEqual(SECTION_KINDS.length, 30);
+  assert.strictEqual(new Set(SECTION_KINDS).size, 30);
   for (const k of ["hero", "narrative", "tasks", "quickActions", "emptyState", "error", "portfolio", "watchlist"]) {
     assert.ok(esSectionKind(k), k);
   }
