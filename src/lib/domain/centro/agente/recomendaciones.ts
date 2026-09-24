@@ -3,7 +3,8 @@
 // (D-194). Puro, probado en tests/domain/centro-agente-recomendaciones.test.ts.
 //
 // TRES PUERTAS, EN ESTE ORDEN:
-//  1. Sin cifras en el "motivo" de fuera — lo primero que ve la persona.
+//  1. Sin cifras en el "titulo" ni en el "motivo" de fuera — lo primero que
+//     ve la persona.
 //  2. La forma que exige `sanearPropuesta` (coach/proposals.ts): el tipo, el
 //     título, y —según el tipo— las horas de un bloque o el destino de un
 //     foco.
@@ -24,7 +25,7 @@ export interface RecomendacionCruda {
 }
 
 export function sanearRecomendacion(it: RecomendacionCruda, proyectos: { id: string }[]): PropuestaSaneada | null {
-  if (tieneCifras(it.motivo)) return null;
+  if (tieneCifras(it.titulo) || tieneCifras(it.motivo)) return null;
 
   const limpia = sanearPropuesta({ tipo: it.tipo, titulo: it.titulo, detalle: it.motivo, datos: it.datos });
   if (!limpia) return null;

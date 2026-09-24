@@ -129,3 +129,46 @@ test("Cifras en texto libre", () => {
   assert.strictEqual(tieneCifras("Tienes 3 tareas vencidas"), false);
   assert.strictEqual(tieneCifras("NVDA y AVGO siguen fuertes"), false);
 });
+
+// --- I1: un valor largo se recorta al tope del validador, no tumba el turno.
+
+test("Una celda de 120 caracteres se recorta con «…» y la sección valida", async () => {
+  const { componerTurno } = await import("../../src/lib/domain/centro/agente/turno.ts");
+  const largo = "a".repeat(120);
+  const f = new Map<string, Record<string, unknown>>([[`fila:debts:${D}`, { id: D, name: largo, status: "x".repeat(100) }]]);
+  const c = { filas: f, moneda: "MXN", locale: "es-MX" };
+  const tabla = resolverBloque(
+    { kind: "tabla", titulo: "Deudas", columnas: [{ etiqueta: "Nombre", campo: "name", formato: "texto" }], filas: [`fila:debts:${D}`] },
+    "b0",
+    c
+  );
+  assert.ok(tabla?.kind === "table");
+  const celda = tabla.data.filas[0]!.celdas[0]!;
+  assert.strictEqual(celda.length, 80);
+  assert.ok(celda.endsWith("…"));
+  const lista = resolverBloque(
+    { kind: "lista", titulo: "Deudas", items: [{ fila: `fila:debts:${D}`, titulo: "name", detalle: null, estado: "status" }] },
+    "b1",
+    c
+  );
+  assert.ok(lista?.kind === "lista");
+  assert.strictEqual(lista.data.items[0]!.estado!.length, 60);
+  const metricas = resolverBloque(
+    { kind: "metricas", titulo: null, items: [{ etiqueta: "Nombre", fila: `fila:debts:${D}`, campo: "name", formato: "texto" }] },
+    "b2",
+    c
+  );
+  assert.ok(metricas?.kind === "metricas");
+  assert.strictEqual(metricas.data.items[0]!.valor.length, 40);
+  const r = componerTurno({ texto: "x", secciones: [tabla, lista, metricas], proyectos: [] });
+  assert.strictEqual(r.secciones.length, 3);
+});
+
+// --- I5: una divisa ANTES del número también es cifra.
+
+test("tieneCifras: el código de divisa antes del número cuenta", () => {
+  assert.strictEqual(tieneCifras("MXN 3,000"), true);
+  assert.strictEqual(tieneCifras("usd 118"), true);
+  assert.strictEqual(tieneCifras("EUR 5"), true);
+  assert.strictEqual(tieneCifras("Top 5 tareas"), false);
+});

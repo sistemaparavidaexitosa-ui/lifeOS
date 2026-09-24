@@ -14,6 +14,7 @@
 import { destinoValido } from "../sugerencias.ts";
 import { fdate, money } from "../../../format.ts";
 import type { AnySection } from "../runtime/types.ts";
+import { LIMITES, recortar } from "../runtime/secciones.ts";
 import type { BloqueGenerico, Formato } from "./contrato.ts";
 
 export type Filas = ReadonlyMap<string, Record<string, unknown>>;
@@ -95,11 +96,21 @@ export function rutaDeFila(fila: string, registro: Record<string, unknown>, proy
   return href && destinoValido(href, proyectos) ? href : null;
 }
 
-export function formatear(valor: unknown, formato: Formato, moneda: string, locale: string): string | null {
+/**
+ * Un valor como texto para pintar, recortado a `max` —el tope que el validador
+ * exige al campo donde va (LIMITES)—. Sin el recorte, un nombre largo en la
+ * base tumbaba la sección entera en `validarScreen`.
+ */
+export function formatear(valor: unknown, formato: Formato, moneda: string, locale: string, max: number = LIMITES.itemTitulo): string | null {
+  const t = formatearSinTope(valor, formato, moneda, locale);
+  return t === null ? null : recortar(t, max);
+}
+
+function formatearSinTope(valor: unknown, formato: Formato, moneda: string, locale: string): string | null {
   if (valor === null || valor === undefined) return null;
   if (formato === "texto") {
     const t = String(valor).trim().replace(/\s+/g, " ");
-    return t ? t.slice(0, 160) : null;
+    return t || null;
   }
   if (formato === "fecha") {
     if (typeof valor !== "string" || !/^\d{4}-\d{2}-\d{2}/.test(valor)) return null;
@@ -113,11 +124,11 @@ export function formatear(valor: unknown, formato: Formato, moneda: string, loca
 }
 
 /** Un campo de una fila, como texto para pintar. Las fechas ISO se leen como fechas. */
-function textoDe(r: Record<string, unknown>, campo: string, ctx: ContextoDeResolucion): string | null {
+function textoDe(r: Record<string, unknown>, campo: string, ctx: ContextoDeResolucion, max: number): string | null {
   if (!(campo in r)) return null;
   const v = r[campo];
   const esFecha = typeof v === "string" && /^\d{4}-\d{2}-\d{2}(T|$)/.test(v);
-  return formatear(v, esFecha ? "fecha" : "texto", ctx.moneda, ctx.locale);
+  return formatear(v, esFecha ? "fecha" : "texto", ctx.moneda, ctx.locale, max);
 }
 
 export function resolverBloque(b: BloqueGenerico, id: string, ctx: ContextoDeResolucion): AnySection | null {
@@ -129,13 +140,13 @@ export function resolverBloque(b: BloqueGenerico, id: string, ctx: ContextoDeRes
     case "lista": {
       const items = b.items.flatMap((it) => {
         const r = leer(it.fila);
-        const titulo = r ? textoDe(r, it.titulo, ctx) : null;
+        const titulo = r ? textoDe(r, it.titulo, ctx, LIMITES.itemTitulo) : null;
         if (!r || !titulo) return [];
         return [{
           id: idDe(it.fila),
           titulo,
-          detalle: it.detalle ? textoDe(r, it.detalle, ctx) : null,
-          estado: it.estado ? textoDe(r, it.estado, ctx) : null,
+          detalle: it.detalle ? textoDe(r, it.detalle, ctx, LIMITES.itemDetalle) : null,
+          estado: it.estado ? textoDe(r, it.estado, ctx, LIMITES.itemEstado) : null,
           href: rutaDeFila(it.fila, r, pv)
         }];
       });
@@ -144,7 +155,7 @@ export function resolverBloque(b: BloqueGenerico, id: string, ctx: ContextoDeRes
     case "metricas": {
       const items = b.items.flatMap((it) => {
         const r = leer(it.fila);
-        const valor = r && it.campo in r ? formatear(r[it.campo], it.formato, ctx.moneda, ctx.locale) : null;
+        const valor = r && it.campo in r ? formatear(r[it.campo], it.formato, ctx.moneda, ctx.locale, LIMITES.metricaValor) : null;
         return valor ? [{ etiqueta: it.etiqueta, valor }] : [];
       });
       return items.length ? { id, kind: "metricas", data: { titulo: b.titulo, items } } : null;
@@ -153,12 +164,12 @@ export function resolverBloque(b: BloqueGenerico, id: string, ctx: ContextoDeRes
       const filas = b.filas.flatMap((fila) => {
         const r = leer(fila);
         if (!r) return [];
-        const celdas = b.columnas.map((c) => (c.campo in r ? formatear(r[c.campo], c.formato, ctx.moneda, ctx.locale) : null) ?? "—");
+        const celdas = b.columnas.map((c) => (c.campo in r ? formatear(r[c.campo], c.formato, ctx.moneda, ctx.locale, LIMITES.celda) : null) ?? "—");
         if (celdas.every((c) => c === "—")) return [];
         return [{ id: idDe(fila), celdas, href: rutaDeFila(fila, r, pv) }];
       });
       return filas.length
-        ? { id, kind: "table", data: { titulo: b.titulo, columnas: b.columnas.map((c) => c.etiqueta), filas } }
+        ? { id, kind: "table", data: { titulo: b.titulo, columnas: b.columnas.map((c) => recortar(c.etiqueta, LIMITES.columna)), filas } }
         : null;
     }
     case "grafica": {
@@ -168,7 +179,7 @@ export function resolverBloque(b: BloqueGenerico, id: string, ctx: ContextoDeRes
         const r = leer(fila);
         const x = r?.[b.campoX];
         const y = typeof r?.[b.campoY] === "number" ? (r[b.campoY] as number) : Number(r?.[b.campoY]);
-        return r && x !== undefined && x !== null && Number.isFinite(y) ? [{ x: String(x).slice(0, 40), y }] : [];
+        return r && x !== undefined && x !== null && Number.isFinite(y) ? [{ x: recortar(String(x), LIMITES.fechaCorta), y }] : [];
       });
       if (puntos.length < 2) return null;
       const unidad = b.formato === "dinero" ? ctx.moneda : b.formato === "porcentaje" ? "%" : "";
@@ -177,17 +188,17 @@ export function resolverBloque(b: BloqueGenerico, id: string, ctx: ContextoDeRes
     case "tarjetas": {
       const items = b.items.flatMap((it) => {
         const r = leer(it.fila);
-        const titulo = r ? textoDe(r, it.titulo, ctx) : null;
+        const titulo = r ? textoDe(r, it.titulo, ctx, LIMITES.itemTitulo) : null;
         if (!r || !titulo) return [];
-        return [{ id: idDe(it.fila), titulo, detalle: it.detalle ? textoDe(r, it.detalle, ctx) : null, href: rutaDeFila(it.fila, r, pv) }];
+        return [{ id: idDe(it.fila), titulo, detalle: it.detalle ? textoDe(r, it.detalle, ctx, LIMITES.itemDetalle) : null, href: rutaDeFila(it.fila, r, pv) }];
       });
       return items.length ? { id, kind: "cards", data: { titulo: b.titulo, items } } : null;
     }
     case "linea": {
       const items = b.items.flatMap((it) => {
         const r = leer(it.fila);
-        const fecha = r && it.fecha in r ? formatear(r[it.fecha], "fecha", ctx.moneda, ctx.locale) : null;
-        const titulo = r ? textoDe(r, it.titulo, ctx) : null;
+        const fecha = r && it.fecha in r ? formatear(r[it.fecha], "fecha", ctx.moneda, ctx.locale, LIMITES.fechaCorta) : null;
+        const titulo = r ? textoDe(r, it.titulo, ctx, LIMITES.itemTitulo) : null;
         if (!r || !fecha || !titulo) return [];
         return [{ id: idDe(it.fila), fecha, titulo, href: rutaDeFila(it.fila, r, pv) }];
       });

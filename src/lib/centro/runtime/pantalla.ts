@@ -48,6 +48,18 @@ function fuentesDeHoy(e: EntradaDePantalla): FuentesDeHoy {
 }
 
 export async function armarPantalla(intent: Intent, e: EntradaDePantalla): Promise<Screen | null> {
+  return (await armarPantallaConProyectos(intent, e)).screen;
+}
+
+/**
+ * Lo mismo, y además los proyectos que el grafo devolvió. El agente (D-195)
+ * mete las secciones de «Hoy» en su turno y las vuelve a validar allí: sin
+ * estos proyectos, un enlace `?project=` que aquí era legal dejaba de serlo.
+ */
+export async function armarPantallaConProyectos(
+  intent: Intent,
+  e: EntradaDePantalla
+): Promise<{ screen: Screen | null; proyectos: { id: string }[] }> {
   const plan = await generadorDeterminista.generar({ intent, franja: franjaDeHoy(e.puerta.hourLocal), flags: e.flags });
 
   // Los proyectos que el grafo devolvió son los únicos que la pantalla puede
@@ -67,7 +79,7 @@ export async function armarPantalla(intent: Intent, e: EntradaDePantalla): Promi
   const r = validarScreen(screen, { proyectos: vistos });
   if (!r.ok) {
     console.warn(`[centro-runtime] pantalla «${plan.id}» rechazada: ${r.reason}`);
-    return null;
+    return { screen: null, proyectos: vistos };
   }
-  return r.screen;
+  return { screen: r.screen, proyectos: vistos };
 }

@@ -10,7 +10,8 @@
 // de `%` nunca hay transición palabra↔no-palabra —% y el espacio o fin de
 // cadena que lo siguen son los dos «no palabra»—, así que `%` va en su propia
 // alternativa, sin `\b`.
-const CIFRA_CON_UNIDAD = /[$€£]\s*\d|\d[\d.,]*\s*%|\d[\d.,]*\s*(por ?ciento|mxn|usd|eur|pesos|d[oó]lares|euros)\b/i;
+// El código de divisa también puede ir DELANTE («MXN 3,000», «USD 118»).
+const CIFRA_CON_UNIDAD = /[$€£]\s*\d|\d[\d.,]*\s*%|\d[\d.,]*\s*(por ?ciento|mxn|usd|eur|pesos|d[oó]lares|euros)\b|\b(mxn|usd|eur)\s*\d/i;
 
 export function tieneCifras(t: string): boolean {
   return CIFRA_CON_UNIDAD.test(t);

@@ -53,3 +53,45 @@ test("Dos capacidades con el mismo id de sección no chocan si cada una lleva el
   const r = componerTurno({ texto: "x", secciones: [...deLaPrimera, ...deLaSegunda], proyectos: [] });
   assert.strictEqual(r.secciones.length, 2);
 });
+
+// --- C1: la sección de «Hoy» enlaza proyectos que vio SU grafo; una sección mala no tumba las demás.
+
+test("Una sección tasks que enlaza un proyecto presente en `proyectos` sobrevive", () => {
+  const r = componerTurno({
+    texto: "x",
+    secciones: [
+      {
+        id: "b0-hoy-tareas",
+        kind: "tasks",
+        data: { fechaISO: "2026-09-24", items: [{ id: "t1", titulo: "Revisar U3", contexto: "Malpaso", href: `/execution?project=${P}` }] }
+      }
+    ],
+    proyectos: [{ id: P }]
+  });
+  assert.deepStrictEqual(r.secciones.map((s) => s.id), ["b0-hoy-tareas"]);
+});
+
+test("Una sección mala junto a una buena: solo se cae la mala", () => {
+  const r = componerTurno({
+    texto: "x",
+    secciones: [
+      { id: "b0", kind: "irA", data: { destinos: [{ etiqueta: "Fuera", href: "https://evil.example" }] } },
+      { id: "b1", kind: "irA", data: { destinos: [{ etiqueta: "Presupuesto", href: "/money/budget" }] } },
+      { id: "b2", kind: "tasks", data: { fechaISO: "2026-09-24", items: [{ id: "t1", titulo: "X", contexto: null, href: "/execution?project=99999999-9999-4999-8999-999999999999" }] } }
+    ],
+    proyectos: [{ id: P }]
+  });
+  assert.deepStrictEqual(r.secciones.map((s) => s.id), ["b1"]);
+});
+
+test("Dos secciones con el mismo id: sale la primera, no se cae el turno", () => {
+  const r = componerTurno({
+    texto: "x",
+    secciones: [
+      { id: "b0", kind: "insight", data: { texto: "Uno." } },
+      { id: "b0", kind: "insight", data: { texto: "Dos." } }
+    ],
+    proyectos: []
+  });
+  assert.deepStrictEqual(r.secciones.map((s) => s.kind === "insight" && s.data.texto), ["Uno."]);
+});

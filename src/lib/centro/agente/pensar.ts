@@ -2,6 +2,7 @@
 // Un turno del agente de interfaz, de punta a punta (D-194). SERVIDOR.
 import "server-only";
 import { randomUUID } from "node:crypto";
+import { after } from "next/server";
 import { generateJson, type Budget } from "@/lib/ai/gemini-provider";
 import { prepararCerebro, type Cerebro } from "@/lib/ai-chat/cerebro";
 import { parsearRespuesta, ESQUEMA_RESPUESTA, type BloqueDelAgente } from "@/lib/domain/centro/agente/contrato.ts";
@@ -15,6 +16,12 @@ import { textoDelContexto } from "@/lib/insights/context";
 import { conLimite } from "@/lib/domain/centro/runtime/ensamblar.ts";
 import type { AnySection } from "@/lib/domain/centro/runtime/types.ts";
 import { CAPACIDADES_REGISTRADAS } from "./capacidades";
+
+/** Lo que aporta un bloque: sus secciones y los proyectos que sus lecturas vieron. */
+interface Aporte {
+  secciones: AnySection[];
+  proyectos: { id: string }[];
+}
 
 const CENTRO_AGENTE_BUDGET: Budget = { maxOutputTokens: 3000, thinkingBudget: 256 };
 const TIEMPO_CAPACIDAD_MS = 8000;
@@ -43,6 +50,7 @@ export async function pensarTurno(input: { texto: string; historial: { rol: "per
         ? { tools: cerebro.herramientas.declaraciones, executeTool: cerebro.herramientas.ejecutar }
         : {})
     });
+    auditarBusquedas(cerebro, r.toolRounds ?? 0);
     if (!r.ok || !r.data) {
       console.warn("[centro-agente] el modelo no contestó:", r.reason);
       return { id, texto: DISCULPA, secciones: [] as AnySection[] };
@@ -57,12 +65,29 @@ export async function pensarTurno(input: { texto: string; historial: { rol: "per
       r.data.bloques.map((b, i) =>
         resolverUno(b, `b${i}`, ctx, proyectos, cerebro).catch((e: unknown) => {
           console.warn("[centro-agente] bloque falló:", e);
-          return [{ id: `b${i}`, kind: "error", data: { mensaje: "No se pudo cargar esta parte." } } as AnySection];
+          const caida: Aporte = { secciones: [{ id: `b${i}`, kind: "error", data: { mensaje: "No se pudo cargar esta parte." } }], proyectos: [] };
+          return caida;
         })
       )
     );
 
-    return { id, ...componerTurno({ texto: r.data.texto, secciones: porBloque.flat(), proyectos }) };
+    // Los proyectos que se pueden enlazar: los de las filas de las
+    // herramientas MÁS los que vieron las capacidades (el grafo de «Hoy»).
+    const enlazables = new Map(proyectos.map((p) => [p.id, p]));
+    for (const a of porBloque) for (const p of a.proyectos) enlazables.set(p.id, p);
+
+    const secciones = porBloque.flatMap((a) => a.secciones);
+    const turno = componerTurno({ texto: r.data.texto, secciones, proyectos: [...enlazables.values()] });
+
+    // Una recomendación ya se guardó como propuesta pendiente antes de validar
+    // su sección: si la sección no sale, que quede en el log cuáles son.
+    for (const s of secciones) {
+      if (s.kind === "recomendaciones" && !turno.secciones.some((t) => t.id === s.id)) {
+        console.warn("[centro-agente] recomendaciones guardadas pero no enseñadas:", s.data.items.map((it) => it.propuestaId));
+      }
+    }
+
+    return { id, ...turno };
   } catch (e) {
     console.warn("[centro-agente] el turno falló:", e);
     return { id, texto: DISCULPA, secciones: [] as AnySection[] };
@@ -75,16 +100,25 @@ async function resolverUno(
   ctx: Parameters<typeof resolverBloque>[2],
   proyectos: { id: string }[],
   cerebro: Cerebro
+): Promise<Aporte> {
+  if (b.kind === "capacidad") {
+    const r = await conLimite(CAPACIDADES_REGISTRADAS[b.nombre](b.parametros, cerebro), TIEMPO_CAPACIDAD_MS);
+    // El id de sección de una capacidad es fijo (`mercado-watchlist`…): si el
+    // modelo pide la misma capacidad dos veces en el turno, dos ids iguales
+    // chocarían. Anteponer el id del bloque los vuelve a hacer únicos.
+    return { secciones: prefijarSecciones(r.secciones, id), proyectos: r.proyectos };
+  }
+  return { secciones: await resolverSinCapacidad(b, id, ctx, proyectos, cerebro), proyectos: [] };
+}
+
+async function resolverSinCapacidad(
+  b: Exclude<BloqueDelAgente, { kind: "capacidad" }>,
+  id: string,
+  ctx: Parameters<typeof resolverBloque>[2],
+  proyectos: { id: string }[],
+  cerebro: Cerebro
 ): Promise<AnySection[]> {
   switch (b.kind) {
-    case "capacidad": {
-      const secciones = await conLimite(CAPACIDADES_REGISTRADAS[b.nombre](b.parametros, cerebro), TIEMPO_CAPACIDAD_MS);
-      // El id de sección de una capacidad es fijo (`mercado-watchlist`…): si el
-      // modelo pide la misma capacidad dos veces en el turno, dos ids iguales
-      // tiran la pantalla ENTERA (`validarScreen` rechaza secciones
-      // repetidas). Anteponer el id del bloque los vuelve a hacer únicos.
-      return prefijarSecciones(secciones, id);
-    }
     case "ir_a": {
       const destinos = b.destinos.filter((d) => destinoValido(d.href, proyectos));
       return destinos.length ? [{ id, kind: "irA", data: { destinos } }] : [];
@@ -119,4 +153,24 @@ async function resolverUno(
       return s ? [s] : [];
     }
   }
+}
+
+/**
+ * Las búsquedas web del turno, al rastro de auditoría —igual que el chat
+ * (`sendChatMessage`)—: es lo único que sale hacia un tercero distinto del
+ * proveedor del modelo. Solo si hubo alguna, y con `after`: la respuesta no
+ * espera al insert.
+ */
+function auditarBusquedas(cerebro: Cerebro, toolRounds: number) {
+  const busquedas = cerebro.herramientas?.busquedas() ?? [];
+  if (!busquedas.length) return;
+  after(async () => {
+    const { error } = await cerebro.supabase.from("audit_log").insert({
+      user_id: cerebro.user.id,
+      action: "ai.centro_turno",
+      object: "centro",
+      meta: { busquedas, toolRounds }
+    });
+    if (error) console.warn("[centro-agente] no se pudo auditar las búsquedas:", error);
+  });
 }

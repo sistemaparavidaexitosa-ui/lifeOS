@@ -9,15 +9,26 @@ import { leerParametrosMercado, seccionesDeMercado } from "@/lib/domain/centro/a
 import { cotizaciones, serieDe } from "@/lib/money/polygon";
 import { listarWatchlist } from "@/lib/money/watchlist-actions";
 import { polygonApiKey } from "@/config/env";
-import { armarPantalla } from "@/lib/centro/runtime/pantalla";
+import { armarPantallaConProyectos } from "@/lib/centro/runtime/pantalla";
 import { loadRitualContent, loadRitualGate } from "@/lib/data/ritual";
 import { sugerenciasDelCentro } from "@/lib/centro/sugerencias";
 import { flagsDelRuntime } from "@/config/env";
 import type { Cerebro } from "@/lib/ai-chat/cerebro";
 
-export type Hidratador = (parametros: Record<string, unknown>, cerebro: Cerebro) => Promise<AnySection[]>;
+/**
+ * Lo que devuelve una capacidad: sus secciones y los proyectos que SUS lecturas
+ * vieron (bajo la RLS de la persona). El turno los suma a los de las
+ * herramientas antes de validar: una sección de «Hoy» enlaza proyectos que el
+ * modelo nunca leyó, y sin ellos `destinoValido` la rechazaba.
+ */
+export interface ResultadoDeCapacidad {
+  secciones: AnySection[];
+  proyectos: { id: string }[];
+}
 
-async function mercado(parametros: Record<string, unknown>, c: Cerebro): Promise<AnySection[]> {
+export type Hidratador = (parametros: Record<string, unknown>, cerebro: Cerebro) => Promise<ResultadoDeCapacidad>;
+
+async function mercado(parametros: Record<string, unknown>, c: Cerebro): Promise<ResultadoDeCapacidad> {
   const p = leerParametrosMercado(parametros);
   const configurado = polygonApiKey() !== null;
   const lista = await listarWatchlist();
@@ -49,7 +60,7 @@ async function mercado(parametros: Record<string, unknown>, c: Cerebro): Promise
     });
   }
 
-  return seccionesDeMercado({
+  const secciones = seccionesDeMercado({
     parametros: p,
     moneda: c.moneda,
     locale: c.locale,
@@ -59,15 +70,21 @@ async function mercado(parametros: Record<string, unknown>, c: Cerebro): Promise
     inversiones: (inv?.data ?? []).map((i) => ({ valuation: i.valuation, currency: i.currency, as_of: i.as_of })),
     historia: (snap?.data ?? []).map((s) => ({ x: s.as_of, y: Number(s.net) })).filter((p) => Number.isFinite(p.y))
   });
+  return { secciones, proyectos: [] };
 }
 
-async function hoy(): Promise<AnySection[]> {
+const NADA: ResultadoDeCapacidad = { secciones: [], proyectos: [] };
+
+async function hoy(): Promise<ResultadoDeCapacidad> {
   const puerta = await loadRitualGate();
-  if (!puerta) return [];
+  if (!puerta) return NADA;
   const [contenido, pensado] = await Promise.all([loadRitualContent(puerta), sugerenciasDelCentro().catch(() => ({ resumen: "" }))]);
-  if (!contenido) return [];
-  const screen = await armarPantalla({ kind: "hoy" }, { puerta, contenido, resumen: pensado.resumen, flags: flagsDelRuntime() });
-  return screen?.sections ?? [];
+  if (!contenido) return NADA;
+  const { screen, proyectos } = await armarPantallaConProyectos(
+    { kind: "hoy" },
+    { puerta, contenido, resumen: pensado.resumen, flags: flagsDelRuntime() }
+  );
+  return { secciones: screen?.sections ?? [], proyectos };
 }
 
 export const CAPACIDADES_REGISTRADAS: Record<"mercado" | "hoy", Hidratador> = { mercado, hoy };

@@ -68,7 +68,17 @@ export function esSectionKind(v: unknown): v is SectionKind {
 export const LIMITES = {
   heroFrase: 200,
   tareaTitulo: 200,
-  tareaContexto: 120
+  tareaContexto: 120,
+  // Fase 2 (D-194): lo que el resolver del agente lee de una fila. Un valor de
+  // la base no tiene tope; el campo que lo pinta, sí.
+  itemTitulo: 160,
+  itemDetalle: 160,
+  itemEstado: 60,
+  metricaValor: 40,
+  celda: 80,
+  /** El contrato admite etiquetas de 60; la cabecera de una tabla, 40. */
+  columna: 40,
+  fechaCorta: 40
 } as const;
 
 /** Recorta a `max` caracteres con puntos suspensivos. Lo usan los hidratadores. */

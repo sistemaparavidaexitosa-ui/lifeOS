@@ -82,7 +82,13 @@ const ESQUEMAS: Partial<Record<SectionKind, z.ZodTypeAny>> = {
       items: z
         .array(
           z
-            .object({ id: texto(120), titulo: texto(160), detalle: texto(160).nullable(), estado: texto(60).nullable(), href: href.nullable() })
+            .object({
+              id: texto(120),
+              titulo: texto(LIMITES.itemTitulo),
+              detalle: texto(LIMITES.itemDetalle).nullable(),
+              estado: texto(LIMITES.itemEstado).nullable(),
+              href: href.nullable()
+            })
             .strict()
         )
         .min(1)
@@ -92,15 +98,15 @@ const ESQUEMAS: Partial<Record<SectionKind, z.ZodTypeAny>> = {
   metricas: z
     .object({
       titulo: texto(80).nullable(),
-      items: z.array(z.object({ etiqueta: texto(60), valor: texto(40) }).strict()).min(1).max(4)
+      items: z.array(z.object({ etiqueta: texto(60), valor: texto(LIMITES.metricaValor) }).strict()).min(1).max(4)
     })
     .strict(),
   table: z
     .object({
       titulo: texto(80),
-      columnas: z.array(texto(40)).min(1).max(4),
+      columnas: z.array(texto(LIMITES.columna)).min(1).max(4),
       filas: z
-        .array(z.object({ id: texto(120), celdas: z.array(texto(80)).max(4), href: href.nullable() }).strict())
+        .array(z.object({ id: texto(120), celdas: z.array(texto(LIMITES.celda)).max(4), href: href.nullable() }).strict())
         .min(1)
         .max(10)
     })
@@ -110,14 +116,14 @@ const ESQUEMAS: Partial<Record<SectionKind, z.ZodTypeAny>> = {
       titulo: texto(80),
       tipo: z.enum(["linea", "barras"]),
       unidad: texto(8),
-      puntos: z.array(z.object({ x: texto(40), y: z.number().finite() }).strict()).min(2).max(400)
+      puntos: z.array(z.object({ x: texto(LIMITES.fechaCorta), y: z.number().finite() }).strict()).min(2).max(400)
     })
     .strict(),
   cards: z
     .object({
       titulo: texto(80),
       items: z
-        .array(z.object({ id: texto(120), titulo: texto(160), detalle: texto(160).nullable(), href: href.nullable() }).strict())
+        .array(z.object({ id: texto(120), titulo: texto(LIMITES.itemTitulo), detalle: texto(LIMITES.itemDetalle).nullable(), href: href.nullable() }).strict())
         .min(1)
         .max(4)
     })
@@ -126,7 +132,7 @@ const ESQUEMAS: Partial<Record<SectionKind, z.ZodTypeAny>> = {
     .object({
       titulo: texto(80),
       items: z
-        .array(z.object({ id: texto(120), fecha: texto(40), titulo: texto(160), href: href.nullable() }).strict())
+        .array(z.object({ id: texto(120), fecha: texto(LIMITES.fechaCorta), titulo: texto(LIMITES.itemTitulo), href: href.nullable() }).strict())
         .min(1)
         .max(8)
     })

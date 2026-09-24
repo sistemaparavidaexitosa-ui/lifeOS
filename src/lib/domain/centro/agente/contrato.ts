@@ -21,6 +21,7 @@
 import { z } from "zod";
 import type { GeminiSchema } from "../../ai/tools.ts";
 import { TIPOS_DEL_CENTRO } from "../../coach/proposals.ts";
+import { tieneCifras } from "./texto.ts";
 
 export const MAX_BLOQUES = 4;
 const MAX_TEXTO = 600;
@@ -136,6 +137,21 @@ function leerJson(datos: unknown): Record<string, unknown> | null {
   }
 }
 
+/**
+ * El primer rótulo (título o etiqueta) que el MODELO escribió con una cifra.
+ * Un rótulo se lee como parte de la interfaz, igual que un insight: «Ahorraste
+ * $3,000» encima de una tabla se confunde con un valor calculado. Un conteo
+ * suelto («Top 5 tareas») no es cifra y pasa.
+ */
+function rotuloConCifras(b: BloqueDelAgente): string | null {
+  const rotulos: string[] = [];
+  if ("titulo" in b && typeof b.titulo === "string") rotulos.push(b.titulo);
+  if (b.kind === "metricas") rotulos.push(...b.items.map((i) => i.etiqueta));
+  if (b.kind === "tabla") rotulos.push(...b.columnas.map((c) => c.etiqueta));
+  if (b.kind === "ir_a") rotulos.push(...b.destinos.map((d) => d.etiqueta));
+  return rotulos.find((r) => tieneCifras(r)) ?? null;
+}
+
 function parsearBloque(crudo: unknown): { ok: true; bloque: BloqueDelAgente } | { ok: false; reason: string } {
   const c = (crudo ?? {}) as { kind?: unknown; datos?: unknown };
   const kind = typeof c.kind === "string" ? c.kind : "";
@@ -163,7 +179,10 @@ function parsearBloque(crudo: unknown): { ok: true; bloque: BloqueDelAgente } | 
     const i = r.error.issues[0];
     return { ok: false, reason: `«${kind}»: ${i?.path.join(".") || "datos"} ${i?.message ?? "inválido"}.` };
   }
-  return { ok: true, bloque: { kind, ...r.data } as BloqueDelAgente };
+  const bloque = { kind, ...r.data } as BloqueDelAgente;
+  const conCifras = rotuloConCifras(bloque);
+  if (conCifras !== null) return { ok: false, reason: `«${kind}»: el rótulo «${conCifras}» lleva cifras.` };
+  return { ok: true, bloque };
 }
 
 export function parsearRespuesta(raw: unknown): { ok: true; value: RespuestaDelAgente } | { ok: false; reason: string } {

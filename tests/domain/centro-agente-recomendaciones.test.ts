@@ -74,3 +74,7 @@ test("bloque: sin horas válidas (lo que el prompt viejo describía: fecha/inici
   const datos = JSON.stringify({ fecha: "2026-09-24", inicio: "09:00", fin: "10:00", categoria: "Trabajo" });
   assert.strictEqual(sanearRecomendacion({ tipo: "bloque", titulo: "Bloque", motivo: "Ordena la tarde.", datos }, []), null);
 });
+
+test("Un título con cifras no pasa", () => {
+  assert.strictEqual(sanearRecomendacion({ ...foco("/money"), titulo: "Ahorra $500" }, []), null);
+});

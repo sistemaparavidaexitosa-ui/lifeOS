@@ -98,3 +98,9 @@ test("Sin tickers en la watchlist: dice qué hacer", () => {
   const [s] = seccionesDeMercado({ ...base, cotizaciones: [], parametros: leerParametrosMercado({ vista: "watchlist" }) });
   assert.strictEqual(s?.kind, "emptyState");
 });
+
+test("Portafolio sin inversiones: estado vacío, nunca «$0.00»", () => {
+  const [s] = seccionesDeMercado({ ...base, inversiones: [], parametros: leerParametrosMercado({ vista: "portafolio" }) });
+  assert.ok(s?.kind === "emptyState");
+  assert.strictEqual(s.data.mensaje, "Aún no registras inversiones.");
+});

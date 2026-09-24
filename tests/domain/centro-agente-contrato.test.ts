@@ -88,3 +88,32 @@ test("El esquema de Gemini pide texto y bloques con kind cerrado y datos en text
   assert.ok(item?.properties?.kind?.enum?.includes("mercado"));
   assert.strictEqual(item?.properties?.datos?.type, "STRING");
 });
+
+// --- I5: las cifras tampoco van en títulos ni etiquetas.
+
+test("Un título con cifras tira el bloque; un conteo suelto pasa", () => {
+  const r = parsearRespuesta({
+    texto: "x",
+    bloques: [
+      b("lista", { titulo: "Ahorraste $3,000", items: [{ fila: F, titulo: "name", detalle: null, estado: null }] }),
+      b("lista", { titulo: "Top 5 tareas", items: [{ fila: F, titulo: "name", detalle: null, estado: null }] })
+    ]
+  });
+  assert.ok(r.ok);
+  assert.deepStrictEqual(r.ok && r.value.bloques.map((x) => "titulo" in x && x.titulo), ["Top 5 tareas"]);
+  assert.strictEqual(r.ok && r.value.descartados.length, 1);
+});
+
+test("Etiquetas con cifras (métricas, columnas, ir_a) tiran el bloque", () => {
+  const r = parsearRespuesta({
+    texto: "x",
+    bloques: [
+      b("metricas", { titulo: null, items: [{ etiqueta: "Meta MXN 3,000", fila: F, campo: "name", formato: "texto" }] }),
+      b("tabla", { titulo: "Hábitos", columnas: [{ etiqueta: "Sube 4%", campo: "name", formato: "texto" }], filas: [F] }),
+      b("ir_a", { destinos: [{ etiqueta: "Ahorra $500", href: "/money" }] })
+    ]
+  });
+  assert.ok(r.ok);
+  assert.strictEqual(r.ok && r.value.bloques.length, 0);
+  assert.strictEqual(r.ok && r.value.descartados.length, 3);
+});

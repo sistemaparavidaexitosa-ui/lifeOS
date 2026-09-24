@@ -103,6 +103,11 @@ export function seccionesDeMercado(e: EntradaMercado): AnySection[] {
   if (p.vista === "portafolio") {
     const propias = e.inversiones.filter((i) => i.currency === e.moneda && typeof i.valuation === "number");
     const otras = e.inversiones.length - propias.length;
+    // Nunca ceros: sin nada que sumar en tu moneda no hay «$0.00», hay un vacío que lo dice.
+    if (propias.length === 0) {
+      const mensaje = otras > 0 ? "Tus inversiones están en otra moneda y no se suman aquí." : "Aún no registras inversiones.";
+      return [{ id: "mercado-portafolio", kind: "emptyState", title: "Tu portafolio hoy", data: { mensaje } }];
+    }
     const total = propias.reduce((s, i) => s + (i.valuation ?? 0), 0);
     const fechas = propias.map((i) => i.as_of).filter((f): f is string => !!f).sort();
     const ultima = fechas[fechas.length - 1];
