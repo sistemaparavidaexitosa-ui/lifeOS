@@ -314,3 +314,17 @@ hoy, no lo que se recuerda.
 | Sin frente o sin nombre, no se ofrece | — | — | `carrilDeRuta` / `etiquetaDeRuta` | — | `comando-componer.test.ts` (✅) |
 | Si falla, el Centro se pinta igual | — | — | `.catch(() => null)` | — | por construcción (✅) |
 | Nadie ha acumulado 14 días de uso real | — | — | — | — | **ninguna preferencia aprendida de verdad** (⚠️) |
+
+## Los permisos que nadie concedió (D-186 · migración 0074)
+
+| Requisito | Tablas | RLS / GRANT | Server Actions y rutas | UI | Pruebas |
+|---|---|---|---|---|---|
+| La función de diagnóstico de la 0014 no existe | — | `drop function` | — | — | `0045_permisos.sql` (✅) · con la llave pública: `PGRST202` (✅) |
+| Ninguna tabla concede TRUNCATE | las 85 | `revoke truncate` | — | — | `0045_permisos.sql` (✅) · 85 → 0 (✅) |
+| Las ayudantes de políticas no las invoca `anon` | — | `revoke … from public` + `grant` | — | — | `anon` pasó de `t` a `f` (✅) |
+| Una tabla NUEVA no concede `select` a `anon` | — | `alter default privileges` | — | — | tabla de prueba creada y borrada: `f` (✅) |
+| Una función NUEVA sigue naciendo abierta a PUBLIC | — | — | — | — | **no se puede arreglar desde una migración** (⚠️) — por eso existe la prueba |
+| Ninguna `security definer` anónima sin comprobar quién eres | — | — | — | — | `0045_permisos.sql`, lista blanca: `invitation_preview` (✅) |
+| RLS activa en todas las tablas | las 85 | — | — | — | `0045_permisos.sql` (✅) |
+| Ninguna política permisiva con `true` | — | — | — | — | `0045_permisos.sql` (✅) |
+| La prueba FALLA cuando vuelve el defecto | — | — | — | — | se recreó la función: saltaron 1 y 2 (✅) |

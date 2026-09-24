@@ -3814,3 +3814,46 @@ implementa:
   - **La watchlist avisa de que sus precios van con retraso.** El plan Starter
     los sirve así, y no decirlo dejaría que alguien decidiera una operación
     creyendo que ve el precio de ahora.
+
+- **D-186 · Los permisos que nadie concedió.** La 0010 dejó puesto un
+  `alter default privileges` que reparte permisos a `anon` y `authenticated` en
+  todo objeto nuevo del esquema. Desde entonces, cada `grant` deliberado escrito
+  en una migración se ha ido ampliando por detrás, **sin aparecer en ningún
+  diff**. Las 0072 y 0073, de hace dos entregas, conceden a propósito solo
+  `select, insert, delete`; las dos tienen `update` y `truncate`.
+  - **Lo que se encontró de verdad, comprobándolo**: `debug_rls_policies()`
+    —creada en la 0014 con el comentario «diagnóstico temporal […] segura de
+    borrar», confirmada en la 0015 y **abierta cincuenta y nueve migraciones
+    después**— invocable con la llave pública del navegador, **sin iniciar
+    sesión**, devolviendo el `qual` y el `with_check` de las políticas de
+    `projects`, `workspaces`, `memberships` y `project_shares`. No filtra
+    datos: filtra el mapa de cómo se protegen los datos, y justo el de la parte
+    compartida, que es la más enredada y la que ya tuvo dos migraciones
+    seguidas por recursión.
+  - **Lo que NO se encontró, y hay que decirlo igual**: RLS activa en las 85
+    tablas, ninguna vista, ninguna política permisiva con `true`, ninguna que
+    nombre a `anon`. La base está bien defendida. Los `grant` anchos son la
+    postura estándar de Supabase y toda la defensa descansa en la RLS, que
+    aquí está bien puesta.
+  - **`TRUNCATE` se quita de las 85 tablas.** Es el único permiso de la lista
+    que **salta la RLS entera**: una política filtra filas, y TRUNCATE no borra
+    filas, vacía la tabla. Hoy **no es alcanzable** —PostgREST no lo emite
+    nunca— así que esto no cierra una fuga: quita un permiso que nadie pidió.
+  - **Un `revoke` que no revoca es peor que no escribirlo**, y estuvo escrito.
+    La primera versión hacía `revoke execute … from anon` sobre dos ayudantes
+    de políticas. Al probarlo, seguían invocándose: PostgreSQL concede EXECUTE
+    a **PUBLIC** por defecto y `anon` hereda de ahí, así que quitar la línea de
+    `anon` quitaba una línea y ningún permiso. Se corrigió a `from public` +
+    `grant` explícito. Deja el problema abierto **y** a alguien convencido de
+    haberlo cerrado.
+  - **Para funciones, la causa no se puede arreglar desde una migración, y se
+    dice.** Hay dos juegos de privilegios por defecto, el de `postgres` y el de
+    `supabase_admin`, y el segundo no es nuestro. Toda función nueva seguirá
+    naciendo con EXECUTE para PUBLIC. Así que la garantía **no se pone en un
+    permiso, se pone en una prueba**: `0045_permisos.sql` falla si aparece una
+    función `security definer`, alcanzable por RPC, invocable por `anon` y que
+    no comprueba `auth.uid()`. Un `revoke` que hay que acordarse de escribir es
+    una convención; una prueba que rompe la entrega es una garantía.
+  - **La prueba se probó fallando.** Se recreó `debug_rls_policies` y los dos
+    casos saltaron; luego se retiró. Un cable trampa que nunca ha saltado no
+    prueba nada.
