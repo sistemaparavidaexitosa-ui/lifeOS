@@ -47,7 +47,13 @@ export default function CentroAgente({
       .then((r) => {
         if (!vivo) return;
         setCargandoHoy(false);
-        if (r?.screen) setHilo([{ id: "hoy", rol: "agente", texto: "", secciones: r.screen.sections }]);
+        // NUNCA una pantalla en blanco: si «Hoy» no llegó, el turno lo dice y
+        // el compositor queda como el paso obvio que sigue.
+        setHilo([
+          r?.screen
+            ? { id: "hoy", rol: "agente", texto: "", secciones: r.screen.sections }
+            : { id: "hoy", rol: "agente", texto: "No pude preparar tu día ahora. Pregúntame lo que necesites.", secciones: [] }
+        ]);
       });
     return () => {
       vivo = false;
@@ -111,8 +117,15 @@ export default function CentroAgente({
             : { id: `e${Date.now()}`, rol: "agente", texto: "No pude pensar esto ahora; inténtalo de nuevo.", secciones: [] }
         )
       );
-    } catch {
-      setHilo((h) => agregar(h, { id: `e${Date.now()}`, rol: "agente", texto: "Tardó demasiado. Inténtalo de nuevo.", secciones: [] }));
+    } catch (e) {
+      // `AbortSignal.timeout` lanza un `TimeoutError`: solo ESE caso es
+      // «tardó demasiado». Cualquier otro fallo (red, JSON) es «no pude
+      // pensar», que es lo mismo que dice el `!t` de arriba.
+      const texto =
+        e instanceof DOMException && e.name === "TimeoutError"
+          ? "Tardó demasiado. Inténtalo de nuevo."
+          : "No pude pensar esto ahora; inténtalo de nuevo.";
+      setHilo((h) => agregar(h, { id: `e${Date.now()}`, rol: "agente", texto, secciones: [] }));
     } finally {
       setPensando(false);
     }

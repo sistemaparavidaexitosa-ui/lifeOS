@@ -4868,6 +4868,17 @@ html[data-theme="dark"] .rit-boton-centro { color: #0b0b12; background: #f6f6fa;
   border-radius: 24px 24px 0 0;
   box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.12);
   padding: 20px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+
+  /* `BarraCaptura` es la de siempre (D-168) y habla en tokens `--rit-*`, que
+     solo existen dentro de `.rit-shell`. Aquí NO vive dentro de `.rit-shell`,
+     así que se remapean uno a uno a su equivalente `--ag-*` — igual que
+     `.rit-shell` remapea `--line`/`--text`/`--muted` de la app en su momento.
+     Ningún token nuevo, solo un puente entre los dos vocabularios. */
+  --rit-text: var(--ag-text);
+  --rit-muted: var(--ag-muted);
+  --rit-line: var(--ag-line);
+  --rit-accent: var(--ag-text);
+  --rit-bg: var(--ag-surface);
 }
 
 .ag-shell :focus-visible { outline: 2px solid var(--ag-text); outline-offset: 2px; }
