@@ -20,6 +20,16 @@ import { polygonApiKey } from "@/config/env";
 import type { Variacion } from "@/lib/domain/money/watchlist.ts";
 import { variacion } from "@/lib/domain/money/watchlist.ts";
 
+// EL HOST SIGUE SIENDO `polygon.io` AUNQUE LA MARCA YA NO.
+// polygon.io redirige a massive.com y la documentación vive allí, pero los dos
+// hosts de API —`api.polygon.io` y `api.massive.com`— responden igual. Se deja
+// el viejo porque es el que aparece en la llave que ya tienes contratada; si
+// algún día deja de responder, cambiar esta línea es todo el trabajo.
+//
+// Comprobado contra el servidor real el 23-sep-2026, sin llave: las dos rutas
+// de abajo devuelven 401 «Unknown API Key», que es la respuesta correcta a una
+// petición bien formada. Ruta, parámetros y forma de pasar la llave son buenas;
+// lo único sin ejercitar es una respuesta CON datos dentro.
 const BASE = "https://api.polygon.io";
 const TIMEOUT_MS = 10_000;
 
