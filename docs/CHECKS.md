@@ -2745,3 +2745,24 @@ la vez que el código, no una revisión.
   acción sí se probó contra la base en D-183.
 - **Ninguna llamada real a Polygon** sigue pendiente (D-184), así que la
   watchlist se ofrece pero nunca se ha visto con precios dentro.
+
+### Los dos contratos externos, verificados sin llave — 23-sep-2026
+
+Groq y Polygon se escribieron **de memoria** y nunca se habían ejecutado. Si los
+IDs de modelo o las rutas estuvieran mal, ambas funciones fallarían en silencio
+el día que se pusieran las llaves. Comprobado:
+
+- **Groq**: `llama-3.3-70b-versatile` y `llama-3.1-8b-instant` siguen los dos en
+  la lista de modelos de producción, ninguno en la de retirados. ✅
+- **Polygon**: la marca cambió a **Massive** —`polygon.io` redirige a
+  `massive.com`— pero **los dos hosts de API responden igual**. Contra el
+  servidor real, sin llave, las dos rutas devuelven **401 «Unknown API Key»**:
+  la respuesta correcta a una petición bien formada. Eso prueba ruta, nombres de
+  parámetro y forma de pasar la llave. ✅
+- Los nombres de campo del contrato (`results[].ticker/name/market`,
+  `tickers[].todaysChangePerc`, `day.c`, `prevDay.c`) coinciden con la
+  documentación. ✅
+
+**Lo que sigue sin ejercitarse** es lo único que una llave puede dar: una
+respuesta **con datos dentro**. Un 401 prueba que la puerta es la correcta, no
+que lo que hay detrás se lea bien.

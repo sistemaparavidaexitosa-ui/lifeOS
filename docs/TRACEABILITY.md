@@ -299,7 +299,8 @@ hoy, no lo que se recuerda.
 | Un movimiento casi nulo no se pinta de color | — | — | `PLANO = 0.1` | `/money/watchlist` | `money-watchlist.test.ts` (✅) |
 | Sin llave, la página lo dice y no rompe | — | — | `polygonApiKey()` | estado vacío | navegador sin llave (✅) |
 | Los precios van con RETRASO y se avisa | — | — | — | aviso en la página | navegador (✅) |
-| Ninguna llamada real a Polygon | — | — | — | — | **nunca ejecutada** (⚠️) |
+| Las rutas de Polygon son las buenas | — | — | `buscarTickers`, `cotizaciones` | — | contra el servidor real, sin llave: 401 «Unknown API Key» en las dos (✅) |
+| Una respuesta CON datos dentro | — | — | — | — | **nunca ejercitada**: hace falta la llave (⚠️) |
 
 ## El Centro usa lo aprendido (D-185, sin migración)
 
