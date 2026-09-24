@@ -19,6 +19,7 @@ import "server-only";
 import { polygonApiKey } from "@/config/env";
 import type { Variacion } from "@/lib/domain/money/watchlist.ts";
 import { variacion } from "@/lib/domain/money/watchlist.ts";
+import { rutaDeSerie, type Rango } from "@/lib/domain/centro/agente/mercado.ts";
 
 // EL HOST SIGUE SIENDO `polygon.io` AUNQUE LA MARCA YA NO.
 // polygon.io redirige a massive.com y la documentación vive allí, pero los dos
@@ -131,5 +132,21 @@ export async function cotizaciones(tickers: readonly string[]): Promise<Resultad
       const precio = t?.day?.c || t?.prevDay?.c || null;
       return { ticker, precio: precio ?? null, variacion: variacion(t?.todaysChangePerc) };
     })
+  };
+}
+
+/**
+ * Los cierres de un ticker en un rango, del más viejo al más nuevo (D-195).
+ * `rutaDeSerie` decide la ventana y la granularidad; aquí solo se pide y se
+ * extrae `c` de cada barra. Vacío si Polygon no tiene barras para ese rango
+ * —no es un error, es una serie corta que el llamador decide cómo mostrar.
+ */
+export async function serieDe(ticker: string, rango: Rango, hoyISO: string): Promise<Resultado<number[]>> {
+  const r = await pedir<{ results?: { c?: number }[] }>(rutaDeSerie(ticker, rango, hoyISO));
+  if (!r.ok) return r;
+
+  return {
+    ok: true,
+    datos: (r.datos.results ?? []).map((b) => b.c).filter((c): c is number => typeof c === "number")
   };
 }

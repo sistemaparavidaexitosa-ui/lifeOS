@@ -82,6 +82,12 @@ export interface CajaDeHerramientas {
    */
   entregados: () => Set<string>;
   /**
+   * Las filas que `consultar` entregó, con sus valores (D-194). El agente de
+   * interfaz cita `fila:<tabla>:<id>` + columna y el servidor lee el valor de
+   * aquí: lo que no se entregó en este turno no se puede enseñar.
+   */
+  filasEntregadas: () => ReadonlyMap<string, Record<string, unknown>>;
+  /**
    * Lo que se buscó en internet, textual. Va a `audit_log`: sin esto, «salió
    * una consulta hacia Google» y «salió QUÉ hacia Google» se ven igual, y solo
    * la segunda permite comprobar que no viajaron datos del usuario.
@@ -149,4 +155,25 @@ export function limiteConsulta(pedido: number | undefined): number {
  */
 export function idDeFila(tabla: string, id: string): string {
   return `fila:${tabla}:${id}`;
+}
+
+/**
+ * La parte pura de lo que `consultar` (`src/lib/ai/tools.ts`) hace con cada
+ * fila que trae de Supabase: calcularle el id citable y guardar su VALOR en
+ * `mapa`, no solo el id (D-194). Separada porque `consultar` es `server-only`
+ * y no se puede probar con el runner de node; esto sí.
+ *
+ * Devuelve las filas en el mismo formato que se le enseña al modelo, para que
+ * `consultar` no repita el cálculo del id.
+ */
+export function registrarFilas(
+  mapa: Map<string, Record<string, unknown>>,
+  tabla: string,
+  filas: Record<string, unknown>[]
+): Record<string, unknown>[] {
+  return filas.map((registro) => {
+    const id = typeof registro.id === "string" ? idDeFila(tabla, registro.id) : idDeFila(tabla, "unica");
+    mapa.set(id, registro);
+    return { id, ...registro };
+  });
 }

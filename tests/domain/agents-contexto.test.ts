@@ -108,6 +108,7 @@ const cajaFalsa = () => ({
   declaraciones: [],
   ejecutar: async () => ({}),
   entregados: () => new Set<string>(),
+  filasEntregadas: () => new Map<string, Record<string, unknown>>(),
   busquedas: () => []
 });
 
