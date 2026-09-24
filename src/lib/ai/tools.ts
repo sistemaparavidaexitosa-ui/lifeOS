@@ -210,7 +210,7 @@ export function crearCajaDeHerramientas(opciones: OpcionesCaja): CajaDeHerramien
     // así que la fila se cita por el nombre de su tabla. Sin un id citable, el
     // modelo no podría respaldar nada de lo que dijera con ella.
     const filasSalida = registrarFilas(filas, tabla, (data ?? []) as unknown as Record<string, unknown>[]);
-    for (const f of filasSalida) entregados.add(f.id as string);
+    for (const f of filasSalida) entregados.add(f.id);
 
     return filasSalida.length ? { filas: filasSalida } : { filas: [], nota: "No hay filas en esa ventana." };
   }

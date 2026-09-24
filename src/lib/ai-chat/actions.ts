@@ -124,15 +124,18 @@ export async function sendChatMessage(text: string): Promise<SendResult> {
   // arma. Va en paralelo con la escritura de la pregunta y con el historial,
   // como antes.
   const [cerebro, historial] = await Promise.all([
-    prepararCerebro(),
+    // Se le pasa la sesión que ya se tiene: sin esto, `prepararCerebro`
+    // repetiría `createClient()` y `getSessionUser()` —un `GET
+    // /auth/v1/user` real— antes de poder empezar sus propias lecturas.
+    prepararCerebro({ supabase, user: { id: user.id } }),
     // `readHistory` y no `loadChatHistory`: esta función ya comprobó la
     // sesión, y volver a preguntársela a Auth era otro viaje de red de más.
     readHistory(supabase)
   ]);
 
   // No debería pasar —ya se comprobó la sesión arriba—, pero `prepararCerebro`
-  // vuelve a mirarla por su cuenta (así lo puede llamar cualquiera sin
-  // depender de este chequeo) y hay que cubrir el caso.
+  // sigue pudiendo devolver `null` (misma firma para quien no tiene sesión en
+  // la mano) y hay que cubrir el caso.
   if (!cerebro) return { ok: false, reason: "No autenticado" };
 
   // Aquí sí se espera: si la pregunta no se pudo guardar, no se gasta una

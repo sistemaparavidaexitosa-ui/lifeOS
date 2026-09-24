@@ -170,7 +170,7 @@ export function registrarFilas(
   mapa: Map<string, Record<string, unknown>>,
   tabla: string,
   filas: Record<string, unknown>[]
-): Record<string, unknown>[] {
+): ({ id: string } & Record<string, unknown>)[] {
   return filas.map((registro) => {
     const id = typeof registro.id === "string" ? idDeFila(tabla, registro.id) : idDeFila(tabla, "unica");
     mapa.set(id, registro);

@@ -35,10 +35,16 @@ export interface Cerebro {
  * El contexto y las herramientas de una sesión, listos para preguntarle al
  * modelo. `null` sin sesión: quien llama decide qué hacer con eso, igual que
  * antes hacía `sendChatMessage` con su propio `if (!user) return`.
+ *
+ * `sesion` es opcional: quien ya tiene cliente y usuario en la mano —como
+ * `sendChatMessage`, que los necesita de todas formas para guardar la
+ * pregunta— los pasa, y esto se ahorra el `createClient()` y el
+ * `getSessionUser()` (un `GET /auth/v1/user` real) de más. Sin `sesion`
+ * —el Centro-agente, que no los tiene— se resuelve por su cuenta.
  */
-export async function prepararCerebro(): Promise<Cerebro | null> {
-  const supabase = await createClient();
-  const user = await getSessionUser();
+export async function prepararCerebro(sesion?: { supabase: Db; user: { id: string } }): Promise<Cerebro | null> {
+  const supabase = sesion?.supabase ?? (await createClient());
+  const user = sesion?.user ?? (await getSessionUser());
   if (!user) return null;
 
   // Ya no se leen `accounts` ni `family_members`: solo servían para construir
