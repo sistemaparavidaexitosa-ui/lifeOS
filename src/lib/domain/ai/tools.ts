@@ -258,3 +258,37 @@ const TABLAS_SIN_VENTANA: ReadonlySet<string> = new Set([
 export function admiteSinVentana(tabla: string): boolean {
   return TABLAS_SIN_VENTANA.has(tabla) && dominioDeTabla(tabla) !== null;
 }
+
+/**
+ * Tope del texto que `buscar` manda a `buscar_en_todo`. Un nombre no pasa de
+ * unas pocas palabras; lo que venga más largo es el modelo pegando una frase
+ * entera, y cada carácter cuesta trigramas contra cada fila candidata.
+ */
+export const MAX_TEXTO_BUSQUEDA = 120;
+
+/** El texto de `buscar`, saneado: sin espacios de sobra y acotado. */
+export function textoDeBusqueda(texto: unknown): string {
+  return String(texto ?? "").trim().slice(0, MAX_TEXTO_BUSQUEDA);
+}
+
+/**
+ * Las filas que `buscar` trajo tabla por tabla, en el orden de relevancia que
+ * dio la RPC ENTRE tablas —si el libro es lo más parecido, va primero aunque
+ * las deudas se trajeran antes—. Lo que la RPC nombró pero no se pudo traer
+ * (error, o la RLS cambió entre las dos llamadas) se omite.
+ */
+export function enOrdenDeBusqueda(
+  hallados: readonly { tabla: string; id: string }[],
+  traidas: ReadonlyMap<string, readonly Record<string, unknown>[]>
+): { tabla: string; registro: Record<string, unknown> }[] {
+  const porClave = new Map<string, Record<string, unknown>>();
+  for (const [tabla, registros] of traidas) {
+    for (const r of registros) porClave.set(`${tabla}:${String(r.id)}`, r);
+  }
+  const salida: { tabla: string; registro: Record<string, unknown> }[] = [];
+  for (const h of hallados) {
+    const registro = porClave.get(`${h.tabla}:${h.id}`);
+    if (registro) salida.push({ tabla: h.tabla, registro });
+  }
+  return salida;
+}

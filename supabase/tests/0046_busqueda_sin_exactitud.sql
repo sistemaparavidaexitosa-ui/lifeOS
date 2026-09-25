@@ -7,7 +7,7 @@
 -- en la RLS) y que `anon` no pueda llamar a la búsqueda nueva.
 
 begin;
-select plan(10);
+select plan(15);
 
 insert into auth.users (id, instance_id, aud, role, email) values
   ('e7111111-1111-4111-8111-111111111111', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'sinexact-duena@test.local'),
@@ -50,6 +50,20 @@ select is(
 select is_empty(
   $$ select 1 from public.buscar_en_todo('malpaso', array['books']) $$,
   'Solo busca en las tablas de p_tablas: la deuda no sale si no se pidió debts'
+);
+
+-- Dos letras: la subcadena sigue valiendo, el parecido difuso no. Con dos
+-- letras casi todo «se parece» a algo; el ramal difuso exige tres.
+select is(
+  (select id from public.buscar_en_todo('pa', array['debts'])),
+  'e7444444-4444-4444-8444-444444444444'::uuid,
+  'Con dos letras la subcadena encuentra («pa» en «Malpaso»)'
+);
+
+select is_empty(
+  $$ select 1 from public.buscar_en_todo('mx', array['books','debts'])
+     where id in ('e7333333-3333-4333-8333-333333333333', 'e7444444-4444-4444-8444-444444444444') $$,
+  'Con dos letras que no son subcadena no hay coincidencia difusa'
 );
 
 -- (e) El grafo, sin acentos. El libro se proyectó a graph_nodes por su trigger.
@@ -95,6 +109,28 @@ select ok(
   not has_function_privilege('anon', 'public.buscar_en_todo(text, text[], integer)', 'execute')
   and not has_function_privilege('anon', 'public.sin_acentos(text)', 'execute'),
   'anon no puede ejecutar buscar_en_todo ni sin_acentos'
+);
+
+select ok(
+  not has_function_privilege('anon', 'public.graph_search(text, integer)', 'execute'),
+  'anon no puede ejecutar graph_search'
+);
+
+-- Rendimiento, sin cronómetro: lo que lo decide es verificable en el catálogo.
+--  · sin_acentos inmutable (indexable) y sin cláusula SET, que solo añadía
+--    guardar y restaurar el GUC en cada llamada.
+--  · el predicado nuevo de graph_search tiene un índice de trigramas sobre la
+--    MISMA expresión; el de `label` a secas ya no le sirve.
+select ok(
+  (select proconfig is null and provolatile = 'i' from pg_proc where oid = 'public.sin_acentos(text)'::regprocedure),
+  'sin_acentos es immutable y sin SET'
+);
+
+select ok(
+  exists (select 1 from pg_indexes
+          where schemaname = 'public' and tablename = 'graph_nodes'
+            and indexdef ~* 'gin \(\S*sin_acentos\(lower\(label\)\) (extensions\.)?gin_trgm_ops\)'),
+  'graph_nodes tiene índice de trigramas sobre sin_acentos(lower(label))'
 );
 
 select * from finish();

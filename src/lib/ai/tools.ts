@@ -6,7 +6,9 @@ import {
   admiteSinVentana,
   limiteConsulta,
   registrarFilas,
+  enOrdenDeBusqueda,
   tablasDeBusqueda,
+  textoDeBusqueda,
   ventanaConsulta,
   type CajaDeHerramientas
 } from "@/lib/domain/ai/tools.ts";
@@ -254,7 +256,8 @@ export function crearCajaDeHerramientas(opciones: OpcionesCaja): CajaDeHerramien
     const filasSalida = registrarFilas(filas, tabla, (data ?? []) as unknown as Record<string, unknown>[]);
     for (const f of filasSalida) entregados.add(f.id);
 
-    return filasSalida.length ? { filas: filasSalida } : { filas: [], nota: "No hay filas en esa ventana." };
+    if (filasSalida.length) return { filas: filasSalida };
+    return { filas: [], nota: sinVentana || !meta.fecha ? "No hay filas en esa tabla." : "No hay filas en esa ventana." };
   }
 
   /**
@@ -269,7 +272,7 @@ export function crearCajaDeHerramientas(opciones: OpcionesCaja): CajaDeHerramien
    */
   async function buscarPorNombre(args: Record<string, unknown>) {
     if (opciones.sinConsultarFilas) return { error: "Esa herramienta no está disponible ahora." };
-    const texto = String(args.texto ?? "").trim();
+    const texto = textoDeBusqueda(args.texto);
     if (texto.length < 2) return { error: "Dime qué buscar, con al menos dos letras." };
 
     const tablas = tablasDeBusqueda(opciones.autorizados);
@@ -280,9 +283,12 @@ export function crearCajaDeHerramientas(opciones: OpcionesCaja): CajaDeHerramien
       p_tablas: tablas,
       p_limite: 30
     });
-    if (error) return { error: "No se pudo buscar." };
+    if (error) {
+      console.warn("[buscar] buscar_en_todo falló:", error.message);
+      return { error: "No se pudo buscar." };
+    }
 
-    // Agrupado por tabla y en el orden de la RPC (el más parecido primero).
+    // Agrupado por tabla para traer cada una en una sola consulta.
     const porTabla = new Map<string, string[]>();
     for (const h of hallados ?? []) {
       const ids = porTabla.get(h.tabla) ?? [];
@@ -290,19 +296,24 @@ export function crearCajaDeHerramientas(opciones: OpcionesCaja): CajaDeHerramien
       porTabla.set(h.tabla, ids);
     }
 
-    const salida: ({ id: string } & Record<string, unknown>)[] = [];
+    const traidas = new Map<string, Record<string, unknown>[]>();
     for (const [tabla, ids] of porTabla) {
       // La RPC solo pudo recibir tablas autorizadas, pero lo que vuelve se
       // vuelve a pasar por la lista blanca: no se confía en el eco.
       const meta = tablaConsultable(tabla, opciones.autorizados);
       if (!meta) continue;
       const { data, error: e } = await opciones.supabase.from(meta.nombre).select(meta.select).in("id", ids);
-      if (e) continue;
-      const registros = (data ?? []) as unknown as Record<string, unknown>[];
-      const orden = new Map(ids.map((id, i) => [id, i]));
-      registros.sort((a, b) => (orden.get(String(a.id)) ?? 0) - (orden.get(String(b.id)) ?? 0));
-      salida.push(...registrarFilas(filas, tabla, registros));
+      if (e) {
+        console.warn(`[buscar] no se pudieron traer las filas de ${tabla}:`, e.message);
+        continue;
+      }
+      traidas.set(tabla, (data ?? []) as unknown as Record<string, unknown>[]);
     }
+
+    // De vuelta al orden de relevancia de la RPC, que cruza tablas.
+    const salida = enOrdenDeBusqueda(hallados ?? [], traidas).flatMap(({ tabla, registro }) =>
+      registrarFilas(filas, tabla, [registro])
+    );
     for (const f of salida) entregados.add(f.id);
 
     return salida.length ? { filas: salida } : { filas: [], nota: "No encontré nada con ese nombre." };

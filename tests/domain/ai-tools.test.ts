@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { idDeFila, limiteConsulta, ventanaConsulta, registrarFilas, MAX_DIAS_CONSULTA, tablasDeBusqueda, TABLAS_DE_BUSQUEDA, admiteSinVentana } from "../../src/lib/domain/ai/tools.ts";
+import { idDeFila, limiteConsulta, ventanaConsulta, registrarFilas, MAX_DIAS_CONSULTA, tablasDeBusqueda, TABLAS_DE_BUSQUEDA, admiteSinVentana, textoDeBusqueda, MAX_TEXTO_BUSQUEDA, enOrdenDeBusqueda } from "../../src/lib/domain/ai/tools.ts";
 import { MAX_FILAS_CONSULTA, dominioDeTabla } from "../../src/lib/insights/context.ts";
 
 // Lo que el modelo pide NO es de fiar: son argumentos generados, no validados.
@@ -111,4 +111,30 @@ test("admiteSinVentana: los eventos siguen exigiendo ventana", () => {
 
 test("admiteSinVentana: una tabla que no existe no se admite", () => {
   assert.strictEqual(admiteSinVentana("auth_users"), false);
+});
+
+test("textoDeBusqueda: recorta espacios y acota la longitud antes de llegar a la RPC", () => {
+  assert.strictEqual(textoDeBusqueda("  malpaso  "), "malpaso");
+  assert.strictEqual(textoDeBusqueda("x".repeat(5000)).length, MAX_TEXTO_BUSQUEDA);
+  assert.strictEqual(textoDeBusqueda(undefined), "");
+  assert.strictEqual(textoDeBusqueda(42), "42");
+});
+
+test("enOrdenDeBusqueda: conserva el orden de relevancia de la RPC entre tablas", () => {
+  const hallados = [
+    { tabla: "books", id: "b1" },
+    { tabla: "debts", id: "d1" },
+    { tabla: "books", id: "b2" }
+  ];
+  const traidas = new Map<string, Record<string, unknown>[]>([
+    ["books", [{ id: "b2", title: "Dos" }, { id: "b1", title: "Uno" }]],
+    ["debts", [{ id: "d1", name: "Deuda" }]]
+  ]);
+  const orden = enOrdenDeBusqueda(hallados, traidas).map((f) => `${f.tabla}:${f.registro.id}`);
+  assert.deepStrictEqual(orden, ["books:b1", "debts:d1", "books:b2"]);
+});
+
+test("enOrdenDeBusqueda: lo que la RPC nombró pero no se pudo traer se omite, sin inventarlo", () => {
+  const r = enOrdenDeBusqueda([{ tabla: "books", id: "b1" }, { tabla: "debts", id: "d9" }], new Map([["books", [{ id: "b1" }]]]));
+  assert.deepStrictEqual(r, [{ tabla: "books", registro: { id: "b1" } }]);
 });
