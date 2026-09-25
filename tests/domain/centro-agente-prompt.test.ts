@@ -15,3 +15,10 @@ test("El prompt lleva contexto, historial y la pregunta, en ese orden", () => {
   const p = promptDelTurno({ contexto: "CTX", historial: [{ rol: "persona", texto: "hola" }, { rol: "agente", texto: "qué tal" }], texto: "¿cómo voy?" });
   assert.ok(p.indexOf("CTX") < p.indexOf("hola") && p.indexOf("hola") < p.indexOf("¿cómo voy?"));
 });
+
+test("ANTES DE DIBUJAR, LEE: `buscar` es la primera opción cuando se nombra algo", () => {
+  const lee = SYSTEM_AGENTE.slice(SYSTEM_AGENTE.indexOf("ANTES DE DIBUJAR, LEE"));
+  const parrafo = lee.slice(0, lee.indexOf("\n\n"));
+  assert.match(parrafo, /\bbuscar\b/);
+  assert.ok(parrafo.indexOf("buscar") < parrafo.indexOf("consultar"), "buscar va antes que consultar");
+});

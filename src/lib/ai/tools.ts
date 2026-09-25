@@ -2,7 +2,14 @@ import "server-only";
 import { generateGroundedText, type FunctionDeclaration, type GeminiSchema } from "./gemini-provider";
 import { loadFacts, type Db, type FactsOverrides, type ProfileBits } from "@/lib/insights/facts-loader";
 import { tablaConsultable, TABLAS_CONSULTABLES, dominioDeTabla } from "@/lib/insights/context";
-import { limiteConsulta, registrarFilas, ventanaConsulta, type CajaDeHerramientas } from "@/lib/domain/ai/tools.ts";
+import {
+  admiteSinVentana,
+  limiteConsulta,
+  registrarFilas,
+  tablasDeBusqueda,
+  ventanaConsulta,
+  type CajaDeHerramientas
+} from "@/lib/domain/ai/tools.ts";
 import { nodosParaModelo, type NodoCrudo } from "@/lib/domain/ai/graph-tool.ts";
 import type { Domain } from "@/lib/domain/insights/types.ts";
 
@@ -85,12 +92,32 @@ const ESQUEMA_GRAFO: GeminiSchema = {
   propertyOrdering: ["consulta"]
 };
 
+const ESQUEMA_NOMBRE: GeminiSchema = {
+  type: "OBJECT",
+  properties: {
+    texto: {
+      type: "STRING",
+      description: "El nombre o título, o parte de él, tal como lo diga el usuario. No hace falta que sea exacto."
+    }
+  },
+  required: ["texto"],
+  propertyOrdering: ["texto"]
+};
+
 const ESQUEMA_CONSULTA: GeminiSchema = {
   type: "OBJECT",
   properties: {
     tabla: { type: "STRING", description: "Tabla a consultar.", enum: Object.keys(TABLAS_CONSULTABLES), format: "enum" },
-    desde: { type: "STRING", description: "Primer día de la ventana, AAAA-MM-DD. Algunas tablas no tienen fecha y lo ignoran." },
-    hasta: { type: "STRING", description: "Último día de la ventana, AAAA-MM-DD, incluido. Algunas tablas no tienen fecha y lo ignoran." },
+    desde: {
+      type: "STRING",
+      description:
+        "Primer día de la ventana, AAAA-MM-DD. En catálogos (hábitos, rutinas, proyectos, libros, metas, deudas, cuentas, patrimonio…) déjalo vacío para traerlos todos. En eventos (registros, gastos, comidas, planes del día…) es obligatorio."
+    },
+    hasta: {
+      type: "STRING",
+      description:
+        "Último día de la ventana, AAAA-MM-DD, incluido. Vacío en catálogos para traerlos todos; obligatorio en eventos."
+    },
     limite: { type: "INTEGER", description: "Cuántas filas como mucho." }
   },
   required: ["tabla", "desde", "hasta", "limite"],
@@ -126,6 +153,12 @@ export function crearCajaDeHerramientas(opciones: OpcionesCaja): CajaDeHerramien
 
   const declaraciones: FunctionDeclaration[] = [
     {
+      name: "buscar",
+      description:
+        "Busca por nombre o título en TODAS las tablas del usuario a la vez (proyectos, tareas, hábitos, rutinas, libros, metas, deudas, cuentas…), sin fechas y tolerando acentos, mayúsculas y erratas. Úsala PRIMERO cuando la pregunta nombre algo concreto.",
+      parameters: ESQUEMA_NOMBRE
+    },
+    {
       name: "leer_hechos",
       description:
         "Hechos ya calculados sobre el usuario en los dominios que pidas: money, debt, habits, time, execution, nutrition, growth (metas y lectura), activity (su equipo). Úsala cuando la pregunta necesite datos que no están en los hechos que ya tienes.",
@@ -134,7 +167,7 @@ export function crearCajaDeHerramientas(opciones: OpcionesCaja): CajaDeHerramien
     {
       name: "consultar",
       description:
-        "Filas concretas de una tabla del usuario en una ventana de fechas. Es la que baja al dato: metas, planes diarios, agenda, gastos, comidas, notas, libros, patrimonio, actividad del equipo. Úsala en cuanto la pregunta pida detalle que los hechos no digan.",
+        "Filas concretas de una tabla del usuario. Es la que baja al dato: metas, planes diarios, agenda, gastos, comidas, notas, libros, patrimonio, actividad del equipo. En catálogos (hábitos, rutinas, proyectos, libros, metas, deudas, cuentas, patrimonio…) deja 'desde' y 'hasta' vacíos y los trae todos; en eventos (registros, gastos, comidas, planes del día…) pide una ventana de fechas. Úsala en cuanto la pregunta pida detalle que los hechos no digan.",
       parameters: ESQUEMA_CONSULTA
     },
     {
@@ -149,7 +182,9 @@ export function crearCajaDeHerramientas(opciones: OpcionesCaja): CajaDeHerramien
         "Busca en Google y devuelve un resumen con sus fuentes. Úsala cuando la respuesta dependa de algo que NO está en la vida del usuario: un método, un dato del mundo, un precio de referencia, una noticia. No la uses para lo que ya puedes consultar en sus tablas.",
       parameters: ESQUEMA_BUSQUEDA
     }
-  ].filter((d) => !(opciones.sinConsultarFilas && (d.name === "consultar" || d.name === "explorar_grafo")));
+  ].filter(
+    (d) => !(opciones.sinConsultarFilas && (d.name === "consultar" || d.name === "explorar_grafo" || d.name === "buscar"))
+  );
 
   async function leerHechos(args: Record<string, unknown>) {
     const pedidos = Array.isArray(args.dominios) ? (args.dominios as string[]) : [];
@@ -193,7 +228,14 @@ export function crearCajaDeHerramientas(opciones: OpcionesCaja): CajaDeHerramien
     // que no tienen solo serviría para esconder filas al azar.
     let consulta = opciones.supabase.from(meta.nombre).select(meta.select).limit(tope);
 
-    if (meta.fecha) {
+    // Un catálogo pedido sin fechas se trae entero hasta el tope: un hábito
+    // creado hace meses existe HOY, y exigirle una ventana sobre `created_at`
+    // lo escondía si el modelo no adivinaba cuándo se creó.
+    const sinVentana = !String(args.desde ?? "").trim() && !String(args.hasta ?? "").trim() && admiteSinVentana(tabla);
+
+    if (meta.fecha && sinVentana) {
+      consulta = consulta.order(meta.fecha, { ascending: false });
+    } else if (meta.fecha) {
       const ventana = ventanaConsulta(String(args.desde ?? ""), String(args.hasta ?? ""), opciones.today);
       if (!ventana.ok) return { error: ventana.reason };
       consulta = consulta
@@ -213,6 +255,57 @@ export function crearCajaDeHerramientas(opciones: OpcionesCaja): CajaDeHerramien
     for (const f of filasSalida) entregados.add(f.id);
 
     return filasSalida.length ? { filas: filasSalida } : { filas: [], nota: "No hay filas en esa ventana." };
+  }
+
+  /**
+   * BUSCAR POR NOMBRE, EN TODO. Solo con sesión, por lo mismo que `consultar`:
+   * `buscar_en_todo` es SECURITY INVOKER y deja que filtre la RLS de cada
+   * tabla; con el cliente de servicio no filtraría nada.
+   *
+   * La RPC solo devuelve (tabla, id, etiqueta). Las filas completas se traen
+   * después con el `select` de la lista blanca, para que lleguen al modelo
+   * exactamente igual que por `consultar` —mismas columnas, mismo id citable—
+   * y queden en `filasEntregadas`, que es lo que el Centro-agente puede dibujar.
+   */
+  async function buscarPorNombre(args: Record<string, unknown>) {
+    if (opciones.sinConsultarFilas) return { error: "Esa herramienta no está disponible ahora." };
+    const texto = String(args.texto ?? "").trim();
+    if (texto.length < 2) return { error: "Dime qué buscar, con al menos dos letras." };
+
+    const tablas = tablasDeBusqueda(opciones.autorizados);
+    if (!tablas.length) return { filas: [], nota: "No encontré nada con ese nombre." };
+
+    const { data: hallados, error } = await opciones.supabase.rpc("buscar_en_todo", {
+      p_texto: texto,
+      p_tablas: tablas,
+      p_limite: 30
+    });
+    if (error) return { error: "No se pudo buscar." };
+
+    // Agrupado por tabla y en el orden de la RPC (el más parecido primero).
+    const porTabla = new Map<string, string[]>();
+    for (const h of hallados ?? []) {
+      const ids = porTabla.get(h.tabla) ?? [];
+      ids.push(h.id);
+      porTabla.set(h.tabla, ids);
+    }
+
+    const salida: ({ id: string } & Record<string, unknown>)[] = [];
+    for (const [tabla, ids] of porTabla) {
+      // La RPC solo pudo recibir tablas autorizadas, pero lo que vuelve se
+      // vuelve a pasar por la lista blanca: no se confía en el eco.
+      const meta = tablaConsultable(tabla, opciones.autorizados);
+      if (!meta) continue;
+      const { data, error: e } = await opciones.supabase.from(meta.nombre).select(meta.select).in("id", ids);
+      if (e) continue;
+      const registros = (data ?? []) as unknown as Record<string, unknown>[];
+      const orden = new Map(ids.map((id, i) => [id, i]));
+      registros.sort((a, b) => (orden.get(String(a.id)) ?? 0) - (orden.get(String(b.id)) ?? 0));
+      salida.push(...registrarFilas(filas, tabla, registros));
+    }
+    for (const f of salida) entregados.add(f.id);
+
+    return salida.length ? { filas: salida } : { filas: [], nota: "No encontré nada con ese nombre." };
   }
 
   /**
@@ -298,6 +391,7 @@ export function crearCajaDeHerramientas(opciones: OpcionesCaja): CajaDeHerramien
       // montado en todas las pantallas.
       try {
         if (name === "leer_hechos") return await leerHechos(args);
+        if (name === "buscar") return await buscarPorNombre(args);
         if (name === "consultar") return await consultar(args);
         if (name === "explorar_grafo") return await explorarGrafo(args);
         if (name === "buscar_en_internet") return await buscar(args);

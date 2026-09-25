@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { idDeFila, limiteConsulta, ventanaConsulta, registrarFilas, MAX_DIAS_CONSULTA } from "../../src/lib/domain/ai/tools.ts";
-import { MAX_FILAS_CONSULTA } from "../../src/lib/insights/context.ts";
+import { idDeFila, limiteConsulta, ventanaConsulta, registrarFilas, MAX_DIAS_CONSULTA, tablasDeBusqueda, TABLAS_DE_BUSQUEDA, admiteSinVentana } from "../../src/lib/domain/ai/tools.ts";
+import { MAX_FILAS_CONSULTA, dominioDeTabla } from "../../src/lib/insights/context.ts";
 
 // Lo que el modelo pide NO es de fiar: son argumentos generados, no validados.
 // Estas reglas son las que impiden que una consulta suya se traiga una vida
@@ -65,4 +65,50 @@ test("registrarFilas: una fila sin id de cadena se cita como 'unica'", () => {
   const filas = registrarFilas(mapa, "nutrition_profiles", [{ meta: 2000 }]);
   assert.strictEqual(filas[0].id, "fila:nutrition_profiles:unica");
   assert.deepStrictEqual(mapa.get("fila:nutrition_profiles:unica"), { meta: 2000 });
+});
+
+// ---------------------------------------------------------------- buscar
+// La búsqueda por nombre cruza TODAS las tablas a la vez, así que la única
+// barrera que queda del lado del código es no pedirle a la RPC una tabla de un
+// dominio que el usuario no encendió.
+
+test("tablasDeBusqueda: solo las tablas cuyos dominios están autorizados", () => {
+  const t = tablasDeBusqueda(["habits"]);
+  assert.ok(t.includes("habits"));
+  assert.ok(t.includes("routines"));
+  assert.ok(!t.includes("books"), "books es de growth");
+  assert.ok(!t.includes("debts"), "debts es de debt");
+  assert.ok(!t.includes("accounts"), "accounts es de money");
+});
+
+test("tablasDeBusqueda: sin dominios autorizados no se busca en nada", () => {
+  assert.deepStrictEqual(tablasDeBusqueda([]), []);
+});
+
+test("tablasDeBusqueda: toda tabla de búsqueda está en la lista blanca, con dominio", () => {
+  for (const tabla of TABLAS_DE_BUSQUEDA) {
+    assert.notStrictEqual(dominioDeTabla(tabla), null, tabla);
+  }
+  const todas = tablasDeBusqueda(["money", "debt", "habits", "time", "execution", "nutrition", "growth", "activity"]);
+  assert.deepStrictEqual([...todas].sort(), [...TABLAS_DE_BUSQUEDA].sort());
+});
+
+// ---------------------------------------------------- consultar sin fechas
+// Un hábito o un libro creado hace meses no «ocurrió» en una ventana: existe.
+// Filtrarlo por `created_at` lo escondía si el modelo no adivinaba la fecha.
+
+test("admiteSinVentana: los catálogos se consultan sin fechas", () => {
+  for (const t of ["habits", "routines", "projects", "books", "personal_goals", "key_results", "debts", "accounts", "savings_goals", "financial_goals", "investments", "assets", "liabilities", "notebooks", "identity_traits", "occupations", "family_members", "cashback_cards", "categories", "folders", "task_groups"]) {
+    assert.strictEqual(admiteSinVentana(t), true, t);
+  }
+});
+
+test("admiteSinVentana: los eventos siguen exigiendo ventana", () => {
+  for (const t of ["habit_logs", "journal_entries", "food_entries", "daily_plans", "routine_runs", "book_progress", "logbook", "comments"]) {
+    assert.strictEqual(admiteSinVentana(t), false, t);
+  }
+});
+
+test("admiteSinVentana: una tabla que no existe no se admite", () => {
+  assert.strictEqual(admiteSinVentana("auth_users"), false);
 });
