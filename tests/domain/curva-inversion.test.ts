@@ -10,6 +10,7 @@ import {
   rendimientoPct,
   recortarCurva,
   retiroPermitido,
+  borradoPermitido,
   type MovimientoPuro
 } from "../../src/lib/domain/money/curva-inversion.ts";
 
@@ -100,4 +101,28 @@ test("Un retiro no puede dejar la posición bajo cero en su fecha", () => {
   assert.strictEqual(retiroPermitido(movs, { amount: 800.01, occurred_on: "2026-02-10" }), false);
   // Antes de la valuación, valía 1000.
   assert.strictEqual(retiroPermitido(movs, { amount: 1000, occurred_on: "2026-01-15" }), true);
+});
+
+test("Un retiro con fecha atrás no puede dejar negativo lo que viene después", () => {
+  // 1000 el 01-01 y retiro de 800 el 03-01. Un retiro de 500 el 02-01 cabe ese
+  // día (vale 1000) pero desde el 03-01 dejaría −300.
+  const movs = [m("aportacion", 1000, "2026-01-01"), m("retiro", 800, "2026-03-01")];
+  assert.strictEqual(retiroPermitido(movs, { amount: 500, occurred_on: "2026-02-01" }), false);
+  assert.strictEqual(retiroPermitido(movs, { amount: 200, occurred_on: "2026-02-01" }), true);
+});
+
+test("Una valuación posterior manda: el retiro anterior a ella no la vuelve negativa", () => {
+  const movs = [m("aportacion", 1000, "2026-01-01"), m("valuacion", 900, "2026-03-01"), m("retiro", 800, "2026-04-01")];
+  assert.strictEqual(retiroPermitido(movs, { amount: 1000, occurred_on: "2026-02-01" }), true);
+});
+
+test("Borrar un movimiento no puede dejar la posición bajo cero", () => {
+  const movs = [
+    { ...m("aportacion", 1000, "2026-01-01"), id: "a" },
+    { ...m("aportacion", 500, "2026-01-15"), id: "b" },
+    { ...m("retiro", 800, "2026-03-01"), id: "r" }
+  ];
+  assert.strictEqual(borradoPermitido(movs, "a"), false);
+  assert.strictEqual(borradoPermitido(movs, "b"), true);
+  assert.strictEqual(borradoPermitido(movs, "r"), true);
 });

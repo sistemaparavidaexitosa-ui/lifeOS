@@ -3999,6 +3999,12 @@ implementa:
   con una aportación y una valuación a su `as_of` (mismos números), en UNA sola
   sentencia: con dos, el trigger del primer insert reescribía el valor antes de
   que el segundo lo leyera. Migración 0077; alta atómica con `crear_posicion`.
+  Un retiro o un borrado se rechazan si dejan la curva bajo cero en CUALQUIER
+  fecha, no solo en la suya. **Despliegue:** la 0077 y el código van juntos; el
+  código viejo escribe `principal/valuation` a mano y una posición creada o
+  editada con él entre la migración y el deploy perdería esos números al primer
+  movimiento. Tras el deploy se vuelve a correr el relleno (idempotente: solo
+  toca posiciones sin movimientos).
 
 - **D-201 · La curva se calcula en TS con la semántica del trigger.** Una
   valuación es el valor al cierre de su día; los flujos posteriores se le suman;

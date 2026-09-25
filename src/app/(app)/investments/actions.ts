@@ -7,7 +7,7 @@ import { requireUser } from "@/lib/data/session";
 import { todayForUser } from "@/lib/data/profile";
 import { round2 } from "@/lib/domain/budget.ts";
 import { describeDbError } from "@/lib/supabase/errors";
-import { retiroPermitido, TIPOS_DE_MOVIMIENTO } from "@/lib/domain/money/curva-inversion.ts";
+import { borradoPermitido, retiroPermitido, TIPOS_DE_MOVIMIENTO } from "@/lib/domain/money/curva-inversion.ts";
 import { fdate } from "@/lib/format";
 import { leerPosicion } from "@/lib/money/inversiones";
 
@@ -134,7 +134,7 @@ export async function registrarMovimiento(investmentId: string, fd: FormData): P
 
   const amount = round2(m.data.amount);
   if (m.data.kind === "retiro" && !retiroPermitido(posicion.movimientos, { amount, occurred_on: m.data.occurredOn })) {
-    return { ok: false, reason: `El retiro supera el valor de la posición al ${fdate(m.data.occurredOn)}.` };
+    return { ok: false, reason: `El retiro supera el valor de la posición al ${fdate(m.data.occurredOn)} o deja negativo lo registrado después.` };
   }
 
   const { error } = await supabase.from("investment_movements").insert({
@@ -153,7 +153,14 @@ export async function registrarMovimiento(investmentId: string, fd: FormData): P
 export async function borrarMovimiento(id: string, investmentId: string): Promise<ResultadoDeAccion> {
   if (!UUID.safeParse(id).success || !UUID.safeParse(investmentId).success) return { ok: false, reason: "Movimiento inválido." };
   const { supabase } = await requireUser();
-  const { error } = await supabase.from("investment_movements").delete().eq("id", id);
+  // Borrar una aportación puede dejar negativo un retiro posterior: se mira la
+  // curva que quedaría antes de borrar (revisión final, D-200).
+  const posicion = await leerPosicion(supabase, investmentId);
+  if (!posicion) return { ok: false, reason: "No encuentro esa inversión." };
+  if (!borradoPermitido(posicion.movimientos, id)) {
+    return { ok: false, reason: "Sin este movimiento, la posición quedaría en negativo: borra antes el retiro que depende de él." };
+  }
+  const { error } = await supabase.from("investment_movements").delete().eq("id", id).eq("investment_id", investmentId);
   if (error) return { ok: false, reason: describeDbError(error) };
   revalidar(investmentId);
   return { ok: true };

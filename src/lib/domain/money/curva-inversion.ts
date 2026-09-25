@@ -115,8 +115,23 @@ export function recortarCurva<T>(puntos: T[], max: number = MAX_PUNTOS): T[] {
   return Array.from({ length: max }, (_, i) => puntos[Math.round((i * (puntos.length - 1)) / (max - 1))]!);
 }
 
+/** Ni el día del retiro ni después: la curva entera con el retiro dentro no baja de cero. */
 export function retiroPermitido(movs: MovimientoPuro[], nuevo: { amount: number; occurred_on: string }): boolean {
-  return valorAl(movs, nuevo.occurred_on) - nuevo.amount >= -0.005;
+  const retiro: MovimientoPuro = { kind: "retiro", amount: nuevo.amount, occurred_on: nuevo.occurred_on, created_at: "9999-12-31T23:59:59Z" };
+  return sinNegativos([...movs, retiro]);
+}
+
+/**
+ * ¿Algún punto de la curva queda bajo cero? Se mira en CADA fecha con
+ * movimiento, no solo en una: un retiro con fecha atrás cabe el día que se
+ * registra y deja negativo lo que viene después (revisión final, D-200).
+ */
+function sinNegativos(movs: MovimientoPuro[]): boolean {
+  return [...new Set(movs.map((x) => x.occurred_on))].every((f) => valorAl(movs, f) >= -0.005);
+}
+
+export function borradoPermitido(movs: MovimientoPuro[], id: string): boolean {
+  return sinNegativos(movs.filter((x) => x.id !== id));
 }
 
 /**
