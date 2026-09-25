@@ -7,7 +7,7 @@ import {
   routineFitsBlock,
   routineAdherence,
   routineRunComplete,
-  routineRunNeedsWrite
+  routineRunWrite
 } from "../../src/lib/domain/development/routines.ts";
 
 // 2026-08-22 es sábado; 2026-08-24 es lunes; 2026-08-26 es miércoles.
@@ -85,19 +85,32 @@ test("routineRunComplete: registros de hábitos ajenos no cierran la rutina", ()
   assert.strictEqual(routineRunComplete(["h1", "h2"], ["h1", "h9"]), false);
 });
 
-test("routineRunNeedsWrite: si hoy ya hay ejecución, se corrige siempre", () => {
+test("routineRunWrite: si hoy ya hay ejecución, se corrige cuando miente", () => {
   // Los dos casos que dejaban `completed_at` mintiendo cuando solo lo
   // recalculaba el toggle: añadir un hábito a una rutina ya cerrada hoy, y
   // borrar el último que quedaba sin marcar.
-  assert.strictEqual(routineRunNeedsWrite(true, false), true);
-  assert.strictEqual(routineRunNeedsWrite(true, true), true);
+  assert.strictEqual(routineRunWrite({ closed: true }, false, false), true);
+  assert.strictEqual(routineRunWrite({ closed: false }, true, false), true);
+  assert.strictEqual(routineRunWrite({ closed: true }, false, true), true);
+  assert.strictEqual(routineRunWrite({ closed: false }, true, true), true);
 });
 
-test("routineRunNeedsWrite: sin ejecución hoy, solo se escribe si la rutina queda cerrada", () => {
+test("routineRunWrite: si la ejecución de hoy ya dice la verdad, no se escribe", () => {
+  // Marcar el primero de cinco hábitos no cambia nada en `routine_runs`: la
+  // fila ya existe y sigue abierta. Escribir igual era un viaje más a la base
+  // en cada toque, y reescribía la hora de cierre de una rutina ya cerrada.
+  assert.strictEqual(routineRunWrite({ closed: false }, false, true), false);
+  assert.strictEqual(routineRunWrite({ closed: true }, true, true), false);
+  assert.strictEqual(routineRunWrite({ closed: false }, false, false), false);
+});
+
+test("routineRunWrite: sin ejecución hoy, ejecutar la abre y editar solo si la cierra", () => {
   // Editar no es ejecutar: crear la fila por un cambio de nombre le daría a la
   // rutina un `started_at` que nadie provocó, y el motor dejaría de avisar de
   // que lleva días sin correrse.
-  assert.strictEqual(routineRunNeedsWrite(false, false), false);
-  assert.strictEqual(routineRunNeedsWrite(false, true), true);
+  assert.strictEqual(routineRunWrite(null, false, false), false);
+  assert.strictEqual(routineRunWrite(null, true, false), true);
+  assert.strictEqual(routineRunWrite(null, false, true), true);
+  assert.strictEqual(routineRunWrite(null, true, true), true);
 });
 

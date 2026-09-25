@@ -202,6 +202,17 @@ export function toggleEffect(existing: LogStatus | null): "insert" | "delete" | 
   return existing === "completed" ? "delete" : "complete";
 }
 
+/**
+ * El registro de hoy que deja un toque en la casilla: lo mismo que devuelve
+ * `toggleHabitToday`, calculado sin preguntar al servidor. La casilla lo pinta
+ * en el acto y el servidor lo confirma después; si no coincidieran, manda el
+ * servidor.
+ */
+export function toggledEntry(entry: HabitLogEntry | null, today: string): HabitLogEntry | null {
+  if (toggleEffect(entry ? entry.status : null) === "delete") return null;
+  return { date: today, status: "completed", pct: 100, note: entry?.note, mood: entry?.mood, energy: entry?.energy };
+}
+
 /** Una fila de `habit_log_series`: el histórico de un hábito en arreglos paralelos. */
 export interface HabitLogSeriesRow {
   habit_id: string;

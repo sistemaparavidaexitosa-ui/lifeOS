@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionUser, requireUser } from "@/lib/data/session";
 
 import { todayForUser } from "@/lib/data/profile";
-import { routineRunComplete, routineRunNeedsWrite } from "@/lib/domain/development/routines.ts";
+import { routineRunComplete, routineRunWrite } from "@/lib/domain/development/routines.ts";
 import { toggleEffect, type LogStatus } from "@/lib/domain/development/habit-analytics.ts";
 import { addDaysISO, diffDays } from "@/lib/domain/datetime.ts";
 import { matchHabitForStep } from "@/lib/domain/development/templates.ts";
@@ -81,7 +81,7 @@ type Db = Awaited<ReturnType<typeof createClient>>;
  * `arranca` distingue ejecutar de editar: al tocar una casilla la ejecución del
  * día se abre aunque falten hábitos —`started_at` es el dato que dice cuándo
  * empezaste—, pero al editar solo se corrige lo que ya existe (ver
- * `routineRunNeedsWrite`).
+ * `routineRunWrite`).
  */
 async function sincronizarCierreDeRutina(
   supabase: Db,
@@ -89,25 +89,30 @@ async function sincronizarCierreDeRutina(
   today: string,
   { arranca }: { arranca: boolean }
 ): Promise<void> {
-  const [{ data: habits }, { data: run }] = await Promise.all([
+  // Las tres lecturas van a la vez: los registros de hoy se filtran por la
+  // rutina con un join (`habits!inner`) en vez de esperar a tener la lista de
+  // hábitos para pasarla a `.in()`. Era un viaje más a la base en cada toque.
+  const [{ data: habits }, { data: run }, { data: logsHoy }] = await Promise.all([
     supabase.from("habits").select("id").eq("routine_id", routineId),
-    supabase.from("routine_runs").select("id").eq("routine_id", routineId).eq("local_date", today).maybeSingle()
+    supabase
+      .from("routine_runs")
+      .select("completed_at")
+      .eq("routine_id", routineId)
+      .eq("local_date", today)
+      .maybeSingle(),
+    supabase
+      .from("habit_logs")
+      .select("habit_id, habits!inner(routine_id)")
+      .eq("log_date", today)
+      // Desde 0063 una fila puede decir «omitido» o «pospuesto»: la rutina solo
+      // se cierra con hábitos HECHOS.
+      .eq("status", "completed")
+      .eq("habits.routine_id", routineId)
   ]);
 
   const habitIds = (habits ?? []).map((h) => h.id);
-  // El uuid imposible evita que `.in()` con lista vacía devuelva la tabla
-  // entera: una rutina recién vaciada no puede heredar los registros de nadie.
-  const { data: logsHoy } = await supabase
-    .from("habit_logs")
-    .select("habit_id")
-    .eq("log_date", today)
-    // Desde 0063 una fila puede decir «omitido» o «pospuesto»: la rutina solo se
-    // cierra con hábitos HECHOS.
-    .eq("status", "completed")
-    .in("habit_id", habitIds.length > 0 ? habitIds : ["00000000-0000-0000-0000-000000000000"]);
-
   const cerrada = routineRunComplete(habitIds, (logsHoy ?? []).map((l) => l.habit_id));
-  if (!arranca && !routineRunNeedsWrite(Boolean(run), cerrada)) return;
+  if (!routineRunWrite(run ? { closed: run.completed_at !== null } : null, cerrada, arranca)) return;
 
   // upsert con onConflict: dos clics simultáneos no crean dos ejecuciones del
   // mismo día — el índice único (routine_id, local_date) lo resuelve en la base.
@@ -261,27 +266,32 @@ export async function toggleHabitToday(
   if (efecto === "delete") {
     const { error } = await supabase.from("habit_logs").delete().eq("id", log!.id);
     if (error) return actionFailed(error);
-    await supabase.from("audit_log").insert({ user_id: user.id, action: "habit.uncomplete", object: habitId });
   } else if (efecto === "complete") {
     const { error } = await supabase
       .from("habit_logs")
       .update({ status: "completed", completion_pct: 100 })
       .eq("id", log!.id);
     if (error) return actionFailed(error);
-    await supabase.from("audit_log").insert({ user_id: user.id, action: "habit.complete", object: habitId });
   } else {
     const { error } = await supabase.from("habit_logs").insert({ habit_id: habitId, log_date: today });
     if (error) return actionFailed(error);
-    await supabase.from("audit_log").insert({ user_id: user.id, action: "habit.complete", object: habitId });
   }
 
   // Se recalcula DESPUÉS de escribir: así el cierre de la rutina refleja el
   // estado real y no el que teníamos antes del clic. `arranca: true` porque
   // tocar una casilla SÍ es ejecutar la rutina, y la ejecución del día se abre
   // aunque queden hábitos por marcar.
-  try {
-    await sincronizarCierreDeRutina(supabase, routineId, today, { arranca: true });
-  } catch (e) {
+  //
+  // La auditoría va en paralelo: no depende del cierre ni el cierre de ella, y
+  // esperarla antes era un viaje a la base más en cada toque.
+  const [, cierre] = await Promise.allSettled([
+    supabase
+      .from("audit_log")
+      .insert({ user_id: user.id, action: efecto === "delete" ? "habit.uncomplete" : "habit.complete", object: habitId }),
+    sincronizarCierreDeRutina(supabase, routineId, today, { arranca: true })
+  ]);
+  if (cierre.status === "rejected") {
+    const e = cierre.reason;
     return { ok: false, reason: e instanceof Error ? e.message : "No se pudo cerrar la rutina." };
   }
 

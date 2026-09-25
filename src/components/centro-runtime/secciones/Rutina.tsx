@@ -13,34 +13,33 @@ type EstadoFila = { motivo: string } | null;
  * página de rutinas) para que el registro y el cierre de la rutina sean
  * idénticos se toque desde donde se toque.
  *
- * `enCurso` es un conjunto y no un solo booleano (fix de revisión, ronda 1):
- * con un único «pendiente» compartido, marcar un hábito deshabilitaba TODAS
- * las filas hasta que esa marca terminara, y dos hábitos no se pueden marcar
- * a la vez aunque no dependan entre sí.
+ * El toque se pinta al instante: el hábito pasa a hecho en cuanto se toca y
+ * solo vuelve atrás si la acción falla. Esperar a la acción —sesión, escritura,
+ * cierre de la rutina y el re-render que dispara `revalidatePath`— dejaba la
+ * fila quieta un segundo o más bajo el dedo. Cada fila va por su cuenta: marcar
+ * una no bloquea las demás (fix de revisión, ronda 1), y una fila hecha ya no
+ * se puede volver a tocar, así que no hace falta un «en curso» aparte.
  */
 export default function SeccionRutina({ data, title }: PropsDeSeccion<"rutina">) {
   const [hechos, setHechos] = useState<Set<string>>(new Set());
   const [estados, setEstados] = useState<Record<string, EstadoFila>>({});
-  const [enCurso, setEnCurso] = useState<Set<string>>(new Set());
 
   async function marcar(habitId: string) {
     setEstados((e) => ({ ...e, [habitId]: null }));
-    setEnCurso((s) => new Set(s).add(habitId));
-    try {
-      const r = await toggleHabitToday(data.routineId, habitId);
-      if (!r.ok) {
-        setEstados((e) => ({ ...e, [habitId]: { motivo: r.reason || "No se pudo marcar." } }));
-      } else {
-        setHechos((h) => new Set(h).add(habitId));
-      }
-    } catch {
-      setEstados((e) => ({ ...e, [habitId]: { motivo: "No se pudo marcar. Inténtalo de nuevo." } }));
-    } finally {
-      setEnCurso((s) => {
-        const resto = new Set(s);
+    setHechos((h) => new Set(h).add(habitId));
+    const deshacer = (motivo: string) => {
+      setHechos((h) => {
+        const resto = new Set(h);
         resto.delete(habitId);
         return resto;
       });
+      setEstados((e) => ({ ...e, [habitId]: { motivo } }));
+    };
+    try {
+      const r = await toggleHabitToday(data.routineId, habitId);
+      if (!r.ok) deshacer(r.reason || "No se pudo marcar.");
+    } catch {
+      deshacer("No se pudo marcar. Inténtalo de nuevo.");
     }
   }
 
@@ -63,7 +62,7 @@ export default function SeccionRutina({ data, title }: PropsDeSeccion<"rutina">)
                   type="button"
                   className="ag-fila-boton"
                   aria-pressed={hecho}
-                  disabled={enCurso.has(h.habitId) || hecho}
+                  disabled={hecho}
                   onClick={() => void marcar(h.habitId)}
                 >
                   <span className="ag-rutina-circulo" aria-hidden data-hecho={hecho} />
