@@ -12,6 +12,7 @@ import { componerTurno, prefijarSecciones } from "@/lib/domain/centro/agente/tur
 import { tieneCifras } from "@/lib/domain/centro/agente/texto.ts";
 import { destinoValido } from "@/lib/domain/centro/sugerencias.ts";
 import { sanearRecomendacion } from "@/lib/domain/centro/agente/recomendaciones.ts";
+import { resolverPropuesta } from "@/lib/domain/centro/agente/propuesta-movimiento.ts";
 import { textoDelContexto } from "@/lib/insights/context";
 import { conLimite } from "@/lib/domain/centro/runtime/ensamblar.ts";
 import type { AnySection } from "@/lib/domain/centro/runtime/types.ts";
@@ -147,6 +148,14 @@ async function resolverSinCapacidad(
         else console.warn("[centro-agente] no se pudo guardar la recomendación:", error);
       }
       return items.length ? [{ id, kind: "recomendaciones", data: { items } }] : [];
+    }
+    case "propuesta_movimiento": {
+      const r = resolverPropuesta(b, id, { filas: ctx.filas, hoy: cerebro.today, moneda: cerebro.moneda });
+      if (!r.ok) {
+        console.warn("[centro-agente] bloque descartado:", r.reason);
+        return [];
+      }
+      return [r.seccion];
     }
     default: {
       const s = resolverBloque(b, id, ctx);

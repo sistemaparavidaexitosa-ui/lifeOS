@@ -22,13 +22,14 @@ import { z } from "zod";
 import type { GeminiSchema } from "../../ai/tools.ts";
 import { TIPOS_DEL_CENTRO } from "../../coach/proposals.ts";
 import { tieneCifras } from "./texto.ts";
+import { TIPOS_DE_MOVIMIENTO } from "../../money/curva-inversion.ts";
 
 export const MAX_BLOQUES = 4;
 const MAX_TEXTO = 600;
 
 export const GENERICOS = ["lista", "metricas", "tabla", "grafica", "tarjetas", "linea"] as const;
 export const CAPACIDADES = ["mercado", "hoy", "inversiones"] as const;
-export const KINDS_DEL_AGENTE = [...GENERICOS, "ir_a", "recomendaciones", "insight", ...CAPACIDADES] as const;
+export const KINDS_DEL_AGENTE = [...GENERICOS, "ir_a", "recomendaciones", "insight", "propuesta_movimiento", ...CAPACIDADES] as const;
 
 export const FORMATOS = ["numero", "dinero", "porcentaje", "fecha", "texto"] as const;
 export type Formato = (typeof FORMATOS)[number];
@@ -110,6 +111,24 @@ const ESQUEMA_RECOMENDACIONES = z
 
 const ESQUEMA_INSIGHT = z.object({ texto: z.string().trim().min(1).max(240) }).strict();
 
+/**
+ * Proponer un movimiento de inversión (D-202). La ÚNICA cifra que el modelo
+ * pone en un bloque: el monto que la persona DICTÓ. No se guarda aquí: se
+ * pinta con Guardar/Descartar y lo guarda la persona, por la misma acción que
+ * /investments. La fila tiene que ser de `investments` y leída en el turno
+ * (lo comprueba `resolverPropuesta`).
+ */
+const ESQUEMA_PROPUESTA_MOVIMIENTO = z
+  .object({
+    fila: z.string().regex(/^fila:investments:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i),
+    tipo: z.enum(TIPOS_DE_MOVIMIENTO),
+    monto: z.number().finite().min(0).max(1e12),
+    fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+    nota: z.string().trim().max(200).nullable()
+  })
+  .strict()
+  .refine((p) => p.tipo === "valuacion" || p.monto > 0, { message: "un flujo necesita monto mayor que 0", path: ["monto"] });
+
 type Genericos = typeof ESQUEMAS_GENERICOS;
 export type BloqueGenerico = { [K in keyof Genericos]: { kind: K } & z.infer<Genericos[K]> }[keyof Genericos];
 
@@ -118,6 +137,7 @@ export type BloqueDelAgente =
   | ({ kind: "ir_a" } & z.infer<typeof ESQUEMA_IR_A>)
   | ({ kind: "recomendaciones" } & z.infer<typeof ESQUEMA_RECOMENDACIONES>)
   | ({ kind: "insight" } & z.infer<typeof ESQUEMA_INSIGHT>)
+  | ({ kind: "propuesta_movimiento" } & z.infer<typeof ESQUEMA_PROPUESTA_MOVIMIENTO>)
   | { kind: "capacidad"; nombre: (typeof CAPACIDADES)[number]; parametros: Record<string, unknown> };
 
 export interface RespuestaDelAgente {
@@ -162,7 +182,7 @@ function parsearBloque(crudo: unknown): { ok: true; bloque: BloqueDelAgente } | 
     return { ok: true, bloque: { kind: "capacidad", nombre: kind as (typeof CAPACIDADES)[number], parametros: datos } };
   }
 
-  const esquema =
+  const esquema: z.ZodTypeAny | null =
     kind in ESQUEMAS_GENERICOS
       ? ESQUEMAS_GENERICOS[kind as keyof Genericos]
       : kind === "ir_a"
@@ -171,7 +191,9 @@ function parsearBloque(crudo: unknown): { ok: true; bloque: BloqueDelAgente } | 
           ? ESQUEMA_RECOMENDACIONES
           : kind === "insight"
             ? ESQUEMA_INSIGHT
-            : null;
+            : kind === "propuesta_movimiento"
+              ? ESQUEMA_PROPUESTA_MOVIMIENTO
+              : null;
   if (!esquema) return { ok: false, reason: `«${kind || "?"}» no es un bloque del catálogo.` };
 
   const r = esquema.safeParse(datos);
