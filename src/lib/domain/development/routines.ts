@@ -105,18 +105,25 @@ export function routineRunComplete(habitIds: string[], doneHabitIds: string[]): 
 }
 
 /**
- * ¿Hay que tocar `routine_runs` al EDITAR la rutina —añadir un hábito, borrar
- * otro— y no al ejecutarla?
+ * ¿Hay que escribir en `routine_runs` después de tocar la rutina de hoy?
  *
- * Editar no es ejecutar, y por eso no basta con escribir siempre. Si hoy no hay
- * ejecución y la rutina tampoco queda cerrada, crear la fila inventaría un
- * `started_at` de una rutina que nadie arrancó: el motor de análisis mide «no
- * se ejecuta desde hace N días» contando esas filas, y se callaría el aviso
- * porque alguien cambió un nombre. Pero si la fila YA existe hay que corregirla
- * siempre — es justo la que se quedó mintiendo: añadir un hábito a una rutina
+ * `run` es la ejecución de hoy tal como está en la base (`closed` = tiene
+ * `completed_at`), o `null` si no hay. `arranca` distingue ejecutar —tocar una
+ * casilla— de editar —añadir o borrar un hábito—.
+ *
+ * Si la fila YA existe, se corrige cuando miente: añadir un hábito a una rutina
  * cerrada hoy la deja incompleta, y borrar el único que faltaba la completa sin
- * que nadie toque una casilla.
+ * que nadie toque una casilla. Si ya dice la verdad no se toca: marcar el
+ * primero de cinco hábitos no cambia nada, y escribir igual costaba un viaje a
+ * la base en cada toque y reescribía la hora de cierre.
+ *
+ * Si NO existe, editar no es ejecutar: crear la fila inventaría un `started_at`
+ * de una rutina que nadie arrancó, y el motor de análisis, que mide «no se
+ * ejecuta desde hace N días» contando esas filas, se callaría el aviso porque
+ * alguien cambió un nombre. Solo se crea al ejecutar o si la rutina queda
+ * cerrada.
  */
-export function routineRunNeedsWrite(hasRunToday: boolean, complete: boolean): boolean {
-  return hasRunToday || complete;
+export function routineRunWrite(run: { closed: boolean } | null, complete: boolean, arranca: boolean): boolean {
+  if (run) return run.closed !== complete;
+  return arranca || complete;
 }

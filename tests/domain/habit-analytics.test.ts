@@ -6,6 +6,7 @@ import {
   habitStreaks,
   completionRate,
   toggleEffect,
+  toggledEntry,
   buildHabitSeries,
   type HabitSeries,
   type HabitLogEntry
@@ -134,6 +135,17 @@ test("toggleEffect: marcar, desmarcar y convertir en hecho", () => {
   assert.equal(toggleEffect("completed"), "delete");
   assert.equal(toggleEffect("skipped"), "complete");
   assert.equal(toggleEffect("postponed"), "complete");
+});
+
+test("toggledEntry: predice lo que dejará el toque, conservando nota y ánimo", () => {
+  // Es lo que la casilla pinta ANTES de que conteste el servidor, así que
+  // tiene que coincidir con lo que `toggleHabitToday` devuelve.
+  assert.deepEqual(toggledEntry(null, HOY), { date: HOY, status: "completed", pct: 100, note: undefined, mood: undefined, energy: undefined });
+  assert.equal(toggledEntry(hecho(HOY), HOY), null);
+  assert.equal(toggledEntry(hecho(HOY, 40), HOY), null);
+  const conNota: HabitLogEntry = { ...omitido(HOY), note: "lluvia", mood: 2, energy: 3 };
+  assert.deepEqual(toggledEntry(conNota, HOY), { date: HOY, status: "completed", pct: 100, note: "lluvia", mood: 2, energy: 3 });
+  assert.equal(toggledEntry(pospuesto(HOY), HOY)?.status, "completed");
 });
 
 test("buildHabitSeries: une arreglos paralelos y da serie vacía al hábito sin filas", () => {

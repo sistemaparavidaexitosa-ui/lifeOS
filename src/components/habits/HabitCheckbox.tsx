@@ -1,8 +1,8 @@
 "use client";
 
-import { useTransition } from "react";
+import { useOptimistic, useTransition } from "react";
 import { toggleHabitToday } from "@/app/(app)/development/routines/actions";
-import type { HabitLogEntry } from "@/lib/domain/development/habit-analytics.ts";
+import { toggledEntry, type HabitLogEntry } from "@/lib/domain/development/habit-analytics.ts";
 
 /**
  * Cómo se pinta la casilla según el registro de hoy (0063). Omitido y pospuesto
@@ -51,6 +51,18 @@ export function casilla(entry: HabitLogEntry | null): {
  * El resultado sube por `onResult` en vez de pintarse aquí: la fila de rutinas
  * enseña el error debajo del nombre y el ritual lo enseña a pantalla completa,
  * y esa decisión es de quien lo usa.
+ *
+ * EL TOQUE SE PINTA AL INSTANTE (`useOptimistic`). Antes la casilla esperaba a
+ * la acción entera —sesión, escritura, cierre de la rutina y el re-render de la
+ * página que dispara `revalidatePath`— y en el teléfono eso era un segundo o
+ * más sin que nada cambiara bajo el dedo. Ahora pinta `toggledEntry`, que es
+ * lo mismo que la acción va a devolver, y cuando la acción termina manda lo que
+ * `onResult` le dé al padre: si falló, el padre devuelve el registro de antes y
+ * la casilla vuelve sola.
+ *
+ * Tampoco se deshabilita mientras espera: tocar dos veces es marcar y
+ * desmarcar, y Next ejecuta las acciones de una en una, así que la segunda
+ * llega al servidor después de la primera y ve su resultado.
  */
 export default function HabitCheckbox({
   routineId,
@@ -68,8 +80,9 @@ export default function HabitCheckbox({
   size?: number;
   onResult: (entry: HabitLogEntry | null, error: string | null) => void;
 }) {
-  const [pending, startTransition] = useTransition();
-  const c = casilla(entry);
+  const [, startTransition] = useTransition();
+  const [visible, pintar] = useOptimistic(entry);
+  const c = casilla(visible);
 
   return (
     <button
@@ -85,9 +98,9 @@ export default function HabitCheckbox({
         color: c.color,
         transition: "background .18s ease, border-color .18s ease"
       }}
-      disabled={pending}
       onClick={() =>
         startTransition(async () => {
+          pintar(toggledEntry(visible, today));
           const r = await toggleHabitToday(routineId, habitId);
           if (!r.ok) {
             onResult(entry, r.reason ?? "No se pudo guardar.");
