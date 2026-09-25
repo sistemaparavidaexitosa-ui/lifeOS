@@ -1,8 +1,9 @@
 // tests/domain/centro-runtime-validador.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { validarScreen, MAX_SECCIONES } from "../../src/lib/domain/centro/runtime/validador.ts";
+import { validarScreen, validarPorSeccion, MAX_SECCIONES } from "../../src/lib/domain/centro/runtime/validador.ts";
 import { sanearAccion } from "../../src/lib/domain/centro/runtime/acciones.ts";
+import type { AnySection } from "../../src/lib/domain/centro/runtime/types.ts";
 
 // La frontera con lo que mañana escribirá un modelo. Hoy la cruza lo que arma
 // el servidor; la regla es la misma.
@@ -164,4 +165,39 @@ test("Las etiquetas de verdad siguen fuera", () => {
   for (const t of ["<b>hola</b>", "</div>", "<Hero />", "<img src=x onerror=alert(1)>", "<!-- x -->"]) {
     assert.strictEqual(validarScreen(con((s) => (s.sections[1].data.items[0].titulo = t)), ctx).ok, false, t);
   }
+});
+
+// --- T1: validación sección por sección, para que «Hoy» no tumbe la pantalla entera por un bloque malo.
+
+test("validarPorSeccion se queda con las secciones que pasan y descarta la que no", () => {
+  const hero: AnySection = { id: "hero", kind: "hero", data: { saludo: "Buenos días", nombre: "Luis", fechaISO: "2026-09-24", frase: null } };
+  const tareasMalas: AnySection = {
+    id: "foco",
+    kind: "tasks",
+    data: { fechaISO: "2026-09-24", items: [{ id: "t1", titulo: "Migrar <Header> a v2", contexto: null, href: null }] }
+  };
+  const quickActions: AnySection = {
+    id: "sigue",
+    kind: "quickActions",
+    data: { items: [{ etiqueta: "Proyectos", detalle: "3 en el plan", href: "/execution", icono: "proyectos" }] }
+  };
+
+  const r = validarPorSeccion([hero, tareasMalas, quickActions], [], "test");
+  assert.deepStrictEqual(r.map((s) => s.id), ["hero", "sigue"]);
+});
+
+test("validarPorSeccion: id repetido se queda con la primera", () => {
+  const a: AnySection = { id: "x", kind: "insight", data: { texto: "Uno." } };
+  const b: AnySection = { id: "x", kind: "insight", data: { texto: "Dos." } };
+  const r = validarPorSeccion([a, b], [], "test");
+  assert.deepStrictEqual(
+    r.map((s) => s.kind === "insight" && s.data.texto),
+    ["Uno."]
+  );
+});
+
+test("validarPorSeccion recorta a MAX_SECCIONES", () => {
+  const secciones: AnySection[] = Array.from({ length: MAX_SECCIONES + 2 }, (_, i) => ({ id: `t${i}`, kind: "text", data: { texto: "x" } }));
+  const r = validarPorSeccion(secciones, [], "test");
+  assert.strictEqual(r.length, MAX_SECCIONES);
 });
