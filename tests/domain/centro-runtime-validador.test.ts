@@ -201,3 +201,50 @@ test("validarPorSeccion recorta a MAX_SECCIONES", () => {
   const r = validarPorSeccion(secciones, [], "test");
   assert.strictEqual(r.length, MAX_SECCIONES);
 });
+
+// --- T3: el esquema de «rutina», estricto como los demás.
+
+function rutinaValida(): AnySection {
+  return {
+    id: "rutina",
+    kind: "rutina",
+    title: "Tu rutina de ahora",
+    data: {
+      routineId: "r1",
+      nombre: "Mañana Milagrosa",
+      habitos: [
+        { habitId: "h1", nombre: "Meditar", duracionMin: 10 },
+        { habitId: "h2", nombre: "Leer", duracionMin: null }
+      ]
+    }
+  };
+}
+
+test("Una sección «rutina» bien hecha pasa", () => {
+  const r = validarPorSeccion([rutinaValida()], [], "test");
+  assert.strictEqual(r.length, 1);
+});
+
+test("«rutina» con un campo de más: fuera", () => {
+  const s = structuredClone(rutinaValida()) as Mutable;
+  s.data.habitos[0].extra = "x";
+  assert.strictEqual(validarPorSeccion([s as AnySection], [], "test").length, 0);
+});
+
+test("«rutina» sin hábitos: fuera (hace falta al menos uno)", () => {
+  const s = structuredClone(rutinaValida()) as Mutable;
+  s.data.habitos = [];
+  assert.strictEqual(validarPorSeccion([s as AnySection], [], "test").length, 0);
+});
+
+test("«rutina» con más de 20 hábitos: fuera", () => {
+  const s = structuredClone(rutinaValida()) as Mutable;
+  s.data.habitos = Array.from({ length: 21 }, (_, i) => ({ habitId: `h${i}`, nombre: `Hábito ${i}`, duracionMin: 5 }));
+  assert.strictEqual(validarPorSeccion([s as AnySection], [], "test").length, 0);
+});
+
+test("«rutina» con duración fuera de 0..600: fuera", () => {
+  const s = structuredClone(rutinaValida()) as Mutable;
+  s.data.habitos[0].duracionMin = 601;
+  assert.strictEqual(validarPorSeccion([s as AnySection], [], "test").length, 0);
+});

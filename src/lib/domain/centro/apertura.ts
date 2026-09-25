@@ -43,3 +43,26 @@ export interface EntradaApertura {
 export function debeAbrirseElCentro(e: EntradaApertura): boolean {
   return e.modo === "premium" && e.inicioDeVisita && esEntrada(e.ruta);
 }
+
+export interface EntradaVistaInicial {
+  /** Hay `datos` del arranque en `RitualHost`: el overlay se iba a mostrar. */
+  hayArranque: boolean;
+  abrirCentro: boolean;
+  /** AGENTIC_CENTER_RUNTIME (D-194): con esto encendido, el Centro es el agente. */
+  agente: boolean;
+}
+
+/**
+ * Qué pinta `RitualHost` al montar (T3, «el Centro abre con tu rutina»).
+ *
+ * Con el agente encendido, un arranque que se iba a mostrar YA NO abre el
+ * overlay viejo: abre el Centro, que empieza por la rutina de hoy
+ * (`matutino`). Con el agente apagado nada cambia — es el camino de siempre,
+ * y por eso esta función existe sola y no como un `if` más dentro del
+ * componente: que el flag-off quede intacto se puede leer aquí sin levantar
+ * React.
+ */
+export function vistaInicial(e: EntradaVistaInicial): "ritual" | "centro" | null {
+  if (e.hayArranque) return e.agente ? "centro" : "ritual";
+  return e.abrirCentro ? "centro" : null;
+}

@@ -195,6 +195,27 @@ const ESQUEMAS: Partial<Record<SectionKind, z.ZodTypeAny>> = {
         .min(1)
         .max(20)
     })
+    .strict(),
+  // T3: la rutina de hoy. 1..20 hábitos — el mismo tope que `maxRoutineSteps`
+  // pide en `pantalla.ts`, y un tope propio de todas formas: esta pantalla no
+  // puede confiar en que quien la llenó lo haya respetado.
+  rutina: z
+    .object({
+      routineId: texto(80),
+      nombre: texto(120),
+      habitos: z
+        .array(
+          z
+            .object({
+              habitId: texto(80),
+              nombre: texto(120),
+              duracionMin: z.number().int().min(0).max(600).nullable()
+            })
+            .strict()
+        )
+        .min(1)
+        .max(20)
+    })
     .strict()
 };
 

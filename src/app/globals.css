@@ -4686,6 +4686,16 @@ html[data-theme="dark"] .rit-boton-centro { color: #0b0b12; background: #f6f6fa;
 .ag-boton-chico-suave { background: var(--ag-soft); color: var(--ag-text); }
 .ag-boton-chico:disabled { opacity: 0.5; cursor: default; }
 
+/* ─── La rutina de ahora (T3) ──────────────────────────────────────────── */
+.ag-rutina-nombre { margin: -4px 0 4px; }
+.ag-fila-boton { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; background: none; border: none; padding: 0; margin: 0; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.ag-fila-boton:disabled { cursor: default; }
+.ag-rutina-circulo { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--ag-line); }
+.ag-rutina-circulo[data-hecho="true"] { background: var(--ag-text); border-color: var(--ag-text); }
+.ag-rutina-nombre-hecho { text-decoration: line-through; color: var(--ag-muted); }
+.ag-rutina-error { display: block; margin-top: 4px; font-size: 12px; }
+.ag-rutina-completa { margin: 4px 0 0; }
+
 /* ─── La superficie del Centro-agente (D-194) ─────────────────────────────
    UNA CONVERSACIÓN, NO UN PANEL: fondo blanco, sin bordes, mucho aire. Usa
    SOLO los tokens `--ag-*` de arriba; los `--rit-*` existen aquí únicamente

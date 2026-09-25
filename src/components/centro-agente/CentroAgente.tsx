@@ -6,6 +6,7 @@ import { ContextoDelAgente } from "@/components/centro-runtime/contexto";
 import { abrirFoco, atraparFoco } from "@/lib/dom/ritual-focus.ts";
 import { agregar, historialParaModelo, type Turno } from "@/lib/domain/centro/agente/hilo.ts";
 import type { Screen } from "@/lib/domain/centro/runtime/types.ts";
+import { startRitual } from "@/lib/ritual/actions";
 import { IconClose } from "@/components/icons";
 import Composer from "./Composer";
 
@@ -25,12 +26,19 @@ export default function CentroAgente({
   // No se usa todavía: nada en esta superficie formatea fecha ni moneda por su
   // cuenta —lo que llega en `screen` ya viene formateado—, pero el contrato
   // con `RitualHost` lo pasa igual que a `CentroPremium`.
-  locale: _locale
+  locale: _locale,
+  matutino = false
 }: {
   onCerrar: () => void;
   onIrA: () => void;
   workspaceId: string | null;
   locale: string;
+  /**
+   * T3: el Centro reemplazó al arranque guiado de hoy. Marca «visto hoy» UNA
+   * vez, igual que hacía `RitualHost` con `startRitual` — si no, el arranque
+   * viejo (o este mismo camino) volvería a dispararse en la próxima carga.
+   */
+  matutino?: boolean;
 }) {
   const [hilo, setHilo] = useState<Turno[]>([]);
   const [cargandoHoy, setCargandoHoy] = useState(true);
@@ -67,6 +75,19 @@ export default function CentroAgente({
   useEffect(() => {
     const el = shellRef.current;
     return el ? abrirFoco(el) : undefined;
+  }, []);
+
+  // T3: UNA sola vez al montar. `startRitual` hace upsert en `ritual_runs` —lo
+  // mismo que escribía el overlay viejo al abrir— así que el arranque de hoy
+  // queda «visto» aunque quien lo vio haya sido el Centro. Es un efecto
+  // secundario opcional: si falla, la conversación sigue igual y solo se avisa
+  // en consola, como ya hacía `RitualHost` con las demás acciones del ritual.
+  useEffect(() => {
+    if (!matutino) return;
+    void startRitual(1).then((r) => {
+      if (!r.ok) console.warn(`[centro-agente] startRitual: ${r.reason}`);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- una sola vez al montar, por diseño.
   }, []);
 
   useEffect(() => {

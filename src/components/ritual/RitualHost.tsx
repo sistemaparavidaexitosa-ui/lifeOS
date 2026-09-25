@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { ContenidoDelRitual } from "@/lib/data/ritual";
-import type { ModoNavegacion } from "@/lib/domain/centro/apertura.ts";
+import { vistaInicial, type ModoNavegacion } from "@/lib/domain/centro/apertura.ts";
 import { contenidoParaRepetir, setNavMode } from "@/lib/ritual/actions";
 import RitualOverlay from "./RitualOverlay";
 import CentroPremium from "./CentroPremium";
@@ -61,9 +61,14 @@ export default function RitualHost({
 }) {
   const [ritual, setRitual] = useState<DatosDelRitual | null>(datos);
   const [modo, setModo] = useState<ModoNavegacion>(navMode);
-  const [vista, setVista] = useState<"ritual" | "centro" | null>(
-    datos ? "ritual" : abrirCentro ? "centro" : null
+  const [vista, setVista] = useState<"ritual" | "centro" | null>(() =>
+    vistaInicial({ hayArranque: Boolean(datos), abrirCentro, agente })
   );
+  // T3: si el Centro reemplazó al arranque de hoy —«hayArranque» era cierto—,
+  // «Hoy» tiene que EMPEZAR por la rutina. Fijado al montar y no derivado de
+  // `vista`: abrir el Centro más tarde desde el botón (`mostrarCentro`) no es
+  // un arranque de la mañana, y no debe volver a marcar «visto hoy».
+  const [matutino] = useState(() => agente && Boolean(datos));
 
   // Solo engancha: un `null` que llega después no suelta lo que ya se mostró.
   useEffect(() => {
@@ -131,6 +136,7 @@ export default function RitualHost({
           onIrA={() => setVista(null)}
           workspaceId={workspaceId}
           locale={locale}
+          matutino={matutino}
         />
       );
     }

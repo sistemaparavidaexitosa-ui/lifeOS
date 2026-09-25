@@ -20,5 +20,6 @@ import "./secciones/Insight";
 import "./secciones/Portafolio";
 import "./secciones/Movimientos";
 import "./secciones/Watchlist";
+import "./secciones/Rutina";
 
 export { registroDeSecciones } from "./registro";

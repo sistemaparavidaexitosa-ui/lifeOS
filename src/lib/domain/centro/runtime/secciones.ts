@@ -44,7 +44,10 @@ export const SECTION_KINDS = [
   "irA",
   "recomendaciones",
   "insight",
-  "movimientos"
+  "movimientos",
+  // T3: la rutina de hoy, por delante en «Hoy» cuando el agente reemplaza al
+  // arranque guiado viejo.
+  "rutina"
 ] as const;
 
 export type SectionKind = (typeof SECTION_KINDS)[number];
@@ -198,6 +201,17 @@ export interface DatosWatchlist {
   }[];
 }
 
+/**
+ * La rutina de ahora, con sus hábitos pendientes (T3). Nace de
+ * `construirSecuencia` filtrada a `routineStep`: la MISMA regla de hora que
+ * decide el arranque guiado, para no volver a escribirla aquí.
+ */
+export interface DatosRutina {
+  routineId: string;
+  nombre: string;
+  habitos: { habitId: string; nombre: string; duracionMin: number | null }[];
+}
+
 export interface DatosCalendar {
   dias: { fechaISO: string; bloques: { inicio: string; fin: string; titulo: string }[] }[];
 }
@@ -303,6 +317,7 @@ export interface DatosPorKind {
   recomendaciones: DatosRecomendaciones;
   insight: DatosInsight;
   movimientos: DatosMovimientos;
+  rutina: DatosRutina;
 }
 
 export type DatosDe<K extends SectionKind> = DatosPorKind[K];
