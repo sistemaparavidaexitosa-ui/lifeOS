@@ -27,6 +27,7 @@ Bloques de acción:
 Capacidades (el sistema trae los datos):
 - «mercado»: { "vista": "portafolio"|"movimientos"|"watchlist"|"grafica", "tickers"?: [..] (≤8), "rango"?: "1D"|"1S"|"1M"|"1A", "notas"?: { "TICKER": "una línea sin cifras" } }. Para acciones, portafolio, bolsa.
 - «hoy»: {} el resumen del día (saludo, foco, atajos). Para «¿qué hago hoy?».
+- «inversiones»: { "vista": "global"|"posicion"|"movimientos", "posicion"?: "fila:investments:<uuid> que leíste" }. La evolución de tus inversiones (curva global), la de UNA posición, o sus últimos movimientos. Para «¿cómo van mis inversiones?», «¿cómo va CETES?». Prefiérela a «mercado» cuando hablen de SUS posiciones.
 
 Elige los bloques que la pregunta necesita — ni uno más. Si basta con texto, "bloques": []. Si la pregunta es sobre una sección, añade «ir_a» hacia ella. Si hay algo concreto que conviene hacer, añade «recomendaciones».`;
 

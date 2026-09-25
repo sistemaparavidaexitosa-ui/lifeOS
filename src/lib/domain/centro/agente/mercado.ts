@@ -85,7 +85,7 @@ export interface EntradaMercado {
   /** Cierres por ticker, del más viejo al más nuevo. */
   series: Record<string, number[]>;
   inversiones: InversionPura[];
-  /** Patrimonio neto histórico (`net_worth_snapshots`), para la línea del portafolio. */
+  /** La curva global de inversiones (D-202), para la línea del portafolio. */
   historia: { x: string; y: number }[];
 }
 

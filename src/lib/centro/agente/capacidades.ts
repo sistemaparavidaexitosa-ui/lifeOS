@@ -6,6 +6,10 @@
 import "server-only";
 import type { AnySection } from "@/lib/domain/centro/runtime/types.ts";
 import { leerParametrosMercado, seccionesDeMercado } from "@/lib/domain/centro/agente/mercado.ts";
+import { leerParametrosInversiones, seccionesDeInversiones } from "@/lib/domain/centro/agente/inversiones.ts";
+import type { CAPACIDADES } from "@/lib/domain/centro/agente/contrato.ts";
+import { curvaGlobal, recortarCurva } from "@/lib/domain/money/curva-inversion.ts";
+import { leerPosiciones } from "@/lib/money/inversiones";
 import { cotizaciones, serieDe } from "@/lib/money/polygon";
 import { listarWatchlist } from "@/lib/money/watchlist-actions";
 import { polygonApiKey } from "@/config/env";
@@ -35,10 +39,12 @@ async function mercado(parametros: Record<string, unknown>, c: Cerebro): Promise
   const tickers = p.tickers.length ? p.tickers : lista.map((w) => w.ticker);
   const nombres = new Map(lista.map((w) => [w.ticker, w.nombre ?? w.ticker]));
 
-  const [cot, inv, snap] = await Promise.all([
+  const [cot, inv, posiciones] = await Promise.all([
     configurado && tickers.length ? cotizaciones(tickers) : Promise.resolve(null),
     p.vista === "portafolio" ? c.supabase.from("investments").select("valuation, currency, as_of") : Promise.resolve(null),
-    p.vista === "portafolio" ? c.supabase.from("net_worth_snapshots").select("as_of, net").order("as_of", { ascending: true }).limit(60) : Promise.resolve(null)
+    // La línea del portafolio es la curva de TUS inversiones (D-202). Antes era
+    // `net_worth_snapshots`: el patrimonio neto, con título de portafolio.
+    p.vista === "portafolio" ? leerPosiciones(c.supabase) : Promise.resolve(null)
   ]);
 
   const precios = new Map((cot?.ok ? cot.datos : []).map((q) => [q.ticker, q]));
@@ -68,7 +74,21 @@ async function mercado(parametros: Record<string, unknown>, c: Cerebro): Promise
     cotizaciones: cotizacionesPuras,
     series,
     inversiones: (inv?.data ?? []).map((i) => ({ valuation: i.valuation, currency: i.currency, as_of: i.as_of })),
-    historia: (snap?.data ?? []).map((s) => ({ x: s.as_of, y: Number(s.net) })).filter((p) => Number.isFinite(p.y))
+    historia: posiciones
+      ? recortarCurva(curvaGlobal(posiciones, c.moneda, c.today).puntos).map((pt) => ({ x: pt.fecha, y: pt.valor }))
+      : []
+  });
+  return { secciones, proyectos: [] };
+}
+
+async function inversiones(parametros: Record<string, unknown>, c: Cerebro): Promise<ResultadoDeCapacidad> {
+  const posiciones = await leerPosiciones(c.supabase);
+  const secciones = seccionesDeInversiones({
+    parametros: leerParametrosInversiones(parametros),
+    moneda: c.moneda,
+    locale: c.locale,
+    hoy: c.today,
+    posiciones
   });
   return { secciones, proyectos: [] };
 }
@@ -87,4 +107,4 @@ async function hoy(): Promise<ResultadoDeCapacidad> {
   return { secciones: screen?.sections ?? [], proyectos };
 }
 
-export const CAPACIDADES_REGISTRADAS: Record<"mercado" | "hoy", Hidratador> = { mercado, hoy };
+export const CAPACIDADES_REGISTRADAS: Record<(typeof CAPACIDADES)[number], Hidratador> = { mercado, hoy, inversiones };

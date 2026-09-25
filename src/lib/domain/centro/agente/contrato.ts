@@ -27,7 +27,7 @@ export const MAX_BLOQUES = 4;
 const MAX_TEXTO = 600;
 
 export const GENERICOS = ["lista", "metricas", "tabla", "grafica", "tarjetas", "linea"] as const;
-export const CAPACIDADES = ["mercado", "hoy"] as const;
+export const CAPACIDADES = ["mercado", "hoy", "inversiones"] as const;
 export const KINDS_DEL_AGENTE = [...GENERICOS, "ir_a", "recomendaciones", "insight", ...CAPACIDADES] as const;
 
 export const FORMATOS = ["numero", "dinero", "porcentaje", "fecha", "texto"] as const;
