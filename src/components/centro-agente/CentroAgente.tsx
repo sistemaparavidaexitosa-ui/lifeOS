@@ -27,7 +27,8 @@ export default function CentroAgente({
   // cuenta —lo que llega en `screen` ya viene formateado—, pero el contrato
   // con `RitualHost` lo pasa igual que a `CentroPremium`.
   locale: _locale,
-  matutino = false
+  matutino = false,
+  onMatutinoRegistrado
 }: {
   onCerrar: () => void;
   onIrA: () => void;
@@ -39,6 +40,15 @@ export default function CentroAgente({
    * viejo (o este mismo camino) volvería a dispararse en la próxima carga.
    */
   matutino?: boolean;
+  /**
+   * Avisa a `RitualHost` para que apague `matutino` en cuanto este montaje lo
+   * usó (fix de revisión, ronda 1). Sin esto, cerrar el Centro y reabrirlo con
+   * el botón o el evento de abrir el centro monta OTRO `CentroAgente` que
+   * seguiría viendo `matutino=true` y volvería a llamar `startRitual`: el
+   * `upsert` de `ritual_runs` es idempotente, pero el `insert` en `audit_log`
+   * no — cada reapertura sumaría una fila más por algo que solo pasó una vez.
+   */
+  onMatutinoRegistrado?: () => void;
 }) {
   const [hilo, setHilo] = useState<Turno[]>([]);
   const [cargandoHoy, setCargandoHoy] = useState(true);
@@ -82,8 +92,15 @@ export default function CentroAgente({
   // queda «visto» aunque quien lo vio haya sido el Centro. Es un efecto
   // secundario opcional: si falla, la conversación sigue igual y solo se avisa
   // en consola, como ya hacía `RitualHost` con las demás acciones del ritual.
+  //
+  // `onMatutinoRegistrado` se llama YA, síncrono con el montaje —no dentro del
+  // `.then()`—: lo que apaga es «este Centro ya reclamó su turno de mañana»,
+  // no «el registro tuvo éxito». Si esperara al resultado, cerrar el Centro
+  // rápido y reabrirlo antes de que la Server Action responda montaría un
+  // segundo `CentroAgente` que también viera `matutino=true`.
   useEffect(() => {
     if (!matutino) return;
+    onMatutinoRegistrado?.();
     void startRitual(1).then((r) => {
       if (!r.ok) console.warn(`[centro-agente] startRitual: ${r.reason}`);
     });

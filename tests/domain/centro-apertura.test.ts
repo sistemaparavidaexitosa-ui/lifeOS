@@ -1,7 +1,7 @@
 // tests/domain/centro-apertura.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { debeAbrirseElCentro, esModoNavegacion, vistaInicial } from "../../src/lib/domain/centro/apertura.ts";
+import { debeAbrirseElCentro, esModoNavegacion, matutinoInicial, vistaInicial } from "../../src/lib/domain/centro/apertura.ts";
 
 // Cuándo se abre el centro solo (D-166). Son tres condiciones y las tres
 // importan: el modo, que sea el principio de una visita, y que la visita haya
@@ -64,4 +64,20 @@ test("vistaInicial: sin arranque, el centro se abre solo si tocaba (agente no im
 test("vistaInicial: sin arranque y sin apertura, nada", () => {
   assert.strictEqual(vistaInicial({ hayArranque: false, abrirCentro: false, agente: true }), null);
   assert.strictEqual(vistaInicial({ hayArranque: false, abrirCentro: false, agente: false }), null);
+});
+
+// Fix round 1 de T3: `matutino` es SOLO la primera vez que el Centro
+// reemplaza al arranque. `RitualHost` lo apaga tras ese primer montaje
+// (`onMatutinoRegistrado`); esta función solo decide el valor INICIAL.
+
+test("matutinoInicial: agente encendido y había arranque → true", () => {
+  assert.strictEqual(matutinoInicial({ hayArranque: true, agente: true }), true);
+});
+
+test("matutinoInicial: sin arranque, aunque el agente esté encendido → false", () => {
+  assert.strictEqual(matutinoInicial({ hayArranque: false, agente: true }), false);
+});
+
+test("matutinoInicial: agente apagado, aunque hubiera arranque → false", () => {
+  assert.strictEqual(matutinoInicial({ hayArranque: true, agente: false }), false);
 });
