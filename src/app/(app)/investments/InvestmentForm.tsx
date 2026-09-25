@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { upsertInvestment, deleteInvestment } from "./actions";
+import { crearPosicion, actualizarPosicion, deleteInvestment } from "./actions";
 
 interface FamilyMemberLite {
   id: string;
@@ -13,15 +13,12 @@ interface InvestmentLite {
   kind: string;
   name: string;
   institutionOrBroker: string;
-  principal: number;
   rate: number;
-  valuation: number;
-  asOf: string;
   source: string;
   familyMemberId: string | null;
 }
 
-export default function InvestmentForm({ investment, familyMembers }: { investment?: InvestmentLite; familyMembers: FamilyMemberLite[] }) {
+export default function InvestmentForm({ investment, familyMembers, today }: { investment?: InvestmentLite; familyMembers: FamilyMemberLite[]; today: string }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -39,13 +36,11 @@ export default function InvestmentForm({ investment, familyMembers }: { investme
       <form
         action={(fd) =>
           startTransition(async () => {
-            try {
-              await upsertInvestment(investment?.id ?? null, fd);
+            const r = investment ? await actualizarPosicion(investment.id, fd) : await crearPosicion(fd);
+            if (r.ok) {
               setOpen(false);
               setError(null);
-            } catch (e) {
-              setError(e instanceof Error ? e.message : "Error");
-            }
+            } else setError(r.reason);
           })
         }
         className="flex flex-col gap-2"
@@ -61,14 +56,18 @@ export default function InvestmentForm({ investment, familyMembers }: { investme
           <input name="institutionOrBroker" placeholder="Institución / Broker" defaultValue={investment?.institutionOrBroker} />
           <input name="rate" type="number" step="0.1" placeholder="Tasa % (renta fija)" defaultValue={investment?.rate} />
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <input name="principal" type="number" step="0.01" placeholder="Capital invertido" defaultValue={investment?.principal} />
-          <input name="valuation" type="number" step="0.01" placeholder="Valor actual" defaultValue={investment?.valuation} />
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <input name="asOf" type="date" defaultValue={investment?.asOf ?? new Date().toISOString().slice(0, 10)} />
-          <input name="source" placeholder="Fuente" defaultValue={investment?.source ?? "Estado de cuenta"} />
-        </div>
+        {!investment && (
+          <div className="grid grid-cols-2 gap-2">
+            <input name="monto" type="number" step="0.01" min="0.01" placeholder="Aportación inicial" required />
+            <input name="fecha" type="date" defaultValue={today} max={today} required />
+          </div>
+        )}
+        <input name="source" placeholder="Fuente" defaultValue={investment?.source ?? "Estado de cuenta"} required />
+        {investment && (
+          <p className="text-xs" style={{ color: "var(--muted)" }}>
+            El capital y el valor salen de los movimientos de la posición.
+          </p>
+        )}
         <select name="familyMemberId" defaultValue={investment?.familyMemberId ?? ""}>
           <option value="">— (titular)</option>
           {familyMembers.map((m) => (

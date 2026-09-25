@@ -21,5 +21,6 @@ import "./secciones/Portafolio";
 import "./secciones/Movimientos";
 import "./secciones/Watchlist";
 import "./secciones/Rutina";
+import "./secciones/PropuestaMovimiento";
 
 export { registroDeSecciones } from "./registro";

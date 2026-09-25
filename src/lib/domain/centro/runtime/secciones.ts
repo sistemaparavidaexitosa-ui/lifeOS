@@ -13,6 +13,8 @@
 // se pinta como `emptyState` hasta que exista su componente. Ampliar un
 // vocabulario con pantallas en uso es una migración; declararlo hoy, un tipo.
 
+import type { TipoDeMovimiento } from "../../money/curva-inversion.ts";
+
 export const SECTION_KINDS = [
   "hero",
   "text",
@@ -47,7 +49,9 @@ export const SECTION_KINDS = [
   "movimientos",
   // T3: la rutina de hoy, por delante en «Hoy» cuando el agente reemplaza al
   // arranque guiado viejo.
-  "rutina"
+  "rutina",
+  // D-202: un movimiento de inversión que el agente propone y la persona guarda.
+  "propuestaMovimiento"
 ] as const;
 
 export type SectionKind = (typeof SECTION_KINDS)[number];
@@ -206,6 +210,16 @@ export interface DatosWatchlist {
  * `construirSecuencia` filtrada a `routineStep`: la MISMA regla de hora que
  * decide el arranque guiado, para no volver a escribirla aquí.
  */
+export interface DatosPropuestaMovimiento {
+  investmentId: string;
+  posicion: string;
+  moneda: string;
+  tipo: TipoDeMovimiento;
+  monto: number;
+  fecha: string;
+  nota: string | null;
+}
+
 export interface DatosRutina {
   routineId: string;
   nombre: string;
@@ -318,6 +332,7 @@ export interface DatosPorKind {
   insight: DatosInsight;
   movimientos: DatosMovimientos;
   rutina: DatosRutina;
+  propuestaMovimiento: DatosPropuestaMovimiento;
 }
 
 export type DatosDe<K extends SectionKind> = DatosPorKind[K];

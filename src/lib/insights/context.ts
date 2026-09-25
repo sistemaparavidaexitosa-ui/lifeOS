@@ -143,6 +143,7 @@ export const TABLAS_CONSULTABLES = {
   savings_goals: { domain: "money", fecha: "created_at", select: "id, name, type, target, current_amount, monthly, priority, target_date, created_at" },
   financial_goals: { domain: "money", fecha: "created_at", select: "id, name, target, current_amount, horizon, priority, created_at" },
   investments: { domain: "money", fecha: "created_at", select: "id, name, kind, institution, principal, valuation, rate, currency, as_of, created_at" },
+  investment_movements: { domain: "money", fecha: "occurred_on", select: "id, investment_id, kind, amount, occurred_on, note, created_at" },
   assets: { domain: "money", fecha: "created_at", select: "id, name, kind, value, currency, as_of, created_at" },
   liabilities: { domain: "money", fecha: "created_at", select: "id, name, value, currency, as_of, created_at" },
   net_worth_snapshots: { domain: "money", fecha: "created_at", select: "id, as_of, assets, liabilities, net, created_at" },

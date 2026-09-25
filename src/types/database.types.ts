@@ -1882,6 +1882,47 @@ export type Database = {
         }
         Relationships: []
       }
+      investment_movements: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          investment_id: string
+          kind: string
+          note: string
+          occurred_on: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          investment_id: string
+          kind: string
+          note?: string
+          occurred_on: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          investment_id?: string
+          kind?: string
+          note?: string
+          occurred_on?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "investment_movements_investment_id_fkey"
+            columns: ["investment_id"]
+            isOneToOne: false
+            referencedRelation: "investments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       investments: {
         Row: {
           as_of: string
@@ -3676,6 +3717,21 @@ export type Database = {
         Args: { p_subject_id: string; p_subject_type: string }
         Returns: boolean
       }
+      crear_posicion: {
+        Args: {
+          p_broker: string
+          p_currency: string
+          p_family_member_id?: string
+          p_fecha: string
+          p_institution: string
+          p_kind: string
+          p_monto: number
+          p_name: string
+          p_rate: number
+          p_source: string
+        }
+        Returns: string
+      }
       enqueue_notification: {
         Args: {
           p_body: string
@@ -3977,6 +4033,7 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      recalcular_inversion: { Args: { p_id: string }; Returns: undefined }
       ritual_gate: {
         Args: { p_date: string }
         Returns: {

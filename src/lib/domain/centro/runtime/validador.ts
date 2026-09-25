@@ -21,6 +21,7 @@ import { z } from "zod";
 import { destinoValido } from "../sugerencias.ts";
 import { sanearAccion } from "./acciones.ts";
 import { LIMITES, SECTION_KINDS, type SectionKind } from "./secciones.ts";
+import { TIPOS_DE_MOVIMIENTO } from "../../money/curva-inversion.ts";
 import { INTENT_KINDS, type Action, type AnySection, type Screen } from "./types.ts";
 
 export const MAX_SECCIONES = 12;
@@ -199,6 +200,17 @@ const ESQUEMAS: Partial<Record<SectionKind, z.ZodTypeAny>> = {
   // T3: la rutina de hoy. 1..20 hábitos — el mismo tope que `maxRoutineSteps`
   // pide en `pantalla.ts`, y un tope propio de todas formas: esta pantalla no
   // puede confiar en que quien la llenó lo haya respetado.
+  propuestaMovimiento: z
+    .object({
+      investmentId: z.string().uuid(),
+      posicion: texto(120),
+      moneda: z.string().regex(/^[A-Z]{3}$/),
+      tipo: z.enum(TIPOS_DE_MOVIMIENTO),
+      monto: z.number().finite().min(0).max(1e12),
+      fecha,
+      nota: texto(200).nullable()
+    })
+    .strict(),
   rutina: z
     .object({
       routineId: texto(80),
