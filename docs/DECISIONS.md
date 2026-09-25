@@ -3991,3 +3991,23 @@ implementa:
   de ahora con sus hábitos pendientes, cada uno marcable con `toggleHabitToday`.
   Abrirlo registra «visto hoy» una sola vez por sesión (`startRitual`); reabrirlo
   con el botón no vuelve a registrar. Con el flag apagado, el arranque de siempre.
+
+- **D-200 · Los movimientos son la verdad de una inversión.** `investment_movements`
+  (aportación, retiro, rendimiento, valuación) y un trigger que mantiene
+  `investments.principal/valuation/as_of` como resumen, para que ningún lector
+  cambie. Sin `update` de movimientos. Relleno: cada posición existente arranca
+  con una aportación y una valuación a su `as_of` (mismos números), en UNA sola
+  sentencia: con dos, el trigger del primer insert reescribía el valor antes de
+  que el segundo lo leyera. Migración 0077; alta atómica con `crear_posicion`.
+
+- **D-201 · La curva se calcula en TS con la semántica del trigger.** Una
+  valuación es el valor al cierre de su día; los flujos posteriores se le suman;
+  el rendimiento sube el valor y no el capital. `CASOS_COMPARTIDOS` se prueba en
+  node y en pgTAP. La global no convierte monedas: dice cuántas no suman.
+
+- **D-202 · El Centro ve y propone; la persona guarda.** Capacidad
+  «inversiones» (global, posición, movimientos) y bloque «propuesta_movimiento»
+  anclado a una fila de `investments` leída en el turno. El monto es la única
+  cifra del modelo en un bloque: la dictó la persona y la confirma. Se guarda por
+  la misma acción que /investments. «mercado/portafolio» dibuja ahora la curva
+  global, no el patrimonio neto.
