@@ -14,7 +14,7 @@
 // grafo falla, la fila sale sin proyecto: es un adorno, no el contenido.
 
 import type { Hidratadores } from "./ensamblar.ts";
-import { LIMITES, recortar, type AccionRapida, type ItemDeTarea } from "./secciones.ts";
+import { LIMITES, recortar, type AccionRapida, type DatosRutina, type ItemDeTarea } from "./secciones.ts";
 
 export interface LectorDelGrafo {
   /** El proyecto al que pertenece una tarea, o `null` si el grafo no lo sabe. */
@@ -31,6 +31,12 @@ export interface FuentesDeHoy {
   tareas: { id: string; title: string }[];
   senales: { vencidas: number; diasParaFinDeQuincena: number; presupuestoEnRojo: boolean };
   habitosPendientes: number;
+  /**
+   * La rutina de ahora mismo (T3), de `construirSecuencia` filtrada a
+   * `routineStep`. `null` = no hay rutina que toque, o ya no le queda ningún
+   * hábito pendiente — las dos son «no hay nada que enseñar aquí».
+   */
+  rutina: { routineId: string; nombre: string; habitos: { habitId: string; nombre: string; durationMin: number }[] } | null;
 }
 
 /** Cinco, contando la una cosa. Más ya no es un foco. */
@@ -108,6 +114,19 @@ export function hidratadoresDeHoy(f: FuentesDeHoy, grafo: LectorDelGrafo): Hidra
       return items.length > 0 ? { fechaISO: f.fechaISO, items } : null;
     },
 
-    quickActions: async () => ({ items: accionesRapidas(f) })
+    quickActions: async () => ({ items: accionesRapidas(f) }),
+
+    // T3: sin rutina o sin hábitos pendientes, nada que mostrar — la sección
+    // no sale (ver el contrato de `Hidratadores`: `null` es «no hay nada que
+    // decir», distinto de `emptyState` o `error`).
+    rutina: async (): Promise<DatosRutina | null> => {
+      const r = f.rutina;
+      if (!r || r.habitos.length === 0) return null;
+      return {
+        routineId: r.routineId,
+        nombre: r.nombre,
+        habitos: r.habitos.map((h) => ({ habitId: h.habitId, nombre: h.nombre, duracionMin: h.durationMin }))
+      };
+    }
   };
 }

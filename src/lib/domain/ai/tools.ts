@@ -5,7 +5,8 @@
 // Los argumentos de una llamada a herramienta son texto generado por un
 // modelo, no un formulario validado. Aquí no se confía en ninguno.
 
-import { MAX_FILAS_CONSULTA } from "../../insights/context.ts";
+import { MAX_FILAS_CONSULTA, dominioDeTabla, type TablaConsultableNombre } from "../../insights/context.ts";
+import type { Domain } from "../insights/types.ts";
 import { addDaysISO } from "../datetime.ts";
 
 /**
@@ -176,4 +177,118 @@ export function registrarFilas(
     mapa.set(id, registro);
     return { id, ...registro };
   });
+}
+
+/**
+ * Las tablas en las que busca la herramienta `buscar` (RPC `buscar_en_todo`,
+ * migración 0076). Son los CATÁLOGOS: cosas con nombre que existen, no cosas
+ * que ocurrieron. Tiene que coincidir con el `union all` de la RPC; una tabla
+ * que esté aquí y no allí simplemente no devuelve nada, y una que esté allí y
+ * no aquí nunca se pide.
+ */
+export const TABLAS_DE_BUSQUEDA = [
+  "projects",
+  "tasks",
+  "habits",
+  "routines",
+  "books",
+  "notes",
+  "notebooks",
+  "personal_goals",
+  "key_results",
+  "debts",
+  "accounts",
+  "savings_goals",
+  "financial_goals",
+  "investments",
+  "assets",
+  "liabilities",
+  "occupations",
+  "family_members",
+  "cashback_cards",
+  "identity_traits"
+] as const satisfies readonly TablaConsultableNombre[];
+
+export type TablaDeBusqueda = (typeof TABLAS_DE_BUSQUEDA)[number];
+
+/**
+ * Las tablas que se le piden a `buscar_en_todo`: solo las de un dominio que el
+ * usuario autorizó. La RLS ya decide QUÉ filas son suyas; esto decide qué
+ * dominios quiere que salgan hacia el modelo, que es otra pregunta.
+ */
+export function tablasDeBusqueda(autorizados: readonly Domain[]): TablaDeBusqueda[] {
+  return TABLAS_DE_BUSQUEDA.filter((t) => {
+    const d = dominioDeTabla(t);
+    return d !== null && autorizados.includes(d);
+  });
+}
+
+/**
+ * Tablas de catálogo: lo que tienen es una fecha de ALTA, no de suceso. Un
+ * hábito creado hace ocho meses sigue siendo un hábito hoy, y exigir una
+ * ventana sobre `created_at` lo escondía si el modelo no adivinaba cuándo se
+ * creó. Las de eventos (registros, gastos, comidas, planes del día…) siguen
+ * pidiendo ventana: ahí la fecha ES el dato, y sin ella se traería una vida.
+ */
+const TABLAS_SIN_VENTANA: ReadonlySet<string> = new Set([
+  "habits",
+  "routines",
+  "projects",
+  "books",
+  "personal_goals",
+  "key_results",
+  "debts",
+  "accounts",
+  "savings_goals",
+  "financial_goals",
+  "investments",
+  "assets",
+  "liabilities",
+  "notebooks",
+  "identity_traits",
+  "occupations",
+  "family_members",
+  "cashback_cards",
+  "categories",
+  "folders",
+  "task_groups"
+]);
+
+/** ¿Se puede consultar esta tabla sin `desde`/`hasta`? Solo los catálogos de la lista blanca. */
+export function admiteSinVentana(tabla: string): boolean {
+  return TABLAS_SIN_VENTANA.has(tabla) && dominioDeTabla(tabla) !== null;
+}
+
+/**
+ * Tope del texto que `buscar` manda a `buscar_en_todo`. Un nombre no pasa de
+ * unas pocas palabras; lo que venga más largo es el modelo pegando una frase
+ * entera, y cada carácter cuesta trigramas contra cada fila candidata.
+ */
+export const MAX_TEXTO_BUSQUEDA = 120;
+
+/** El texto de `buscar`, saneado: sin espacios de sobra y acotado. */
+export function textoDeBusqueda(texto: unknown): string {
+  return String(texto ?? "").trim().slice(0, MAX_TEXTO_BUSQUEDA);
+}
+
+/**
+ * Las filas que `buscar` trajo tabla por tabla, en el orden de relevancia que
+ * dio la RPC ENTRE tablas —si el libro es lo más parecido, va primero aunque
+ * las deudas se trajeran antes—. Lo que la RPC nombró pero no se pudo traer
+ * (error, o la RLS cambió entre las dos llamadas) se omite.
+ */
+export function enOrdenDeBusqueda(
+  hallados: readonly { tabla: string; id: string }[],
+  traidas: ReadonlyMap<string, readonly Record<string, unknown>[]>
+): { tabla: string; registro: Record<string, unknown> }[] {
+  const porClave = new Map<string, Record<string, unknown>>();
+  for (const [tabla, registros] of traidas) {
+    for (const r of registros) porClave.set(`${tabla}:${String(r.id)}`, r);
+  }
+  const salida: { tabla: string; registro: Record<string, unknown> }[] = [];
+  for (const h of hallados) {
+    const registro = porClave.get(`${h.tabla}:${h.id}`);
+    if (registro) salida.push({ tabla: h.tabla, registro });
+  }
+  return salida;
 }

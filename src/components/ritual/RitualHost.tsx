@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { ContenidoDelRitual } from "@/lib/data/ritual";
-import type { ModoNavegacion } from "@/lib/domain/centro/apertura.ts";
+import { matutinoInicial, vistaInicial, type ModoNavegacion } from "@/lib/domain/centro/apertura.ts";
 import { contenidoParaRepetir, setNavMode } from "@/lib/ritual/actions";
 import RitualOverlay from "./RitualOverlay";
 import CentroPremium from "./CentroPremium";
@@ -61,9 +61,16 @@ export default function RitualHost({
 }) {
   const [ritual, setRitual] = useState<DatosDelRitual | null>(datos);
   const [modo, setModo] = useState<ModoNavegacion>(navMode);
-  const [vista, setVista] = useState<"ritual" | "centro" | null>(
-    datos ? "ritual" : abrirCentro ? "centro" : null
+  const [vista, setVista] = useState<"ritual" | "centro" | null>(() =>
+    vistaInicial({ hayArranque: Boolean(datos), abrirCentro, agente })
   );
+  // T3: si el Centro reemplazó al arranque de hoy —«hayArranque» era cierto—,
+  // «Hoy» tiene que EMPEZAR por la rutina. Con SETTER, y no fijo: el primer
+  // `CentroAgente` lo apaga en cuanto registra «visto hoy» (ver
+  // `onMatutinoRegistrado` abajo), así que cerrar y reabrir el Centro con el
+  // botón o con el evento de abrir el centro —que vuelven a montarlo— nunca
+  // lo ve en `true` y nunca vuelve a llamar `startRitual`.
+  const [matutino, setMatutino] = useState(() => matutinoInicial({ hayArranque: Boolean(datos), agente }));
 
   // Solo engancha: un `null` que llega después no suelta lo que ya se mostró.
   useEffect(() => {
@@ -131,6 +138,8 @@ export default function RitualHost({
           onIrA={() => setVista(null)}
           workspaceId={workspaceId}
           locale={locale}
+          matutino={matutino}
+          onMatutinoRegistrado={() => setMatutino(false)}
         />
       );
     }

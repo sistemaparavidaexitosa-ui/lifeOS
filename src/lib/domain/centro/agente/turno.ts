@@ -1,7 +1,7 @@
 // src/lib/domain/centro/agente/turno.ts
 // La última puerta del turno (D-194). Pura.
-import { MAX_SECCIONES, validarScreen } from "../runtime/validador.ts";
-import type { AnySection, Screen } from "../runtime/types.ts";
+import { validarPorSeccion } from "../runtime/validador.ts";
+import type { AnySection } from "../runtime/types.ts";
 import { tieneCifras } from "./texto.ts";
 
 export interface EntradaComponer {
@@ -10,53 +10,24 @@ export interface EntradaComponer {
   proyectos: { id: string }[];
 }
 
-/** Una pantalla de UNA sección, para pasarla sola por `validarScreen`. */
-function pantallaDe(sections: AnySection[]): Screen {
-  return {
-    id: "turno",
-    intent: "libre",
-    title: "Centro",
-    layout: { densidad: "aireada" },
-    sections,
-    actions: [],
-    refreshPolicy: { tipo: "alAbrir" },
-    permissions: { lectura: true, escritura: false }
-  };
-}
-
 /**
  * SECCIÓN POR SECCIÓN (spec: «bloque con forma inválida → ese bloque no
- * sale»). Cada sección pasa sola por el validador del runtime; la que no pasa
- * se cae con su motivo en el log y las demás siguen. Validar la pantalla
- * entera de una vez —como hace el lienzo de Fase 1, que tiene respaldo— tiraba
- * TODO el turno por un solo enlace malo (lo encontró la revisión final: «¿Qué
- * hago hoy?» se quedaba en texto cuando una tarea tenía proyecto).
+ * sale»). El chequeo propio del insight con cifras corre primero, ANTES de
+ * `validarPorSeccion` (T1): esa regla es del agente, no del runtime, y no
+ * depende de las demás secciones ni del orden en que se validen. El resto —id
+ * repetido, MAX_SECCIONES, forma y contenido— lo hace `validarPorSeccion`
+ * (compartida con `armarPantallaConProyectos`, que hasta T1 validaba la
+ * pantalla entera y tiraba TODO el turno por un solo enlace malo).
  */
 export function componerTurno(e: EntradaComponer): { texto: string; secciones: AnySection[] } {
-  const buenas: AnySection[] = [];
-  const ids = new Set<string>();
-  for (const s of e.secciones) {
+  const sinInsightsConCifras = e.secciones.filter((s) => {
     if (s.kind === "insight" && tieneCifras(s.data.texto)) {
       console.warn(`[centro-agente] sección «${s.id}» (${s.kind}) descartada: el insight lleva cifras.`);
-      continue;
+      return false;
     }
-    if (ids.has(s.id)) {
-      console.warn(`[centro-agente] sección «${s.id}» (${s.kind}) descartada: id repetido.`);
-      continue;
-    }
-    if (buenas.length >= MAX_SECCIONES) {
-      console.warn(`[centro-agente] sección «${s.id}» (${s.kind}) descartada: más de ${MAX_SECCIONES} secciones.`);
-      continue;
-    }
-    const r = validarScreen(pantallaDe([s]), { proyectos: e.proyectos });
-    if (!r.ok) {
-      console.warn(`[centro-agente] sección «${s.id}» (${s.kind}) descartada: ${r.reason}`);
-      continue;
-    }
-    ids.add(s.id);
-    buenas.push(r.screen.sections[0]!);
-  }
-  return { texto: e.texto, secciones: buenas };
+    return true;
+  });
+  return { texto: e.texto, secciones: validarPorSeccion(sinInsightsConCifras, e.proyectos, "centro-agente") };
 }
 
 /**

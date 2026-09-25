@@ -3657,6 +3657,15 @@ export type Database = {
           workspace_id: string
         }[]
       }
+      buscar_en_todo: {
+        Args: { p_limite?: number; p_tablas: string[]; p_texto: string }
+        Returns: {
+          etiqueta: string
+          id: string
+          similitud: number
+          tabla: string
+        }[]
+      }
       can_edit_comment_subject: {
         Args: { p_subject_id: string; p_subject_type: string }
         Returns: boolean
@@ -4019,6 +4028,7 @@ export type Database = {
           title: string
         }[]
       }
+      sin_acentos: { Args: { p_texto: string }; Returns: string }
       workspace_role: { Args: { p_workspace_id: string }; Returns: string }
     }
     Enums: {

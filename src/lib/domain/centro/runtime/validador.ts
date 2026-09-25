@@ -21,7 +21,7 @@ import { z } from "zod";
 import { destinoValido } from "../sugerencias.ts";
 import { sanearAccion } from "./acciones.ts";
 import { LIMITES, SECTION_KINDS, type SectionKind } from "./secciones.ts";
-import { INTENT_KINDS, type Action, type Screen } from "./types.ts";
+import { INTENT_KINDS, type Action, type AnySection, type Screen } from "./types.ts";
 
 export const MAX_SECCIONES = 12;
 
@@ -195,6 +195,27 @@ const ESQUEMAS: Partial<Record<SectionKind, z.ZodTypeAny>> = {
         .min(1)
         .max(20)
     })
+    .strict(),
+  // T3: la rutina de hoy. 1..20 hábitos — el mismo tope que `maxRoutineSteps`
+  // pide en `pantalla.ts`, y un tope propio de todas formas: esta pantalla no
+  // puede confiar en que quien la llenó lo haya respetado.
+  rutina: z
+    .object({
+      routineId: texto(80),
+      nombre: texto(120),
+      habitos: z
+        .array(
+          z
+            .object({
+              habitId: texto(80),
+              nombre: texto(120),
+              duracionMin: z.number().int().min(0).max(600).nullable()
+            })
+            .strict()
+        )
+        .min(1)
+        .max(20)
+    })
     .strict()
 };
 
@@ -281,4 +302,49 @@ export function validarScreen(v: unknown, ctx: ContextoDeValidacion): ResultadoD
   // El cast es seguro por lo de arriba: cada sección se comprobó contra el
   // esquema de SU kind, que es la pareja que `AnySection` expresa y zod no.
   return { ok: true, screen: { ...forma.data, actions } as Screen };
+}
+
+/** Una pantalla de UNA sección, para pasarla sola por `validarScreen`. */
+function pantallaDeUnaSeccion(s: AnySection): Screen {
+  return {
+    id: "validacion",
+    intent: "libre",
+    title: "Centro",
+    layout: { densidad: "aireada" },
+    sections: [s],
+    actions: [],
+    refreshPolicy: { tipo: "alAbrir" },
+    permissions: { lectura: true, escritura: false }
+  };
+}
+
+/**
+ * SECCIÓN POR SECCIÓN (spec: «bloque con forma inválida → ese bloque no
+ * sale»). Cada sección pasa sola por este validador; la que no pasa se cae
+ * con su motivo en el log y las demás siguen. Validar la pantalla entera de
+ * una vez tira TODO por un solo enlace malo — lo que le pasaba a «Hoy»
+ * (`armarPantallaConProyectos`) antes de T1, y lo que el turno del agente
+ * (`componerTurno`) ya evitaba desde D-194.
+ */
+export function validarPorSeccion(secciones: AnySection[], proyectos: { id: string }[], etiqueta: string): AnySection[] {
+  const buenas: AnySection[] = [];
+  const ids = new Set<string>();
+  for (const s of secciones) {
+    if (ids.has(s.id)) {
+      console.warn(`[${etiqueta}] sección «${s.id}» (${s.kind}) descartada: id repetido.`);
+      continue;
+    }
+    if (buenas.length >= MAX_SECCIONES) {
+      console.warn(`[${etiqueta}] sección «${s.id}» (${s.kind}) descartada: más de ${MAX_SECCIONES} secciones.`);
+      continue;
+    }
+    const r = validarScreen(pantallaDeUnaSeccion(s), { proyectos });
+    if (!r.ok) {
+      console.warn(`[${etiqueta}] sección «${s.id}» (${s.kind}) descartada: ${r.reason}`);
+      continue;
+    }
+    ids.add(s.id);
+    buenas.push(r.screen.sections[0]!);
+  }
+  return buenas;
 }

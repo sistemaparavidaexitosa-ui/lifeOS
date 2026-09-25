@@ -12,9 +12,9 @@ const entrada = (kind: (typeof INTENT_KINDS)[number], ref?: string) => ({
   flags: { ...FLAGS_APAGADOS }
 });
 
-test("«Hoy» es hero, narrativa, foco y atajos, en ese orden", async () => {
+test("«Hoy» es hero, rutina, narrativa, foco y atajos, en ese orden", async () => {
   const plan = await generadorDeterminista.generar(entrada("hoy"));
-  assert.deepStrictEqual(plan.huecos.map((h) => h.kind), ["hero", "narrative", "tasks", "quickActions"]);
+  assert.deepStrictEqual(plan.huecos.map((h) => h.kind), ["hero", "rutina", "narrative", "tasks", "quickActions"]);
   assert.deepStrictEqual(plan.refreshPolicy, { tipo: "porFranja" });
   assert.deepStrictEqual(plan.actions, []);
 });
@@ -30,7 +30,7 @@ test("Cada plan es una copia: tocarlo no cambia el siguiente", async () => {
   a.huecos[0]!.title = "tocado";
   a.huecos.pop();
   const b = await generadorDeterminista.generar(entrada("hoy"));
-  assert.strictEqual(b.huecos.length, 4);
+  assert.strictEqual(b.huecos.length, 5);
   assert.strictEqual(b.huecos[0]!.title, undefined);
 });
 

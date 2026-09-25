@@ -22,6 +22,7 @@ function fuentes(cambios: Partial<FuentesDeHoy> = {}): FuentesDeHoy {
     ],
     senales: { vencidas: 0, diasParaFinDeQuincena: 9, presupuestoEnRojo: false },
     habitosPendientes: 2,
+    rutina: null,
     ...cambios
   };
 }
@@ -111,4 +112,41 @@ test("Textos larguísimos del usuario se recortan en vez de tumbar la pantalla",
 test("«Proyectos» no dice «en el plan»: esas tareas son las de impacto, no el plan", () => {
   const a = accionesRapidas(fuentes({ tareas: [] }));
   assert.ok(!a[0]!.detalle.includes("plan"));
+});
+
+// --- T3: el hidratador de «rutina».
+
+test("Con rutina y dos hábitos pendientes: los dos, en su orden", async () => {
+  const s = await pantalla(
+    fuentes({
+      rutina: {
+        routineId: "r1",
+        nombre: "Mañana Milagrosa",
+        habitos: [
+          { habitId: "h1", nombre: "Meditar", durationMin: 10 },
+          { habitId: "h2", nombre: "Leer", durationMin: 15 }
+        ]
+      }
+    })
+  );
+  const rutina = s.sections.find((x) => x.id === "rutina");
+  assert.ok(rutina && rutina.kind === "rutina");
+  assert.deepStrictEqual(rutina.data, {
+    routineId: "r1",
+    nombre: "Mañana Milagrosa",
+    habitos: [
+      { habitId: "h1", nombre: "Meditar", duracionMin: 10 },
+      { habitId: "h2", nombre: "Leer", duracionMin: 15 }
+    ]
+  });
+});
+
+test("Sin rutina: la sección no sale", async () => {
+  const s = await pantalla(fuentes({ rutina: null }));
+  assert.strictEqual(s.sections.some((x) => x.id === "rutina"), false);
+});
+
+test("Rutina sin hábitos pendientes: tampoco sale (defensa de más)", async () => {
+  const s = await pantalla(fuentes({ rutina: { routineId: "r1", nombre: "Vacía", habitos: [] } }));
+  assert.strictEqual(s.sections.some((x) => x.id === "rutina"), false);
 });

@@ -30,6 +30,9 @@ export interface ScreenGenerator {
 const HUECOS: Record<IntentKind, HuecoDelPlan[]> = {
   hoy: [
     { id: "hero", kind: "hero" },
+    // T3: la rutina va justo después del saludo — es lo primero que hay que
+    // hacer, así que es lo primero que se pregunta.
+    { id: "rutina", kind: "rutina", title: "Tu rutina de ahora" },
     { id: "narrativa", kind: "narrative" },
     { id: "foco", kind: "tasks", title: "Tu foco de hoy" },
     { id: "sigue", kind: "quickActions", title: "Sigue por aquí" }

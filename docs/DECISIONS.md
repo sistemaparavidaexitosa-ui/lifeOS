@@ -3968,3 +3968,26 @@ implementa:
   como `coach_proposals` pendientes tras validar destino y cifras
   (`sanearRecomendacion`); escribir es siempre un clic de la persona. La revisión
   encontró —y se arregló— que un `foco` podía guardar un enlace fuera de la app.
+
+- **D-197 · «Hoy» se valida sección por sección.** A algunas cuentas el Centro
+  les enseñaba «No pude preparar tu día» sin saludo ni accesos directos: una sola
+  sección inválida con sus datos reales (un título con `<`, un texto largo)
+  tumbaba la pantalla entera. `validarPorSeccion` (compartida con los turnos del
+  agente) deja caer solo la sección mala, con su motivo en el log.
+
+- **D-198 · La IA encuentra sin que haya que ser exacto.** `graph_search`
+  exigía el texto literal (`ilike '%texto%'`) y `consultar` exigía fechas, así
+  que un libro o un hábito de hace meses, o una palabra sin acento, no aparecían.
+  Migración 0076: `unaccent` + `sin_acentos`, `graph_search` por subcadena sin
+  acentos o `word_similarity ≥ 0.4` (desde 3 letras) con índice de trigramas, y
+  la RPC `buscar_en_todo` (security invoker: decide la RLS) sobre 20 tablas de
+  catálogo. Herramienta `buscar` para el chat y el Centro —solo dominios
+  autorizados, filas citables— y `consultar` sin fechas en tablas de catálogo.
+  `graph_search` pierde además el `execute` de `anon`/PUBLIC (D-186/D-187).
+
+- **D-199 · Por la mañana, el Centro abre con tu rutina.** Con el runtime
+  encendido, cuando el arranque guiado tocaba (política, ventana, no visto hoy),
+  se abre el Centro en su lugar y «Hoy» empieza por el bloque «rutina»: la rutina
+  de ahora con sus hábitos pendientes, cada uno marcable con `toggleHabitToday`.
+  Abrirlo registra «visto hoy» una sola vez por sesión (`startRitual`); reabrirlo
+  con el botón no vuelve a registrar. Con el flag apagado, el arranque de siempre.
