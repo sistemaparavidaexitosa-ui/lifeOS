@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getUserTimeZone } from "@/lib/data/profile";
@@ -6,6 +7,9 @@ import { Card, Chip, EmptyState } from "@/components/ui";
 import { money, money0, fdate } from "@/lib/format";
 import { investmentReturnPct } from "@/lib/domain/money.ts";
 import InvestmentForm from "./InvestmentForm";
+import InvestmentCurve from "@/components/charts/InvestmentCurve";
+import { curvaGlobal, rendimientoPct } from "@/lib/domain/money/curva-inversion.ts";
+import { leerPosiciones } from "@/lib/money/inversiones";
 import { getSessionUser } from "@/lib/data/session";
 
 export default async function InvestmentsPage() {
@@ -20,6 +24,12 @@ export default async function InvestmentsPage() {
   ]);
   if (!profile) throw new Error("Perfil no encontrado.");
 
+  const hoy = todayInTimeZone(await getUserTimeZone());
+  const posiciones = await leerPosiciones(supabase);
+  const global = curvaGlobal(posiciones, profile.currency, hoy);
+  const ultimo = global.puntos[global.puntos.length - 1];
+  const rendGlobal = ultimo ? rendimientoPct(ultimo) : null;
+
   const total = (investments ?? []).reduce((s, i) => s + i.valuation, 0);
   const principal = (investments ?? []).reduce((s, i) => s + i.principal, 0);
   const overallReturn = investmentReturnPct(principal, total);
@@ -30,9 +40,29 @@ export default async function InvestmentsPage() {
 
   return (
     <div className="flex flex-col gap-3.5">
+      {global.puntos.length >= 2 && ultimo && (
+        <Card>
+          <div className="flex items-baseline justify-between gap-3 mb-2">
+            <h3 className="font-bold">Evolución de tus inversiones</h3>
+            <span className="text-sm" style={{ color: "var(--muted)" }}>
+              {money(ultimo.valor, profile.currency, profile.locale)}
+              {rendGlobal !== null && (
+                <b style={{ color: rendGlobal >= 0 ? "var(--ok)" : "var(--danger)", marginLeft: 8 }}>
+                  {rendGlobal >= 0 ? "+" : ""}{rendGlobal}%
+                </b>
+              )}
+            </span>
+          </div>
+          <InvestmentCurve data={global.puntos} currency={profile.currency} locale={profile.locale} />
+          <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+            Valor (línea) contra capital aportado (punteada). Rendimiento simple.
+            {global.fuera > 0 && ` ${global.fuera} ${global.fuera === 1 ? "posición en otra moneda no suma" : "posiciones en otra moneda no suman"}.`}
+          </p>
+        </Card>
+      )}
       <div className="grid md:grid-cols-2 gap-3.5">
         <Card hero>
-          <div className="text-xs" style={{ opacity: 0.85 }}>Capital invertido · corte {fdate(todayInTimeZone(await getUserTimeZone()))}</div>
+          <div className="text-xs" style={{ opacity: 0.85 }}>Capital invertido · corte {fdate(hoy)}</div>
           <div className="text-3xl font-black">{money(total, profile.currency, profile.locale)}</div>
           <div className="flex justify-between mt-1.5 text-sm">
             <span>Rendimiento acumulado</span>
@@ -61,7 +91,7 @@ export default async function InvestmentsPage() {
 
       <div className="flex items-center justify-between">
         <h3 className="font-bold">Posiciones</h3>
-        <InvestmentForm familyMembers={familyMembers ?? []} />
+        <InvestmentForm familyMembers={familyMembers ?? []} today={hoy} />
       </div>
 
       <Card className="overflow-auto">
@@ -87,7 +117,7 @@ export default async function InvestmentsPage() {
                 const ret = investmentReturnPct(i.principal, i.valuation);
                 return (
                   <tr key={i.id} style={{ borderTop: "1px solid var(--line)" }}>
-                    <td className="py-2"><b>{i.name}</b></td>
+                    <td className="py-2"><Link href={`/investments/${i.id}`}><b>{i.name}</b></Link></td>
                     <td><Chip kind={i.kind === "fija" ? "info" : "accent"}>{i.kind === "fija" ? "Renta fija" : "Renta variable"}</Chip></td>
                     <td style={{ color: "var(--muted)" }}>{i.institution || i.broker || "—"}</td>
                     <td>{money0(i.principal, profile.currency, profile.locale)}</td>
@@ -97,8 +127,9 @@ export default async function InvestmentsPage() {
                     <td className="text-xs" style={{ color: "var(--muted)" }}>{i.source} · {fdate(i.as_of)}</td>
                     <td>
                       <InvestmentForm
-                        investment={{ id: i.id, kind: i.kind, name: i.name, institutionOrBroker: i.institution || i.broker, principal: i.principal, rate: i.rate, valuation: i.valuation, asOf: i.as_of, source: i.source, familyMemberId: i.family_member_id }}
+                        investment={{ id: i.id, kind: i.kind, name: i.name, institutionOrBroker: i.institution || i.broker, rate: i.rate, source: i.source, familyMemberId: i.family_member_id }}
                         familyMembers={familyMembers ?? []}
+                        today={hoy}
                       />
                     </td>
                   </tr>
