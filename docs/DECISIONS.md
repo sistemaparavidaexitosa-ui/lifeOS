@@ -4044,3 +4044,29 @@ implementa:
   las dos sabe aceptarlos); quedan `pending` en la base y se pintan solo en su
   propia tarjeta de diff (`propuestaCambio`).
   Rondas de herramientas del Centro: 6; salida: 4000 tokens.
+
+- **D-204 · El Centro conversa: confirma si duda, enseña lo que sabe y aprende
+  solo, a la vista.** Respuestas de hasta 2000 caracteres y 6 bloques (6000
+  tokens de salida). Bloque «confirmar_entendimiento» cuando la petición es
+  ambigua, toca varias cosas, borra o interpreta: en ese turno no salen
+  propuestas (regla pura en `parsearRespuesta`). «No es esto» en las tarjetas
+  de cambio. Aprende en la conversación: cada turno lee un resumen de los
+  últimos 30 días (propuestas guardadas y descartadas, campos corregidos,
+  confirmaciones y malentendidos, de `coach_proposals` y `audit_log`) y puede
+  escribir UNA preferencia con «recordar». **Rompe D-089 por decisión de la
+  persona:** esa memoria entra sin clic, con `origin = 'centro'` (0079), caduca
+  a los 90 días, no pasa de 20 (se va la más vieja del Centro), no duplica, se
+  marca «Lo notó el Centro» en /intelligence/memory y entra al contexto como
+  «Lo que el Centro ha notado (puede equivocarse)», nunca junto a lo que la
+  persona dijo. Solo el Centro la escribe. Chips de capacidades al abrir, sin
+  modelo: catálogo filtrado por dominios y franja, ordenado por uso
+  (`ai.centro_chip`).
+  De revisión: el tope de 20 es SOLO de las memorias `origin = 'centro'` — las
+  de la persona no cuentan para él ni se tocan nunca, así lo deducido por el
+  Centro jamás desplaza lo que la persona escribió. El resumen de resultados y
+  el ranking de chips leen `audit_log`/`coach_proposals` ordenados por más
+  reciente primero y RECIÉN DESPUÉS aplican el tope de filas, para no perder
+  lo último por quedarse con filas viejas. Mientras un turno está en vuelo el
+  Centro ignora un mensaje nuevo (`enVuelo`/`ocupado` en `ContextoDelAgente`):
+  la tarjeta de confirmación, «No es esto» y los chips quedan inertes hasta
+  que responde.
