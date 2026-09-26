@@ -74,3 +74,64 @@ test("Título larguísimo: recortado a 90; sin título, la primera línea del cu
 test("Sin items, no hay sección", () => {
   assert.strictEqual(seccionDeCambios("b0", [], filas), null);
 });
+
+test("Borrar: una ref (proyecto) enseña el nombre leído, no el uuid crudo (M1)", () => {
+  const borrarConRef: CambioGuardado = { operacion: "borrar", tabla: "tasks", id: T, campos: {}, antes: { id: T, title: "Leer", project_id: P } };
+  const s = seccionDeCambios("b0", [{ propuestaId: PID, cambio: borrarConRef }], filas);
+  const item = s?.kind === "propuestaCambio" ? s.data.items[0]! : null;
+  assert.deepStrictEqual(item?.campos.find((c) => c.campo === "project_id"), {
+    campo: "project_id", etiqueta: "Proyecto", tipo: "ref", antes: "Tesis", despues: null, editable: false, opciones: null
+  });
+});
+
+test("Borrar: una ref cuya fila no se leyó en el turno cae a null, no al uuid (M1)", () => {
+  const borrarSinLeer: CambioGuardado = {
+    operacion: "borrar",
+    tabla: "tasks",
+    id: T,
+    campos: {},
+    antes: { id: T, title: "Leer", project_id: "77777777-7777-4777-8777-777777777777" }
+  };
+  const s = seccionDeCambios("b0", [{ propuestaId: PID, cambio: borrarSinLeer }], filas);
+  const item = s?.kind === "propuestaCambio" ? s.data.items[0]! : null;
+  assert.strictEqual(item?.campos.find((c) => c.campo === "project_id")?.antes, null);
+});
+
+test("Editar: un cuerpo con salto de línea no es editable — lo que se ve ya no es lo que se guardó (I1)", () => {
+  const editarBody: CambioGuardado = {
+    operacion: "editar",
+    tabla: "notes",
+    id: T,
+    campos: { body: "Primera línea\nSegunda línea" },
+    antes: { id: T, title: "Nota", body: "Antes" }
+  };
+  const s = seccionDeCambios("b0", [{ propuestaId: PID, cambio: editarBody }], filas);
+  const item = s?.kind === "propuestaCambio" ? s.data.items[0]! : null;
+  assert.strictEqual(item?.campos.find((c) => c.campo === "body")?.editable, false);
+});
+
+test("Editar: un cuerpo de más de 400 caracteres se recorta y por eso no es editable (I1)", () => {
+  const editarBody: CambioGuardado = {
+    operacion: "editar",
+    tabla: "notes",
+    id: T,
+    campos: { body: "x".repeat(500) },
+    antes: { id: T, title: "Nota", body: "Antes" }
+  };
+  const s = seccionDeCambios("b0", [{ propuestaId: PID, cambio: editarBody }], filas);
+  const item = s?.kind === "propuestaCambio" ? s.data.items[0]! : null;
+  assert.strictEqual(item?.campos.find((c) => c.campo === "body")?.editable, false);
+});
+
+test("Editar: un título corto y sin marcado sigue siendo editable (I1)", () => {
+  const editarTitulo: CambioGuardado = {
+    operacion: "editar",
+    tabla: "notes",
+    id: T,
+    campos: { title: "Título corto" },
+    antes: { id: T, title: "Otro", body: "Cuerpo" }
+  };
+  const s = seccionDeCambios("b0", [{ propuestaId: PID, cambio: editarTitulo }], filas);
+  const item = s?.kind === "propuestaCambio" ? s.data.items[0]! : null;
+  assert.strictEqual(item?.campos.find((c) => c.campo === "title")?.editable, true);
+});

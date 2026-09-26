@@ -58,7 +58,15 @@ function camposDeTarjeta(c: CambioGuardado, filas: ReadonlyMap<string, Record<st
   if (c.operacion === "borrar") {
     return Object.entries(e.campos)
       .filter(([n]) => c.antes && c.antes[n] !== undefined && c.antes[n] !== null)
-      .map(([n, def]) => ({ ...base(n, def), antes: comoTexto(c.antes![n]), despues: null, editable: false }));
+      .map(([n, def]) => ({
+        // M1: una ref borrada enseñaba el uuid crudo; el mismo `nombreDeRef`
+        // que usa crear, con el mismo `null` de respaldo si esa fila no se
+        // leyó en el turno.
+        ...base(n, def),
+        antes: def.tipo === "ref" ? nombreDeRef(def, c.antes![n], filas) : comoTexto(c.antes![n]),
+        despues: null,
+        editable: false
+      }));
   }
 
   const permitidos = new Map(camposDe(e, c.operacion));
@@ -68,7 +76,12 @@ function camposDeTarjeta(c: CambioGuardado, filas: ReadonlyMap<string, Record<st
       const def = permitidos.get(n)!;
       const despues = def.tipo === "ref" ? nombreDeRef(def, v, filas) : comoTexto(v);
       const antes = c.operacion === "editar" ? comoTexto(c.antes?.[n]) : null;
-      return { ...base(n, def), antes, despues, editable: def.tipo !== "ref" };
+      // I1: si `paraLeer` cambió el texto (salto de línea, `<`/`>`, espacios
+      // repetidos o recorte a 400), lo que se enseña YA NO ES lo que se
+      // guardó — dejarlo editable manda de vuelta el texto mutilado en la
+      // primera pulsación de tecla.
+      const mutilado = def.tipo === "texto" && typeof v === "string" && paraLeer(v, MAX_VALOR) !== v;
+      return { ...base(n, def), antes, despues, editable: def.tipo !== "ref" && !mutilado };
     });
 }
 
