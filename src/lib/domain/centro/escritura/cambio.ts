@@ -84,9 +84,15 @@ function valorDe(
     }
     case "numero":
     case "entero": {
-      const n = typeof crudo === "number" ? crudo : typeof crudo === "string" && crudo.trim() !== "" ? Number(crudo) : Number.NaN;
+      let n = typeof crudo === "number" ? crudo : typeof crudo === "string" && crudo.trim() !== "" ? Number(crudo) : Number.NaN;
       if (!Number.isFinite(n)) return mal("no es un número");
       if (c.tipo === "entero" && !Number.isInteger(n)) return mal("no es un entero");
+      // `numero` se guarda en columnas `numeric(_,2)` (grams/kcal100/…, D-203
+      // fix round 2): redondear ANTES del rango es lo que hace que lo que
+      // valida el registro sea lo mismo que Postgres va a almacenar — si no,
+      // `efectoAplicado` compara un valor sin redondear contra la fila ya
+      // redondeada y un guardado que sí funcionó se reporta como fallido.
+      if (c.tipo === "numero") n = Math.round(n * 100) / 100;
       if (c.min !== undefined && n < c.min) return mal(`es menor que ${c.min}`);
       if (c.max !== undefined && n > c.max) return mal(`es mayor que ${c.max}`);
       return { ok: true, valor: n };

@@ -63,6 +63,15 @@ test("Crear: números como texto pasan como número (Review Focus 1)", () => {
   assert.deepStrictEqual(r.ok && r.cambio.campos, { meal: "Desayuno", name: "Avena", grams: 80, kcal100: 389, protein100: 17 });
 });
 
+test("Crear: `numero` se redondea a 2 decimales — food_entries.grams es numeric(7,2) (D-203 fix round 2)", () => {
+  const r = validarCambio(
+    { operacion: "crear", tabla: "food_entries", campos: { meal: "Desayuno", name: "Avena", grams: "83.456", kcal100: "389" } },
+    ctx
+  );
+  assert.ok(r.ok);
+  assert.strictEqual(r.ok && r.cambio.campos.grams, 83.46);
+});
+
 test("Crear: opción fuera de la lista, fecha que no existe, número fuera de rango: fuera", () => {
   for (const campos of [
     { meal: "Merienda", name: "Pan", grams: 50, kcal100: 250 },
@@ -144,6 +153,18 @@ test("aplicarCorrecciones: la persona corrige los gramos antes de guardar", () =
   const r = aplicarCorrecciones(guardado(), { grams: "20" });
   assert.ok(r.ok);
   assert.strictEqual(r.ok && r.cambio.campos.grams, 20);
+});
+
+test("aplicarCorrecciones: la corrección también se redondea a lo que numeric(7,2) guardaría (D-203 fix round 2)", () => {
+  const r = aplicarCorrecciones(guardado(), { grams: "20.005" });
+  assert.ok(r.ok);
+  // 20.005 * 100 = 2000.5 exacto en IEEE754 (no hay error de precisión en este
+  // caso concreto) y Math.round redondea .5 hacia arriba, igual que el
+  // redondeo de `numeric` en Postgres: 20.01. Si algún otro valor cayera en un
+  // caso donde 1e2 no represente el decimal exacto, `Math.round(n*100)/100`
+  // podría diferir en el último dígito de lo que guarde Postgres — no se usa
+  // una librería decimal para esto (fuera de alcance de este fix).
+  assert.strictEqual(r.ok && r.cambio.campos.grams, 20.01);
 });
 
 test("aplicarCorrecciones: vaciar un obligatorio, tocar una ref o un campo ajeno: motivo legible (Review Focus 3)", () => {
