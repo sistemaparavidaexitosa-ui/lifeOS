@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import RuntimeScreen from "@/components/centro-runtime/RuntimeScreen";
 import { ContextoDelAgente } from "@/components/centro-runtime/contexto";
+import { registrarChip } from "@/lib/centro/agente/eventos";
 import { abrirFoco, atraparFoco } from "@/lib/dom/ritual-focus.ts";
 import { agregar, historialParaModelo, type Turno } from "@/lib/domain/centro/agente/hilo.ts";
 import type { Screen } from "@/lib/domain/centro/runtime/types.ts";
@@ -53,6 +54,7 @@ export default function CentroAgente({
   const [hilo, setHilo] = useState<Turno[]>([]);
   const [cargandoHoy, setCargandoHoy] = useState(true);
   const [pensando, setPensando] = useState(false);
+  const [chips, setChips] = useState<{ id: string; texto: string }[]>([]);
   // La hoja del «+» vive aquí y no en el compositor: Escape la cierra a ELLA
   // primero, en vez de cerrar el Centro y perder la conversación.
   const [hojaAbierta, setHojaAbierta] = useState(false);
@@ -76,6 +78,20 @@ export default function CentroAgente({
         // «Hoy» va SIEMPRE primero, pero sin borrar lo que ya hubiera: la
         // persona puede haber preguntado antes de que llegara.
         setHilo((h) => [hoy, ...h]);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  // D-204: lo que el Centro sabe hacer, para pintarlo como frases pulsables.
+  useEffect(() => {
+    let vivo = true;
+    void fetch("/api/centro/chips")
+      .then((r) => (r.ok ? (r.json() as Promise<{ chips?: { id: string; texto: string }[] }>) : null))
+      .catch(() => null)
+      .then((r) => {
+        if (vivo) setChips(r?.chips ?? []);
       });
     return () => {
       vivo = false;
@@ -174,8 +190,12 @@ export default function CentroAgente({
     }
   }
 
+  function enfocar() {
+    shellRef.current?.querySelector<HTMLTextAreaElement>(".ag-campo")?.focus();
+  }
+
   return (
-    <ContextoDelAgente.Provider value={{ workspaceId }}>
+    <ContextoDelAgente.Provider value={{ workspaceId, enviar, enfocar }}>
       <div ref={shellRef} className="ag-shell" role="dialog" aria-modal="true" aria-label="Centro">
         <header className="ag-cabecera">
           <span className="ag-logo">
@@ -223,6 +243,22 @@ export default function CentroAgente({
                 )}
               </section>
             )
+          )}
+          {chips.length > 0 && !hilo.some((t) => t.rol === "persona") && !pensando && (
+            <div className="ag-chips" aria-label="Cosas que puedo hacer">
+              {chips.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="ag-chip"
+                  onClick={() => {
+                    void registrarChip(c.id);
+                    void enviar(c.texto);
+                  }}>
+                  {c.texto}
+                </button>
+              ))}
+            </div>
           )}
           {pensando && (
             <p className="ag-respuesta ag-pensando">

@@ -23,5 +23,6 @@ import "./secciones/Watchlist";
 import "./secciones/Rutina";
 import "./secciones/PropuestaMovimiento";
 import "./secciones/PropuestaCambio";
+import "./secciones/ConfirmarEntendimiento";
 
 export { registroDeSecciones } from "./registro";
