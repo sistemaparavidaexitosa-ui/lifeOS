@@ -27,6 +27,8 @@ export interface Cerebro {
   today: string;
   context: InsightContext;
   herramientas: CajaDeHerramientas | null;
+  /** Los dominios ya intersecados con el opt-in: los que puede leer Y escribir. */
+  dominios: Domain[];
   moneda: string;
   locale: string;
 }
@@ -124,6 +126,7 @@ export async function prepararCerebro(sesion?: { supabase: Db; user: { id: strin
     today,
     context,
     herramientas,
+    dominios: permitidos,
     moneda: profile?.currency ?? MONEDA_DEFECTO,
     locale: profile?.locale ?? LOCALE_DEFECTO
   };

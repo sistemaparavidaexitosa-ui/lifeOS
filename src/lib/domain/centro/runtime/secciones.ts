@@ -14,6 +14,7 @@
 // vocabulario con pantallas en uso es una migración; declararlo hoy, un tipo.
 
 import type { TipoDeMovimiento } from "../../money/curva-inversion.ts";
+import type { Operacion, TipoCampo } from "../escritura/registro.ts";
 
 export const SECTION_KINDS = [
   "hero",
@@ -51,7 +52,9 @@ export const SECTION_KINDS = [
   // arranque guiado viejo.
   "rutina",
   // D-202: un movimiento de inversión que el agente propone y la persona guarda.
-  "propuestaMovimiento"
+  "propuestaMovimiento",
+  // D-203: cambios en cualquier tabla del registro, que la persona guarda.
+  "propuestaCambio"
 ] as const;
 
 export type SectionKind = (typeof SECTION_KINDS)[number];
@@ -220,6 +223,28 @@ export interface DatosPropuestaMovimiento {
   nota: string | null;
 }
 
+export interface CampoDeTarjeta {
+  campo: string;
+  etiqueta: string;
+  tipo: TipoCampo;
+  antes: string | null;
+  despues: string | null;
+  editable: boolean;
+  opciones: string[] | null;
+}
+
+export interface ItemDeCambio {
+  propuestaId: string;
+  operacion: Operacion;
+  etiquetaTabla: string;
+  titulo: string;
+  campos: CampoDeTarjeta[];
+}
+
+export interface DatosPropuestaCambio {
+  items: ItemDeCambio[];
+}
+
 export interface DatosRutina {
   routineId: string;
   nombre: string;
@@ -333,6 +358,7 @@ export interface DatosPorKind {
   movimientos: DatosMovimientos;
   rutina: DatosRutina;
   propuestaMovimiento: DatosPropuestaMovimiento;
+  propuestaCambio: DatosPropuestaCambio;
 }
 
 export type DatosDe<K extends SectionKind> = DatosPorKind[K];

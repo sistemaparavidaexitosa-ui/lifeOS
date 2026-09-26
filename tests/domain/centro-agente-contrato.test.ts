@@ -117,3 +117,14 @@ test("Etiquetas con cifras (métricas, columnas, ir_a) tiran el bloque", () => {
   assert.strictEqual(r.ok && r.value.bloques.length, 0);
   assert.strictEqual(r.ok && r.value.descartados.length, 3);
 });
+
+test("propuesta_cambio: 1–5 cambios; la forma fina se valida después, contra las filas", () => {
+  const b = (datos: unknown) => ({ kind: "propuesta_cambio", datos: JSON.stringify(datos) });
+  const uno = parsearRespuesta({ texto: "¿Lo guardo?", bloques: [b({ cambios: [{ operacion: "crear", tabla: "tasks", campos: { title: "X" } }] })] });
+  assert.ok(uno.ok);
+  assert.deepStrictEqual(uno.ok && uno.value.bloques[0], { kind: "propuesta_cambio", cambios: [{ operacion: "crear", tabla: "tasks", campos: { title: "X" } }] });
+  const seis = parsearRespuesta({ texto: "x", bloques: [b({ cambios: Array.from({ length: 6 }, () => ({ operacion: "borrar", fila: "fila:tasks:1" })) })] });
+  assert.strictEqual(seis.ok && seis.value.bloques.length, 0);
+  const mala = parsearRespuesta({ texto: "x", bloques: [b({ cambios: [{ operacion: "truncar" }] })] });
+  assert.strictEqual(mala.ok && mala.value.bloques.length, 0);
+});

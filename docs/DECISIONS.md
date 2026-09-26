@@ -4017,3 +4017,30 @@ implementa:
   cifra del modelo en un bloque: la dictó la persona y la confirma. Se guarda por
   la misma acción que /investments. «mercado/portafolio» dibuja ahora la curva
   global, no el patrimonio neto.
+
+- **D-203 · El Centro escribe en toda la app, siempre con Guardar.** Un
+  registro puro (`domain/centro/escritura/registro.ts`) dice qué tablas,
+  campos y operaciones son escribibles; es la lista blanca de escritura, como
+  `TABLAS_CONSULTABLES` lo es de lectura. El modelo propone con el bloque
+  «propuesta_cambio» (1–5 cambios, 10 por turno) tras pedir `esquema_de_tabla`;
+  editar y borrar solo sobre filas leídas en el turno; `ai_domains` manda al
+  proponer y al confirmar. Cada cambio válido se guarda en `coach_proposals`
+  (`tipo = 'cambio'`, 0078) y la tarjeta solo lleva ids. `confirmarCambio`
+  re-valida lo guardado, aplica las correcciones de la persona y escribe por la
+  server action de la sección (adaptadores; su tipo rompe `tsc` si falta uno).
+  Antes de escribir un editar/borrar compara la fila fresca con el `antes`
+  leído al proponer, columna por columna; si cambió o desapareció, descarta la
+  propuesta («Esta fila ya no existe o cambió…»). Tras escribir, relee y
+  comprueba que el efecto ocurrió de verdad — una fila de solo lectura bajo RLS
+  puede aceptar un update/delete de cero filas sin error —; si no, la propuesta
+  vuelve a `pending` con «No tienes permiso para cambiar esto, o no se aplicó».
+  `tasks.editar` aplica primero el cambio de estado, el que más probablemente
+  falla. Los campos numéricos se redondean a 2 decimales al validar (columnas
+  `numeric(_,2)`). La fila de auditoría lleva el id de la fila creada cuando la
+  server action de la sección lo expone (tasks, notes; food_entries no).
+  `profiles` y el resto de TABLAS_PROHIBIDAS no entran nunca (test). Entrega 1:
+  `tasks`, `notes`, `food_entries`. Desvío del spec: los cambios pendientes NO
+  salen en la barra del chat ni entre las sugerencias del Centro (ninguna de
+  las dos sabe aceptarlos); quedan `pending` en la base y se pintan solo en su
+  propia tarjeta de diff (`propuestaCambio`).
+  Rondas de herramientas del Centro: 6; salida: 4000 tokens.

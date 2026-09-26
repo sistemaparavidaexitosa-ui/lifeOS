@@ -16,6 +16,9 @@ import { resolverPropuesta } from "@/lib/domain/centro/agente/propuesta-movimien
 import { textoDelContexto } from "@/lib/insights/context";
 import { conLimite } from "@/lib/domain/centro/runtime/ensamblar.ts";
 import type { AnySection } from "@/lib/domain/centro/runtime/types.ts";
+import { conEscritura } from "@/lib/domain/centro/escritura/esquema.ts";
+import { MAX_CAMBIOS_POR_TURNO } from "@/lib/domain/centro/agente/contrato.ts";
+import { proponerCambios } from "@/lib/centro/escritura/proponer";
 import { CAPACIDADES_REGISTRADAS } from "./capacidades";
 
 /** Lo que aporta un bloque: sus secciones y los proyectos que sus lecturas vieron. */
@@ -24,7 +27,8 @@ interface Aporte {
   proyectos: { id: string }[];
 }
 
-const CENTRO_AGENTE_BUDGET: Budget = { maxOutputTokens: 3000, thinkingBudget: 256 };
+const CENTRO_AGENTE_BUDGET: Budget = { maxOutputTokens: 4000, thinkingBudget: 256 };
+const CENTRO_RONDAS = 6;
 const TIEMPO_CAPACIDAD_MS = 8000;
 export const DISCULPA = "No pude pensar esto ahora; inténtalo de nuevo.";
 
@@ -41,15 +45,17 @@ export async function pensarTurno(input: { texto: string; historial: { rol: "per
     const cerebro = await prepararCerebro();
     if (!cerebro) return { id, texto: DISCULPA, secciones: [] as AnySection[] };
 
+    const caja = cerebro.herramientas ? conEscritura(cerebro.herramientas, cerebro.dominios) : null;
+    const cupo = { restantes: MAX_CAMBIOS_POR_TURNO };
+
     const r = await generateJson({
       system: SYSTEM_AGENTE,
       prompt: promptDelTurno({ contexto: textoDelContexto(cerebro.context), historial: input.historial, texto: input.texto }),
       schema: ESQUEMA_RESPUESTA,
       validate: (raw) => parsearRespuesta(raw),
       budget: CENTRO_AGENTE_BUDGET,
-      ...(cerebro.herramientas
-        ? { tools: cerebro.herramientas.declaraciones, executeTool: cerebro.herramientas.ejecutar }
-        : {})
+      maxToolRounds: CENTRO_RONDAS,
+      ...(caja ? { tools: caja.declaraciones, executeTool: caja.ejecutar } : {})
     });
     auditarBusquedas(cerebro, r.toolRounds ?? 0);
     if (!r.ok || !r.data) {
@@ -64,7 +70,7 @@ export async function pensarTurno(input: { texto: string; historial: { rol: "per
 
     const porBloque = await Promise.all(
       r.data.bloques.map((b, i) =>
-        resolverUno(b, `b${i}`, ctx, proyectos, cerebro).catch((e: unknown) => {
+        resolverUno(b, `b${i}`, ctx, proyectos, cerebro, cupo).catch((e: unknown) => {
           console.warn("[centro-agente] bloque falló:", e);
           const caida: Aporte = { secciones: [{ id: `b${i}`, kind: "error", data: { mensaje: "No se pudo cargar esta parte." } }], proyectos: [] };
           return caida;
@@ -100,7 +106,8 @@ async function resolverUno(
   id: string,
   ctx: Parameters<typeof resolverBloque>[2],
   proyectos: { id: string }[],
-  cerebro: Cerebro
+  cerebro: Cerebro,
+  cupo: { restantes: number }
 ): Promise<Aporte> {
   if (b.kind === "capacidad") {
     const r = await conLimite(CAPACIDADES_REGISTRADAS[b.nombre](b.parametros, cerebro), TIEMPO_CAPACIDAD_MS);
@@ -109,7 +116,7 @@ async function resolverUno(
     // chocarían. Anteponer el id del bloque los vuelve a hacer únicos.
     return { secciones: prefijarSecciones(r.secciones, id), proyectos: r.proyectos };
   }
-  return { secciones: await resolverSinCapacidad(b, id, ctx, proyectos, cerebro), proyectos: [] };
+  return { secciones: await resolverSinCapacidad(b, id, ctx, proyectos, cerebro, cupo), proyectos: [] };
 }
 
 async function resolverSinCapacidad(
@@ -117,7 +124,8 @@ async function resolverSinCapacidad(
   id: string,
   ctx: Parameters<typeof resolverBloque>[2],
   proyectos: { id: string }[],
-  cerebro: Cerebro
+  cerebro: Cerebro,
+  cupo: { restantes: number }
 ): Promise<AnySection[]> {
   switch (b.kind) {
     case "ir_a": {
@@ -157,6 +165,8 @@ async function resolverSinCapacidad(
       }
       return [r.seccion];
     }
+    case "propuesta_cambio":
+      return proponerCambios(b, id, cerebro, ctx.filas, cupo);
     default: {
       const s = resolverBloque(b, id, ctx);
       return s ? [s] : [];

@@ -37,10 +37,13 @@ export interface CoachProposalRow {
 /** Lo que se pinta debajo del turno del coach. Solo lo pendiente. */
 export async function loadPendingProposals(): Promise<CoachProposalRow[]> {
   const { supabase } = await requireUser();
+  // `cambio` (D-203) se pinta en el Centro con su tarjeta de diff; la barra
+  // del chat no sabe aceptarlo y sería un botón que falla.
   const { data } = await supabase
     .from("coach_proposals")
     .select("id, message_id, tipo, titulo, detalle, payload")
     .eq("status", "pending")
+    .neq("tipo", "cambio")
     .order("created_at", { ascending: true })
     .limit(20);
 

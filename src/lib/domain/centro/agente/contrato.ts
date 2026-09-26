@@ -25,11 +25,13 @@ import { tieneCifras } from "./texto.ts";
 import { TIPOS_DE_MOVIMIENTO } from "../../money/curva-inversion.ts";
 
 export const MAX_BLOQUES = 4;
+export const MAX_CAMBIOS_POR_BLOQUE = 5;
+export const MAX_CAMBIOS_POR_TURNO = 10;
 const MAX_TEXTO = 600;
 
 export const GENERICOS = ["lista", "metricas", "tabla", "grafica", "tarjetas", "linea"] as const;
 export const CAPACIDADES = ["mercado", "hoy", "inversiones"] as const;
-export const KINDS_DEL_AGENTE = [...GENERICOS, "ir_a", "recomendaciones", "insight", "propuesta_movimiento", ...CAPACIDADES] as const;
+export const KINDS_DEL_AGENTE = [...GENERICOS, "ir_a", "recomendaciones", "insight", "propuesta_movimiento", "propuesta_cambio", ...CAPACIDADES] as const;
 
 export const FORMATOS = ["numero", "dinero", "porcentaje", "fecha", "texto"] as const;
 export type Formato = (typeof FORMATOS)[number];
@@ -129,6 +131,29 @@ const ESQUEMA_PROPUESTA_MOVIMIENTO = z
   .strict()
   .refine((p) => p.tipo === "valuacion" || p.monto > 0, { message: "un flujo necesita monto mayor que 0", path: ["monto"] });
 
+/**
+ * Cambios en cualquier tabla del registro de escritura (D-203). Aquí solo la
+ * FORMA gruesa: qué tabla, qué campos y si la fila se leyó se comprueba en
+ * `validarCambio`, que necesita las filas del turno.
+ */
+const ESQUEMA_PROPUESTA_CAMBIO = z
+  .object({
+    cambios: z
+      .array(
+        z
+          .object({
+            operacion: z.enum(["crear", "editar", "borrar"]),
+            tabla: z.string().max(64).nullable().optional(),
+            fila: z.string().max(120).nullable().optional(),
+            campos: z.record(z.unknown()).nullable().optional()
+          })
+          .strict()
+      )
+      .min(1)
+      .max(MAX_CAMBIOS_POR_BLOQUE)
+  })
+  .strict();
+
 type Genericos = typeof ESQUEMAS_GENERICOS;
 export type BloqueGenerico = { [K in keyof Genericos]: { kind: K } & z.infer<Genericos[K]> }[keyof Genericos];
 
@@ -138,6 +163,7 @@ export type BloqueDelAgente =
   | ({ kind: "recomendaciones" } & z.infer<typeof ESQUEMA_RECOMENDACIONES>)
   | ({ kind: "insight" } & z.infer<typeof ESQUEMA_INSIGHT>)
   | ({ kind: "propuesta_movimiento" } & z.infer<typeof ESQUEMA_PROPUESTA_MOVIMIENTO>)
+  | ({ kind: "propuesta_cambio" } & z.infer<typeof ESQUEMA_PROPUESTA_CAMBIO>)
   | { kind: "capacidad"; nombre: (typeof CAPACIDADES)[number]; parametros: Record<string, unknown> };
 
 export interface RespuestaDelAgente {
@@ -193,7 +219,9 @@ function parsearBloque(crudo: unknown): { ok: true; bloque: BloqueDelAgente } | 
             ? ESQUEMA_INSIGHT
             : kind === "propuesta_movimiento"
               ? ESQUEMA_PROPUESTA_MOVIMIENTO
-              : null;
+              : kind === "propuesta_cambio"
+                ? ESQUEMA_PROPUESTA_CAMBIO
+                : null;
   if (!esquema) return { ok: false, reason: `«${kind || "?"}» no es un bloque del catálogo.` };
 
   const r = esquema.safeParse(datos);
