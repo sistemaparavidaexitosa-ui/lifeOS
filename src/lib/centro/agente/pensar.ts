@@ -20,6 +20,10 @@ import { conEscritura } from "@/lib/domain/centro/escritura/esquema.ts";
 import { MAX_CAMBIOS_POR_TURNO } from "@/lib/domain/centro/agente/contrato.ts";
 import { proponerCambios } from "@/lib/centro/escritura/proponer";
 import { CAPACIDADES_REGISTRADAS } from "./capacidades";
+import { cargarResultados } from "./resultados";
+import { seccionDeConfirmacion } from "@/lib/domain/centro/agente/entendimiento.ts";
+import { planDeRecordar } from "@/lib/domain/centro/agente/recordar.ts";
+import type { MemoryScope } from "@/lib/domain/insights/memory.ts";
 
 /** Lo que aporta un bloque: sus secciones y los proyectos que sus lecturas vieron. */
 interface Aporte {
@@ -27,7 +31,7 @@ interface Aporte {
   proyectos: { id: string }[];
 }
 
-const CENTRO_AGENTE_BUDGET: Budget = { maxOutputTokens: 4000, thinkingBudget: 256 };
+const CENTRO_AGENTE_BUDGET: Budget = { maxOutputTokens: 6000, thinkingBudget: 256 };
 const CENTRO_RONDAS = 6;
 const TIEMPO_CAPACIDAD_MS = 8000;
 export const DISCULPA = "No pude pensar esto ahora; inténtalo de nuevo.";
@@ -45,12 +49,17 @@ export async function pensarTurno(input: { texto: string; historial: { rol: "per
     const cerebro = await prepararCerebro();
     if (!cerebro) return { id, texto: DISCULPA, secciones: [] as AnySection[] };
 
+    const resultados = await cargarResultados(cerebro.supabase, cerebro.user.id, cerebro.today).catch((e: unknown) => {
+      console.warn("[centro-agente] resultados:", e);
+      return [] as string[];
+    });
+
     const caja = cerebro.herramientas ? conEscritura(cerebro.herramientas, cerebro.dominios) : null;
     const cupo = { restantes: MAX_CAMBIOS_POR_TURNO };
 
     const r = await generateJson({
       system: SYSTEM_AGENTE,
-      prompt: promptDelTurno({ contexto: textoDelContexto(cerebro.context), historial: input.historial, texto: input.texto }),
+      prompt: promptDelTurno({ contexto: textoDelContexto(cerebro.context), historial: input.historial, texto: input.texto, resultados }),
       schema: ESQUEMA_RESPUESTA,
       validate: (raw) => parsearRespuesta(raw),
       budget: CENTRO_AGENTE_BUDGET,
@@ -168,8 +177,9 @@ async function resolverSinCapacidad(
     case "propuesta_cambio":
       return proponerCambios(b, id, cerebro, ctx.filas, cupo);
     case "confirmar_entendimiento":
+      return [seccionDeConfirmacion(b, id)];
     case "recordar":
-      // D-204: se resuelven en la tarea del turno (Task 6).
+      await recordar(b, cerebro);
       return [];
     default: {
       const s = resolverBloque(b, id, ctx);
@@ -196,4 +206,31 @@ function auditarBusquedas(cerebro: Cerebro, toolRounds: number) {
     });
     if (error) console.warn("[centro-agente] no se pudo auditar las búsquedas:", error);
   });
+}
+
+/**
+ * Guarda lo que el Centro aprendió (D-204), SIN preguntar por decisión de la
+ * persona, con los límites de `planDeRecordar`. Nunca rompe el turno: un
+ * fallo aquí es una línea en el log.
+ */
+async function recordar(b: { texto: string; ambito: MemoryScope }, cerebro: Cerebro) {
+  try {
+    const { data: existentes, error } = await cerebro.supabase
+      .from("memory_items")
+      .select("id, text, origin, created_at, valid_until")
+      .eq("user_id", cerebro.user.id);
+    if (error) throw error;
+    const plan = planDeRecordar(b, existentes ?? [], cerebro.today);
+    if (plan.accion === "omitir") {
+      console.warn("[centro-agente] recordar:", plan.motivo);
+      return;
+    }
+    if (plan.borrar.length) {
+      await cerebro.supabase.from("memory_items").delete().in("id", plan.borrar).eq("user_id", cerebro.user.id).eq("origin", "centro");
+    }
+    const { error: e2 } = await cerebro.supabase.from("memory_items").insert({ ...plan.fila, user_id: cerebro.user.id });
+    if (e2) throw e2;
+  } catch (e) {
+    console.warn("[centro-agente] recordar:", e);
+  }
 }
