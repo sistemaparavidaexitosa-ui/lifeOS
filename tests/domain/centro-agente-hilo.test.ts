@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { agregar, historialParaModelo, MAX_HISTORIAL, type Turno } from "../../src/lib/domain/centro/agente/hilo.ts";
+import { agregar, historialParaModelo, MAX_HISTORIAL, type Turno, MAX_TEXTO_HISTORIAL } from "../../src/lib/domain/centro/agente/hilo.ts";
 
 const t = (i: number, rol: Turno["rol"]): Turno => ({ id: `t${i}`, rol, texto: `m${i}`, secciones: [] });
 
@@ -41,4 +41,12 @@ test("El «Entendí» de una tarjeta de confirmación viaja pegado al texto del 
 test("Si el turno de confirmación no trae texto propio, igual viaja con el «Entendí»", () => {
   const h = agregar([], { id: "t1", rol: "agente", texto: "", secciones: [confirmarEntendimiento("Borrar la tarea X")] });
   assert.deepStrictEqual(historialParaModelo(h), [{ rol: "agente", texto: "(Entendí: Borrar la tarea X)" }]);
+});
+
+test("Texto largo + «Entendí»: la entrada nunca pasa del tope que acepta la ruta del turno", () => {
+  const entendi = "e".repeat(300);
+  const h = agregar([], { id: "t1", rol: "agente", texto: "a".repeat(2000), secciones: [confirmarEntendimiento(entendi)] });
+  const [entrada] = historialParaModelo(h);
+  assert.ok(entrada!.texto.length <= MAX_TEXTO_HISTORIAL, String(entrada!.texto.length));
+  assert.ok(entrada!.texto.endsWith(`(Entendí: ${entendi})`), "lo entendido no se recorta: es lo que ancla «Sí, sigue»");
 });

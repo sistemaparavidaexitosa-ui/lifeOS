@@ -10,6 +10,9 @@ import type { AnySection } from "../runtime/types.ts";
 
 export const MAX_HISTORIAL = 12;
 
+/** Lo que `/api/centro/turno` acepta por entrada del historial. Tienen que coincidir. */
+export const MAX_TEXTO_HISTORIAL = 2000;
+
 export interface Turno {
   id: string;
   rol: "persona" | "agente";
@@ -32,7 +35,11 @@ function conEntendimiento(t: Turno): string {
   const confirmacion = t.secciones.find((s) => s.kind === "confirmarEntendimiento");
   if (!confirmacion) return t.texto;
   const sufijo = `(Entendí: ${confirmacion.data.entendi})`;
-  return t.texto.trim() ? `${t.texto}\n${sufijo}` : sufijo;
+  if (!t.texto.trim()) return sufijo;
+  // Se recorta el texto, nunca lo entendido: la ruta del turno rechaza la
+  // petición ENTERA si una entrada del historial pasa del tope, y la
+  // conversación se quedaría atascada hasta que ese turno saliera de la ventana.
+  return `${t.texto.slice(0, MAX_TEXTO_HISTORIAL - sufijo.length - 1)}\n${sufijo}`;
 }
 
 export function historialParaModelo(hilo: readonly Turno[]): { rol: "persona" | "agente"; texto: string }[] {

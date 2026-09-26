@@ -3,7 +3,7 @@ import { z } from "zod";
 import { flagsDelRuntime } from "@/config/env";
 import { getSessionUser } from "@/lib/data/session";
 import { pensarTurno } from "@/lib/centro/agente/pensar";
-import { MAX_HISTORIAL } from "@/lib/domain/centro/agente/hilo.ts";
+import { MAX_HISTORIAL, MAX_TEXTO_HISTORIAL } from "@/lib/domain/centro/agente/hilo.ts";
 import type { Action } from "@/lib/domain/centro/runtime/types.ts";
 
 /**
@@ -15,7 +15,7 @@ export const maxDuration = 60;
 
 const Entrada = z.object({
   texto: z.string().trim().min(1).max(2000),
-  historial: z.array(z.object({ rol: z.enum(["persona", "agente"]), texto: z.string().max(2000) })).max(MAX_HISTORIAL)
+  historial: z.array(z.object({ rol: z.enum(["persona", "agente"]), texto: z.string().max(MAX_TEXTO_HISTORIAL) })).max(MAX_HISTORIAL)
 });
 
 export async function POST(req: Request) {
