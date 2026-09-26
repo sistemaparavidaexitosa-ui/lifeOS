@@ -225,11 +225,15 @@ async function recordar(b: { texto: string; ambito: MemoryScope }, cerebro: Cere
       console.warn("[centro-agente] recordar:", plan.motivo);
       return;
     }
-    if (plan.borrar.length) {
-      await cerebro.supabase.from("memory_items").delete().in("id", plan.borrar).eq("user_id", cerebro.user.id).eq("origin", "centro");
-    }
     const { error: e2 } = await cerebro.supabase.from("memory_items").insert({ ...plan.fila, user_id: cerebro.user.id });
     if (e2) throw e2;
+    if (plan.borrar.length) {
+      // Después de insertar, no antes: si el insert falla, las evictadas se
+      // quedan — mejor una memoria de más (se limpiará la próxima vez) que
+      // borrar espacio para una que nunca llegó a guardarse.
+      const { error: e3 } = await cerebro.supabase.from("memory_items").delete().in("id", plan.borrar).eq("user_id", cerebro.user.id).eq("origin", "centro");
+      if (e3) console.warn("[centro-agente] recordar: no se pudo borrar la memoria evictada:", e3);
+    }
   } catch (e) {
     console.warn("[centro-agente] recordar:", e);
   }

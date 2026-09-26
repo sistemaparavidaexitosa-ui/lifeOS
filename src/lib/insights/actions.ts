@@ -124,13 +124,15 @@ export async function editRecommendationText(id: string, text: string): Promise<
 // --- Memoria (§6) -----------------------------------------------------------
 
 /**
- * Alta y edición de una nota de memoria, y el ÚNICO sitio que escribe en
- * `memory_items`.
+ * Alta y edición de una nota de memoria desde la pantalla, y el único sitio
+ * donde la persona (no el modelo) escribe en `memory_items` con un clic.
  *
  * `origin` distingue quién la redactó, no quién la autorizó: la de origen `ai`
  * sale de una propuesta del chat que el usuario confirmó con un botón (D-089).
- * Ninguna de las dos se escribe sola — lo que cambia es a quién se le atribuye
- * el texto cuando después se lee en `/intelligence/memory`.
+ * La de origen `centro` es la excepción a "nada se escribe sola": el Centro
+ * (D-204) la guarda directo desde `recordar` en pensar.ts SIN pasar por aquí
+ * y sin que la persona haga clic; caduca sola a los 90 días y esta función es
+ * justamente cómo la persona se la apropia — editarla aquí la pasa a `user`.
  */
 export async function upsertMemoryItem(
   id: string | null,
@@ -149,9 +151,17 @@ export async function upsertMemoryItem(
   if (!user) return { ok: false, reason: "No autenticado" };
 
   const payload = { scope, text, valid_until: validUntilRaw || null };
-  const { error } = id
-    ? await supabase.from("memory_items").update(payload).eq("id", id)
-    : await supabase.from("memory_items").insert({ ...payload, user_id: user.id, origin });
+  let error;
+  if (id) {
+    // Editar una memoria del Centro es apropiársela (D-204): a partir de aquí
+    // la escribió la persona, no una deducción que puede equivocarse, y la
+    // pantalla de memoria ya no debe seguir marcándola como del Centro.
+    const { data: actual } = await supabase.from("memory_items").select("origin").eq("id", id).single();
+    const conOrigen = actual?.origin === "centro" ? { ...payload, origin: "user" as const } : payload;
+    ({ error } = await supabase.from("memory_items").update(conOrigen).eq("id", id));
+  } else {
+    ({ error } = await supabase.from("memory_items").insert({ ...payload, user_id: user.id, origin }));
+  }
   if (error) return actionFailed(error);
 
   revalidatePath("/intelligence/memory");
