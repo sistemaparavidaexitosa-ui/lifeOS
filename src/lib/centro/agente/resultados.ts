@@ -16,14 +16,16 @@ export async function cargarResultados(supabase: Db, userId: string, hoy: string
       .eq("user_id", userId)
       .eq("origen", "centro")
       .in("status", ["accepted", "dismissed"])
-      .gte("created_at", desde)
+      .gte("created_at", `${desde}T00:00:00Z`)
+      .order("created_at", { ascending: false })
       .limit(200),
     supabase
       .from("audit_log")
       .select("action, meta")
       .eq("user_id", userId)
       .in("action", ["ai.centro_escritura", "ai.centro_entendimiento"])
-      .gte("created_at", desde)
+      .gte("created_at", `${desde}T00:00:00Z`)
+      .order("created_at", { ascending: false })
       .limit(200)
   ]);
 
