@@ -211,6 +211,38 @@ const ESQUEMAS: Partial<Record<SectionKind, z.ZodTypeAny>> = {
       nota: texto(200).nullable()
     })
     .strict(),
+  propuestaCambio: z
+    .object({
+      items: z
+        .array(
+          z
+            .object({
+              propuestaId: z.string().uuid(),
+              operacion: z.enum(["crear", "editar", "borrar"]),
+              etiquetaTabla: texto(40),
+              titulo: texto(90),
+              campos: z
+                .array(
+                  z
+                    .object({
+                      campo: z.string().regex(/^[a-z][a-z0-9_]{0,62}$/),
+                      etiqueta: texto(60),
+                      tipo: z.enum(["texto", "numero", "entero", "fecha", "opcion", "ref"]),
+                      antes: texto(400).nullable(),
+                      despues: texto(400).nullable(),
+                      editable: z.boolean(),
+                      opciones: z.array(texto(40)).max(12).nullable()
+                    })
+                    .strict()
+                )
+                .max(12)
+            })
+            .strict()
+        )
+        .min(1)
+        .max(10)
+    })
+    .strict(),
   rutina: z
     .object({
       routineId: texto(80),
