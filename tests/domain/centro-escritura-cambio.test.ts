@@ -4,7 +4,8 @@ import {
   validarCambio,
   aGuardar,
   revalidarGuardado,
-  aplicarCorrecciones
+  aplicarCorrecciones,
+  valoresIguales
 } from "../../src/lib/domain/centro/escritura/cambio.ts";
 
 const P = "11111111-1111-4111-8111-111111111111";
@@ -157,4 +158,27 @@ test("aplicarCorrecciones: un borrado no se corrige", () => {
   const b = validarCambio({ operacion: "borrar", fila: `fila:tasks:${T}` }, ctx);
   assert.ok(b.ok);
   assert.strictEqual(aplicarCorrecciones(aGuardar(b.cambio), { title: "x" }).ok, false);
+});
+
+test("valoresIguales: null, undefined y '' son la misma nada", () => {
+  assert.strictEqual(valoresIguales(null, undefined), true);
+  assert.strictEqual(valoresIguales(null, ""), true);
+  assert.strictEqual(valoresIguales("", undefined), true);
+  assert.strictEqual(valoresIguales(null, 0), false); // 0 es un valor real, no «nada»
+});
+
+test("valoresIguales: número guardado vs numeric de Postgres devuelto como texto", () => {
+  assert.strictEqual(valoresIguales(20, "20.00"), true);
+  assert.strictEqual(valoresIguales("80", 80), true);
+  assert.strictEqual(valoresIguales(80, 81), false);
+});
+
+test("valoresIguales: fechas AAAA-MM-DD, comparación de texto", () => {
+  assert.strictEqual(valoresIguales("2026-01-01", "2026-01-01"), true);
+  assert.strictEqual(valoresIguales("2026-01-01", "2026-01-02"), false);
+});
+
+test("valoresIguales: texto que no es numérico compara como texto, no como NaN === NaN", () => {
+  assert.strictEqual(valoresIguales("Leer capítulo 2", "Leer capítulo 2"), true);
+  assert.strictEqual(valoresIguales("Leer capítulo 2", "Otro título"), false);
 });

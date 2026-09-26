@@ -20,7 +20,7 @@ import { createNote, saveNote, deleteNote } from "@/app/(app)/notebooks/actions"
 import { logFoodEntry, updateFoodEntry, deleteFoodEntry } from "@/app/(app)/development/nutrition/actions";
 import type { TaskStatus, Priority } from "@/lib/domain/types";
 
-export type Adaptador = (c: CambioGuardado) => Promise<ActionResult>;
+export type Adaptador = (c: CambioGuardado) => Promise<ActionResult & { id?: string }>;
 
 type Cobertura = {
   [T in TablaEscribible]: { [O in (typeof ESCRITURA_POR_TABLA)[T]["operaciones"][number]]: Adaptador };
@@ -29,12 +29,17 @@ type Cobertura = {
 /**
  * Las acciones del repo devuelven de tres formas: `ActionResult`, `void` o
  * lanzan (`createTask`, `setTaskStatus`). Aquí se vuelven todas `ActionResult`.
+ *
+ * Si lo que devolvió trae un `id` de texto (p. ej. `createTask`), se conserva:
+ * es lo único que `confirmarCambio` tiene para auditar un `crear` con el id de
+ * la fila real (I3), porque `cambio.id` en un `crear` siempre es `null`.
  */
-async function seguro(fn: () => Promise<unknown>): Promise<ActionResult> {
+async function seguro(fn: () => Promise<unknown>): Promise<ActionResult & { id?: string }> {
   try {
     const r = await fn();
-    if (r && typeof r === "object" && "ok" in r && (r as ActionResult).ok === false) return r as ActionResult;
-    return { ok: true };
+    if (r && typeof r === "object" && "ok" in r && (r as ActionResult).ok === false) return r as ActionResult & { id?: string };
+    const id = r && typeof r === "object" && "id" in r && typeof (r as { id?: unknown }).id === "string" ? (r as { id: string }).id : undefined;
+    return id ? { ok: true, id } : { ok: true };
   } catch (e) {
     return { ok: false, reason: e instanceof Error ? e.message : "No se pudo guardar." };
   }
@@ -68,7 +73,11 @@ export const ADAPTADORES: Cobertura = {
       seguro(async () => {
         const id = c.id!;
         // Una acción por campo: cada una tiene su regla (la máquina de estados
-        // de `setTaskStatus`, el `urgent` de `setTaskPriority`).
+        // de `setTaskStatus`, el `urgent` de `setTaskPriority`). El estado va
+        // PRIMERO (I2): es el que más lanza (transición inválida), y si lanza
+        // ahí no debe quedar título/prioridad/fecha ya escritos mientras la
+        // propuesta queda varada.
+        if (typeof c.campos.status === "string") await setTaskStatus(id, c.campos.status as TaskStatus);
         if (typeof c.campos.title === "string") await renameTask(id, c.campos.title);
         if (typeof c.campos.priority === "string") {
           const supabase = await createClient();
@@ -80,7 +89,6 @@ export const ADAPTADORES: Cobertura = {
           const { data } = await supabase.from("tasks").select("start_date").eq("id", id).single();
           await updateTaskDates(id, data?.start_date ?? null, (c.campos.due as string | null) ?? null);
         }
-        if (typeof c.campos.status === "string") await setTaskStatus(id, c.campos.status as TaskStatus);
       }),
     borrar: (c) => seguro(() => deleteTask(c.id!))
   },
@@ -90,7 +98,10 @@ export const ADAPTADORES: Cobertura = {
         const creada = await createNote(s(c.campos.notebook_id));
         if (!creada.ok || !creada.id) return creada;
         // Una nota nace vacía con version 1 (0032); el texto va en su primer guardado.
-        return saveNote(creada.id, s(c.campos.title), s(c.campos.body), 1);
+        const guardada = await saveNote(creada.id, s(c.campos.title), s(c.campos.body), 1);
+        // I3: `saveNote` no devuelve el id (ya lo conoce quien la llama); se
+        // reintroduce aquí para que el audit de un `crear` lo tenga.
+        return { ...guardada, id: creada.id };
       }),
     editar: (c) =>
       seguro(async () => {

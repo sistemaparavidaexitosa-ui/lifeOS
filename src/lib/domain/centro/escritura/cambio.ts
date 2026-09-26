@@ -177,6 +177,27 @@ export function validarCambio(crudo: unknown, ctx: ContextoDeCambio): R<{ cambio
   return { ok: true, cambio: { operacion, tabla: entrada.tabla, id: m[2]!, campos, antes, ignorados: s.ignorados } };
 }
 
+/**
+ * Compara un valor que se guardó (número, texto o `null`) con lo que la base
+ * devuelve para esa misma columna al releerla. No siempre es el mismo tipo:
+ * Postgres puede devolver un `numeric` como texto (`"20.00"`), y `null`,
+ * `undefined` y `""` son la misma «nada» para un campo vacío. Las fechas ya
+ * llegan como `AAAA-MM-DD` en ambos lados, así que ahí basta comparar texto.
+ *
+ * La usan `confirmarCambio` (I1: ¿el adaptador escribió de verdad, o la RLS
+ * dejó pasar un `update` de cero filas sin error?) y su chequeo de fila
+ * desactualizada (I4: ¿la fila sigue siendo la que se leyó al proponer?).
+ */
+export function valoresIguales(a: unknown, b: unknown): boolean {
+  const vacio = (v: unknown) => v === null || v === undefined || v === "";
+  if (vacio(a) && vacio(b)) return true;
+  if (a === b) return true;
+  const an = typeof a === "number" ? a : typeof a === "string" && a.trim() !== "" ? Number(a) : NaN;
+  const bn = typeof b === "number" ? b : typeof b === "string" && b.trim() !== "" ? Number(b) : NaN;
+  if (!Number.isNaN(an) && !Number.isNaN(bn)) return an === bn;
+  return String(a) === String(b);
+}
+
 export function aGuardar(c: CambioValidado): CambioGuardado {
   return { operacion: c.operacion, tabla: c.tabla, id: c.id, campos: c.campos, antes: c.antes };
 }
