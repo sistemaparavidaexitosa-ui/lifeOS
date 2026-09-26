@@ -161,6 +161,17 @@ test("Confirmación y propuestas en el mismo turno: solo la confirmación (Revie
   assert.ok(r.ok && r.value.descartados.some((d) => d.includes("pregunta primero")));
 });
 
+test("Confirmación y una propuesta de movimiento en el mismo turno: solo la confirmación (I2)", () => {
+  const MOV = { fila: "fila:investments:11111111-1111-4111-8111-111111111111", tipo: "aportacion", monto: 500, fecha: null, nota: null };
+  const r = parsearRespuesta({
+    texto: "x",
+    bloques: [blq("propuesta_movimiento", MOV), blq("confirmar_entendimiento", CONF)]
+  });
+  assert.ok(r.ok);
+  assert.deepStrictEqual(r.ok && r.value.bloques.map((b) => b.kind), ["confirmar_entendimiento"]);
+  assert.ok(r.ok && r.value.descartados.some((d) => d.includes("propuesta_movimiento") && d.includes("pregunta primero")));
+});
+
 test("recordar: bien formado; ámbito fuera de la lista, vacío, largo o con cifras: fuera", () => {
   const ok = parsearRespuesta({ texto: "x", bloques: [blq("recordar", { texto: "Prefiere registrar comidas en gramos", ambito: "preference" })] });
   assert.deepStrictEqual(ok.ok && ok.value.bloques, [{ kind: "recordar", texto: "Prefiere registrar comidas en gramos", ambito: "preference" }]);

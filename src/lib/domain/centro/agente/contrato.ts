@@ -273,14 +273,19 @@ function parsearBloque(crudo: unknown): { ok: true; bloque: BloqueDelAgente } | 
 
 /**
  * Reglas entre bloques (D-204), después de validar cada uno:
- *  - Si el turno pregunta «¿entendí bien?», no propone cambios a la vez.
+ *  - Si el turno pregunta «¿entendí bien?», no propone cambios a la vez —ni de
+ *    escritura (`propuesta_cambio`) ni de movimiento (`propuesta_movimiento`):
+ *    las dos son un cambio que la persona todavía no confirmó entender.
  *  - Una sola confirmación y un solo `recordar` por turno: el primero.
  */
 function reglasDelTurno(bloques: BloqueDelAgente[], descartados: string[]): BloqueDelAgente[] {
   let salida = bloques;
-  if (salida.some((b) => b.kind === "confirmar_entendimiento") && salida.some((b) => b.kind === "propuesta_cambio")) {
-    descartados.push("«propuesta_cambio»: el turno pregunta primero.");
-    salida = salida.filter((b) => b.kind !== "propuesta_cambio");
+  if (salida.some((b) => b.kind === "confirmar_entendimiento")) {
+    for (const kind of ["propuesta_cambio", "propuesta_movimiento"] as const) {
+      if (!salida.some((b) => b.kind === kind)) continue;
+      descartados.push(`«${kind}»: el turno pregunta primero.`);
+      salida = salida.filter((b) => b.kind !== kind);
+    }
   }
   for (const kind of ["confirmar_entendimiento", "recordar"] as const) {
     const primero = salida.findIndex((b) => b.kind === kind);
