@@ -32,7 +32,8 @@ export async function GET() {
         .select("meta")
         .eq("user_id", user.id)
         .eq("action", "ai.centro_chip")
-        .gte("created_at", addDaysISO(hoy, -30))
+        .gte("created_at", `${addDaysISO(hoy, -30)}T00:00:00Z`)
+        .order("created_at", { ascending: false })
         .limit(500)
     ]);
     const activos = (perfil?.ai_domains ?? []) as Domain[];
