@@ -264,3 +264,21 @@ test("textoDelContexto: hechos, memoria y dominios saltados, en ese orden", () =
   const iSaltados = t.indexOf("no autorizó estos dominios");
   assert.ok(iHechos < iMemoria && iMemoria < iSaltados);
 });
+
+test("La memoria del Centro va aparte y rotulada; nunca como orden de la persona (Review Focus 4)", () => {
+  const ctx = buildContext({
+    scope: "global",
+    facts: [],
+    todayISO: "2026-09-26",
+    memory: [
+      { id: "u", scope: "preference", origin: "user", text: "No trabajo sábados", validUntil: null },
+      { id: "c", scope: "preference", origin: "centro", text: "Prefiere gramos", validUntil: "2026-12-01" }
+    ]
+  });
+  assert.deepStrictEqual(ctx.memory, ["No trabajo sábados"]);
+  assert.deepStrictEqual(ctx.memoriaCentro, ["Prefiere gramos"]);
+  const t = textoDelContexto(ctx);
+  const respeta = t.slice(t.indexOf("Lo que el usuario te ha dicho"));
+  assert.ok(!respeta.split("\n\n")[0]!.includes("Prefiere gramos"));
+  assert.match(t, /Lo que el Centro ha notado \(puede equivocarse\):\n- Prefiere gramos/);
+});

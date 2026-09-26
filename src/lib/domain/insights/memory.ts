@@ -14,7 +14,7 @@
  */
 export const MEMORY_SCOPES = ["goal", "project", "finance", "decision", "preference", "time", "habit", "health"] as const;
 export type MemoryScope = (typeof MEMORY_SCOPES)[number];
-export type MemoryOrigin = "user" | "ai";
+export type MemoryOrigin = "user" | "ai" | "centro";
 
 export interface MemoryItemLike {
   id: string;

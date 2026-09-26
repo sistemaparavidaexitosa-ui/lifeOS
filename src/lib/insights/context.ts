@@ -286,6 +286,12 @@ export interface InsightContext {
   rejections: string[];
   /** Memoria vigente y relevante. */
   memory: string[];
+  /**
+   * Lo que el Centro dedujo solo (D-204, `origin = 'centro'`). Va APARTE de
+   * `memory` —que es lo que la persona dijo y hay que respetar—: una
+   * deducción nunca pesa como una orden. Ausente si no hay ninguna.
+   */
+  memoriaCentro?: string[];
   /** Cuántos hechos se descartaron por el tope, para poder decirlo en la UI. */
   trimmed: number;
 }
@@ -316,6 +322,10 @@ export function textoDelContexto(context: InsightContext): string {
     partes.push(`Lo que el usuario te ha dicho y debes respetar:\n${context.memory.map((m) => `- ${m}`).join("\n")}`);
   }
 
+  if (context.memoriaCentro?.length) {
+    partes.push(`Lo que el Centro ha notado (puede equivocarse):\n${context.memoriaCentro.map((m) => `- ${m}`).join("\n")}`);
+  }
+
   if (context.skippedDomains.length) {
     partes.push(
       `(El usuario no autorizó estos dominios, así que no tienes sus datos: ${context.skippedDomains.join(", ")}. No especules sobre ellos.)`
@@ -339,8 +349,9 @@ export function buildContext(input: ContextInput): InsightContext {
   const ordered = [...permitted].sort((a, b) => b.weight - a.weight);
   const kept = ordered.slice(0, input.maxFacts ?? MAX_FACTS);
 
-  const memory =
-    input.memory && input.todayISO ? activeMemory(input.memory, input.scope, input.todayISO).map((m) => m.text) : [];
+  const vigentes = input.memory && input.todayISO ? activeMemory(input.memory, input.scope, input.todayISO) : [];
+  const memory = vigentes.filter((m) => m.origin !== "centro").map((m) => m.text);
+  const memoriaCentro = vigentes.filter((m) => m.origin === "centro").map((m) => m.text);
 
   return {
     scope: input.scope,
@@ -349,6 +360,7 @@ export function buildContext(input: ContextInput): InsightContext {
     facts: kept,
     rejections: (input.previousRejections ?? []).map((r) => r.text),
     memory,
+    ...(memoriaCentro.length ? { memoriaCentro } : {}),
     trimmed: ordered.length - kept.length
   };
 }

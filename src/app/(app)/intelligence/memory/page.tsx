@@ -86,6 +86,7 @@ export default async function MemoryPage() {
             <div className="flex items-center gap-2 flex-wrap">
               <Chip kind="info">{SCOPE_LABEL[m.scope]}</Chip>
               {m.origin === "ai" && <Chip kind="purple">la escribió el motor</Chip>}
+              {m.origin === "centro" && <Chip kind="purple">Lo notó el Centro</Chip>}
               {caducada && <Chip kind="bad">caducada</Chip>}
               {m.validUntil && !caducada && (
                 <span className="text-xs" style={{ color: "var(--muted)" }}>
