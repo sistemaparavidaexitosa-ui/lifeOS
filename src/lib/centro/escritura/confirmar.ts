@@ -35,14 +35,22 @@ function columnasComparables(cambio: CambioGuardado): string[] {
   return Object.keys(campos).filter((k) => k in antes);
 }
 
+type Vigencia = "vigente" | "cambio" | "error";
+
 /**
  * I4: la fila puede haber cambiado entre proponer y confirmar (otra persona
  * la editó, o ya no existe). Compara el `antes` que se leyó al proponer con
  * lo que hay ahora, columna por columna, no solo si la fila sigue existiendo.
  * Sin columnas comparables (registro sin solape con lo leído), se cae a solo
  * existencia.
+ *
+ * M3: un error de lectura (red, RLS temporal…) NO es lo mismo que «la fila ya
+ * no existe» — antes los dos volvían `false` y la propuesta se descartaba con
+ * `dismissed` aunque la fila siguiera perfectamente vigente. Ahora `"error"`
+ * se distingue de `"cambio"` (fila ausente o distinta) para que el llamador
+ * decida sin tirar la propuesta a la basura por un fallo pasajero.
  */
-async function filaSigueVigente(supabase: Cliente, cambio: CambioGuardado): Promise<boolean> {
+async function filaSigueVigente(supabase: Cliente, cambio: CambioGuardado): Promise<Vigencia> {
   const columnas = columnasComparables(cambio);
   // La unión de tablas del registro le complica a `tsc` un `.from` dinámico;
   // todas tienen `id`, así que basta afirmarla en esta sola línea. La lista de
@@ -50,11 +58,12 @@ async function filaSigueVigente(supabase: Cliente, cambio: CambioGuardado): Prom
   // fuera de `.select()` para que el parser de tipos de Supabase no intente
   // leerla como una plantilla literal.
   const query: string = columnas.length ? ["id", ...columnas].join(", ") : "id";
-  const { data: fresca } = await supabase.from(cambio.tabla as "tasks").select(query).eq("id", cambio.id!).maybeSingle();
-  if (!fresca) return false;
+  const { data: fresca, error } = await supabase.from(cambio.tabla as "tasks").select(query).eq("id", cambio.id!).maybeSingle();
+  if (error) return "error";
+  if (!fresca) return "cambio";
   const antes = cambio.antes ?? {};
   const filaFresca = fresca as unknown as Record<string, unknown>;
-  return columnas.every((k) => valoresIguales(filaFresca[k], antes[k]));
+  return columnas.every((k) => valoresIguales(filaFresca[k], antes[k])) ? "vigente" : "cambio";
 }
 
 /**
@@ -106,13 +115,19 @@ export async function confirmarCambio(
   if (!corregido.ok) return corregido;
   const cambio = corregido.cambio;
 
-  if (cambio.operacion !== "crear" && !(await filaSigueVigente(supabase, cambio))) {
-    await supabase
-      .from("coach_proposals")
-      .update({ status: "dismissed", resolved_at: new Date().toISOString() })
-      .eq("id", id.data)
-      .eq("status", "pending");
-    return { ok: false, reason: "Esta fila ya no existe o cambió; vuelve a pedírselo al Centro." };
+  if (cambio.operacion !== "crear") {
+    const vigencia = await filaSigueVigente(supabase, cambio);
+    // M3: un error de lectura no descarta la propuesta — solo una fila
+    // ausente o distinta a la leída al proponer lo hace.
+    if (vigencia === "error") return { ok: false, reason: "No se pudo comprobar la fila; inténtalo de nuevo." };
+    if (vigencia === "cambio") {
+      await supabase
+        .from("coach_proposals")
+        .update({ status: "dismissed", resolved_at: new Date().toISOString() })
+        .eq("id", id.data)
+        .eq("status", "pending");
+      return { ok: false, reason: "Esta fila ya no existe o cambió; vuelve a pedírselo al Centro." };
+    }
   }
 
   const { data: reclamada } = await supabase

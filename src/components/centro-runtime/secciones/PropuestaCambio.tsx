@@ -128,7 +128,7 @@ function Campo(p: { c: CampoDeTarjeta; borrar: boolean; editable: boolean; valor
               </option>
             ))}
           </select>
-        ) : c.tipo === "texto" && actual.length > 80 ? (
+        ) : c.tipo === "texto" && (c.despues ?? "").length > 80 ? (
           <textarea value={actual} rows={4} onChange={(e) => p.onChange(e.target.value)} />
         ) : (
           <input
