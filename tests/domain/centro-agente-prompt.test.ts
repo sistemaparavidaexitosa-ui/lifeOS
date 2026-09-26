@@ -22,3 +22,10 @@ test("ANTES DE DIBUJAR, LEE: `buscar` es la primera opción cuando se nombra alg
   assert.match(parrafo, /\bbuscar\b/);
   assert.ok(parrafo.indexOf("buscar") < parrafo.indexOf("consultar"), "buscar va antes que consultar");
 });
+
+test("El system explica propuesta_cambio, esquema_de_tabla y trae el índice de tablas", () => {
+  assert.ok(SYSTEM_AGENTE.includes("«propuesta_cambio»"));
+  assert.match(SYSTEM_AGENTE, /esquema_de_tabla/);
+  for (const t of ["tasks", "notes", "food_entries"]) assert.ok(SYSTEM_AGENTE.includes(t), t);
+  assert.match(SYSTEM_AGENTE, /Nunca digas que ya quedó (guardado|registrado)/);
+});

@@ -157,6 +157,10 @@ async function resolverSinCapacidad(
       }
       return [r.seccion];
     }
+    case "propuesta_cambio": {
+      // TODO: resolver cambios en tablas (D-203). Por ahora devuelve vacío.
+      return [];
+    }
     default: {
       const s = resolverBloque(b, id, ctx);
       return s ? [s] : [];
