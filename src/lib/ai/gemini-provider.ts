@@ -162,6 +162,12 @@ export interface GenerateJsonInput<T> {
    * `user_id` ni se puede tocar Supabase, y así sigue.
    */
   executeTool?: (name: string, args: Record<string, unknown>) => Promise<unknown>;
+  /**
+   * Tope de rondas de herramientas para ESTA llamada. Por defecto
+   * `MAX_RONDAS_HERRAMIENTAS`. El Centro pide más (D-203): buscar → esquema →
+   * leer la fila → proponer ya son cuatro.
+   */
+  maxToolRounds?: number;
 }
 
 export interface GenerateJsonResult<T> {
@@ -503,11 +509,12 @@ async function conversarConModelo<T>(
   conHerramientas: boolean
 ): Promise<Intento<T>> {
   const contents: GeminiContent[] = [{ role: "user", parts: [{ text: input.prompt }] }];
+  const tope = input.maxToolRounds ?? MAX_RONDAS_HERRAMIENTAS;
 
-  for (let ronda = 0; ronda <= MAX_RONDAS_HERRAMIENTAS; ronda += 1) {
+  for (let ronda = 0; ronda <= tope; ronda += 1) {
     // En la última vuelta se le quitan las herramientas: es lo que convierte el
     // tope en «ahora contesta» en vez de en un error.
-    const ultima = ronda === MAX_RONDAS_HERRAMIENTAS;
+    const ultima = ronda === tope;
     const intento = await intentarConModelo(input, apiKey, model, contents, conHerramientas && !ultima);
 
     if (intento.ok || !intento.pide) return { ...intento, rondas: ronda };
