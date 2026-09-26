@@ -67,11 +67,16 @@ function valorDe(
   c: CampoDeEscritura,
   crudo: unknown,
   modo: "turno" | "guardado",
-  filas: ReadonlyMap<string, Record<string, unknown>>
+  filas: ReadonlyMap<string, Record<string, unknown>>,
+  // I2: al EDITAR (o al corregir, que es editar un cambio ya guardado — crear
+  // no pasa `true` aquí), vaciar un `opcion` OPCIONAL se rechaza: no hay un
+  // «sin seleccionar» razonable para un select, a diferencia de un texto.
+  enEdicion = false
 ): R<{ valor: Valor }> {
   const mal = (por: string): { ok: false; reason: string } => ({ ok: false, reason: `«${nombre}» ${por}.` });
   if (crudo === null || crudo === undefined || crudo === "") {
     if (c.obligatorio) return { ok: false, reason: `«${c.etiqueta}» no puede quedar vacío.` };
+    if (enEdicion && c.tipo === "opcion") return { ok: false, reason: `«${c.etiqueta}» no puede quedar vacío.` };
     return { ok: true, valor: null };
   }
   switch (c.tipo) {
@@ -135,7 +140,7 @@ function sanearCampos(
     }
     // Al editar nada es obligatorio: viaja lo que cambia. Pero vaciar un
     // obligatorio tampoco se puede.
-    const v = valorDe(nombre, c, crudo, modo, filas);
+    const v = valorDe(nombre, c, crudo, modo, filas, operacion === "editar");
     if (!v.ok) return v;
     campos[nombre] = v.valor;
   }
@@ -246,7 +251,9 @@ export function aplicarCorrecciones(c: CambioGuardado, correcciones: Record<stri
   for (const [nombre, crudo] of Object.entries(correcciones)) {
     const def = permitidos.get(nombre);
     if (!def || def.tipo === "ref") return { ok: false, reason: `«${nombre}» no se puede corregir aquí.` };
-    const v = valorDe(nombre, def, crudo, "guardado", new Map());
+    // Una corrección es siempre editar lo que ya quedó en la tarjeta, aunque
+    // el cambio de fondo sea un `crear` todavía sin guardar (I2).
+    const v = valorDe(nombre, def, crudo, "guardado", new Map(), true);
     if (!v.ok) return v;
     campos[nombre] = v.valor;
   }

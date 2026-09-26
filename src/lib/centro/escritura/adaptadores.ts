@@ -81,13 +81,18 @@ export const ADAPTADORES: Cobertura = {
         if (typeof c.campos.title === "string") await renameTask(id, c.campos.title);
         if (typeof c.campos.priority === "string") {
           const supabase = await createClient();
-          const { data } = await supabase.from("tasks").select("urgent").eq("id", id).single();
-          await setTaskPriority(id, c.campos.priority as Priority, data?.urgent ?? false);
+          const { data, error } = await supabase.from("tasks").select("urgent").eq("id", id).single();
+          // I2: sin la fila no hay forma de saber su `urgent` — un `false` por
+          // defecto podría apagar una urgencia real en vez de solo cambiar la
+          // prioridad que se pidió.
+          if (error || !data) return { ok: false, reason: "No se pudo leer la tarea." };
+          await setTaskPriority(id, c.campos.priority as Priority, data.urgent ?? false);
         }
         if ("due" in c.campos) {
           const supabase = await createClient();
-          const { data } = await supabase.from("tasks").select("start_date").eq("id", id).single();
-          await updateTaskDates(id, data?.start_date ?? null, (c.campos.due as string | null) ?? null);
+          const { data, error } = await supabase.from("tasks").select("start_date").eq("id", id).single();
+          if (error || !data) return { ok: false, reason: "No se pudo leer la tarea." };
+          await updateTaskDates(id, data.start_date ?? null, (c.campos.due as string | null) ?? null);
         }
       }),
     borrar: (c) => seguro(() => deleteTask(c.id!))
@@ -108,10 +113,15 @@ export const ADAPTADORES: Cobertura = {
         const supabase = await createClient();
         const { data: actual } = await supabase.from("notes").select("title, body, version").eq("id", c.id!).single();
         if (!actual) return { ok: false, reason: "Esta nota ya no existe." };
+        // I2: `title` es opcional — una corrección que lo vacía manda `null`,
+        // no `""`, y `typeof === "string"` lo trataba como «no vino» y
+        // conservaba el título viejo. `"campo" in c.campos` distingue «no
+        // viajó» (no toca) de «viajó vacío» (sí lo vacía). Mismo patrón para
+        // `body` por consistencia, aunque hoy sea obligatorio.
         return saveNote(
           c.id!,
-          typeof c.campos.title === "string" ? c.campos.title : actual.title,
-          typeof c.campos.body === "string" ? c.campos.body : actual.body,
+          "title" in c.campos ? s(c.campos.title) : actual.title,
+          "body" in c.campos ? s(c.campos.body) : actual.body,
           actual.version
         );
       }),

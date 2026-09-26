@@ -11,10 +11,12 @@ import {
 const P = "11111111-1111-4111-8111-111111111111";
 const T = "22222222-2222-4222-8222-222222222222";
 const N = "33333333-3333-4333-8333-333333333333";
+const NOTA = "66666666-6666-4666-8666-666666666666";
 const filas = new Map<string, Record<string, unknown>>([
   [`fila:projects:${P}`, { id: P, title: "Tesis" }],
   [`fila:tasks:${T}`, { id: T, title: "Leer capítulo 2", status: "Pending", priority: "Medium", due: null }],
-  [`fila:notebooks:${N}`, { id: N, title: "Ideas" }]
+  [`fila:notebooks:${N}`, { id: N, title: "Ideas" }],
+  [`fila:notes:${NOTA}`, { id: NOTA, title: "Idea", body: "Cuerpo" }]
 ]);
 const ctx = { filas, autorizados: ["execution", "nutrition"] as const };
 
@@ -173,6 +175,24 @@ test("aplicarCorrecciones: vaciar un obligatorio, tocar una ref o un campo ajeno
   const t = validarCambio({ operacion: "crear", tabla: "tasks", campos: { project_id: `fila:projects:${P}`, title: "X" } }, ctx);
   assert.ok(t.ok);
   assert.strictEqual(aplicarCorrecciones(aGuardar(t.cambio), { project_id: P }).ok, false);
+});
+
+test("Editar: vaciar una opción opcional (prioridad) se rechaza — un select no tiene «sin seleccionar» (I2)", () => {
+  const r = validarCambio({ operacion: "editar", fila: `fila:tasks:${T}`, campos: { priority: null } }, ctx);
+  assert.deepStrictEqual(r, { ok: false, reason: "«Prioridad» no puede quedar vacío." });
+});
+
+test("Editar: vaciar el título de una nota (texto opcional) se acepta, queda null (I2)", () => {
+  const r = validarCambio({ operacion: "editar", fila: `fila:notes:${NOTA}`, campos: { title: "" } }, ctx);
+  assert.ok(r.ok);
+  assert.strictEqual(r.ok && r.cambio.campos.title, null);
+});
+
+test("aplicarCorrecciones: vaciar una opción opcional también se rechaza, aunque el cambio sea un crear (I2)", () => {
+  const r = validarCambio({ operacion: "crear", tabla: "tasks", campos: { project_id: `fila:projects:${P}`, title: "X", priority: "High" } }, ctx);
+  assert.ok(r.ok);
+  const g = aGuardar(r.cambio);
+  assert.deepStrictEqual(aplicarCorrecciones(g, { priority: "" }), { ok: false, reason: "«Prioridad» no puede quedar vacío." });
 });
 
 test("aplicarCorrecciones: un borrado no se corrige", () => {
