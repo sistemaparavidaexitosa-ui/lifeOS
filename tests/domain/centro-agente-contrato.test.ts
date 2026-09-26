@@ -58,8 +58,8 @@ test("Un campo tiene que ser un nombre de columna, no una expresión", () => {
 });
 
 test("Como mucho cuatro bloques: el resto se descarta", () => {
-  const cinco = Array.from({ length: 5 }, () => b("insight", { texto: "Bien." }));
-  const r = parsearRespuesta({ texto: "x", bloques: cinco });
+  const bloques_exceso = Array.from({ length: MAX_BLOQUES + 1 }, () => b("insight", { texto: "Bien." }));
+  const r = parsearRespuesta({ texto: "x", bloques: bloques_exceso });
   assert.strictEqual(r.ok && r.value.bloques.length, MAX_BLOQUES);
   assert.strictEqual(r.ok && r.value.descartados.length, 1);
 });
@@ -127,4 +127,69 @@ test("propuesta_cambio: 1–5 cambios; la forma fina se valida después, contra 
   assert.strictEqual(seis.ok && seis.value.bloques.length, 0);
   const mala = parsearRespuesta({ texto: "x", bloques: [b({ cambios: [{ operacion: "truncar" }] })] });
   assert.strictEqual(mala.ok && mala.value.bloques.length, 0);
+});
+
+const blq = (kind: string, datos: unknown) => ({ kind, datos: JSON.stringify(datos) });
+const CONF = { entendi: "Quieres registrar la avena y mover «Leer» a mañana.", seguir: "Sí, hazlo", alternativas: [{ etiqueta: "Solo la comida", texto: "Solo registra la avena" }, { etiqueta: "Otra cosa", texto: null }] };
+
+test("confirmar_entendimiento: bien formado pasa tal cual", () => {
+  const r = parsearRespuesta({ texto: "Antes de seguir:", bloques: [blq("confirmar_entendimiento", CONF)] });
+  assert.ok(r.ok);
+  assert.deepStrictEqual(r.ok && r.value.bloques, [{ kind: "confirmar_entendimiento", ...CONF }]);
+});
+
+test("confirmar_entendimiento: límites y marcado", () => {
+  for (const malo of [
+    { ...CONF, entendi: "" },
+    { ...CONF, entendi: "x".repeat(301) },
+    { ...CONF, seguir: "x".repeat(41) },
+    { ...CONF, alternativas: [1, 2, 3, 4].map(() => ({ etiqueta: "a", texto: null })) },
+    { ...CONF, alternativas: [{ etiqueta: "", texto: null }] }
+  ]) {
+    const r = parsearRespuesta({ texto: "x", bloques: [blq("confirmar_entendimiento", malo)] });
+    assert.strictEqual(r.ok && r.value.bloques.length, 0, JSON.stringify(malo).slice(0, 80));
+  }
+});
+
+test("Confirmación y propuestas en el mismo turno: solo la confirmación (Review Focus 1)", () => {
+  const r = parsearRespuesta({
+    texto: "x",
+    bloques: [blq("propuesta_cambio", { cambios: [{ operacion: "crear", tabla: "tasks", campos: { title: "X" } }] }), blq("confirmar_entendimiento", CONF)]
+  });
+  assert.ok(r.ok);
+  assert.deepStrictEqual(r.ok && r.value.bloques.map((b) => b.kind), ["confirmar_entendimiento"]);
+  assert.ok(r.ok && r.value.descartados.some((d) => d.includes("pregunta primero")));
+});
+
+test("recordar: bien formado; ámbito fuera de la lista, vacío, largo o con cifras: fuera", () => {
+  const ok = parsearRespuesta({ texto: "x", bloques: [blq("recordar", { texto: "Prefiere registrar comidas en gramos", ambito: "preference" })] });
+  assert.deepStrictEqual(ok.ok && ok.value.bloques, [{ kind: "recordar", texto: "Prefiere registrar comidas en gramos", ambito: "preference" }]);
+  for (const malo of [
+    { texto: "x", ambito: "gustos" },
+    { texto: "", ambito: "preference" },
+    { texto: "x".repeat(201), ambito: "preference" },
+    { texto: "Ahorra $3,000 al mes", ambito: "finance" }
+  ]) {
+    const r = parsearRespuesta({ texto: "x", bloques: [blq("recordar", malo)] });
+    assert.strictEqual(r.ok && r.value.bloques.length, 0, JSON.stringify(malo));
+  }
+});
+
+test("Dos recordar o dos confirmaciones: solo el primero (Review Focus 2)", () => {
+  const r = parsearRespuesta({
+    texto: "x",
+    bloques: [
+      blq("recordar", { texto: "Uno", ambito: "preference" }),
+      blq("recordar", { texto: "Dos", ambito: "preference" }),
+      blq("confirmar_entendimiento", CONF),
+      blq("confirmar_entendimiento", { ...CONF, entendi: "Otra" })
+    ]
+  });
+  assert.ok(r.ok);
+  assert.deepStrictEqual(r.ok && r.value.bloques.map((b) => (b.kind === "recordar" ? b.texto : b.kind === "confirmar_entendimiento" ? b.entendi : b.kind)), ["Uno", CONF.entendi]);
+});
+
+test("Texto hasta 2000 caracteres", () => {
+  const r = parsearRespuesta({ texto: "a".repeat(2500), bloques: [] });
+  assert.strictEqual(r.ok && r.value.texto.length, 2000);
 });

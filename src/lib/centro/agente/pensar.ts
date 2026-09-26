@@ -167,6 +167,10 @@ async function resolverSinCapacidad(
     }
     case "propuesta_cambio":
       return proponerCambios(b, id, cerebro, ctx.filas, cupo);
+    case "confirmar_entendimiento":
+    case "recordar":
+      // D-204: se resuelven en la tarea del turno (Task 6).
+      return [];
     default: {
       const s = resolverBloque(b, id, ctx);
       return s ? [s] : [];
