@@ -533,7 +533,7 @@ async function conversarConModelo<T>(
     contents.push({ role: "user", parts: respuestas });
   }
 
-  return { ok: false, reason: "El modelo se quedó pidiendo datos y no llegó a contestar.", rondas: MAX_RONDAS_HERRAMIENTAS };
+  return { ok: false, reason: "El modelo se quedó pidiendo datos y no llegó a contestar.", rondas: tope };
 }
 
 /**
