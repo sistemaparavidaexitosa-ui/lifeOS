@@ -4040,5 +4040,7 @@ implementa:
   server action de la sección lo expone (tasks, notes; food_entries no).
   `profiles` y el resto de TABLAS_PROHIBIDAS no entran nunca (test). Entrega 1:
   `tasks`, `notes`, `food_entries`. Desvío del spec: los cambios pendientes NO
-  salen en la barra del chat (no sabe aceptarlos); quedan `pending` en la base.
+  salen en la barra del chat ni entre las sugerencias del Centro (ninguna de
+  las dos sabe aceptarlos); quedan `pending` en la base y se pintan solo en su
+  propia tarjeta de diff (`propuestaCambio`).
   Rondas de herramientas del Centro: 6; salida: 4000 tokens.

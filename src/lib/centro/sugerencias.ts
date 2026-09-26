@@ -52,6 +52,11 @@ async function pendientes(supabase: Db, userId: string): Promise<SugerenciaView[
     .eq("user_id", userId)
     .eq("origen", "centro")
     .eq("status", "pending")
+    // `cambio` (D-203) se pinta con su propia tarjeta de diff en
+    // `propuestaCambio`, no como sugerencia «Añadir: …»: ese botón no sabe
+    // aceptarla y fallaría al pulsarlo (C1). Mismo filtro que
+    // `loadPendingProposals` en `lib/coach/actions.ts`.
+    .neq("tipo", "cambio")
     .order("created_at", { ascending: true })
     .limit(3);
 
