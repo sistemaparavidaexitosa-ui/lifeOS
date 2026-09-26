@@ -282,3 +282,21 @@ test("La memoria del Centro va aparte y rotulada; nunca como orden de la persona
   assert.ok(!respeta.split("\n\n")[0]!.includes("Prefiere gramos"));
   assert.match(t, /Lo que el Centro ha notado \(puede equivocarse\):\n- Prefiere gramos/);
 });
+
+test("buildContext: una racha de memoria del Centro no desplaza la de la persona del tope (Review Focus 1, fix round 1)", () => {
+  const centro = Array.from({ length: 20 }, (_, i) => ({
+    id: `c${i}`,
+    scope: "preference" as const,
+    origin: "centro" as const,
+    text: `Nota del Centro ${i}`,
+    validUntil: null
+  }));
+  const ctx = buildContext({
+    scope: "global",
+    facts: [],
+    todayISO: "2026-09-26",
+    memory: [...centro, { id: "u", scope: "preference", origin: "user", text: "No trabajo sábados", validUntil: null }]
+  });
+  assert.deepStrictEqual(ctx.memory, ["No trabajo sábados"]);
+  assert.strictEqual(ctx.memoriaCentro?.length, 20);
+});

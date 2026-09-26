@@ -349,9 +349,25 @@ export function buildContext(input: ContextInput): InsightContext {
   const ordered = [...permitted].sort((a, b) => b.weight - a.weight);
   const kept = ordered.slice(0, input.maxFacts ?? MAX_FACTS);
 
-  const vigentes = input.memory && input.todayISO ? activeMemory(input.memory, input.scope, input.todayISO) : [];
-  const memory = vigentes.filter((m) => m.origin !== "centro").map((m) => m.text);
-  const memoriaCentro = vigentes.filter((m) => m.origin === "centro").map((m) => m.text);
+  // Se separa por origen ANTES de aplicar el tope de `activeMemory`: si no, una
+  // racha de escrituras del Centro (hasta 20) podría llenar la ventana y sacar
+  // las memorias de la persona del contexto — justo el desplazamiento que D-204
+  // debe impedir. Cada origen compite solo con sus pares por el mismo tope.
+  const todas = input.memory ?? [];
+  const memory = input.todayISO
+    ? activeMemory(
+        todas.filter((m) => m.origin !== "centro"),
+        input.scope,
+        input.todayISO
+      ).map((m) => m.text)
+    : [];
+  const memoriaCentro = input.todayISO
+    ? activeMemory(
+        todas.filter((m) => m.origin === "centro"),
+        input.scope,
+        input.todayISO
+      ).map((m) => m.text)
+    : [];
 
   return {
     scope: input.scope,
