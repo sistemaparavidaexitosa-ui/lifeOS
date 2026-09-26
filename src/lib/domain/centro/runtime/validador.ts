@@ -243,6 +243,13 @@ const ESQUEMAS: Partial<Record<SectionKind, z.ZodTypeAny>> = {
         .max(10)
     })
     .strict(),
+  confirmarEntendimiento: z
+    .object({
+      entendi: texto(300),
+      seguir: texto(40),
+      alternativas: z.array(z.object({ etiqueta: texto(40), texto: texto(300).nullable() }).strict()).max(3)
+    })
+    .strict(),
   rutina: z
     .object({
       routineId: texto(80),

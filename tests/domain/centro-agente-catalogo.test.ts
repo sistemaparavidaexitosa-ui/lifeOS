@@ -22,7 +22,7 @@ function pantalla(sections: unknown[]) {
 
 test("El catálogo trae los seis kinds del agente", () => {
   for (const k of ["lista", "metricas", "irA", "recomendaciones", "insight", "movimientos"]) assert.ok(esSectionKind(k), k);
-  assert.strictEqual(SECTION_KINDS.length, 33);
+  assert.strictEqual(SECTION_KINDS.length, 34);
 });
 
 const validas: Record<string, unknown> = {

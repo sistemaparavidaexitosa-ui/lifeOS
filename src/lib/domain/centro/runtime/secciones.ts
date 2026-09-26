@@ -54,7 +54,9 @@ export const SECTION_KINDS = [
   // D-202: un movimiento de inversión que el agente propone y la persona guarda.
   "propuestaMovimiento",
   // D-203: cambios en cualquier tabla del registro, que la persona guarda.
-  "propuestaCambio"
+  "propuestaCambio",
+  // D-204: «¿entendí bien?» antes de proponer cuando hay duda.
+  "confirmarEntendimiento"
 ] as const;
 
 export type SectionKind = (typeof SECTION_KINDS)[number];
@@ -245,6 +247,12 @@ export interface DatosPropuestaCambio {
   items: ItemDeCambio[];
 }
 
+export interface DatosConfirmarEntendimiento {
+  entendi: string;
+  seguir: string;
+  alternativas: { etiqueta: string; texto: string | null }[];
+}
+
 export interface DatosRutina {
   routineId: string;
   nombre: string;
@@ -359,6 +367,7 @@ export interface DatosPorKind {
   rutina: DatosRutina;
   propuestaMovimiento: DatosPropuestaMovimiento;
   propuestaCambio: DatosPropuestaCambio;
+  confirmarEntendimiento: DatosConfirmarEntendimiento;
 }
 
 export type DatosDe<K extends SectionKind> = DatosPorKind[K];

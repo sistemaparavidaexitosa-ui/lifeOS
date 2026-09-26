@@ -1,12 +1,18 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useContext, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { confirmarCambio, descartarCambio } from "@/lib/centro/escritura/confirmar";
 import type { CampoDeTarjeta, ItemDeCambio } from "@/lib/domain/centro/runtime/secciones.ts";
+import { ContextoDelAgente } from "../contexto";
 import { registrarSeccion, type PropsDeSeccion } from "../registro";
 
 type Estado = "pendiente" | "guardado" | "descartado";
+
+/** Mismo criterio que el título de la tarjeta: qué se hizo, en una palabra. */
+function verboDe(operacion: ItemDeCambio["operacion"]): string {
+  return operacion === "borrar" ? "Borrar" : operacion === "crear" ? "Crear" : "Cambiar";
+}
 
 /**
  * Cambios que el Centro propone (D-203). Nada existe hasta que la persona
@@ -19,6 +25,7 @@ export default function SeccionPropuestaCambio({ data }: PropsDeSeccion<"propues
   const [correcciones, setCorrecciones] = useState<Record<string, Record<string, string>>>({});
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+  const { enviar, ocupado } = useContext(ContextoDelAgente);
 
   const pendientes = data.items.filter((it) => (estados[it.propuestaId] ?? "pendiente") === "pendiente");
 
@@ -46,6 +53,14 @@ export default function SeccionPropuestaCambio({ data }: PropsDeSeccion<"propues
     startTransition(async () => {
       await descartarCambio(it.propuestaId).catch(() => null);
       setEstados((e) => ({ ...e, [it.propuestaId]: "descartado" }));
+    });
+  }
+
+  function noEsEsto(it: ItemDeCambio) {
+    startTransition(async () => {
+      await descartarCambio(it.propuestaId, "malentendido").catch(() => null);
+      setEstados((e) => ({ ...e, [it.propuestaId]: "descartado" }));
+      enviar?.(`No era eso (${verboDe(it.operacion)} · ${it.etiquetaTabla}: ${it.titulo})`);
     });
   }
 
@@ -90,6 +105,9 @@ export default function SeccionPropuestaCambio({ data }: PropsDeSeccion<"propues
                 </button>
                 <button type="button" className="ag-boton-chico" disabled={pending} onClick={() => descartar(it)}>
                   Descartar
+                </button>
+                <button type="button" className="ag-boton-chico" disabled={pending || ocupado} onClick={() => noEsEsto(it)}>
+                  No es esto
                 </button>
               </p>
             )}

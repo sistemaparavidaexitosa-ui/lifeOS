@@ -99,9 +99,14 @@ export const MAX_TEXTO_MEMORIA = 200;
 /**
  * Lo que distingue una memoria de un dato del día.
  *
- * `memory_items` entra en el prompt de TODAS las features y no caduca sola, así
- * que lo que se cuele aquí seguirá contándose dentro de un año. «Hoy comió
- * avena» no es quién eres: es un renglón del diario, y el diario ya lo guarda.
+ * Lo que se acepta aquí entra en el prompt de TODAS las features (vía
+ * `context.memory`, D-027) y no caduca sola salvo que la persona le ponga
+ * fecha, así que lo que se cuele aquí seguirá contándose dentro de un año.
+ * «Hoy comió avena» no es quién eres: es un renglón del diario, y el diario ya
+ * lo guarda. (La memoria que el Centro guarda solo, con `origin: "centro"`
+ * —D-204—, es otra cosa: pasa por `planDeRecordar`, no por aquí; caduca a los
+ * 90 días; y solo la ve el propio Centro y el chat, vía `context.memoriaCentro`
+ * y etiquetada como una deducción, no como algo que la persona dijo.)
  *
  * El `(?<!la |las )` delante de «mañana» no es un detalle: sin él, «entrena por
  * la mañana» —que es exactamente el tipo de hecho duradero que esto quiere

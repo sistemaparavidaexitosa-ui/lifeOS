@@ -23,15 +23,16 @@ import type { GeminiSchema } from "../../ai/tools.ts";
 import { TIPOS_DEL_CENTRO } from "../../coach/proposals.ts";
 import { tieneCifras } from "./texto.ts";
 import { TIPOS_DE_MOVIMIENTO } from "../../money/curva-inversion.ts";
+import { MEMORY_SCOPES, type MemoryScope } from "../../insights/memory.ts";
 
-export const MAX_BLOQUES = 4;
+export const MAX_BLOQUES = 6;
 export const MAX_CAMBIOS_POR_BLOQUE = 5;
 export const MAX_CAMBIOS_POR_TURNO = 10;
-const MAX_TEXTO = 600;
+export const MAX_TEXTO = 2000;
 
 export const GENERICOS = ["lista", "metricas", "tabla", "grafica", "tarjetas", "linea"] as const;
 export const CAPACIDADES = ["mercado", "hoy", "inversiones"] as const;
-export const KINDS_DEL_AGENTE = [...GENERICOS, "ir_a", "recomendaciones", "insight", "propuesta_movimiento", "propuesta_cambio", ...CAPACIDADES] as const;
+export const KINDS_DEL_AGENTE = [...GENERICOS, "ir_a", "recomendaciones", "insight", "propuesta_movimiento", "propuesta_cambio", "confirmar_entendimiento", "recordar", ...CAPACIDADES] as const;
 
 export const FORMATOS = ["numero", "dinero", "porcentaje", "fecha", "texto"] as const;
 export type Formato = (typeof FORMATOS)[number];
@@ -154,6 +155,35 @@ const ESQUEMA_PROPUESTA_CAMBIO = z
   })
   .strict();
 
+/**
+ * «¿Entendí bien?» (D-204). Se usa cuando la petición es ambigua, toca varias
+ * cosas, borra algo o interpreta lo que la persona no dijo. En el mismo turno
+ * no se proponen cambios: `parsearRespuesta` los quita.
+ */
+const ESQUEMA_CONFIRMAR = z
+  .object({
+    entendi: z.string().trim().min(1).max(300),
+    seguir: z.string().trim().min(1).max(40),
+    alternativas: z
+      .array(z.object({ etiqueta: z.string().trim().min(1).max(40), texto: z.string().trim().min(1).max(300).nullable() }).strict())
+      .max(3)
+  })
+  .strict();
+
+/**
+ * Una preferencia que el Centro dedujo y guarda SIN preguntar (D-204, decisión
+ * de la persona). Va a `memory_items` con `origin = 'centro'`, visible y
+ * borrable en /intelligence/memory. Sin cifras de dinero ni porcentajes: una
+ * memoria es un gusto, no un dato.
+ */
+const ESQUEMA_RECORDAR = z
+  .object({
+    texto: z.string().trim().min(1).max(200),
+    ambito: z.enum(MEMORY_SCOPES as unknown as [MemoryScope, ...MemoryScope[]])
+  })
+  .strict()
+  .refine((r) => !tieneCifras(r.texto), { message: "lleva cifras", path: ["texto"] });
+
 type Genericos = typeof ESQUEMAS_GENERICOS;
 export type BloqueGenerico = { [K in keyof Genericos]: { kind: K } & z.infer<Genericos[K]> }[keyof Genericos];
 
@@ -164,6 +194,8 @@ export type BloqueDelAgente =
   | ({ kind: "insight" } & z.infer<typeof ESQUEMA_INSIGHT>)
   | ({ kind: "propuesta_movimiento" } & z.infer<typeof ESQUEMA_PROPUESTA_MOVIMIENTO>)
   | ({ kind: "propuesta_cambio" } & z.infer<typeof ESQUEMA_PROPUESTA_CAMBIO>)
+  | ({ kind: "confirmar_entendimiento" } & z.infer<typeof ESQUEMA_CONFIRMAR>)
+  | ({ kind: "recordar" } & z.infer<typeof ESQUEMA_RECORDAR>)
   | { kind: "capacidad"; nombre: (typeof CAPACIDADES)[number]; parametros: Record<string, unknown> };
 
 export interface RespuestaDelAgente {
@@ -221,7 +253,11 @@ function parsearBloque(crudo: unknown): { ok: true; bloque: BloqueDelAgente } | 
               ? ESQUEMA_PROPUESTA_MOVIMIENTO
               : kind === "propuesta_cambio"
                 ? ESQUEMA_PROPUESTA_CAMBIO
-                : null;
+                : kind === "confirmar_entendimiento"
+                  ? ESQUEMA_CONFIRMAR
+                  : kind === "recordar"
+                    ? ESQUEMA_RECORDAR
+                    : null;
   if (!esquema) return { ok: false, reason: `«${kind || "?"}» no es un bloque del catálogo.` };
 
   const r = esquema.safeParse(datos);
@@ -233,6 +269,32 @@ function parsearBloque(crudo: unknown): { ok: true; bloque: BloqueDelAgente } | 
   const conCifras = rotuloConCifras(bloque);
   if (conCifras !== null) return { ok: false, reason: `«${kind}»: el rótulo «${conCifras}» lleva cifras.` };
   return { ok: true, bloque };
+}
+
+/**
+ * Reglas entre bloques (D-204), después de validar cada uno:
+ *  - Si el turno pregunta «¿entendí bien?», no propone cambios a la vez —ni de
+ *    escritura (`propuesta_cambio`) ni de movimiento (`propuesta_movimiento`):
+ *    las dos son un cambio que la persona todavía no confirmó entender.
+ *  - Una sola confirmación y un solo `recordar` por turno: el primero.
+ */
+function reglasDelTurno(bloques: BloqueDelAgente[], descartados: string[]): BloqueDelAgente[] {
+  let salida = bloques;
+  if (salida.some((b) => b.kind === "confirmar_entendimiento")) {
+    for (const kind of ["propuesta_cambio", "propuesta_movimiento"] as const) {
+      if (!salida.some((b) => b.kind === kind)) continue;
+      descartados.push(`«${kind}»: el turno pregunta primero.`);
+      salida = salida.filter((b) => b.kind !== kind);
+    }
+  }
+  for (const kind of ["confirmar_entendimiento", "recordar"] as const) {
+    const primero = salida.findIndex((b) => b.kind === kind);
+    if (primero === -1) continue;
+    const antes = salida.length;
+    salida = salida.filter((b, i) => b.kind !== kind || i === primero);
+    if (salida.length < antes) descartados.push(`«${kind}»: solo uno por turno.`);
+  }
+  return salida;
 }
 
 export function parsearRespuesta(raw: unknown): { ok: true; value: RespuestaDelAgente } | { ok: false; reason: string } {
@@ -252,13 +314,13 @@ export function parsearRespuesta(raw: unknown): { ok: true; value: RespuestaDelA
     if (p.ok) bloques.push(p.bloque);
     else descartados.push(p.reason);
   }
-  return { ok: true, value: { texto, bloques, descartados } };
+  return { ok: true, value: { texto, bloques: reglasDelTurno(bloques, descartados), descartados } };
 }
 
 export const ESQUEMA_RESPUESTA: GeminiSchema = {
   type: "OBJECT",
   properties: {
-    texto: { type: "STRING", description: "Una a tres frases para la persona." },
+    texto: { type: "STRING", description: "Lo que haga falta, hasta cuatro párrafos cortos; breve si basta." },
     bloques: {
       type: "ARRAY",
       description: `Como mucho ${MAX_BLOQUES}. Vacío si basta con el texto.`,

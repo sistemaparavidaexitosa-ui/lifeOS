@@ -182,16 +182,31 @@ export async function confirmarCambio(
   return { ok: true };
 }
 
-export async function descartarCambio(propuestaId: string): Promise<ActionResult> {
+export async function descartarCambio(propuestaId: string, motivo?: "malentendido"): Promise<ActionResult> {
   const id = z.string().uuid().safeParse(propuestaId);
   if (!id.success) return { ok: false, reason: "Esta propuesta no existe." };
   const { supabase, user } = await requireUser();
-  const { error } = await supabase
+  const { data: fila, error } = await supabase
     .from("coach_proposals")
     .update({ status: "dismissed", resolved_at: new Date().toISOString() })
     .eq("id", id.data)
     .eq("user_id", user.id)
     .eq("tipo", "cambio")
-    .eq("status", "pending");
-  return error ? actionFailed(error) : { ok: true };
+    .eq("status", "pending")
+    .select("payload")
+    .maybeSingle();
+  if (error) return actionFailed(error);
+
+  if (motivo === "malentendido" && fila) {
+    const pl = (fila?.payload ?? {}) as { tabla?: unknown; operacion?: unknown };
+    // Un error de este insert se ignora: el descarte ya ocurrió.
+    await supabase.from("audit_log").insert({
+      user_id: user.id,
+      action: "ai.centro_entendimiento",
+      object: id.data,
+      meta: { resultado: "malentendido", propuestaId: id.data, tabla: typeof pl.tabla === "string" ? pl.tabla : null, operacion: typeof pl.operacion === "string" ? pl.operacion : null }
+    });
+  }
+
+  return { ok: true };
 }

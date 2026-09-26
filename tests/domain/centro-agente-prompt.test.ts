@@ -29,3 +29,22 @@ test("El system explica propuesta_cambio, esquema_de_tabla y trae el índice de 
   for (const t of ["tasks", "notes", "food_entries"]) assert.ok(SYSTEM_AGENTE.includes(t), t);
   assert.match(SYSTEM_AGENTE, /Nunca digas que ya quedó (guardado|registrado)/);
 });
+
+test("El system pide respuestas más largas, explica la confirmación y recordar", () => {
+  assert.ok(!SYSTEM_AGENTE.includes("1–3 frases"));
+  assert.match(SYSTEM_AGENTE, /hasta cuatro párrafos/);
+  for (const k of ["confirmar_entendimiento", "recordar"]) assert.ok(SYSTEM_AGENTE.includes(`«${k}»`), k);
+  assert.match(SYSTEM_AGENTE, /no propongas cambios en ese turno/i);
+  assert.match(SYSTEM_AGENTE, /Lo tendré en cuenta/);
+});
+
+test("El system no vuelve a preguntar cuando la persona ya confirmó lo que entendió", () => {
+  assert.match(SYSTEM_AGENTE, /Sí, sigue: ….{0,40}propón directamente sin volver a preguntar/);
+});
+
+test("El prompt lleva los resultados recientes cuando los hay", () => {
+  const p = promptDelTurno({ contexto: "CTX", historial: [], texto: "hola", resultados: ["Crear · Comida: guardaste 2, descartaste 1."] });
+  assert.match(p, /Cómo te fue con mis propuestas \(últimos 30 días\):\n- Crear · Comida/);
+  assert.ok(p.indexOf("Cómo te fue") < p.indexOf("Persona: hola"));
+  assert.ok(!promptDelTurno({ contexto: "CTX", historial: [], texto: "hola" }).includes("Cómo te fue"));
+});
