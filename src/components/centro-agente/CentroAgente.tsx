@@ -60,6 +60,10 @@ export default function CentroAgente({
   const [hojaAbierta, setHojaAbierta] = useState(false);
   const shellRef = useRef<HTMLDivElement | null>(null);
   const finRef = useRef<HTMLDivElement | null>(null);
+  // Fix ronda 1: las secciones (confirmación, «No es esto», chips) llaman a
+  // `enviar` sin ver `ocupado` — sin esto, un clic durante un turno en vuelo
+  // abriría un segundo turno concurrente.
+  const enVuelo = useRef(false);
 
   // Primer turno: «Hoy», de /api/centro (que ya devuelve `screen` con el flag).
   useEffect(() => {
@@ -155,6 +159,8 @@ export default function CentroAgente({
   }, [hilo, pensando]);
 
   async function enviar(texto: string) {
+    if (enVuelo.current) return;
+    enVuelo.current = true;
     const pregunta: Turno = { id: `p${Date.now()}`, rol: "persona", texto, secciones: [] };
     const historial = historialParaModelo(hilo);
     setHilo((h) => agregar(h, pregunta));
@@ -187,6 +193,7 @@ export default function CentroAgente({
       setHilo((h) => agregar(h, { id: `e${Date.now()}`, rol: "agente", texto, secciones: [] }));
     } finally {
       setPensando(false);
+      enVuelo.current = false;
     }
   }
 
@@ -195,7 +202,7 @@ export default function CentroAgente({
   }
 
   return (
-    <ContextoDelAgente.Provider value={{ workspaceId, enviar, enfocar }}>
+    <ContextoDelAgente.Provider value={{ workspaceId, enviar, enfocar, ocupado: pensando }}>
       <div ref={shellRef} className="ag-shell" role="dialog" aria-modal="true" aria-label="Centro">
         <header className="ag-cabecera">
           <span className="ag-logo">

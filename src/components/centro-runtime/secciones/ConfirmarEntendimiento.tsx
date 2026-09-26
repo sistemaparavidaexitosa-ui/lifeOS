@@ -10,7 +10,7 @@ import { registrarSeccion, type PropsDeSeccion } from "../registro";
  * registro para que el Centro aprenda; la tarjeta queda contestada.
  */
 export default function SeccionConfirmarEntendimiento({ data }: PropsDeSeccion<"confirmarEntendimiento">) {
-  const { enviar, enfocar } = useContext(ContextoDelAgente);
+  const { enviar, enfocar, ocupado } = useContext(ContextoDelAgente);
   const [usada, setUsada] = useState(false);
 
   function elegir(resultado: "seguir" | "alternativa" | "otra", texto: string | null) {
@@ -28,15 +28,15 @@ export default function SeccionConfirmarEntendimiento({ data }: PropsDeSeccion<"
         {data.entendi}
       </p>
       <p className="ag-acciones">
-        <button type="button" className="ag-boton-chico" disabled={usada} onClick={() => elegir("seguir", "Sí, sigue")}>
+        <button type="button" className="ag-boton-chico" disabled={usada || ocupado} onClick={() => elegir("seguir", "Sí, sigue")}>
           {data.seguir}
         </button>
-        {data.alternativas.map((a) => (
+        {data.alternativas.map((a, i) => (
           <button
-            key={a.etiqueta}
+            key={`${i}-${a.etiqueta}`}
             type="button"
             className="ag-boton-chico"
-            disabled={usada}
+            disabled={usada || ocupado}
             onClick={() => elegir(a.texto ? "alternativa" : "otra", a.texto)}>
             {a.etiqueta}
           </button>

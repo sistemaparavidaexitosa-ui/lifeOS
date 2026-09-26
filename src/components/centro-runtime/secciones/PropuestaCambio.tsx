@@ -20,7 +20,7 @@ export default function SeccionPropuestaCambio({ data }: PropsDeSeccion<"propues
   const [correcciones, setCorrecciones] = useState<Record<string, Record<string, string>>>({});
   const [pending, startTransition] = useTransition();
   const router = useRouter();
-  const { enviar } = useContext(ContextoDelAgente);
+  const { enviar, ocupado } = useContext(ContextoDelAgente);
 
   const pendientes = data.items.filter((it) => (estados[it.propuestaId] ?? "pendiente") === "pendiente");
 
@@ -101,7 +101,7 @@ export default function SeccionPropuestaCambio({ data }: PropsDeSeccion<"propues
                 <button type="button" className="ag-boton-chico" disabled={pending} onClick={() => descartar(it)}>
                   Descartar
                 </button>
-                <button type="button" className="ag-boton-chico" disabled={pending} onClick={() => noEsEsto(it)}>
+                <button type="button" className="ag-boton-chico" disabled={pending || ocupado} onClick={() => noEsEsto(it)}>
                   No es esto
                 </button>
               </p>

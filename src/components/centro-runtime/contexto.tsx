@@ -15,4 +15,6 @@ export const ContextoDelAgente = createContext<{
   enviar?: (texto: string) => void;
   /** D-204: lleva el foco al compositor («Otra cosa»). */
   enfocar?: () => void;
+  /** D-204 fix ronda 1: hay un turno en vuelo — `enviar` lo va a ignorar. */
+  ocupado?: boolean;
 }>({ workspaceId: null });
