@@ -24,3 +24,21 @@ test("El turno de «Hoy» (sin texto) no viaja", () => {
   const h = agregar([], { id: "hoy", rol: "agente", texto: "", secciones: [] });
   assert.deepStrictEqual(historialParaModelo(h), []);
 });
+
+// --- I1: lo que el Centro entendió tiene que llegar al modelo, o «Sí, sigue» pierde el ancla.
+
+const confirmarEntendimiento = (entendi: string) => ({
+  id: "c",
+  kind: "confirmarEntendimiento" as const,
+  data: { entendi, seguir: "Sí, sigue", alternativas: [] }
+});
+
+test("El «Entendí» de una tarjeta de confirmación viaja pegado al texto del turno", () => {
+  const h = agregar([], { id: "t1", rol: "agente", texto: "¿Seguro?", secciones: [confirmarEntendimiento("Borrar la tarea X")] });
+  assert.deepStrictEqual(historialParaModelo(h), [{ rol: "agente", texto: "¿Seguro?\n(Entendí: Borrar la tarea X)" }]);
+});
+
+test("Si el turno de confirmación no trae texto propio, igual viaja con el «Entendí»", () => {
+  const h = agregar([], { id: "t1", rol: "agente", texto: "", secciones: [confirmarEntendimiento("Borrar la tarea X")] });
+  assert.deepStrictEqual(historialParaModelo(h), [{ rol: "agente", texto: "(Entendí: Borrar la tarea X)" }]);
+});

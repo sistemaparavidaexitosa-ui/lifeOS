@@ -9,6 +9,11 @@ import { registrarSeccion, type PropsDeSeccion } from "../registro";
 
 type Estado = "pendiente" | "guardado" | "descartado";
 
+/** Mismo criterio que el título de la tarjeta: qué se hizo, en una palabra. */
+function verboDe(operacion: ItemDeCambio["operacion"]): string {
+  return operacion === "borrar" ? "Borrar" : operacion === "crear" ? "Crear" : "Cambiar";
+}
+
 /**
  * Cambios que el Centro propone (D-203). Nada existe hasta que la persona
  * pulsa Guardar; lo que se escribe es lo que el servidor validó al proponer,
@@ -55,7 +60,7 @@ export default function SeccionPropuestaCambio({ data }: PropsDeSeccion<"propues
     startTransition(async () => {
       await descartarCambio(it.propuestaId, "malentendido").catch(() => null);
       setEstados((e) => ({ ...e, [it.propuestaId]: "descartado" }));
-      enviar?.("No era eso");
+      enviar?.(`No era eso (${verboDe(it.operacion)} · ${it.etiquetaTabla}: ${it.titulo})`);
     });
   }
 

@@ -21,9 +21,23 @@ export function agregar(hilo: readonly Turno[], turno: Turno): Turno[] {
   return [...hilo, turno];
 }
 
+/**
+ * El texto de un turno, con lo que el Centro entendió (D-204) al final: si no
+ * viaja, «Sí, sigue» pierde la única frase que ancla qué va a seguir, y el
+ * modelo puede releer la petición original como si aún estuviera sin aclarar.
+ * Puede ser la ÚNICA razón por la que el turno viaja (un turno de
+ * `confirmar_entendimiento` puro no trae más texto que ese).
+ */
+function conEntendimiento(t: Turno): string {
+  const confirmacion = t.secciones.find((s) => s.kind === "confirmarEntendimiento");
+  if (!confirmacion) return t.texto;
+  const sufijo = `(Entendí: ${confirmacion.data.entendi})`;
+  return t.texto.trim() ? `${t.texto}\n${sufijo}` : sufijo;
+}
+
 export function historialParaModelo(hilo: readonly Turno[]): { rol: "persona" | "agente"; texto: string }[] {
   return hilo
+    .map((t) => ({ rol: t.rol, texto: conEntendimiento(t) }))
     .filter((t) => t.texto.trim() !== "")
-    .slice(-MAX_HISTORIAL)
-    .map((t) => ({ rol: t.rol, texto: t.texto }));
+    .slice(-MAX_HISTORIAL);
 }

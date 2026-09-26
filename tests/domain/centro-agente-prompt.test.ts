@@ -38,6 +38,10 @@ test("El system pide respuestas más largas, explica la confirmación y recordar
   assert.match(SYSTEM_AGENTE, /Lo tendré en cuenta/);
 });
 
+test("El system no vuelve a preguntar cuando la persona ya confirmó lo que entendió", () => {
+  assert.match(SYSTEM_AGENTE, /Sí, sigue: ….{0,40}propón directamente sin volver a preguntar/);
+});
+
 test("El prompt lleva los resultados recientes cuando los hay", () => {
   const p = promptDelTurno({ contexto: "CTX", historial: [], texto: "hola", resultados: ["Crear · Comida: guardaste 2, descartaste 1."] });
   assert.match(p, /Cómo te fue con mis propuestas \(últimos 30 días\):\n- Crear · Comida/);

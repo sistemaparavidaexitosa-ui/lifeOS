@@ -28,7 +28,7 @@ export default function SeccionConfirmarEntendimiento({ data }: PropsDeSeccion<"
         {data.entendi}
       </p>
       <p className="ag-acciones">
-        <button type="button" className="ag-boton-chico" disabled={usada || ocupado} onClick={() => elegir("seguir", "Sí, sigue")}>
+        <button type="button" className="ag-boton-chico" disabled={usada || ocupado} onClick={() => elegir("seguir", `Sí, sigue: ${data.entendi}`)}>
           {data.seguir}
         </button>
         {data.alternativas.map((a, i) => (
