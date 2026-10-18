@@ -56,7 +56,7 @@ export default async function ExecutionPage({
   searchParams: Promise<{ project?: string; view?: string; ws?: string; task?: string }>;
 }) {
   const { project: requestedProjectId, view: rawView, ws: requestedWorkspaceId, task: requestedTaskId } = await searchParams;
-  const view: ExecutionView = isExecutionView(rawView) ? rawView : "board";
+  const view: ExecutionView = isExecutionView(rawView) ? rawView : "lista";
 
   const supabase = await createClient();
   const user = await getSessionUser();
@@ -368,7 +368,7 @@ async function BoardWorkspace({
         commentCountByTask={commentCountByTask}
         members={members}
         revision={revision}
-        initialView={threadEnabled || view !== "hilo" ? view : "board"}
+        initialView={threadEnabled || view !== "hilo" ? view : "lista"}
         orderingEnabled={orderingEnabled}
         threadEnabled={threadEnabled}
         openTaskId={openTaskId}
