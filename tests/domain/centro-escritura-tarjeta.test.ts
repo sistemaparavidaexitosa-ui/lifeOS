@@ -163,3 +163,13 @@ test("D-205: confirmarEntendimiento acepta textoSeguir y modoSeguir «ia», y na
   assert.strictEqual(validarPorSeccion([{ ...base, data: { ...base.data, textoSeguir: "borra la tarea x", modoSeguir: "ia" as const } }], [], "test").length, 1);
   assert.strictEqual(validarPorSeccion([{ ...base, data: { ...base.data, textoSeguir: "x", modoSeguir: "auto" as unknown as "ia" } }], [], "test").length, 0);
 });
+
+test("D-205 E2: si el título es una ref (el hábito de un registro), la tarjeta se titula con su nombre, no con el uuid", () => {
+  const habito = "55555555-5555-4555-8555-555555555555";
+  const cambio = { operacion: "crear", tabla: "habit_logs", id: null, antes: null, campos: { habit_id: habito, log_date: "2026-10-18", status: "completed" } } as const;
+  const filas = new Map([[`fila:habits:${habito}`, { id: habito, name: "Meditar" }]]);
+  assert.equal(tituloDeCambio(cambio, filas), "Meditar");
+  assert.equal(tituloDeCambio(cambio), "Hábito");
+  const s = seccionDeCambios("s1", [{ propuestaId: "p1", cambio }], filas);
+  assert.equal((s?.data as { items: { titulo: string }[] }).items[0]!.titulo, "Meditar");
+});

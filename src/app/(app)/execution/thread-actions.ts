@@ -210,6 +210,33 @@ export async function createReminder(
   return { ok: true };
 }
 
+/**
+ * D-205: el mismo recordatorio para un día concreto, que es lo que el Centro
+ * entiende de «recuérdame la tarea X el jueves». Hoy o después: un
+ * recordatorio en el pasado no avisaría nunca.
+ */
+export async function createReminderOn(subjectType: "task" | "comment", subjectId: string, remindOn: string, text: string): Promise<ThreadActionResult> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(remindOn)) return { ok: false, reason: "Fecha no válida." };
+  if (!z.string().uuid().safeParse(subjectId).success) return { ok: false, reason: "No se encontró qué recordar." };
+
+  const supabase = await createClient();
+  const user = await getSessionUser();
+  if (!user) return { ok: false, reason: "No autenticado" };
+  if (remindOn < (await todayForUser())) return { ok: false, reason: "Ese día ya pasó." };
+
+  const { error } = await supabase.from("reminders").insert({
+    user_id: user.id,
+    subject_type: subjectType,
+    subject_id: subjectId,
+    text: text.slice(0, 300),
+    remind_on: remindOn
+  });
+  if (error) return actionFailed(error);
+
+  revalidatePath("/home");
+  return { ok: true };
+}
+
 export async function completeReminder(id: string): Promise<void> {
   const supabase = await createClient();
   const user = await getSessionUser();

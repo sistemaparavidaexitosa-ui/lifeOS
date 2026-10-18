@@ -13,7 +13,7 @@ import { after } from "next/server";
 import type { Cerebro } from "@/lib/ai-chat/cerebro";
 import type { AnySection } from "@/lib/domain/centro/runtime/types.ts";
 import { analizar, MARCA_DE_FILA, type Analisis } from "@/lib/domain/centro/interprete/analizar.ts";
-import { resolverAnalisis, type Candidato, type ContextoDeResolucion, type Interpretacion } from "@/lib/domain/centro/interprete/resolver.ts";
+import { resolverAnalisis, type Candidato, type ContextoDeResolucion, type Interpretacion, type Opcion } from "@/lib/domain/centro/interprete/resolver.ts";
 import { normalizar } from "@/lib/domain/centro/interprete/normalizar.ts";
 import { ESCRITURA_POR_TABLA, type EntradaDeEscritura } from "@/lib/domain/centro/escritura/registro.ts";
 import { MAX_CAMBIOS_POR_TURNO } from "@/lib/domain/centro/agente/contrato.ts";
@@ -62,19 +62,37 @@ async function leer(a: Escribir, cerebro: Cerebro, ctx: ContextoDeResolucion) {
   const entrada = ESCRITURA_POR_TABLA[a.tabla] as EntradaDeEscritura;
 
   if (a.operacion === "crear") {
-    for (const c of Object.values(entrada.campos)) {
+    for (const [nombre, c] of Object.entries(entrada.campos)) {
       if (c.tipo !== "ref" || !c.refTabla) continue;
-      // Solo los catálogos que el registro usa como destino hoy (`projects`,
-      // `notebooks`): los dos tienen `title` y `created_at`. El cast es solo
-      // para `tsc`, que no deja un `.from` dinámico — y por eso tampoco
-      // comprueba las columnas: si se añade una ref nueva, mirar que las tenga.
-      const { data, error } = await cerebro.supabase
-        .from(c.refTabla as "projects")
-        .select("id, title")
-        .order("created_at", { ascending: false })
-        .limit(MAX_CATALOGO);
+      // Los destinos de una ref (`projects`, `notebooks`, `habits`, `tasks`)
+      // tienen todos `id`, `created_at` y su columna de nombre (`refTitulo`).
+      // El cast es solo para `tsc`, que no deja un `.from` dinámico — y por eso
+      // tampoco comprueba las columnas: si se añade una ref nueva, mirar que
+      // las tenga (lo cubre el test del registro).
+      const col = c.refTitulo ?? "title";
+      const consulta = () => cerebro.supabase.from(c.refTabla as "projects").select(`id, ${col}` as "id, title");
+      // Si se dijo el nombre, además se busca ESE: con más de 20 hábitos o
+      // tareas, el nombrado puede no estar entre los recientes. Por la RPC de
+      // `buscar` (ignora acentos: «rediseno» encuentra «Rediseño»).
+      const dicho = a.menciones[nombre] ?? (entrada.dictado === nombre ? a.resto : undefined);
+      let nombrados: Record<string, unknown>[] = [];
+      if (dicho && (TABLAS_DE_BUSQUEDA as readonly string[]).includes(c.refTabla)) {
+        const { data: hallados, error } = await cerebro.supabase.rpc("buscar_en_todo", { p_texto: dicho, p_tablas: [c.refTabla], p_limite: MAX_CATALOGO });
+        if (error) throw error;
+        const ids = (hallados ?? []).map((h) => h.id);
+        if (ids.length) {
+          const { data, error: e2 } = await consulta().in("id", ids);
+          if (e2) throw e2;
+          nombrados = (data ?? []) as unknown as Record<string, unknown>[];
+        }
+      }
+      const { data: recientes, error } = await consulta().order("created_at", { ascending: false }).limit(MAX_CATALOGO);
       if (error) throw error;
-      ctx.catalogo[c.refTabla] = (data ?? []).map((f) => ({ id: f.id, nombre: f.title }));
+      const vistos = new Map<string, Opcion>();
+      for (const f of [...nombrados, ...((recientes ?? []) as unknown as Record<string, unknown>[])]) {
+        vistos.set(String(f.id), { id: String(f.id), nombre: String(f[col] ?? "") });
+      }
+      ctx.catalogo[c.refTabla] = [...vistos.values()];
     }
     if (a.tabla === "food_entries" && a.resto) {
       const { data, error } = await cerebro.supabase

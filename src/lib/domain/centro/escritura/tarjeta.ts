@@ -36,9 +36,12 @@ function nombreDeRef(c: CampoDeEscritura, uuid: unknown, filas: ReadonlyMap<stri
   return typeof n === "string" && n.trim() ? paraLeer(n, MAX_VALOR) : null;
 }
 
-export function tituloDeCambio(c: CambioGuardado): string {
+export function tituloDeCambio(c: CambioGuardado, filas: ReadonlyMap<string, Record<string, unknown>> = new Map()): string {
   const e = ESCRITURA_POR_TABLA[c.tabla] as EntradaDeEscritura;
   const fuente = c.operacion === "crear" ? c.campos : { ...(c.antes ?? {}), ...c.campos };
+  // D-205 E2: un registro de hábito se titula con su hábito, nunca con el uuid.
+  const def = e.campos[e.titulo];
+  if (def?.tipo === "ref") return nombreDeRef(def, fuente[e.titulo], filas) ?? e.etiqueta;
   const principal = fuente[e.titulo];
   // Una nota sin título se titula con su primera línea, como en /notebooks.
   const alterno = c.tabla === "notes" ? fuente.body : null;
@@ -97,7 +100,7 @@ export function seccionDeCambios(
     propuestaId,
     operacion: cambio.operacion,
     etiquetaTabla: (ESCRITURA_POR_TABLA[cambio.tabla] as EntradaDeEscritura).etiqueta,
-    titulo: tituloDeCambio(cambio),
+    titulo: tituloDeCambio(cambio, filas),
     campos: camposDeTarjeta(cambio, filas)
   }));
   return { id, kind: "propuestaCambio", data: extra ? { items: datos, ...extra } : { items: datos } };

@@ -119,8 +119,8 @@ test("Borrar: sobre una fila leída, sin campos", () => {
   assert.deepStrictEqual(r.ok && { op: r.cambio.operacion, id: r.cambio.id, campos: r.cambio.campos }, { op: "borrar", id: T, campos: {} });
 });
 
-test("Borrar: de una tabla que se lee pero no se escribe (projects), fuera", () => {
-  assert.strictEqual(validarCambio({ operacion: "borrar", fila: `fila:projects:${P}` }, ctx).ok, false);
+test("Borrar: de una tabla que se lee pero no se escribe (notebooks), fuera", () => {
+  assert.strictEqual(validarCambio({ operacion: "borrar", fila: `fila:notebooks:${P}` }, ctx).ok, false);
 });
 
 test("Operación desconocida, fuera", () => {
