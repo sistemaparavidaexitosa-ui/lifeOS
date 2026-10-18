@@ -164,7 +164,7 @@ function Campo(p: { c: CampoDeTarjeta; borrar: boolean; editable: boolean; valor
           <textarea value={actual} rows={4} onChange={(e) => p.onChange(e.target.value)} />
         ) : (
           <input
-            type={c.tipo === "fecha" ? "date" : c.tipo === "numero" || c.tipo === "entero" ? "number" : "text"}
+            type={c.tipo === "fecha" ? "date" : c.tipo === "hora" ? "time" : c.tipo === "numero" || c.tipo === "entero" ? "number" : "text"}
             value={actual}
             onChange={(e) => p.onChange(e.target.value)}
           />

@@ -36,7 +36,17 @@ export const VERBOS_DE_TABLA: Readonly<Record<string, { operacion: Operacion; ta
   termina: { operacion: "editar", tabla: "tasks", valores: { status: "Completed" } },
   termine: { operacion: "editar", tabla: "tasks", valores: { status: "Completed" } },
   recuerdame: { operacion: "crear", tabla: "reminders", valores: {} },
-  recuerdamelo: { operacion: "crear", tabla: "reminders", valores: {} }
+  recuerdamelo: { operacion: "crear", tabla: "reminders", valores: {} },
+  gaste: { operacion: "crear", tabla: "journal_entries", valores: { type: "expense" } },
+  pague: { operacion: "crear", tabla: "journal_entries", valores: { type: "expense" } },
+  compre: { operacion: "crear", tabla: "journal_entries", valores: { type: "expense" } },
+  cobre: { operacion: "crear", tabla: "journal_entries", valores: { type: "income" } },
+  recibi: { operacion: "crear", tabla: "journal_entries", valores: { type: "income" } },
+  gane: { operacion: "crear", tabla: "journal_entries", valores: { type: "income" } },
+  peso: { operacion: "crear", tabla: "body_measurements", valores: {} },
+  pese: { operacion: "crear", tabla: "body_measurements", valores: {} },
+  comenta: { operacion: "crear", tabla: "comments", valores: {} },
+  comentale: { operacion: "crear", tabla: "comments", valores: {} }
 };
 
 /**

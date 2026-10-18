@@ -227,7 +227,7 @@ const ESQUEMAS: Partial<Record<SectionKind, z.ZodTypeAny>> = {
                     .object({
                       campo: z.string().regex(/^[a-z][a-z0-9_]{0,62}$/),
                       etiqueta: texto(60),
-                      tipo: z.enum(["texto", "numero", "entero", "fecha", "opcion", "ref"]),
+                      tipo: z.enum(["texto", "numero", "entero", "fecha", "hora", "opcion", "ref"]),
                       antes: texto(400).nullable(),
                       despues: texto(400).nullable(),
                       editable: z.boolean(),

@@ -104,6 +104,8 @@ function valorDe(
     }
     case "fecha":
       return typeof crudo === "string" && esFecha(crudo) ? { ok: true, valor: crudo } : mal("no es una fecha AAAA-MM-DD");
+    case "hora":
+      return typeof crudo === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(crudo) ? { ok: true, valor: crudo } : mal("no es una hora HH:MM");
     case "opcion":
       return typeof crudo === "string" && (c.opciones ?? []).includes(crudo) ? { ok: true, valor: crudo } : mal("no es una opción válida");
     case "ref": {

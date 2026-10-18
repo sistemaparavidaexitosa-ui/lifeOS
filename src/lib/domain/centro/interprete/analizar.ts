@@ -14,7 +14,7 @@
 import { ESCRITURA_POR_TABLA, camposDe, type EntradaDeEscritura, type Operacion, type TablaEscribible } from "../escritura/registro.ts";
 import type { Valor } from "../escritura/cambio.ts";
 import { comoPalabra, entreComillas, normalizar } from "./normalizar.ts";
-import { extraerFecha, extraerNumero, extraerOpcion, type Hallazgo } from "./valores.ts";
+import { extraerFecha, extraerNumero, extraerNumeroSuelto, extraerOpcion, extraerRangoDeHoras, type Hallazgo } from "./valores.ts";
 import { VERBOS, VERBOS_DE_TABLA, destinoDe, pideCriterio } from "./vocabulario.ts";
 
 export const MAX_TEXTO_INTERPRETABLE = 300;
@@ -127,8 +127,11 @@ function subordinada(t: Nombrada, de: TablaEscribible, n: string): "mencion" | "
 
 /** La tabla de la orden: la única nombrada que no es parte de otra. */
 function tablaPrincipal(nombradas: Nombrada[], n: string, delVerbo?: TablaEscribible): { tabla: TablaEscribible; porDictado: Nombrada[] } | { motivo: string } {
-  const libres = nombradas.filter((t) => !nombradas.some((u) => u.tabla !== t.tabla && subordinada(t, u.tabla, n)) && !(delVerbo && t.tabla !== delVerbo && subordinada(t, delVerbo, n)));
-  const tabla = delVerbo ?? (libres.length === 1 ? libres[0]!.tabla : null);
+  // Un verbo que ya dice la tabla («gasté», «desayuné») hace del resto de
+  // palabras contenido: «gasté 300 en COMIDA» no nombra la tabla de comidas.
+  if (delVerbo) return { tabla: delVerbo, porDictado: nombradas.filter((t) => t.tabla !== delVerbo && subordinada(t, delVerbo, n) === "dictado") };
+  const libres = nombradas.filter((t) => !nombradas.some((u) => u.tabla !== t.tabla && subordinada(t, u.tabla, n)));
+  const tabla = libres.length === 1 ? libres[0]!.tabla : null;
   if (!tabla) return { motivo: libres.length ? "nombra más de una tabla" : "no nombra ninguna tabla" };
   if (libres.some((t) => t.tabla !== tabla)) return { motivo: "nombra más de una tabla" };
   return { tabla, porDictado: nombradas.filter((t) => t.tabla !== tabla && subordinada(t, tabla, n) === "dictado") };
@@ -170,7 +173,8 @@ export function analizar(conMarca: string, hoy: string): Analisis {
   // Las mencionadas se quedan: su mención las recoge abajo con el nombre.
   for (const t of [...nombradas.filter((t) => t.tabla === tabla), ...p.porDictado]) trabajo = quitar(trabajo, t.frase);
 
-  const valores: Record<string, Valor> = { ...(v.deTabla?.valores ?? {}) };
+  const nombrada = nombradas.find((t) => t.tabla === tabla)?.frase;
+  const valores: Record<string, Valor> = { ...(v.deTabla?.valores ?? {}), ...(nombrada ? (entrada.valoresPorSinonimo?.[nombrada] ?? {}) : {}) };
   const campos = operacion === "borrar" ? [] : camposDe(entrada, operacion);
   let fechaUsada = false;
   const tomar = (nombre: string, h: Hallazgo<string | number> | null) => {
@@ -178,6 +182,16 @@ export function analizar(conMarca: string, hoy: string): Analisis {
     valores[nombre] = h.valor;
     trabajo = quitar(trabajo, h.frase);
   };
+  // Las horas, antes que fechas y números: «de 9 a 2» no son dos números sueltos.
+  const horas = campos.filter(([, c]) => c.tipo === "hora");
+  if (horas.length === 2) {
+    const r = extraerRangoDeHoras(trabajo);
+    if (r) {
+      valores[horas[0]![0]] = r.valor[0];
+      valores[horas[1]![0]] = r.valor[1];
+      trabajo = quitar(trabajo, r.frase);
+    }
+  }
   for (const [nombre, c] of campos) {
     if (nombre in valores) continue;
     if (c.tipo === "opcion" && c.sinonimos) tomar(nombre, extraerOpcion(trabajo, c.sinonimos));
@@ -193,13 +207,18 @@ export function analizar(conMarca: string, hoy: string): Analisis {
     if (nombre in valores || (c.tipo !== "numero" && c.tipo !== "entero") || !c.unidades) continue;
     tomar(nombre, extraerNumero(trabajo, c.unidades));
   }
+  // Y al final, el número sin nada alrededor, para el campo que lo admite.
+  for (const [nombre, c] of campos) {
+    if (nombre in valores || !c.suelto) continue;
+    tomar(nombre, extraerNumeroSuelto(trabajo));
+  }
 
   // Lo que se nombra como destino: «en el proyecto Rediseño», hasta la coma o el final.
   const menciones: Record<string, string> = {};
   for (const [nombre, c] of campos) {
     if (c.tipo !== "ref" || !c.menciones) continue;
     for (const m of [...c.menciones].sort((a, b) => b.length - a.length)) {
-      const r = new RegExp(`(?<![a-z0-9])${m.replace(/ /g, "\\s+")}\\s+([^,]+)`).exec(trabajo);
+      const r = new RegExp(`(?<![a-z0-9])${m.replace(/ /g, "\\s+")}\\s+([^,:]+)`).exec(trabajo);
       if (!r) continue;
       const dicho = recortarBordes(r[1]!);
       if (dicho) menciones[nombre] = dicho;

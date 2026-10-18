@@ -150,3 +150,35 @@ export function extraerOpcion(n: string, sinonimos: Readonly<Record<string, read
   }
   return mejor;
 }
+
+/** Un número que no lleva unidad ni etiqueta («gasté 300 en comida»). */
+export function extraerNumeroSuelto(n: string): Hallazgo<number> | null {
+  const m = new RegExp(`(?<![a-z0-9.,:$])${CIFRA}(?![0-9a-z:])`).exec(n);
+  if (!m) return null;
+  const valor = cifra(m[1]!);
+  return Number.isFinite(valor) ? { valor, frase: m[0] } : null;
+}
+
+function hhmm(h: number, m: number): string | null {
+  return h >= 0 && h < 24 && m >= 0 && m < 60 ? `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}` : null;
+}
+
+/**
+ * «de 9 a 2» → 09:00–14:00; «de 6 a 9 pm» → 18:00–21:00. Sin am/pm, un fin
+ * menor que el inicio es de la tarde: nadie trabaja de 9 de la mañana a 2 de
+ * la madrugada. El am/pm del final vale para los dos si el inicio no lleva.
+ */
+export function extraerRangoDeHoras(n: string): Hallazgo<[string, string]> | null {
+  const m = /(?<![a-z0-9])(?:de |desde )(?:las? )?(\d{1,2})(?::(\d{2}))? ?(am|pm)? (?:a|hasta) (?:las? )?(\d{1,2})(?::(\d{2}))? ?(am|pm)?(?![a-z0-9])/.exec(n);
+  if (!m) return null;
+  let h1 = Number(m[1]);
+  let h2 = Number(m[4]);
+  if (h1 > 23 || h2 > 23) return null;
+  const sufijo1 = m[3] ?? m[6];
+  if (sufijo1 === "pm" && h1 < 12) h1 += 12;
+  if (m[6] === "pm" && h2 < 12) h2 += 12;
+  if (!m[3] && !m[6] && h2 <= h1 && h2 < 12) h2 += 12;
+  const ini = hhmm(h1, Number(m[2] ?? 0));
+  const fin = hhmm(h2, Number(m[5] ?? 0));
+  return ini && fin && fin > ini ? { valor: [ini, fin], frase: m[0] } : null;
+}

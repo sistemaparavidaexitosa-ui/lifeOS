@@ -30,6 +30,12 @@ import { upsertDebt, deleteDebt } from "@/app/(app)/debt/actions";
 import { upsertAsset, deleteAsset } from "@/app/(app)/wealth/actions";
 import { saveDailyLearning } from "@/app/(app)/planning/actions";
 import { todayForUser } from "@/lib/data/profile";
+import { createAccount, postTransaction } from "@/app/(app)/money/actions";
+import { upsertBudgetLine, deleteBudgetLine } from "@/app/(app)/money/budget/actions";
+import { upsertWeight } from "@/app/(app)/development/nutrition/actions";
+import { upsertOccupation, deleteOccupation } from "@/app/(app)/time/actions";
+import { addTaskComment } from "@/app/(app)/execution/task-detail-actions";
+import { upsertTrait, deleteTrait } from "@/lib/identity/actions";
 import type { TaskStatus, Priority } from "@/lib/domain/types";
 
 export type Adaptador = (c: CambioGuardado) => Promise<ActionResult & { id?: string }>;
@@ -365,6 +371,90 @@ export const ADAPTADORES: Cobertura = {
           wins: s(v("wins", hoy?.wins ?? ""))
         });
       })
+  },
+  journal_entries: {
+    crear: (c) =>
+      seguro(() =>
+        postTransaction(
+          formulario({
+            type: s(c.campos.type),
+            amount: s(c.campos.amount),
+            memo: s(c.campos.memo),
+            accountId: s(c.campos.account_id),
+            category: s(c.campos.category) || "Otros",
+            effectiveAt: s(c.campos.entry_date)
+          })
+        )
+      )
+  },
+  accounts: {
+    crear: (c) =>
+      seguro(() =>
+        createAccount(
+          formulario({ name: s(c.campos.name), type: s(c.campos.type) || "bank", currency: s(c.campos.currency) || "MXN", opening: s(c.campos.opening_balance) || "0" })
+        )
+      )
+  },
+  budgets: {
+    crear: (c) =>
+      seguro(() => {
+        const mensual = Number(c.campos.monthly_cost);
+        // Sin quincenas dichas, mitad y mitad, como sugiere el formulario.
+        return upsertBudgetLine(
+          null,
+          formulario({
+            category: s(c.campos.category),
+            monthlyCost: s(c.campos.monthly_cost),
+            q1Amount: s(c.campos.q1_amount) || String(r2(mensual / 2)),
+            q2Amount: s(c.campos.q2_amount) || String(r2(mensual / 2))
+          })
+        );
+      }),
+    editar: (c) =>
+      seguro(async () => {
+        const f = await actual("budgets", c.id!, "monthly_cost, q1_amount, q2_amount");
+        if (!f) return ya;
+        const mensual = Number(c.campos.monthly_cost ?? f.monthly_cost);
+        // Si cambia el mes y no se dijeron quincenas, se reparten mitad y mitad.
+        const reparto = "monthly_cost" in c.campos ? String(r2(mensual / 2)) : null;
+        await upsertBudgetLine(
+          c.id!,
+          formulario({
+            monthlyCost: String(mensual),
+            q1Amount: s(c.campos.q1_amount ?? reparto ?? f.q1_amount),
+            q2Amount: s(c.campos.q2_amount ?? reparto ?? f.q2_amount)
+          })
+        );
+      }),
+    borrar: (c) => seguro(() => deleteBudgetLine(c.id!))
+  },
+  body_measurements: {
+    crear: (c) => seguro(() => upsertWeight(formulario({ weightKg: s(c.campos.weight_kg), bodyFatPct: s(c.campos.body_fat_pct) })))
+  },
+  occupations: {
+    crear: (c) =>
+      seguro(() =>
+        upsertOccupation(
+          null,
+          formulario({ title: s(c.campos.title), start: s(c.campos.start_time), end: s(c.campos.end_time), category: s(c.campos.category) || "Otros", date: s(c.campos.occ_date) })
+        )
+      ),
+    borrar: (c) => seguro(() => deleteOccupation(c.id!))
+  },
+  comments: {
+    crear: (c) => seguro(() => addTaskComment(s(c.campos.subject_id), s(c.campos.body)))
+  },
+  identity_traits: {
+    crear: (c) =>
+      seguro(() => upsertTrait(null, { name: s(c.campos.name), statement: s(c.campos.statement), area: (s(c.campos.area) || "Personal") as "Personal" })),
+    editar: (c) =>
+      seguro(async () => {
+        const f = await actual("identity_traits", c.id!, "name, statement, area, active");
+        if (!f) return ya;
+        const v = mezcla(c, f);
+        return upsertTrait(c.id!, { name: v("name"), statement: v("statement"), area: v("area") as "Personal", active: f.active !== false });
+      }),
+    borrar: (c) => seguro(() => deleteTrait(c.id!))
   }
 };
 

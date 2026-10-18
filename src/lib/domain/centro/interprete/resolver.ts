@@ -94,7 +94,8 @@ function legible(c: CampoDeEscritura, v: Valor): string {
 
 /** «· vence 19 oct · prioridad alta»: fechas primero, luego en el orden del registro. */
 function detalles(entrada: EntradaDeEscritura, campos: Record<string, Valor>): string {
-  const lista = Object.entries(entrada.campos).filter(([n, c]) => n !== entrada.titulo && n !== entrada.dictado && c.tipo !== "ref" && campos[n] !== undefined && campos[n] !== null);
+  const titulado = (n: string) => !entrada.sinDictado && (n === entrada.titulo || n === entrada.dictado);
+  const lista = Object.entries(entrada.campos).filter(([n, c]) => !titulado(n) && c.tipo !== "ref" && campos[n] !== undefined && campos[n] !== null);
   lista.sort(([, a], [, b]) => Number(b.tipo === "fecha") - Number(a.tipo === "fecha"));
   return lista.map(([n, c]) => ` · ${c.etiqueta.toLowerCase()} ${legible(c, campos[n]!)}`).join("");
 }
@@ -156,6 +157,8 @@ function resolverCrear(a: Escribir, entrada: EntradaDeEscritura & { tabla: strin
     const al = ctx.alimentos.find((x) => normalizar(x.nombre) === a.resto) ?? ctx.alimentos.find((x) => normalizar(x.nombre).includes(a.resto));
     if (!al || !a.resto) return ia("alimento sin macros conocidos");
     Object.assign(campos, { name: al.nombre, kcal100: al.kcal100, protein100: al.protein100, carbs100: al.carbs100, fat100: al.fat100 });
+  } else if (entrada.sinDictado) {
+    // Nada que dictar: el peso son solo números.
   } else if (dictadoEsRef) {
     menciones[dictado] ??= a.resto;
     if (!menciones[dictado]) return ia("sin nombre de la fila");
@@ -218,7 +221,8 @@ function resolverCrear(a: Escribir, entrada: EntradaDeEscritura & { tabla: strin
   const dicho = campos[dictado];
   const nombre = nombreDictado ?? (typeof dicho === "string" ? dicho : titulo);
   const destino = enLaTarjeta.length ? ` en ${enLaTarjeta.join(", ")}` : "";
-  const entendi = `${accion} ${conArticulo(entrada.etiqueta, entrada.femenino)} «${nombre}»${destino}${detalles(entrada, campos)}`;
+  const cabeza = entrada.sinDictado ? "" : ` «${nombre}»`;
+  const entendi = `${accion} ${conArticulo(entrada.etiqueta, entrada.femenino)}${cabeza}${destino}${detalles(entrada, campos)}`;
   return { tipo: "cambios", entendi: recortar(entendi, MAX_ENTENDI), cambios: [cambio], filas };
 }
 

@@ -17,7 +17,7 @@ import { TASK_TRANSITIONS } from "../../task-state.ts";
 export const OPERACIONES = ["crear", "editar", "borrar"] as const;
 export type Operacion = (typeof OPERACIONES)[number];
 
-export type TipoCampo = "texto" | "numero" | "entero" | "fecha" | "opcion" | "ref";
+export type TipoCampo = "texto" | "numero" | "entero" | "fecha" | "hora" | "opcion" | "ref";
 
 export interface CampoDeEscritura {
   etiqueta: string;
@@ -41,6 +41,11 @@ export interface CampoDeEscritura {
   unidades?: readonly string[];
   /** D-205, `numero`/`entero`: las palabras que lo anuncian («saldo 4500»). */
   etiquetas?: readonly string[];
+  /**
+   * D-205 E3, `numero`: si no lleva unidad ni etiqueta, el número que quede
+   * suelto es este («gasté 300 en comida»). Uno por tabla.
+   */
+  suelto?: boolean;
   /** D-205, `ref`: cómo se nombra el destino («en el proyecto …»). */
   menciones?: readonly string[];
   /** D-205, `ref`: la columna con el nombre de la fila destino. Por defecto, `title`. */
@@ -81,6 +86,10 @@ export interface EntradaDeEscritura {
    * marcar un hábito es crear su registro del día.
    */
   crearCon?: readonly string[];
+  /** D-205 E3: valores que ya dice el sinónimo con que se nombró («un GASTO» → type expense). */
+  valoresPorSinonimo?: Readonly<Record<string, Readonly<Record<string, string>>>>;
+  /** D-205 E3: crear no dicta ningún texto (el peso es solo números). */
+  sinDictado?: boolean;
   /**
    * D-205: dónde pone el intérprete lo que se dictó al crear. Por defecto,
    * `titulo`; en una nota es el cuerpo (el título es opcional y el cuerpo no).
@@ -179,6 +188,26 @@ const SINONIMOS_DE_TIPO_DE_ACTIVO = {
   Negocio: ["negocio"]
 } as const;
 const PESOS = ["pesos", "mxn"];
+
+// E3 (D-205).
+const TIPOS_DE_CUENTA = ["bank", "cash", "savings", "credit", "investment"] as const;
+const SINONIMOS_DE_TIPO_DE_CUENTA = {
+  bank: ["bancaria", "de banco", "de debito", "debito"],
+  cash: ["efectivo", "de efectivo"],
+  savings: ["de ahorro", "ahorro"],
+  credit: ["de credito", "tarjeta de credito", "credito"],
+  investment: ["de inversion", "inversion"]
+} as const;
+const TIPOS_DE_MOVIMIENTO = ["income", "expense"] as const;
+const SINONIMOS_DE_TIPO_DE_MOVIMIENTO = { income: ["ingreso"], expense: ["gasto"] } as const;
+const CATEGORIAS_DE_OCUPACION = ["Trabajo", "Familia", "Personal", "Salud", "Descanso", "Otros"] as const;
+const SINONIMOS_DE_CATEGORIA_DE_OCUPACION = {
+  Trabajo: ["trabajo"],
+  Familia: ["familia"],
+  Personal: ["personal"],
+  Salud: ["salud"],
+  Descanso: ["descanso"]
+} as const;
 
 export const ESCRITURA_POR_TABLA = {
   tasks: {
@@ -410,6 +439,114 @@ export const ESCRITURA_POR_TABLA = {
       mood: { etiqueta: "Ánimo", tipo: "entero", min: 1, max: 5, etiquetas: ["animo", "humor"] },
       energy: { etiqueta: "Energía", tipo: "entero", min: 1, max: 5, etiquetas: ["energia"] },
       sleep_hours: { etiqueta: "Horas de sueño", tipo: "numero", min: 0, max: 24, unidades: ["horas", "h"], etiquetas: ["dormi", "sueno"] }
+    }
+  },
+  journal_entries: {
+    dominio: "money",
+    etiqueta: "Movimiento",
+    descripcion: "un gasto o ingreso en una cuenta leída (asiento balanceado vía postTransaction; no se edita ni borra desde aquí)",
+    operaciones: ["crear"],
+    sinonimos: ["gasto", "ingreso", "movimiento"],
+    valoresPorSinonimo: { gasto: { type: "expense" }, ingreso: { type: "income" } },
+    titulo: "memo",
+    accion: "Registrar",
+    campos: {
+      type: { etiqueta: "Tipo", tipo: "opcion", opciones: TIPOS_DE_MOVIMIENTO, obligatorio: true, sinonimos: SINONIMOS_DE_TIPO_DE_MOVIMIENTO },
+      amount: { etiqueta: "Monto", tipo: "numero", obligatorio: true, min: 0.01, max: 1e12, unidades: PESOS, etiquetas: ["monto"], suelto: true },
+      memo: { etiqueta: "Concepto", tipo: "texto", obligatorio: true, min: 1, max: 200 },
+      account_id: {
+        etiqueta: "Cuenta",
+        tipo: "ref",
+        refTabla: "accounts",
+        refTitulo: "name",
+        obligatorio: true,
+        menciones: ["con la cuenta", "de la cuenta", "en la cuenta", "desde la cuenta"]
+      },
+      entry_date: { etiqueta: "Fecha", tipo: "fecha", obligatorio: true, porDefecto: "hoy" },
+      category: { etiqueta: "Categoría", tipo: "texto", min: 1, max: 80, porDefecto: "Otros" }
+    }
+  },
+  accounts: {
+    dominio: "money",
+    etiqueta: "Cuenta",
+    descripcion: "abrir una cuenta (banco, efectivo, ahorro, crédito, inversión) con saldo inicial",
+    operaciones: ["crear"],
+    sinonimos: ["cuenta", "cuentas"],
+    titulo: "name",
+    campos: {
+      name: { etiqueta: "Nombre", tipo: "texto", obligatorio: true, min: 1, max: 120 },
+      type: { etiqueta: "Tipo", tipo: "opcion", opciones: TIPOS_DE_CUENTA, obligatorio: true, sinonimos: SINONIMOS_DE_TIPO_DE_CUENTA, porDefecto: "bank" },
+      currency: { etiqueta: "Moneda", tipo: "texto", obligatorio: true, min: 3, max: 3, porDefecto: "MXN" },
+      opening_balance: { etiqueta: "Saldo inicial", tipo: "numero", min: -1e12, max: 1e12, unidades: PESOS, etiquetas: ["saldo inicial", "saldo", "con"], porDefecto: 0 }
+    }
+  },
+  budgets: {
+    dominio: "money",
+    etiqueta: "Presupuesto",
+    descripcion: "conceptos del presupuesto (crear con costo mensual; cambiar costo o quincenas; borrar)",
+    operaciones: ["crear", "editar", "borrar"],
+    sinonimos: ["presupuesto", "presupuestos"],
+    titulo: "category",
+    campos: {
+      category: { etiqueta: "Concepto", tipo: "texto", obligatorio: true, min: 1, max: 80, soloCrear: true },
+      monthly_cost: { etiqueta: "Costo mensual", tipo: "numero", obligatorio: true, min: 0.01, max: 1e12, unidades: ["al mes", "mensuales", ...PESOS], etiquetas: ["costo", "monto"], suelto: true },
+      q1_amount: { etiqueta: "1ª quincena", tipo: "numero", min: 0, max: 1e12, etiquetas: ["primera quincena"] },
+      q2_amount: { etiqueta: "2ª quincena", tipo: "numero", min: 0, max: 1e12, etiquetas: ["segunda quincena"] }
+    }
+  },
+  body_measurements: {
+    dominio: "nutrition",
+    etiqueta: "Peso",
+    descripcion: "el peso de HOY (y % de grasa); actualiza también el peso del perfil",
+    operaciones: ["crear"],
+    sinonimos: ["peso", "mi peso"],
+    titulo: "weight_kg",
+    accion: "Registrar",
+    sinDictado: true,
+    campos: {
+      weight_kg: { etiqueta: "Peso", tipo: "numero", obligatorio: true, min: 25, max: 400, unidades: ["kg", "kilos", "kilogramos"], suelto: true },
+      body_fat_pct: { etiqueta: "Grasa corporal %", tipo: "numero", min: 2, max: 70, unidades: ["%", "por ciento"], etiquetas: ["grasa"] }
+    }
+  },
+  occupations: {
+    dominio: "time",
+    etiqueta: "Ocupación",
+    femenino: true,
+    descripcion: "un bloque de horario en un día (título, hora de inicio y fin HH:MM, categoría); borrar",
+    operaciones: ["crear", "borrar"],
+    sinonimos: ["ocupacion", "ocupaciones", "bloque de tiempo", "compromiso"],
+    titulo: "title",
+    campos: {
+      title: { etiqueta: "Título", tipo: "texto", obligatorio: true, min: 1, max: 120 },
+      start_time: { etiqueta: "Inicio", tipo: "hora", obligatorio: true },
+      end_time: { etiqueta: "Fin", tipo: "hora", obligatorio: true },
+      occ_date: { etiqueta: "Día", tipo: "fecha", obligatorio: true, porDefecto: "hoy" },
+      category: { etiqueta: "Categoría", tipo: "opcion", opciones: CATEGORIAS_DE_OCUPACION, obligatorio: true, sinonimos: SINONIMOS_DE_CATEGORIA_DE_OCUPACION, porDefecto: "Otros" }
+    }
+  },
+  comments: {
+    dominio: "activity",
+    etiqueta: "Comentario",
+    descripcion: "comentar en una tarea leída",
+    operaciones: ["crear"],
+    sinonimos: ["comentario", "comentarios"],
+    titulo: "body",
+    campos: {
+      subject_id: { etiqueta: "Tarea", tipo: "ref", refTabla: "tasks", obligatorio: true, menciones: ["en la tarea", "a la tarea", "de la tarea"] },
+      body: { etiqueta: "Comentario", tipo: "texto", obligatorio: true, min: 1, max: 4000 }
+    }
+  },
+  identity_traits: {
+    dominio: "growth",
+    etiqueta: "Rasgo",
+    descripcion: "rasgos de la identidad deseada (crear con área, cambiar nombre/frase/área, borrar)",
+    operaciones: ["crear", "editar", "borrar"],
+    sinonimos: ["rasgo", "rasgos", "rasgo de identidad"],
+    titulo: "name",
+    campos: {
+      name: { etiqueta: "Nombre", tipo: "texto", obligatorio: true, min: 1, max: 60 },
+      statement: { etiqueta: "Frase", tipo: "texto", min: 0, max: 160 },
+      area: { etiqueta: "Área", tipo: "opcion", opciones: AREAS, obligatorio: true, sinonimos: SINONIMOS_DE_AREA, porDefecto: "Personal" }
     }
   }
 } as const satisfies Record<string, EntradaDeEscritura>;
