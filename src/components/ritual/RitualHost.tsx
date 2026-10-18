@@ -7,7 +7,7 @@ import { contenidoParaRepetir, setNavMode } from "@/lib/ritual/actions";
 import RitualOverlay from "./RitualOverlay";
 import CentroPremium from "./CentroPremium";
 import CentroAgente from "@/components/centro-agente/CentroAgente";
-import { EVENTO_ABRIR_CENTRO } from "./eventos";
+import { EVENTO_ABRIR_CENTRO, tomarPeticionPendiente } from "./eventos";
 
 export interface DatosDelRitual {
   contenido: ContenidoDelRitual;
@@ -80,12 +80,15 @@ export default function RitualHost({
   // hay que abrirlo al cargar, esta lo abre. Llamarlas igual hizo que el
   // listener recibiera un booleano, y lo cazó el compilador.
   const mostrarCentro = useCallback(() => {
+    tomarPeticionPendiente();
     setModo("premium");
     setVista("centro");
   }, []);
 
   useEffect(() => {
     window.addEventListener(EVENTO_ABRIR_CENTRO, mostrarCentro);
+    // Un toque en el objetivo ANTES de que este anfitrión montara.
+    if (tomarPeticionPendiente()) mostrarCentro();
     return () => window.removeEventListener(EVENTO_ABRIR_CENTRO, mostrarCentro);
   }, [mostrarCentro]);
 

@@ -77,7 +77,7 @@ export default function WeekView({
       <b>Semana · 7 líneas de tiempo</b>
       <div className="text-xs" style={{ color: "var(--muted)", margin: "4px 0 8px" }}>
         Cada línea refleja exactamente las ocupaciones de ese día (recurrentes 🔁 + específicas). Usa &quot;Editar
-        {"{día}"}&quot; para agregar/editar ocupaciones y tareas de ese día en particular (FR-TIM-001/008).
+        {"{día}"}&quot; para agregar/editar ocupaciones y tareas de ese día en particular.
       </div>
 
       {dates.map((d, i) => {

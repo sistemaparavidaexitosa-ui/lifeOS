@@ -2,6 +2,8 @@
 // aplican a TODO el proyecto (secuencia sugerida, editar, bitácora, base de
 // conocimiento). Server Component puro.
 import { Chip, Progress } from "@/components/ui";
+import { PRIORITY_META, PROJECT_STATUS_META } from "./status-meta";
+import type { Priority, ProjectStatus } from "@/lib/domain/types.ts";
 import ProjectMenu, { type ProjectMenuData } from "./ProjectMenu";
 import type { LogEntry, KnowledgeItem } from "./logbook-knowledge-actions";
 import type { WorkspaceSummary } from "@/lib/data/workspaces";
@@ -46,12 +48,15 @@ export default function BoardHeader({
       <h2 className="ex-header-title">{project.title}</h2>
 
       <div className="ex-header-main">
-        <Chip kind={project.status === "Active" ? "accent" : project.status === "Completed" ? "ok" : ""}>{project.status}</Chip>
-        <Chip kind={project.priority === "High" ? "bad" : project.priority === "Medium" ? "warn" : ""}>
-          Prioridad {project.priority}
-        </Chip>
-        {targetDateLabel && <Chip>🎯 {targetDateLabel}</Chip>}
-        {overdueCount > 0 && <Chip kind="bad">{overdueCount} vencida(s)</Chip>}
+        <span className="lp-estado" style={{ cursor: "default" }}>
+          <span className="lp-punto" style={{ background: PROJECT_STATUS_META[project.status as ProjectStatus]?.color }} />
+          {PROJECT_STATUS_META[project.status as ProjectStatus]?.label ?? project.status}
+        </span>
+        <span className="lp-estado" style={{ cursor: "default" }}>
+          Prioridad {PRIORITY_META[project.priority as Priority]?.label.toLowerCase() ?? project.priority}
+        </span>
+        {targetDateLabel && <span className="lp-estado" style={{ cursor: "default" }}>Meta {targetDateLabel}</span>}
+        {overdueCount > 0 && <Chip kind="bad">{overdueCount} {overdueCount === 1 ? "vencida" : "vencidas"}</Chip>}
       </div>
 
       {project.objective && <p className="ex-header-objective text-sm">{project.objective}</p>}

@@ -22,7 +22,7 @@ function pantalla(sections: unknown[]) {
 
 test("El catálogo trae los seis kinds del agente", () => {
   for (const k of ["lista", "metricas", "irA", "recomendaciones", "insight", "movimientos"]) assert.ok(esSectionKind(k), k);
-  assert.strictEqual(SECTION_KINDS.length, 34);
+  assert.strictEqual(SECTION_KINDS.length, 36);
 });
 
 const validas: Record<string, unknown> = {
@@ -62,4 +62,31 @@ test("Un enlace de ítem fuera de la app tumba la sección", () => {
 test("Los topes: más de 8 ítems en una lista, fuera", () => {
   const items = Array.from({ length: 9 }, (_, i) => ({ id: `h${i}`, titulo: "x", detalle: null, estado: null, href: null }));
   assert.strictEqual(validarScreen(pantalla([{ id: "l", kind: "lista", data: { titulo: "x", items } }]), ctx).ok, false);
+});
+
+// Componentes nuevos: progreso y agenda, desde bloques del modelo.
+import { resolverBloque } from "../../src/lib/domain/centro/agente/resolver.ts";
+
+test("«progreso» lee actual y meta de la fila y calcula el porcentaje; «agenda» ordena por hora", () => {
+  const filas = new Map<string, Record<string, unknown>>([
+    ["fila:books:b1", { id: "b1", title: "Dune", current_page: 130, total_pages: 260 }],
+    ["fila:occupations:o1", { id: "o1", title: "Gimnasio", start_time: "07:00:00", end_time: "08:30:00" }],
+    ["fila:occupations:o2", { id: "o2", title: "Junta", start_time: "06:15:00", end_time: null }]
+  ]);
+  const ctx = { filas, moneda: "MXN", locale: "es-MX" } as unknown as Parameters<typeof resolverBloque>[2];
+  const p = resolverBloque({ kind: "progreso", titulo: "Lectura", items: [{ fila: "fila:books:b1", titulo: "title", actual: "current_page", meta: "total_pages", formato: "numero" }] }, "b0", ctx);
+  assert.deepStrictEqual(p?.data, { titulo: "Lectura", items: [{ id: "b1", titulo: "Dune", detalle: null, pct: 50, valor: "130 / 260", href: "/development/library" }] });
+  const a = resolverBloque(
+    {
+      kind: "agenda",
+      titulo: "Hoy",
+      items: [
+        { fila: "fila:occupations:o1", inicio: "start_time", fin: "end_time", titulo: "title" },
+        { fila: "fila:occupations:o2", inicio: "start_time", fin: "end_time", titulo: "title" }
+      ]
+    },
+    "b1",
+    ctx
+  );
+  assert.deepStrictEqual((a?.data as { items: { inicio: string; fin: string | null }[] }).items.map((i) => [i.inicio, i.fin]), [["06:15", null], ["07:00", "08:30"]]);
 });

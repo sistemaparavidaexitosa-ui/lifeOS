@@ -29,10 +29,11 @@ import {
 } from "@/lib/domain/board.ts";
 import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
 import type { BoardApi, BoardGroup, BoardTask, ExecutionView, MoveTarget } from "./board-types";
-import { VIEW_LABELS, VIEWS_CON_HILO, VIEWS_SIN_HILO } from "./board-types";
+import { VIEWS_CON_HILO, VIEWS_SIN_HILO } from "./board-types";
 import BoardToolbar from "./BoardToolbar";
 import BulkActionBar from "./BulkActionBar";
 import MondayBoard from "./MondayBoard";
+import LinearList from "./LinearList";
 import KanbanBoard from "./KanbanBoard";
 import TableView from "./TableView";
 import TimelineView from "./TimelineView";
@@ -319,6 +320,7 @@ export default function BoardShell({
         </p>
       )}
 
+      {view === "lista" && <LinearList api={api} tasks={filteredTasks} />}
       {view === "board" && (
         <MondayBoard
           api={api}
@@ -350,10 +352,7 @@ export default function BoardShell({
         />
       )}
 
-      <p className="ex-viewhint text-xs">
-        Vista actual: <b>{VIEW_LABELS[view].label}</b>
-        {view === "board" && api.orderingEnabled && " — arrastra una fila para reordenar, suéltala sobre otra tarea para anidarla."}
-      </p>
+
     </div>
   );
 }

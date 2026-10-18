@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SECCIONES, seccionDe, type SeccionDeNav } from "../nav-items";
 import { IconNavDevelopment, IconNavExecution, IconNavHome, IconNavMoney, IconTarget } from "../icons";
-import { EVENTO_ABRIR_CENTRO } from "../ritual/eventos";
+import { pedirAbrirCentro } from "../ritual/eventos";
 
 const ICONOS: Record<Exclude<SeccionDeNav["id"], "centro">, typeof IconNavHome> = {
   home: IconNavHome,
@@ -33,7 +33,7 @@ export default function BottomNav() {
               type="button"
               className="nx-nav-centro"
               aria-label="Abrir el Centro"
-              onClick={() => window.dispatchEvent(new Event(EVENTO_ABRIR_CENTRO))}
+              onClick={pedirAbrirCentro}
             >
               <IconTarget width={26} height={26} />
             </button>

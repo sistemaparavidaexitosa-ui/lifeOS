@@ -109,7 +109,6 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
 
   return (
     <div className="flex flex-col gap-3.5">
-      <ModuleNote>La lectura es un seguimiento personal ligero, privado, sin relación con Workspaces (BR-027).</ModuleNote>
 
       <SectionHeader action={<BookForm />}>Lectura · Biblioteca</SectionHeader>
 

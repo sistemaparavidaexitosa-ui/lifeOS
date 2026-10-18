@@ -19,18 +19,19 @@ export interface BoardGroup {
   position: number;
 }
 
-export type ExecutionView = "board" | "kanban" | "table" | "timeline" | "hilo";
+export type ExecutionView = "lista" | "board" | "kanban" | "table" | "timeline" | "hilo";
 
 export const VIEW_LABELS: Record<ExecutionView, { label: string; icon: string }> = {
-  board: { label: "Tablero", icon: "📋" },
-  kanban: { label: "Kanban", icon: "🗂️" },
+  lista: { label: "Lista", icon: "☰" },
+  board: { label: "Grupos", icon: "📋" },
+  kanban: { label: "Tablero", icon: "🗂️" },
   table: { label: "Tabla", icon: "📑" },
   timeline: { label: "Timeline", icon: "📆" },
   hilo: { label: "Hilo", icon: "💬" }
 };
 
 export function isExecutionView(value: string | undefined): value is ExecutionView {
-  return value === "board" || value === "kanban" || value === "table" || value === "timeline" || value === "hilo";
+  return value === "lista" || value === "board" || value === "kanban" || value === "table" || value === "timeline" || value === "hilo";
 }
 
 /**
@@ -41,7 +42,9 @@ export function isExecutionView(value: string | undefined): value is ExecutionVi
  * recorren las claves de VIEW_LABELS para que esa condición viva en UN sitio
  * —quien monta el tablero— y no repartida por la barra de pestañas.
  */
-export const VIEWS_SIN_HILO: ExecutionView[] = ["board", "kanban", "table", "timeline"];
+// Rediseño (estilo Linear): Lista y Tablero. Grupos, Tabla y Timeline siguen
+// existiendo para los enlaces viejos (?view=), pero ya no se ofrecen.
+export const VIEWS_SIN_HILO: ExecutionView[] = ["lista", "kanban"];
 export const VIEWS_CON_HILO: ExecutionView[] = [...VIEWS_SIN_HILO, "hilo"];
 
 /** Destino de un arrastre: grupo y/o padre nuevos para la tarea movida. */

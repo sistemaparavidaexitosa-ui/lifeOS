@@ -133,7 +133,7 @@ function RoutineFields({
       </label>
 
       <p className="text-xs" style={{ color: "var(--muted)" }}>
-        El horario vive en Autogestión del Tiempo: la rutina solo se ancla a un bloque que ya existe (BR-026).
+        El horario vive en Autogestión del Tiempo: la rutina solo se ancla a un bloque que ya existe.
       </p>
       {error && (
         <div className="text-xs" style={{ color: "var(--danger)" }}>

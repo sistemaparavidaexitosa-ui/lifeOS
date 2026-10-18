@@ -29,7 +29,9 @@ test("Una ruta inventada no vale", () => {
 });
 
 test("Una ruta oculta del menú tampoco: no se ofrece lo que no se ofrece", () => {
-  assert.strictEqual(destinoValido("/activity", proyectos), false);
+  assert.strictEqual(destinoValido("/intelligence", proyectos), false);
+  // Notebooks y Actividad no están en el menú, pero son pantallas reales.
+  assert.strictEqual(destinoValido("/notebooks", proyectos), true);
 });
 
 test("Un proyecto propio vale", () => {

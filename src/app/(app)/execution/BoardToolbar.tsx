@@ -89,7 +89,6 @@ export default function BoardToolbar({
             className={`ex-tab${view === key ? " active" : ""}`}
             onClick={() => onViewChange(key)}
           >
-            <span aria-hidden>{VIEW_LABELS[key].icon}</span>
             {VIEW_LABELS[key].label}
           </button>
         ))}

@@ -30,10 +30,13 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Tabla → sección. Lo que no está aquí no tiene enlace. */
 const SECCION_DE_TABLA: Record<string, string> = {
   tasks: "/execution",
+  notebooks: "/notebooks",
+  notes: "/notebooks",
+  logbook: "/execution",
   task_groups: "/execution",
   task_history: "/execution",
-  daily_plans: "/planning",
-  weekly_reviews: "/planning",
+  daily_plans: "/time",
+  weekly_reviews: "/time",
   occupations: "/time",
   reminders: "/time",
   habits: "/development/routines",
@@ -203,6 +206,30 @@ export function resolverBloque(b: BloqueGenerico, id: string, ctx: ContextoDeRes
         return [{ id: idDe(it.fila), fecha, titulo, href: rutaDeFila(it.fila, r, pv) }];
       });
       return items.length ? { id, kind: "timeline", data: { titulo: b.titulo, items } } : null;
+    }
+    case "progreso": {
+      const items = b.items.flatMap((it) => {
+        const r = leer(it.fila);
+        const titulo = r ? textoDe(r, it.titulo, ctx, LIMITES.itemTitulo) : null;
+        const actual = Number(r?.[it.actual]);
+        const meta = Number(r?.[it.meta]);
+        if (!r || !titulo || !Number.isFinite(actual) || !Number.isFinite(meta) || meta <= 0) return [];
+        const valor = `${formatear(actual, it.formato, ctx.moneda, ctx.locale, 18)} / ${formatear(meta, it.formato, ctx.moneda, ctx.locale, 18)}`;
+        return [{ id: idDe(it.fila), titulo, detalle: null, pct: Math.max(0, Math.min(100, Math.round((actual / meta) * 100))), valor, href: rutaDeFila(it.fila, r, pv) }];
+      });
+      return items.length ? { id, kind: "progreso", data: { titulo: b.titulo, items } } : null;
+    }
+    case "agenda": {
+      const hora = (v: unknown) => (typeof v === "string" && /^\d{2}:\d{2}/.test(v) ? v.slice(0, 5) : null);
+      const items = b.items.flatMap((it) => {
+        const r = leer(it.fila);
+        const inicio = hora(r?.[it.inicio]);
+        const titulo = r ? textoDe(r, it.titulo, ctx, LIMITES.itemTitulo) : null;
+        if (!r || !inicio || !titulo) return [];
+        return [{ id: idDe(it.fila), inicio, fin: it.fin ? hora(r[it.fin]) : null, titulo, detalle: null, href: rutaDeFila(it.fila, r, pv) }];
+      });
+      items.sort((a, b2) => a.inicio.localeCompare(b2.inicio));
+      return items.length ? { id, kind: "agenda", data: { titulo: b.titulo, items } } : null;
     }
   }
 }

@@ -19,7 +19,7 @@ export default function WeeklyReviewPanel({ blockedCount }: { blockedCount: numb
         </div>
       )}
       <p className="text-xs" style={{ color: "var(--muted)" }}>
-        Al aprobar se genera un snapshot inmutable de la semana (BR-004).
+        Al aprobar se genera un snapshot inmutable de la semana.
       </p>
       <button
         className="btn-primary"

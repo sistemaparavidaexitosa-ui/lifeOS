@@ -16,10 +16,9 @@
 // una tabla con scroll horizontal.
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Progress } from "@/components/ui";
 import { IconCalendar, IconTrash } from "@/components/icons";
 import MenuSurface, { useMenuAnchor } from "@/components/MenuSurface";
-import { PRIORITY_META, PRIORITY_ORDER, PROJECT_OPEN_STATUSES, PROJECT_STATUS_META, PROJECT_STATUS_ORDER } from "./status-meta";
+import { PROJECT_OPEN_STATUSES, PROJECT_STATUS_META, PROJECT_STATUS_ORDER } from "./status-meta";
 import { deleteProject, patchProject, type ProjectPatch } from "./actions";
 import type { Priority, ProjectStatus } from "@/lib/domain/types.ts";
 
@@ -162,37 +161,25 @@ export default function PortfolioBoard({
         </div>
       )}
 
-      {/* .mb-board fija las columnas vía --mb-cols; aquí se redefine porque la
-          cartera no tiene "Personas" sino "Avance". */}
-      <div className="mb-board ex-portfolio-board">
-        <div className="mb-group">
-          <div className="mb-group-head">
-            <span className="mb-group-name">Proyectos</span>
-            <span className="mb-group-pct">
-              {visible.length} de {rows.length} · {totalOpen} tareas abiertas
-              {totalOverdue > 0 ? ` · ${totalOverdue} vencidas` : ""} · {avgProgress}% promedio
-            </span>
-          </div>
-
-          <div className="mb-cols">
-            <span>Proyecto</span>
-            <span className="mb-col-center">Estado</span>
-            <span className="mb-col-center">Prioridad</span>
-            <span className="mb-col-center">Avance</span>
-            <span className="mb-col-center">Meta</span>
-          </div>
-
-          {visible.map((p) => (
-            <ProjectRow key={p.id} project={p} view={view} onPatch={(patch) => apply(p.id, patch)} onDelete={() => remove(p)} />
-          ))}
-
-          {!visible.length && <p className="mb-empty">Ningún proyecto coincide con la búsqueda.</p>}
+      <div className="lp-lista">
+        <div className="lp-resumen">
+          {visible.length} {visible.length === 1 ? "proyecto" : "proyectos"} · {totalOpen} tareas abiertas
+          {totalOverdue > 0 ? ` · ${totalOverdue} vencidas` : ""} · {avgProgress}% de avance
         </div>
+        {visible.map((p) => (
+          <ProjectRow key={p.id} project={p} view={view} onPatch={(patch) => apply(p.id, patch)} onDelete={() => remove(p)} />
+        ))}
+        {!visible.length && <p className="ln-vacio">Ningún proyecto coincide con la búsqueda.</p>}
       </div>
     </div>
   );
 }
 
+/**
+ * Una fila de proyecto (rediseño, estilo Linear): el anillo dice cuánto va, el
+ * título abre la lista de tareas, y a la derecha solo lo que se cambia sin
+ * entrar: estado y fecha meta. La prioridad vive en la cabecera del proyecto.
+ */
 function ProjectRow({
   project,
   view,
@@ -205,55 +192,34 @@ function ProjectRow({
   onDelete: () => void;
 }) {
   return (
-    <div className="mb-row">
-      <div className="mb-row-item">
-        {/* El título ES el enlace al tablero. No hay un segundo sitio donde
-            abrir el proyecto: la fila es la lista y el navegador a la vez. */}
-        <Link href={`/execution?project=${project.id}&view=${view}`} className="ex-portfolio-title">
-          {project.title}
-        </Link>
-        <span className="ex-portfolio-count">
-          {project.openCount} abiertas de {project.taskCount}
+    <div className="lp-fila">
+      <Link href={`/execution?project=${project.id}${view !== "lista" ? `&view=${view}` : ""}`} className="lp-principal">
+        <AnilloDeAvance pct={project.progress} />
+        <span className="lp-titulo">{project.title}</span>
+        <span className="lp-cuenta">
+          {project.taskCount - project.openCount}/{project.taskCount}
         </span>
-        {project.overdueCount > 0 && (
-          <span className="chip bad mb-urgent">{project.overdueCount} vencidas</span>
-        )}
-
-        {/* Mismo sitio y mismo icono que el borrado de una tarea en MondayRow:
-            si la fila de proyecto imita a la de tarea, sus acciones también. */}
-        <span className="mb-row-tools">
-          <button
-            type="button"
-            className="mb-icon-btn danger"
-            onClick={onDelete}
-            title={`Eliminar ${project.title}`}
-            aria-label={`Eliminar proyecto ${project.title}`}
-          >
-            <IconTrash />
-          </button>
-        </span>
-      </div>
-
-      <div className="mb-row-meta">
-        <div className="mb-cell">
-          <ProjectStatusPill status={project.status} onChange={(status) => onPatch({ status })} />
-        </div>
-        <div className="mb-cell">
-          <ProjectPriorityPill priority={project.priority} onChange={(priority) => onPatch({ priority })} />
-        </div>
-        <div className="mb-cell ex-portfolio-progress">
-          <Progress pct={project.progress} />
-          <b>{project.progress}%</b>
-        </div>
-        <div className="mb-cell">
-          <ProjectTargetPill
-            targetDate={project.targetDate}
-            label={project.targetDateLabel}
-            onChange={(targetDate) => onPatch({ targetDate })}
-          />
-        </div>
-      </div>
+        {project.overdueCount > 0 && <span className="lp-vencidas">{project.overdueCount} vencidas</span>}
+      </Link>
+      <span className="lp-meta">
+        <ProjectStatusPill status={project.status} onChange={(status) => onPatch({ status })} />
+        <ProjectTargetPill targetDate={project.targetDate} label={project.targetDateLabel} onChange={(targetDate) => onPatch({ targetDate })} />
+        <button type="button" className="lp-borrar" onClick={onDelete} title={`Eliminar ${project.title}`} aria-label={`Eliminar proyecto ${project.title}`}>
+          <IconTrash width={15} height={15} />
+        </button>
+      </span>
     </div>
+  );
+}
+
+function AnilloDeAvance({ pct }: { pct: number }) {
+  const r = 7;
+  const c = 2 * Math.PI * r;
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-label={`${pct}% de avance`} role="img" className="flex-none -rotate-90">
+      <circle cx="9" cy="9" r={r} fill="none" stroke="var(--surface3)" strokeWidth="2.2" />
+      <circle cx="9" cy="9" r={r} fill="none" stroke={pct >= 100 ? "var(--ok)" : "var(--text)"} strokeWidth="2.2" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - pct / 100)} />
+    </svg>
   );
 }
 
@@ -265,73 +231,31 @@ function ProjectStatusPill({ status, onChange }: { status: ProjectStatus; onChan
     <div className="mb-menu-wrap">
       <button
         type="button"
-        className="mb-pill"
-        style={{ background: meta.color }}
+        className="lp-estado"
         onClick={menu.toggle}
         aria-haspopup="menu"
         aria-expanded={menu.open}
         title="Cambiar estado del proyecto"
       >
+        <span className="lp-punto" style={{ background: meta.color }} />
         {meta.label}
       </button>
       {menu.open && (
         <MenuSurface anchor={menu.anchor} onClose={menu.close} label="Cambiar estado del proyecto">
-          <div className="ex-menu-list">
+          <div className="ln-menu">
             {PROJECT_STATUS_ORDER.map((s) => (
               <button
                 key={s}
                 type="button"
                 role="menuitem"
-                className="mb-pill"
-                style={{ background: PROJECT_STATUS_META[s].color }}
+                className="ln-menu-item"
                 onClick={() => {
                   menu.close();
                   if (s !== status) onChange(s);
                 }}
               >
+                <span className="lp-punto" style={{ background: PROJECT_STATUS_META[s].color }} />
                 {PROJECT_STATUS_META[s].label}
-              </button>
-            ))}
-          </div>
-        </MenuSurface>
-      )}
-    </div>
-  );
-}
-
-function ProjectPriorityPill({ priority, onChange }: { priority: Priority; onChange: (p: Priority) => void }) {
-  const menu = useMenuAnchor();
-  const meta = PRIORITY_META[priority];
-
-  return (
-    <div className="mb-menu-wrap">
-      <button
-        type="button"
-        className="mb-pill soft"
-        style={{ background: meta.soft, color: meta.color }}
-        onClick={menu.toggle}
-        aria-haspopup="menu"
-        aria-expanded={menu.open}
-        title="Cambiar prioridad del proyecto"
-      >
-        {meta.label}
-      </button>
-      {menu.open && (
-        <MenuSurface anchor={menu.anchor} onClose={menu.close} label="Cambiar prioridad del proyecto">
-          <div className="ex-menu-list">
-            {PRIORITY_ORDER.map((p) => (
-              <button
-                key={p}
-                type="button"
-                role="menuitem"
-                className="mb-pill soft"
-                style={{ background: PRIORITY_META[p].soft, color: PRIORITY_META[p].color }}
-                onClick={() => {
-                  menu.close();
-                  if (p !== priority) onChange(p);
-                }}
-              >
-                {PRIORITY_META[p].label}
               </button>
             ))}
           </div>

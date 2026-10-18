@@ -96,6 +96,46 @@ const ESQUEMAS: Partial<Record<SectionKind, z.ZodTypeAny>> = {
         .max(8)
     })
     .strict(),
+  progreso: z
+    .object({
+      titulo: texto(80),
+      items: z
+        .array(
+          z
+            .object({
+              id: texto(120),
+              titulo: texto(LIMITES.itemTitulo),
+              detalle: texto(LIMITES.itemDetalle).nullable(),
+              pct: z.number().finite().min(0).max(100),
+              valor: texto(LIMITES.metricaValor),
+              href: href.nullable()
+            })
+            .strict()
+        )
+        .min(1)
+        .max(8)
+    })
+    .strict(),
+  agenda: z
+    .object({
+      titulo: texto(80),
+      items: z
+        .array(
+          z
+            .object({
+              id: texto(120),
+              inicio: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+              fin: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable(),
+              titulo: texto(LIMITES.itemTitulo),
+              detalle: texto(LIMITES.itemDetalle).nullable(),
+              href: href.nullable()
+            })
+            .strict()
+        )
+        .min(1)
+        .max(12)
+    })
+    .strict(),
   metricas: z
     .object({
       titulo: texto(80).nullable(),

@@ -56,7 +56,10 @@ export const SECTION_KINDS = [
   // D-203: cambios en cualquier tabla del registro, que la persona guarda.
   "propuestaCambio",
   // D-204: «¿entendí bien?» antes de proponer cuando hay duda.
-  "confirmarEntendimiento"
+  "confirmarEntendimiento",
+  // Avance de cosas con meta (libros, metas, ahorros) y bloques del día por hora.
+  "progreso",
+  "agenda"
 ] as const;
 
 export type SectionKind = (typeof SECTION_KINDS)[number];
@@ -132,6 +135,18 @@ export type Tono = "ok" | "bad" | "info";
 export interface DatosLista {
   titulo: string;
   items: { id: string; titulo: string; detalle: string | null; estado: string | null; href: string | null }[];
+}
+
+/** Cosas con meta: cuánto llevan. `pct` ya acotado a 0–100; `valor` dice las cifras («130 / 280»). */
+export interface DatosProgreso {
+  titulo: string;
+  items: { id: string; titulo: string; detalle: string | null; pct: number; valor: string; href: string | null }[];
+}
+
+/** Bloques de un día por hora, en orden. `fin` puede faltar (un recordatorio). */
+export interface DatosAgenda {
+  titulo: string;
+  items: { id: string; inicio: string; fin: string | null; titulo: string; detalle: string | null; href: string | null }[];
 }
 
 export interface DatosMetricas {
@@ -378,6 +393,8 @@ export interface DatosPorKind {
   propuestaMovimiento: DatosPropuestaMovimiento;
   propuestaCambio: DatosPropuestaCambio;
   confirmarEntendimiento: DatosConfirmarEntendimiento;
+  progreso: DatosProgreso;
+  agenda: DatosAgenda;
 }
 
 export type DatosDe<K extends SectionKind> = DatosPorKind[K];

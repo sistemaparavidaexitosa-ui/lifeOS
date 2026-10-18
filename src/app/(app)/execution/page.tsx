@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { fdate } from "@/lib/format";
+import { fcorta } from "@/lib/format";
 import { boardRevision, isOverdue, isOpen, type BoardTaskLike } from "@/lib/domain/board.ts";
 import { todayInTimeZone } from "@/lib/domain/datetime.ts";
 import { getUserTimeZone } from "@/lib/data/profile";
@@ -56,7 +56,7 @@ export default async function ExecutionPage({
   searchParams: Promise<{ project?: string; view?: string; ws?: string; task?: string }>;
 }) {
   const { project: requestedProjectId, view: rawView, ws: requestedWorkspaceId, task: requestedTaskId } = await searchParams;
-  const view: ExecutionView = isExecutionView(rawView) ? rawView : "board";
+  const view: ExecutionView = isExecutionView(rawView) ? rawView : "lista";
 
   const supabase = await createClient();
   const user = await getSessionUser();
@@ -115,7 +115,7 @@ export default async function ExecutionPage({
       openCount: rootTasks.filter((t) => isOpen(t.status as TaskStatus)).length,
       overdueCount: rootTasks.filter((t) => isOverdue({ due: t.due, status: t.status as TaskStatus }, today)).length,
       targetDate: p.target_date,
-      targetDateLabel: p.target_date ? fdate(p.target_date) : ""
+      targetDateLabel: p.target_date ? fcorta(p.target_date, today) : ""
     };
   });
 
@@ -353,7 +353,7 @@ async function BoardWorkspace({
         taskCount={rootTasks.length}
         openCount={rootTasks.filter((t) => isOpen(t.status)).length}
         overdueCount={tasks.filter((t) => isOverdue(t, today)).length}
-        targetDateLabel={projectRow.target_date ? fdate(projectRow.target_date) : ""}
+        targetDateLabel={projectRow.target_date ? fcorta(projectRow.target_date, today) : ""}
         sequenceTasks={tasks.map((t) => ({ id: t.id, title: t.title }))}
         logbookEntries={logAndKnowledge.logbook}
         knowledgeItems={logAndKnowledge.knowledge}
@@ -368,7 +368,7 @@ async function BoardWorkspace({
         commentCountByTask={commentCountByTask}
         members={members}
         revision={revision}
-        initialView={threadEnabled || view !== "hilo" ? view : "board"}
+        initialView={threadEnabled || view !== "hilo" ? view : "lista"}
         orderingEnabled={orderingEnabled}
         threadEnabled={threadEnabled}
         openTaskId={openTaskId}

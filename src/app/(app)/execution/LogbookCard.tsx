@@ -34,7 +34,7 @@ export default function LogbookCard({ projectId, entries }: { projectId: string;
     <div className="card" style={{ background: "var(--surface)" }}>
       <b className="text-sm">Bitácora</b>
       <div className="text-xs" style={{ color: "var(--muted)", margin: "4px 0 8px" }}>
-        Decisiones, cambios, comentarios y aprendizajes del proyecto (FR-EXE-007/012).
+        Decisiones, cambios, comentarios y aprendizajes del proyecto.
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 260, overflowY: "auto" }}>
