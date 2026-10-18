@@ -1,6 +1,5 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
-import InsightSection from "@/components/InsightSection";
 import { createClient } from "@/lib/supabase/server";
 import { Card, Chip, EmptyState, Progress, Stat } from "@/components/ui";
 import { loadRoutinesForToday, type RutinaDeHoy } from "@/lib/data/routines";
@@ -249,7 +248,6 @@ export default async function RoutinesPage() {
           retrase el resto de Hoy. */}
       {rows.length > 0 && (
         <Suspense fallback={null}>
-          <InsightSection scope="habits" />
         </Suspense>
       )}
 

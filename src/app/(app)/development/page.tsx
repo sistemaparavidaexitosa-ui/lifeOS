@@ -12,7 +12,6 @@ import { CardHeader, SectionHeader } from "./FormSheet";
 import { BookCover } from "./library/BookForm";
 import { getSessionUser } from "@/lib/data/session";
 import { fdate } from "@/lib/format";
-import InsightSection from "@/components/InsightSection";
 
 /**
  * Panel del módulo. No calcula nada propio: compone lo que ya resuelven
@@ -250,7 +249,6 @@ export default async function DevelopmentPage() {
         ))
       )}
 
-      <InsightSection scope="habits" />
     </div>
   );
 }

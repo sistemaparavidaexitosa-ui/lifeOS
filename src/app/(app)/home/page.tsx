@@ -8,7 +8,6 @@ import { getSessionUser } from "@/lib/data/session";
 import { FOCUS_TITLE } from "@/lib/domain/development/reading-plan.ts";
 import { BookCover } from "../development/library/BookForm";
 import RemindersCard from "./RemindersCard";
-import InsightSection from "@/components/InsightSection";
 import { loadRitualGate } from "@/lib/data/ritual";
 import ActivarPremium from "@/components/ritual/ActivarPremium";
 
@@ -43,7 +42,7 @@ export default async function HomePage() {
             {greet}, {data.profile.name.split(" ")[0]}
           </h2>
         </div>
-        <Link href="/planning" className="btn-primary">
+        <Link href="/time" className="btn-primary">
           {data.dailyPlan ? "Editar día" : "Planear mi día"}
         </Link>
       </div>
@@ -63,7 +62,7 @@ export default async function HomePage() {
             The ONE Thing · lo más importante desbloquea lo demás.
           </p>
           <div className="flex gap-2 mt-1.5">
-            <Link href="/planning" className="btn-ghost btn-sm">
+            <Link href="/time" className="btn-ghost btn-sm">
               Definir plan diario
             </Link>
             <Link href="/execution" className="btn-ghost btn-sm">
@@ -112,7 +111,7 @@ export default async function HomePage() {
           </span>
         </div>
         <Link href="/time" className="btn-ghost btn-sm mt-2 inline-block">
-          Ver Autogestión del Tiempo
+          Ver tu carga del día
         </Link>
       </Card>
 
@@ -201,7 +200,6 @@ export default async function HomePage() {
           la única pantalla que no es de ninguno en particular. Es donde una
           recomendación puede decir algo que ninguna otra puede: que la agenda
           está llena justo la semana en que vence la tarjeta cara. */}
-      <InsightSection scope="global" />
     </div>
   );
 }

@@ -4619,15 +4619,15 @@ html[data-theme="dark"] .rit-boton-centro { color: #0b0b12; background: #f6f6fa;
   --rit-line: var(--ag-line);
   --rit-accent: var(--ag-text);
 }
-@media (prefers-color-scheme: dark) {
-  .ag-shell {
-    --ag-bg: #0b0b0c;
-    --ag-surface: #161618;
-    --ag-soft: #1c1c1f;
-    --ag-text: #f5f5f7;
-    --ag-muted: #a1a1a6;
-    --ag-line: rgba(255, 255, 255, 0.08);
-  }
+/* Rediseño: el Centro sigue el tema de la app (negro por defecto), no el del
+   sistema operativo — la app y su Centro son una sola superficie. */
+html[data-theme="dark"] .ag-shell {
+  --ag-bg: #0a0a0b;
+  --ag-surface: #141416;
+  --ag-soft: #1c1c1f;
+  --ag-text: #f5f5f7;
+  --ag-muted: #a1a1a6;
+  --ag-line: rgba(255, 255, 255, 0.08);
 }
 
 .ag-card { background: var(--ag-surface); color: var(--ag-text); border-radius: 18px; padding: 20px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.04); }
@@ -4912,3 +4912,320 @@ html[data-theme="dark"] .rit-boton-centro { color: #0b0b12; background: #f6f6fa;
 }
 
 .ag-shell :focus-visible { outline: 2px solid var(--ag-text); outline-offset: 2px; }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   REDISEÑO NOIR — toda la app, homologada con el Centro.
+   Negro por defecto; claro si la persona lo elige en Configuración (cookie
+   `lifeos_theme`). Superficies casi planas, bordes de un pelo, tipografía
+   apretada, botón primario monocromo (el del Centro). Va al final a propósito:
+   redefine los tokens de arriba sin tocar ninguna clase existente.
+   Movimiento: curvas fuertes y < 300 ms (Emil Kowalski); nada se anima en
+   acciones de teclado; `prefers-reduced-motion` deja solo opacidad.
+   ═══════════════════════════════════════════════════════════════════════════ */
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
+  --bg: #f5f5f7;
+  --surface: #ffffff;
+  --surface2: #f0f0f2;
+  --surface3: #e7e7ea;
+  --text: #0b0b0c;
+  --muted: #6e6e73;
+  --line: rgba(0, 0, 0, 0.07);
+  --accent: #5e5ce6;
+  --accent-d: #4a48d1;
+  --accent2: #a5a3f5;
+  --chart-1: #5e5ce6;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 12px 32px rgba(0, 0, 0, 0.06);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 14px rgba(0, 0, 0, 0.04);
+  --r: 18px;
+  --r2: 12px;
+  --topbar-h: 56px;
+  --bottomnav-h: 64px;
+  --bottomnav-total: calc(var(--bottomnav-h) + 12px + env(safe-area-inset-bottom, 0px));
+  --glass: color-mix(in srgb, var(--surface) 78%, transparent);
+  --primary-bg: var(--text);
+  --primary-fg: var(--bg);
+}
+
+html[data-theme="dark"] {
+  --bg: #0a0a0b;
+  --surface: #131315;
+  --surface2: #1a1a1d;
+  --surface3: #232327;
+  --text: #f5f5f7;
+  --muted: #9b9ba1;
+  --line: rgba(255, 255, 255, 0.07);
+  --accent: #8e8cff;
+  --accent-d: #7472f0;
+  --accent2: #3f3d9e;
+  --chart-1: #8e8cff;
+  --chart-grid: rgba(255, 255, 255, 0.06);
+  --c-purple: #8e8cff;
+  --c-green: #30d18a;
+  --c-orange: #ffb04a;
+  --c-pink: #ff6fcf;
+  --c-teal: #40d9c6;
+  --c-blue: #6aaeff;
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 20px 50px rgba(0, 0, 0, 0.55);
+  --shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.03) inset;
+  --glass: color-mix(in srgb, #141416 72%, transparent);
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg);
+  font-feature-settings: "ss01", "cv11";
+  letter-spacing: -0.006em;
+}
+h1, h2, h3, .font-bold { letter-spacing: -0.02em; }
+
+.card {
+  border-radius: var(--r);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-primary {
+  background: var(--primary-bg);
+  color: var(--primary-fg);
+  box-shadow: none;
+  border-radius: 999px;
+  font-weight: 600;
+  transition: transform 160ms var(--ease-out), opacity 160ms ease;
+}
+.btn-ghost,
+.btn-danger {
+  border-radius: 999px;
+  border-width: 1px;
+  font-weight: 600;
+  transition: transform 160ms var(--ease-out), border-color 150ms ease, background-color 150ms ease;
+}
+.btn-ghost { background: transparent; }
+.btn-primary:active,
+.btn-ghost:active,
+.btn-danger:active { transform: scale(0.97); }
+@media (hover: hover) and (pointer: fine) {
+  .btn-primary:hover { opacity: 0.88; }
+  .btn-ghost:hover { background: var(--surface2); border-color: var(--line); }
+}
+
+input, select, textarea {
+  border-width: 1px;
+  background: var(--surface2);
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--text) 35%, transparent);
+  background: var(--surface);
+}
+
+.progress { height: 6px; }
+.chip { font-weight: 600; }
+
+/* El ritual de la mañana, también en negro. */
+html[data-theme="dark"] .rit-shell {
+  --rit-bg: #0a0a0b;
+  --rit-text: #f5f5f7;
+  --rit-muted: #a1a1a6;
+  --rit-line: rgba(255, 255, 255, 0.1);
+  --rit-accent: #f5f5f7;
+}
+
+/* ─── Barra superior ─────────────────────────────────────────────────────── */
+.nx-topbar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-topbar);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--topbar-h);
+  padding: calc(8px + env(safe-area-inset-top, 0px)) 16px 8px;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: saturate(160%) blur(18px);
+  -webkit-backdrop-filter: saturate(160%) blur(18px);
+}
+.nx-topbar-titulo {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nx-icono-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition: transform 160ms var(--ease-out), background-color 150ms ease;
+}
+.nx-icono-btn:active { transform: scale(0.94); }
+@media (hover: hover) and (pointer: fine) { .nx-icono-btn:hover { background: var(--surface2); } }
+
+/* ─── Pestañas de la sección ─────────────────────────────────────────────── */
+.nx-pestanas {
+  position: sticky;
+  top: var(--topbar-total);
+  z-index: calc(var(--z-topbar) - 1);
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 2px 16px 10px;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: saturate(160%) blur(18px);
+  -webkit-backdrop-filter: saturate(160%) blur(18px);
+  border-bottom: 1px solid var(--line);
+  mask-image: linear-gradient(90deg, transparent 0, #000 16px, #000 calc(100% - 24px), transparent);
+}
+.nx-pestanas::-webkit-scrollbar { display: none; }
+.nx-pestana {
+  flex: none;
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 13.5px;
+  font-weight: 550;
+  color: var(--muted);
+  white-space: nowrap;
+  text-decoration: none;
+  transition: color 150ms ease, background-color 200ms var(--ease-out), transform 160ms var(--ease-out);
+}
+.nx-pestana:active { transform: scale(0.97); }
+.nx-pestana[aria-current="page"] { color: var(--primary-fg); background: var(--primary-bg); }
+@media (hover: hover) and (pointer: fine) { .nx-pestana:not([aria-current="page"]):hover { color: var(--text); background: var(--surface2); } }
+
+/* ─── Barra de navegación inferior ───────────────────────────────────────── */
+.nx-bottomnav {
+  position: fixed;
+  left: 50%;
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: var(--z-centro);
+  width: min(calc(100% - 24px), 460px);
+  height: var(--bottomnav-h);
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  align-items: center;
+  padding: 0 6px;
+  border-radius: 24px;
+  background: var(--glass);
+  backdrop-filter: saturate(180%) blur(24px);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.18);
+}
+html[data-theme="dark"] .nx-bottomnav { box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 16px 48px rgba(0, 0, 0, 0.6); }
+.nx-nav-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 52px;
+  border: 0;
+  background: transparent;
+  border-radius: 16px;
+  color: var(--muted);
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 550;
+  letter-spacing: 0;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 150ms ease, transform 160ms var(--ease-out);
+}
+.nx-nav-item:active { transform: scale(0.94); }
+.nx-nav-item[aria-current="page"] { color: var(--text); }
+.nx-nav-item[aria-current="page"]::after {
+  content: "";
+  position: absolute;
+  bottom: 2px;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: currentColor;
+}
+.nx-nav-centro {
+  justify-self: center;
+  display: grid;
+  place-items: center;
+  width: 50px;
+  height: 50px;
+  border-radius: 999px;
+  border: 0;
+  color: var(--primary-fg);
+  background: var(--primary-bg);
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+  transition: transform 160ms var(--ease-out);
+}
+.nx-nav-centro:active { transform: scale(0.92); }
+.nx-nav-centro svg { transition: transform 300ms var(--ease-out); }
+@media (hover: hover) and (pointer: fine) { .nx-nav-centro:hover svg { transform: rotate(45deg); } }
+
+/* ─── Menú lateral: solo Configuración ───────────────────────────────────── */
+.nx-velo {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-nav) - 1);
+  background: rgba(0, 0, 0, 0.45);
+  opacity: 1;
+  transition: opacity 200ms ease;
+}
+@starting-style { .nx-velo { opacity: 0; } }
+.nx-menu {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: var(--z-nav);
+  width: min(86vw, 320px);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: calc(16px + env(safe-area-inset-top, 0px)) 14px calc(16px + env(safe-area-inset-bottom, 0px));
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  transform: translateX(0);
+  transition: transform 320ms var(--ease-drawer);
+}
+@starting-style { .nx-menu { transform: translateX(-100%); } }
+.nx-menu-enlace {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  color: var(--text);
+  font-weight: 550;
+  text-decoration: none;
+  transition: background-color 150ms ease, transform 160ms var(--ease-out);
+}
+.nx-menu-enlace:active { transform: scale(0.98); }
+.nx-menu-enlace[aria-current="page"], .nx-menu-enlace:hover { background: var(--surface2); }
+
+/* ─── Contenido: deja sitio a la barra inferior ──────────────────────────── */
+.nx-contenido { padding-bottom: calc(var(--bottomnav-total) + 24px) !important; }
+
+/* Entrada de cada pantalla: sutil, una vez, sin bloquear nada. */
+.nx-contenido > * { animation: nx-entra 260ms var(--ease-out) both; }
+@keyframes nx-entra { from { opacity: 0; transform: translateY(6px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .nx-contenido > * { animation: nx-funde 200ms ease both; }
+  .nx-menu, .nx-nav-centro svg { transition: none; }
+}
+@keyframes nx-funde { from { opacity: 0; } }

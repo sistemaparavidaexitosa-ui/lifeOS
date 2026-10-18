@@ -22,8 +22,8 @@ export default function CloseoutPanel({ impactTasks }: { impactTasks: TaskLite[]
     <div className="flex flex-col gap-3">
       {impactTasks.map((t) => (
         <div key={t.id} className="flex items-center justify-between gap-2">
-          <span className="text-sm truncate">{t.title}</span>
-          <div className="flex gap-1">
+          <span className="text-sm truncate min-w-0">{t.title}</span>
+          <div className="flex gap-1 flex-none">
             {(["Completed", "Rescheduled", "Blocked"] as const).map((s) => (
               <form
                 key={s}

@@ -70,9 +70,9 @@ test("Como mucho cinco en el foco, contando la una cosa", async () => {
   assert.strictEqual(foco?.kind === "tasks" ? foco.data.items.length : -1, MAX_FOCO);
 });
 
-test("Día vacío: queda el saludo y los atajos, y valida", async () => {
+test("Día vacío: queda el saludo y la narrativa por reglas, y valida", async () => {
   const s = await pantalla(fuentes({ resumen: "  ", unicaCosa: null, tareas: [], habitosPendientes: 0 }));
-  assert.deepStrictEqual(s.sections.map((x) => x.kind), ["hero", "quickActions"]);
+  assert.deepStrictEqual(s.sections.map((x) => x.kind), ["hero", "narrative"]);
   assert.strictEqual(validarScreen(s, { proyectos: [] }).ok, true);
 });
 
@@ -149,4 +149,29 @@ test("Sin rutina: la sección no sale", async () => {
 test("Rutina sin hábitos pendientes: tampoco sale (defensa de más)", async () => {
   const s = await pantalla(fuentes({ rutina: { routineId: "r1", nombre: "Vacía", habitos: [] } }));
   assert.strictEqual(s.sections.some((x) => x.id === "rutina"), false);
+});
+
+// Rediseño: la narrativa de «Hoy» sale de reglas, sin modelo.
+import { narrativaDeHoy } from "../../src/lib/domain/centro/runtime/hoy.ts";
+
+test("Narrativa por reglas: foco, rutina y dinero, sin IA", () => {
+  assert.equal(
+    narrativaDeHoy(fuentes()),
+    "Hoy lo que importa es «Cerrar el entregable U3». Te quedan 2 hábitos de tu rutina."
+  );
+});
+
+test("Narrativa por reglas: vencidas y presupuesto en rojo mandan", () => {
+  const t = narrativaDeHoy(fuentes({ unicaCosa: null, senales: { vencidas: 3, diasParaFinDeQuincena: 9, presupuestoEnRojo: true }, habitosPendientes: 0 }));
+  assert.equal(t, "Tienes 2 tareas de alto impacto en el radar. Arrastras 3 vencidas: despéjalas antes de sumar nuevas. Tu presupuesto va en rojo: cuida el gasto de hoy.");
+});
+
+test("Narrativa por reglas: sin nada, invita a elegir una cosa", () => {
+  const t = narrativaDeHoy(fuentes({ unicaCosa: null, tareas: [], habitosPendientes: 0, senales: { vencidas: 0, diasParaFinDeQuincena: 2, presupuestoEnRojo: false } }));
+  assert.equal(t, "Día despejado: elige la una cosa que haría que hoy valga la pena. Tu rutina está al día. La quincena cierra en 2 días.");
+});
+
+test("«Sigue por aquí» ya no está en Hoy: la barra inferior lleva a las secciones", async () => {
+  const plan = await generadorDeterminista.generar({ intent: { kind: "hoy" }, franja: "manana", flags: FLAGS_APAGADOS });
+  assert.ok(!plan.huecos.some((h) => h.kind === "quickActions"));
 });

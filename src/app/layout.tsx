@@ -19,7 +19,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   // F12: viewport-fit=cover + safe-area para layout nativo en móvil.
   viewportFit: "cover",
-  themeColor: "#0b8f75"
+  themeColor: "#0a0a0b"
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
@@ -31,9 +31,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // que sincroniza entre dispositivos—, y aquí se lee gratis. Es el mismo
   // patrón que `lifeos_chat_collapsed` en (app)/layout.tsx.
   //
-  // La consecuencia aceptada: en un dispositivo nuevo se ve el tema claro hasta
-  // que la persona entra en Configuración una vez.
-  const theme = (await cookies()).get("lifeos_theme")?.value === "dark" ? "dark" : "light";
+  // Rediseño: NEGRO POR DEFECTO, homologado con el Centro. Claro solo si la
+  // persona lo eligió en Configuración (la cookie dice «light»).
+  const theme = (await cookies()).get("lifeos_theme")?.value === "light" ? "light" : "dark";
 
   return (
     <html lang="es-MX" data-theme={theme}>

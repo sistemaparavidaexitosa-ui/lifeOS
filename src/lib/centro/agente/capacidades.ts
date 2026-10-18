@@ -15,7 +15,6 @@ import { listarWatchlist } from "@/lib/money/watchlist-actions";
 import { polygonApiKey } from "@/config/env";
 import { armarPantallaConProyectos } from "@/lib/centro/runtime/pantalla";
 import { loadRitualContent, loadRitualGate } from "@/lib/data/ritual";
-import { sugerenciasDelCentro } from "@/lib/centro/sugerencias";
 import { flagsDelRuntime } from "@/config/env";
 import type { Cerebro } from "@/lib/ai-chat/cerebro";
 
@@ -98,12 +97,10 @@ const NADA: ResultadoDeCapacidad = { secciones: [], proyectos: [] };
 async function hoy(): Promise<ResultadoDeCapacidad> {
   const puerta = await loadRitualGate();
   if (!puerta) return NADA;
-  const [contenido, pensado] = await Promise.all([loadRitualContent(puerta), sugerenciasDelCentro().catch(() => ({ resumen: "" }))]);
+  // La narrativa sale de reglas (`narrativaDeHoy`): «Hoy» ya no llama al modelo.
+  const contenido = await loadRitualContent(puerta);
   if (!contenido) return NADA;
-  const { screen, proyectos } = await armarPantallaConProyectos(
-    { kind: "hoy" },
-    { puerta, contenido, resumen: pensado.resumen, flags: flagsDelRuntime() }
-  );
+  const { screen, proyectos } = await armarPantallaConProyectos({ kind: "hoy" }, { puerta, contenido, resumen: "", flags: flagsDelRuntime() });
   return { secciones: screen?.sections ?? [], proyectos };
 }
 

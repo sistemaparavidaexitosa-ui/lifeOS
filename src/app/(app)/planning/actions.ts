@@ -55,6 +55,7 @@ export async function approveDailyPlan(formData: FormData) {
   });
 
   revalidatePath("/planning");
+  revalidatePath("/time");
   revalidatePath("/home");
 }
 
@@ -89,6 +90,7 @@ export async function closeoutTask(formData: FormData) {
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "day.closeout", object: parsed.taskId });
   revalidatePath("/planning");
+  revalidatePath("/time");
   revalidatePath("/home");
 }
 
@@ -126,4 +128,5 @@ export async function approveWeeklyReview() {
 
   await supabase.from("audit_log").insert({ user_id: user.id, action: "weekly.review" });
   revalidatePath("/planning");
+  revalidatePath("/time");
 }

@@ -30,12 +30,14 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { href: "/home", label: "Home", group: "Panel", icon: "home", color: "var(--accent)" },
-  { href: "/reports", label: "Reportes", group: "Panel", icon: "reports", color: "var(--accent)" },
+  // Fuera de la interfaz (rediseño); la ruta y su backend siguen.
+  { href: "/reports", label: "Reportes", group: "Panel", icon: "reports", color: "var(--accent)", hidden: true },
   { href: "/execution", label: "Proyectos y Tareas", group: "Execution OS", icon: "board", color: "var(--c-purple)" },
-  { href: "/execution/eisenhower", label: "Matriz de Eisenhower", group: "Execution OS", icon: "eisenhower", color: "var(--c-purple)" },
-  { href: "/graph", label: "Mapa de dependencias", group: "Execution OS", icon: "graph", color: "var(--c-purple)" },
-  { href: "/planning", label: "Planeación", group: "Execution OS", icon: "planning", color: "var(--c-purple)" },
-  { href: "/time", label: "Autogestión del Tiempo", group: "Execution OS", icon: "time", color: "var(--c-purple)" },
+  { href: "/execution/eisenhower", label: "Matriz de Eisenhower", group: "Execution OS", icon: "eisenhower", color: "var(--c-purple)", hidden: true },
+  { href: "/graph", label: "Mapa de dependencias", group: "Execution OS", icon: "graph", color: "var(--c-purple)", hidden: true },
+  // /planning vive dentro de /time (rediseño): la ruta redirige.
+  { href: "/planning", label: "Tiempo y planeación", group: "Execution OS", icon: "planning", color: "var(--c-purple)", hidden: true },
+  { href: "/time", label: "Tiempo y planeación", group: "Execution OS", icon: "time", color: "var(--c-purple)" },
   { href: "/notebooks", label: "Notebooks", group: "Execution OS", icon: "workspaces", color: "var(--c-purple)", hidden: true },
   { href: "/activity", label: "Actividad", group: "Execution OS", icon: "workspaces", color: "var(--c-purple)", hidden: true },
   // "Equipos y Colaboración" (/workspaces) ya no está aquí: los espacios de
@@ -43,7 +45,7 @@ export const NAV_ITEMS: NavItem[] = [
   // módulo aparte, y se administran desde /execution con el selector de
   // espacio y el panel de Equipo. El ícono `workspaces` sigue en icons.tsx
   // porque ese selector lo usa.
-  { href: "/development", label: "Panel", group: "Personal Development OS", icon: "development", color: "var(--c-orange)" },
+  { href: "/development", label: "Desarrollo personal", group: "Personal Development OS", icon: "development", color: "var(--c-orange)" },
   { href: "/development/goals", label: "Metas Personales", group: "Personal Development OS", icon: "personalGoals", color: "var(--c-orange)" },
   { href: "/development/routines", label: "Rutinas y Hábitos", group: "Personal Development OS", icon: "routines", color: "var(--c-orange)" },
   // La pestaña Analítica de Rutinas (F2) vive en su propia ruta para que
@@ -89,3 +91,88 @@ export const NAV_ITEMS: NavItem[] = [
   // índice de administración, pero de aquí sale el título de la barra superior.
   { href: "/admin/ritual", label: "Arranque guiado", group: "Cuenta", icon: "settings", color: "var(--muted)", hidden: true }
 ];
+
+// ============================================================================
+// Rediseño: barra de navegación inferior + pestañas superiores por sección.
+//
+// La barra inferior lleva CINCO destinos; el del centro es el Centro (un
+// objetivo, no una ruta: abre el agente). Lo que antes eran los submenús de
+// cada grupo del menú lateral son ahora las PESTAÑAS de arriba de su sección.
+// El menú lateral solo guarda Configuración.
+// ============================================================================
+
+export interface Pestana {
+  href: string;
+  label: string;
+}
+
+export interface SeccionDeNav {
+  id: "home" | "execution" | "centro" | "money" | "development";
+  label: string;
+  /** `null` en el Centro: no navega, abre el agente. */
+  href: string | null;
+  pestanas: Pestana[];
+  /** Prefijos de ruta que pertenecen a la sección (además de sus pestañas). */
+  rutas: string[];
+}
+
+export const SECCIONES: SeccionDeNav[] = [
+  { id: "home", label: "Home", href: "/home", pestanas: [], rutas: ["/home"] },
+  {
+    id: "execution",
+    label: "Execution",
+    href: "/execution",
+    pestanas: [
+      { href: "/execution", label: "Proyectos y Tareas" },
+      { href: "/time", label: "Tiempo y planeación" }
+      // Notebooks y Actividad no: viven DENTRO del espacio de trabajo y ya
+      // tienen sus pestañas (WorkspaceTabs) junto al selector de espacio.
+    ],
+    rutas: ["/execution", "/time", "/planning", "/notebooks", "/activity", "/workspaces", "/graph", "/reports"]
+  },
+  { id: "centro", label: "Centro", href: null, pestanas: [], rutas: [] },
+  {
+    id: "money",
+    label: "Money",
+    href: "/money",
+    pestanas: [
+      { href: "/money", label: "Dashboard" },
+      { href: "/money/budget", label: "Presupuesto" },
+      { href: "/investments", label: "Inversiones" },
+      { href: "/money/watchlist", label: "Watchlist" },
+      { href: "/savings", label: "Ahorros" },
+      { href: "/debt", label: "Deudas" },
+      { href: "/goals", label: "Metas" },
+      { href: "/wealth", label: "Patrimonio" },
+      { href: "/cashback", label: "Cashback" },
+      { href: "/household", label: "Hogar" }
+    ],
+    rutas: ["/money", "/investments", "/savings", "/debt", "/goals", "/wealth", "/cashback", "/household", "/intelligence"]
+  },
+  {
+    id: "development",
+    label: "Desarrollo",
+    href: "/development",
+    pestanas: [
+      { href: "/development", label: "Panel" },
+      { href: "/development/goals", label: "Metas" },
+      { href: "/development/routines", label: "Rutinas y Hábitos" },
+      { href: "/development/library", label: "Biblioteca" },
+      { href: "/development/nutrition", label: "Nutrición" }
+    ],
+    rutas: ["/development", "/habits"]
+  }
+];
+
+const bajo = (ruta: string, prefijo: string) => ruta === prefijo || ruta.startsWith(`${prefijo}/`);
+
+/** La sección de una ruta, o `null` si no es de ninguna (Configuración, Admin). */
+export function seccionDe(ruta: string): SeccionDeNav | null {
+  return SECCIONES.find((s) => s.rutas.some((p) => bajo(ruta, p))) ?? null;
+}
+
+/** La pestaña de la sección que corresponde a la ruta: la de prefijo más largo. */
+export function pestanaActiva(ruta: string, s: SeccionDeNav): Pestana | null {
+  const candidatas = s.pestanas.filter((p) => bajo(ruta, p.href) || (p.href === "/time" && bajo(ruta, "/planning")));
+  return candidatas.sort((a, b) => b.href.length - a.href.length)[0] ?? null;
+}

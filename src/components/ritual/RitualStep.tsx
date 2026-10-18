@@ -131,7 +131,7 @@ function HabitoDelDia({
 /** A dónde lleva el cierre. Las rutas son las que ya existen, sin inventar ninguna. */
 const DESTINOS = [
   { href: "/execution", label: "Proyectos y tareas" },
-  { href: "/planning", label: "Planear el día" },
+  { href: "/time", label: "Planear el día" },
   { href: "/development/routines", label: "Rutinas" },
   { href: "/notebooks", label: "Notas" },
   { href: "/money", label: "Dinero" }

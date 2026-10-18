@@ -6,7 +6,6 @@ import { netWorth, accountBalance } from "@/lib/domain/money.ts";
 import DebtForm from "./DebtForm";
 import DebtSimulator from "./DebtSimulator";
 import { getSessionUser } from "@/lib/data/session";
-import InsightSection from "@/components/InsightSection";
 
 export default async function DebtPage() {
   const supabase = await createClient();
@@ -100,7 +99,6 @@ export default async function DebtPage() {
         />
       )}
 
-      <InsightSection scope="debt" />
     </div>
   );
 }

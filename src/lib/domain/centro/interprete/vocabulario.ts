@@ -91,9 +91,8 @@ const ALIAS: Readonly<Record<string, string>> = {
   patrimonio: "/wealth",
   configuracion: "/settings",
   ajustes: "/settings",
-  planeacion: "/planning",
-  tiempo: "/time",
-  reportes: "/reports"
+  planeacion: "/time",
+  tiempo: "/time"
 };
 
 /**

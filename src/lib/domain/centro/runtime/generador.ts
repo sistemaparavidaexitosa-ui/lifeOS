@@ -34,8 +34,8 @@ const HUECOS: Record<IntentKind, HuecoDelPlan[]> = {
     // hacer, así que es lo primero que se pregunta.
     { id: "rutina", kind: "rutina", title: "Tu rutina de ahora" },
     { id: "narrativa", kind: "narrative" },
-    { id: "foco", kind: "tasks", title: "Tu foco de hoy" },
-    { id: "sigue", kind: "quickActions", title: "Sigue por aquí" }
+    { id: "foco", kind: "tasks", title: "Tu foco de hoy" }
+    // «Sigue por aquí» ya no: esas secciones están en la barra inferior.
   ],
   portafolio: [
     { id: "comentario", kind: "narrative" },
