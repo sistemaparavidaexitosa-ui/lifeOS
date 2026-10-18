@@ -30,7 +30,7 @@ export const MAX_CAMBIOS_POR_BLOQUE = 5;
 export const MAX_CAMBIOS_POR_TURNO = 10;
 export const MAX_TEXTO = 2000;
 
-export const GENERICOS = ["lista", "metricas", "tabla", "grafica", "tarjetas", "linea"] as const;
+export const GENERICOS = ["lista", "metricas", "tabla", "grafica", "tarjetas", "linea", "progreso", "agenda"] as const;
 export const CAPACIDADES = ["mercado", "hoy", "inversiones"] as const;
 export const KINDS_DEL_AGENTE = [...GENERICOS, "ir_a", "recomendaciones", "insight", "propuesta_movimiento", "propuesta_cambio", "confirmar_entendimiento", "recordar", ...CAPACIDADES] as const;
 
@@ -85,6 +85,18 @@ const ESQUEMAS_GENERICOS = {
     .object({
       titulo,
       items: z.array(z.object({ fila, fecha: campo, titulo: campo }).strict()).min(1).max(8)
+    })
+    .strict(),
+  progreso: z
+    .object({
+      titulo,
+      items: z.array(z.object({ fila, titulo: campo, actual: campo, meta: campo, formato }).strict()).min(1).max(8)
+    })
+    .strict(),
+  agenda: z
+    .object({
+      titulo,
+      items: z.array(z.object({ fila, inicio: campo, fin: campo.nullable(), titulo: campo }).strict()).min(1).max(12)
     })
     .strict()
 } as const;

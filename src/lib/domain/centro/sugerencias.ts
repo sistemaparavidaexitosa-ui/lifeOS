@@ -25,12 +25,16 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  *     tu lista. La RLS lo impediría igualmente al abrirlo, pero entonces el
  *     botón ya estaría pintado y el fallo sería una pantalla vacía.
  */
+const ALCANZABLES_FUERA_DEL_MENU = new Set(["/notebooks", "/activity"]);
+
 export function destinoValido(href: string, proyectos: { id: string }[]): boolean {
   if (!href.startsWith("/") || href.startsWith("//")) return false;
 
   const [ruta = "", query] = href.split("?");
   const item = NAV_ITEMS.find((n) => n.href === ruta);
-  if (!item || item.hidden) return false;
+  // Notebooks y Actividad no están en el menú, pero son pantallas reales: se
+  // llega a ellas desde el selector del espacio de trabajo.
+  if (!item || (item.hidden && !ALCANZABLES_FUERA_DEL_MENU.has(ruta))) return false;
 
   if (!query) return true;
   const id = new URLSearchParams(query).get("project");

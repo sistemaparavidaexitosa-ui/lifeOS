@@ -24,5 +24,7 @@ import "./secciones/Rutina";
 import "./secciones/PropuestaMovimiento";
 import "./secciones/PropuestaCambio";
 import "./secciones/ConfirmarEntendimiento";
+import "./secciones/Progreso";
+import "./secciones/Agenda";
 
 export { registroDeSecciones } from "./registro";

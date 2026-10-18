@@ -21,6 +21,8 @@ import { TABLAS_DE_BUSQUEDA, registrarFilas } from "@/lib/domain/ai/tools.ts";
 import { tablaConsultable } from "@/lib/insights/context";
 import { proponerCambios } from "@/lib/centro/escritura/proponer";
 import { validarPorSeccion } from "@/lib/domain/centro/runtime/validador.ts";
+import { analizarConsulta, filtrosDeConsulta, seccionesDeConsulta, CONSULTAS, MAX_FILAS, type DefConsulta } from "@/lib/domain/centro/interprete/consultas.ts";
+import { publicEnv } from "@/config/env";
 
 const MAX_CATALOGO = 20;
 const MAX_CANDIDATOS = 5;
@@ -31,6 +33,18 @@ type Escribir = Extract<Analisis, { tipo: "escribir" }>;
 
 export async function interpretarTurno(texto: string, cerebro: Cerebro): Promise<{ texto: string; secciones: AnySection[] } | null> {
   try {
+    // Pedir información («dame mis cuadernos») se contesta leyendo, sin modelo.
+    const c = analizarConsulta(texto);
+    if (c) {
+      const r = await consultar(CONSULTAS[c.consulta]!, c.filtro, cerebro);
+      if (r) {
+        after(async () => {
+          await cerebro.supabase.from("audit_log").insert({ user_id: cerebro.user.id, action: "ai.centro_interprete", object: "centro", meta: { salida: "consulta", consulta: c.consulta, filtro: c.filtro } });
+        });
+        return r;
+      }
+    }
+
     const a = analizar(texto, cerebro.today);
     if (a.tipo === "ia") return null;
 
@@ -55,6 +69,55 @@ export async function interpretarTurno(texto: string, cerebro: Cerebro): Promise
     console.warn("[centro-interprete] falló, sigue la IA:", e);
     return null;
   }
+}
+
+interface ConsultaDinamica {
+  eq(c: string, v: unknown): ConsultaDinamica;
+  neq(c: string, v: unknown): ConsultaDinamica;
+  lt(c: string, v: unknown): ConsultaDinamica;
+  lte(c: string, v: unknown): ConsultaDinamica;
+  gte(c: string, v: unknown): ConsultaDinamica;
+  in(c: string, v: unknown[]): ConsultaDinamica;
+  not(c: string, op: string, v: string): ConsultaDinamica;
+  order(c: string, o: { ascending: boolean; nullsFirst: boolean }): ConsultaDinamica;
+  limit(n: number): PromiseLike<{ data: unknown[] | null; error: unknown; count: number | null }>;
+}
+
+/**
+ * Una consulta directa: la MISMA lectura con la sesión que la herramienta
+ * `consultar` del modelo (`tablaConsultable` + RLS), y los componentes del
+ * Centro para enseñarla. `null` (sigue la IA) si el dominio no está autorizado.
+ */
+async function consultar(def: DefConsulta, filtro: string | null, cerebro: Cerebro): Promise<{ texto: string; secciones: AnySection[] } | null> {
+  const meta = tablaConsultable(def.tabla, cerebro.dominios);
+  if (!meta) return null;
+  // Las ocupaciones se filtran ya leídas (recurrentes por día de la semana):
+  // se leen todas, que son pocas. El resto, como mucho una página y su cuenta.
+  // La tabla y las columnas son dinámicas (las fija `CONSULTAS`, una lista
+  // cerrada): `tsc` no puede tipar el constructor, así que se describe a mano.
+  let q = cerebro.supabase.from(meta.nombre).select(def.select, { count: "exact" }) as unknown as ConsultaDinamica;
+  for (const f of filtrosDeConsulta(def, filtro, cerebro.today)) {
+    if (f.op === "in") q = q.in(f.campo, f.valor as (string | number)[]);
+    else if (f.op === "notIn") q = q.not(f.campo, "in", `(${(f.valor as (string | number)[]).join(",")})`);
+    else q = q[f.op](f.campo, f.valor as string);
+  }
+  const limite = def.enJs ? 200 : MAX_FILAS[def.forma];
+  const { data, error, count } = await q.order(def.orden.campo, { ascending: def.orden.asc, nullsFirst: false }).limit(limite);
+  if (error) {
+    console.warn("[centro-interprete] la consulta falló, sigue la IA:", error);
+    return null;
+  }
+  const filas = (data ?? []) as unknown as Record<string, unknown>[];
+  const secciones = seccionesDeConsulta(def, filas, {
+    hoy: cerebro.today,
+    total: count ?? filas.length,
+    filtro,
+    moneda: publicEnv.NEXT_PUBLIC_DEFAULT_CURRENCY,
+    locale: publicEnv.NEXT_PUBLIC_DEFAULT_LOCALE
+  });
+  const proyectos = def.tabla === "projects" ? filas.map((r) => ({ id: String(r.id) })) : [];
+  const buenas = validarPorSeccion(secciones, proyectos, "centro-consulta");
+  return buenas.length ? { texto: "", secciones: buenas } : null;
 }
 
 /** Lo que el resolver necesita saber de la base, y nada más. */
