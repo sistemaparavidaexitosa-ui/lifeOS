@@ -78,6 +78,28 @@ export function accionesRapidas(f: FuentesDeHoy): AccionRapida[] {
   ];
 }
 
+/**
+ * «Tu narrativa de hoy» SIN MODELO (rediseño): el foco, lo que arrastras, la
+ * rutina y el dinero, en ese orden y con tres frases como mucho. Antes la
+ * escribía la IA en cada franja; con las mismas señales que ya cargaba la
+ * pantalla, unas reglas dicen lo mismo y no gastan un token.
+ */
+export function narrativaDeHoy(f: FuentesDeHoy): string {
+  const frases: string[] = [];
+  const s = f.senales;
+  if (f.unicaCosa) frases.push(`Hoy lo que importa es «${recortar(f.unicaCosa, 80)}».`);
+  else if (f.tareas.length) frases.push(`Tienes ${plural(f.tareas.length, "tarea", "tareas")} de alto impacto en el radar.`);
+  else frases.push("Día despejado: elige la una cosa que haría que hoy valga la pena.");
+
+  if (s.vencidas > 0) frases.push(`Arrastras ${plural(s.vencidas, "vencida", "vencidas")}: despéjalas antes de sumar nuevas.`);
+  else frases.push(f.habitosPendientes > 0 ? `Te quedan ${plural(f.habitosPendientes, "hábito", "hábitos")} de tu rutina.` : "Tu rutina está al día.");
+
+  if (s.presupuestoEnRojo) frases.push("Tu presupuesto va en rojo: cuida el gasto de hoy.");
+  else if (s.diasParaFinDeQuincena <= QUINCENA_CERCA) frases.push(`La quincena cierra en ${plural(s.diasParaFinDeQuincena, "día", "días")}.`);
+
+  return frases.slice(0, 3).join(" ");
+}
+
 export function hidratadoresDeHoy(f: FuentesDeHoy, grafo: LectorDelGrafo): Hidratadores {
   return {
     hero: async () => ({
@@ -87,10 +109,7 @@ export function hidratadoresDeHoy(f: FuentesDeHoy, grafo: LectorDelGrafo): Hidra
       frase: f.unicaCosa ? recortar(`Lo que importa hoy: ${f.unicaCosa}`, LIMITES.heroFrase) : null
     }),
 
-    narrative: async () => {
-      const texto = f.resumen.trim();
-      return texto ? { titulo: "Tu narrativa de hoy", texto, href: null } : null;
-    },
+    narrative: async () => ({ titulo: "Tu narrativa de hoy", texto: narrativaDeHoy(f), href: null }),
 
     tasks: async () => {
       const tareas = f.tareas.slice(0, f.unicaCosa ? MAX_FOCO - 1 : MAX_FOCO);
