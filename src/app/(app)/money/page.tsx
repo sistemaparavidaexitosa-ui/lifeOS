@@ -12,7 +12,6 @@ import { todayInTimeZone } from "@/lib/domain/datetime.ts";
 import NewTransactionForm from "./NewTransactionForm";
 import NewAccountForm from "./NewAccountForm";
 import TxnRowActions from "./TxnRowActions";
-import InsightSection from "@/components/InsightSection";
 import { getSessionUser } from "@/lib/data/session";
 
 export default async function MoneyPage() {
@@ -208,7 +207,6 @@ export default async function MoneyPage() {
         </table>
       </Card>
 
-      <InsightSection scope="money" />
     </div>
   );
 }

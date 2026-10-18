@@ -7,7 +7,6 @@ import { contenidoParaRepetir, setNavMode } from "@/lib/ritual/actions";
 import RitualOverlay from "./RitualOverlay";
 import CentroPremium from "./CentroPremium";
 import CentroAgente from "@/components/centro-agente/CentroAgente";
-import BotonCentro from "./BotonCentro";
 import { EVENTO_ABRIR_CENTRO } from "./eventos";
 
 export interface DatosDelRitual {
@@ -157,6 +156,7 @@ export default function RitualHost({
     );
   }
 
-  if (modo === "premium") return <BotonCentro onClick={() => setVista("centro")} />;
+  // Rediseño: el botón flotante se fue. El Centro se abre con el objetivo de
+  // la barra inferior, que manda `EVENTO_ABRIR_CENTRO`.
   return null;
 }

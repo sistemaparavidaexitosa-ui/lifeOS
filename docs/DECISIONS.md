@@ -4116,3 +4116,33 @@ implementa:
   editar o borrar asientos (contabilidad: se corrige con reverso en /money),
   asignar personas (necesita el roster del espacio) y el perfil de identidad
   y de nutrición (formularios de una sola fila, sin nombre que dictar).
+
+- **D-206 · Rediseño: negro, barra inferior con el Centro al medio, pestañas
+  por sección.** Encargo de la persona (2026-10-18): tema negro «aesthetic,
+  moderno, supersofisticado», homologado con el Centro, y claro si se elige.
+  **Tema:** capa final «Noir» en `globals.css` que redefine los tokens (negro
+  `#0a0a0b`, superficies `#131315`, bordes de un pelo, botón primario
+  monocromo como el del Centro); `lifeos_theme` ahora es negro salvo que diga
+  `light` (selector en Configuración → Apariencia). El Centro y el ritual
+  siguen el tema de la app, no el del sistema. Movimiento según Emil Kowalski:
+  curvas `--ease-out`/`--ease-drawer`, < 300 ms, `scale(0.97)` al pulsar,
+  `@starting-style`, nada animado en acciones de teclado y
+  `prefers-reduced-motion` respetado.
+  **Navegación:** `BottomNav` con Home · Execution · **Centro** (un objetivo:
+  manda `EVENTO_ABRIR_CENTRO`, el botón flotante `BotonCentro` se fue) · Money ·
+  Desarrollo. Los submenús son ahora pestañas superiores (`SECCIONES`,
+  `seccionDe`, `pestanaActiva` en `nav-items.ts`). El menú lateral solo guarda
+  Configuración (y Salir).
+  **Fuera de la interfaz, backend intacto:** las recomendaciones
+  (`InsightSection` en ocho pantallas y los enlaces a /intelligence; el motor
+  sigue y el Centro las usa como conocimiento), el chat de la esquina
+  (`AiChatRail`), /reports, /execution/eisenhower y /graph (rutas vivas, sin
+  enlace). «Sigue por aquí» sale de «Hoy»: esas secciones están en la barra.
+  **La narrativa de «Hoy» sale de reglas** (`narrativaDeHoy`) y el turno «Hoy»
+  del agente ya no llama al modelo.
+  **Tiempo y planeación en una (`/time`; `/planning` redirige):** arriba la
+  CARGA DEL DÍA (`cargaDelDia`): ocupaciones + tareas que vencen hoy o de
+  impacto sin fecha + rutinas que tocan hoy (sin doble cuenta: una rutina
+  ligada a una ocupación ya está en ella), contra la ventana de actividad, con
+  margen del 20 % y un consejo por reglas. El objetivo es no saturarse, no
+  llenar el día.

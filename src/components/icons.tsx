@@ -417,3 +417,64 @@ export const NAV_ICONS = {
 } as const;
 
 export type NavIconKey = keyof typeof NAV_ICONS;
+
+// ─── Rediseño: barra inferior. Trazo 1.6, geometría simple. ─────────────────
+const fino = (children: React.ReactNode, p: IconProps) => base(children, { strokeWidth: 1.6, ...p });
+
+export const IconNavHome = (p: IconProps) =>
+  fino(
+    <>
+      <path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z" />
+    </>,
+    p
+  );
+
+export const IconNavExecution = (p: IconProps) =>
+  fino(
+    <>
+      <rect x="4" y="4" width="16" height="16" rx="4.5" />
+      <path d="m8.5 12.2 2.4 2.3 4.6-5" />
+    </>,
+    p
+  );
+
+/** El Centro: un objetivo. */
+export const IconTarget = (p: IconProps) =>
+  fino(
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <circle cx="12" cy="12" r="4.8" />
+      <circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none" />
+    </>,
+    p
+  );
+
+export const IconNavMoney = (p: IconProps) =>
+  fino(
+    <>
+      <rect x="3.5" y="6" width="17" height="13" rx="3.5" />
+      <path d="M3.5 10h17" />
+      <path d="M15.5 14.5h1.5" />
+      <path d="M6.5 6 15 3.6a1.5 1.5 0 0 1 1.9 1.1L17.2 6" />
+    </>,
+    p
+  );
+
+export const IconNavDevelopment = (p: IconProps) =>
+  fino(
+    <>
+      <path d="M12 20v-7" />
+      <path d="M12 13c0-4 2.5-6.5 7-7 0 4.5-2.5 7-7 7Z" />
+      <path d="M12 15.5c0-3-2-5-5.5-5.5 0 3.5 2 5.5 5.5 5.5Z" />
+    </>,
+    p
+  );
+
+export const IconNavSettings = (p: IconProps) =>
+  fino(
+    <>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
+    </>,
+    p
+  );

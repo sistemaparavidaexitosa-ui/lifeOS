@@ -14,6 +14,8 @@ import { isPlatformAdmin } from "@/lib/data/templates";
 import { loadRitualPolicy, loadRitualPreference } from "@/lib/data/ritual";
 import { pasosOfrecibles } from "@/lib/domain/ritual/policy.ts";
 import RitualPrefs from "./RitualPrefs";
+import TemaSelector from "./TemaSelector";
+import { cookies } from "next/headers";
 
 export default async function SettingsPage() {
   const supabase = await createClient();
@@ -63,6 +65,14 @@ export default async function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-3.5">
+      <Card>
+        <h3 className="font-bold mb-1">Apariencia</h3>
+        <p className="text-sm mb-3" style={{ color: "var(--muted)" }}>
+          Life OS es negro por defecto, como el Centro. Puedes pasarlo a claro.
+        </p>
+        <TemaSelector actual={(await cookies()).get("lifeos_theme")?.value === "light" ? "light" : "dark"} />
+      </Card>
+
       <Card>
         <h3 className="font-bold mb-2">Perfil y preferencias</h3>
         <form action={updateProfile} className="flex flex-col gap-2">
@@ -149,23 +159,12 @@ export default async function SettingsPage() {
       </Card>
 
       <Card>
-        <h3 className="font-bold mb-2">Recomendaciones (Intelligence OS)</h3>
-        <AiSettings enabled={(profile.ai_domains ?? []) as string[]} />
+        <h3 className="font-bold mb-2">Lo que el Centro puede leer</h3>
         {/*
-          Intelligence OS dejó de ser una sección del menú lateral (ver
-          nav-items.ts). Sus dos pantallas siguen existiendo y estos son sus
-          accesos estables: la bandeja también se alcanza desde el panel de
-          /money, pero la memoria solo se alcanzaba a través de ella, y una
-          pantalla que depende de pasar por Dinero es una pantalla perdida.
+          Rediseño: las recomendaciones salen de la interfaz. El motor sigue y
+          alimenta al Centro como conocimiento; estos dominios deciden qué lee.
         */}
-        <div className="flex gap-1.5 flex-wrap" style={{ marginTop: 10 }}>
-          <a href="/intelligence" className="btn-ghost btn-sm">
-            Ver recomendaciones
-          </a>
-          <a href="/intelligence/memory" className="btn-ghost btn-sm">
-            Memoria del motor
-          </a>
-        </div>
+        <AiSettings enabled={(profile.ai_domains ?? []) as string[]} />
       </Card>
 
       {/*

@@ -19,7 +19,6 @@ import { isExecutionView, type BoardGroup, type BoardTask, type ExecutionView } 
 import { getProjectLogAndKnowledge } from "./logbook-knowledge-actions";
 import { getSessionUser } from "@/lib/data/session";
 import { listTemplates } from "@/lib/data/templates";
-import InsightSection from "@/components/InsightSection";
 
 // REDISEÑO DEL FLUJO DE PROYECTOS (estilo monday.com / ClickUp)
 //
@@ -164,7 +163,6 @@ export default async function ExecutionPage({
             proyecto. Y va tras un límite de Suspense por el mismo motivo que
             TeamSection: su consulta no puede retrasar la lista de proyectos. */}
         <Suspense fallback={null}>
-          <InsightSection scope="execution" />
         </Suspense>
         </>
       ) : (

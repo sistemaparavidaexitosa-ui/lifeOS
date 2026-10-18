@@ -13,7 +13,8 @@ export function Card({ children, className = "", hero = false }: { children: Rea
       className={`card ${className}`}
       style={
         hero
-          ? { background: "linear-gradient(145deg, var(--accent-d), var(--accent))", color: "#fff", border: 0, position: "relative", overflow: "hidden" }
+          ? // Rediseño Noir: el destacado es una superficie un paso más clara, no un bloque de color.
+            { background: "linear-gradient(160deg, var(--surface3), var(--surface) 70%)", color: "var(--text)", position: "relative", overflow: "hidden" }
           : undefined
       }
     >
