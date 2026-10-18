@@ -18,11 +18,24 @@ test("Ninguna tabla prohibida está en el registro (profiles, sobre todo)", () =
   for (const t of TABLAS_PROHIBIDAS) assert.ok(!tablas.includes(t), t);
 });
 
-test("Entregas 1 y 2 (D-203, D-205 E2): las tablas que el Centro escribe", () => {
+test("Entregas 1, 2 y 3 (D-203, D-205): las tablas que el Centro escribe", () => {
   assert.deepStrictEqual(tablas.sort(), [
-    "assets", "books", "daily_reflections", "debts", "financial_goals", "food_entries", "habit_logs",
-    "logbook", "notes", "personal_goals", "projects", "reminders", "savings_goals", "tasks"
+    "accounts", "assets", "body_measurements", "books", "budgets", "comments", "daily_reflections", "debts",
+    "financial_goals", "food_entries", "habit_logs", "identity_traits", "journal_entries", "logbook", "notes",
+    "occupations", "personal_goals", "projects", "reminders", "savings_goals", "tasks"
   ]);
+});
+
+test("D-205 E3: `suelto` solo en números, uno por tabla; `valoresPorSinonimo` nombra sinónimos y opciones reales", () => {
+  for (const [tabla, e] of Object.entries(ESCRITURA_POR_TABLA) as [string, EntradaDeEscritura][]) {
+    const sueltos = Object.entries(e.campos).filter(([, c]) => c.suelto);
+    assert.ok(sueltos.length <= 1, tabla);
+    for (const [n, c] of sueltos) assert.ok(c.tipo === "numero" || c.tipo === "entero", `${tabla}.${n}`);
+    for (const [frase, valores] of Object.entries(e.valoresPorSinonimo ?? {})) {
+      assert.ok(e.sinonimos.includes(frase), `${tabla}: «${frase}»`);
+      for (const [campo, v] of Object.entries(valores)) assert.ok(e.campos[campo]?.opciones?.includes(v), `${tabla}.${campo}=${v}`);
+    }
+  }
 });
 
 test("El dominio de cada tabla es el de la lista blanca de lectura", () => {

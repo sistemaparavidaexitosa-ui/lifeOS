@@ -4106,6 +4106,13 @@ implementa:
   que solo se nombra como destino, como lo dictado o como valor de otra («el
   proyecto a ACTIVO») ya no hace dudar entre dos tablas. Los upsert de cada
   sección piden la fila entera: editar lee la que hay y reenvía lo que no cambió.
-  **Pendiente (E3):** `occupations` (necesita un tipo hora), asientos de dinero
-  (`postTransaction`), presupuestos, cuentas, identidad, perfil y peso de
-  nutrición, comentarios y asignaciones.
+  **E3 (hecha):** `journal_entries` («gasté 300 en comida», «cobré…»; solo
+  crear, por `postTransaction`), `accounts`, `budgets`, `body_measurements`
+  («peso 78 kilos»), `occupations` (tipo nuevo `hora`: «de 9 a 2» = 09:00–14:00),
+  `comments` (en una tarea) e `identity_traits`. El registro gana `suelto`
+  (el número sin unidad), `valoresPorSinonimo` («un GASTO» → expense) y
+  `sinDictado`. Un verbo que ya dice la tabla hace del resto contenido:
+  «gasté en COMIDA» no nombra la tabla de comidas. **Fuera, a propósito:**
+  editar o borrar asientos (contabilidad: se corrige con reverso en /money),
+  asignar personas (necesita el roster del espacio) y el perfil de identidad
+  y de nutrición (formularios de una sola fila, sin nombre que dictar).
