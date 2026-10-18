@@ -135,3 +135,31 @@ test("Editar: un título corto y sin marcado sigue siendo editable (I1)", () => 
   const item = s?.kind === "propuestaCambio" ? s.data.items[0]! : null;
   assert.strictEqual(item?.campos.find((c) => c.campo === "title")?.editable, true);
 });
+
+// D-205: la tarjeta del intérprete dice qué entendió y que fue sin IA.
+const EXTRA = { entendi: "Crear la tarea «Escribir intro» en Tesis", textoOriginal: "crea una tarea escribir intro", sinIA: true as const };
+
+test("D-205: seccionDeCambios copia lo entendido, y el validador lo deja pasar", () => {
+  const s = seccionDeCambios("i0", [{ propuestaId: PID, cambio: crear }], filas, EXTRA);
+  assert.ok(s && s.kind === "propuestaCambio");
+  assert.strictEqual(s.kind === "propuestaCambio" && s.data.entendi, EXTRA.entendi);
+  assert.strictEqual(s.kind === "propuestaCambio" && s.data.textoOriginal, EXTRA.textoOriginal);
+  assert.strictEqual(s.kind === "propuestaCambio" && s.data.sinIA, true);
+  assert.strictEqual(validarPorSeccion([s!], [], "test").length, 1);
+});
+
+test("D-205: sin extra, la tarjeta es la de siempre (sin claves nuevas)", () => {
+  const s = seccionDeCambios("b0", [{ propuestaId: PID, cambio: crear }], filas);
+  assert.deepStrictEqual(s && s.kind === "propuestaCambio" && Object.keys(s.data), ["items"]);
+});
+
+test("D-205: un «Entendí» de más de 300 caracteres no pasa", () => {
+  const s = seccionDeCambios("i0", [{ propuestaId: PID, cambio: crear }], filas, { ...EXTRA, entendi: "x".repeat(301) });
+  assert.strictEqual(validarPorSeccion([s!], [], "test").length, 0);
+});
+
+test("D-205: confirmarEntendimiento acepta textoSeguir y modoSeguir «ia», y nada más", () => {
+  const base = { id: "i0", kind: "confirmarEntendimiento" as const, data: { entendi: "No encontré ninguna tarea", seguir: "Pregúntale a la IA", alternativas: [] } };
+  assert.strictEqual(validarPorSeccion([{ ...base, data: { ...base.data, textoSeguir: "borra la tarea x", modoSeguir: "ia" as const } }], [], "test").length, 1);
+  assert.strictEqual(validarPorSeccion([{ ...base, data: { ...base.data, textoSeguir: "x", modoSeguir: "auto" as unknown as "ia" } }], [], "test").length, 0);
+});

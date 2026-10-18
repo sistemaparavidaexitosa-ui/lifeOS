@@ -240,14 +240,19 @@ const ESQUEMAS: Partial<Record<SectionKind, z.ZodTypeAny>> = {
             .strict()
         )
         .min(1)
-        .max(10)
+        .max(10),
+      entendi: texto(300).optional(),
+      textoOriginal: texto(2000).optional(),
+      sinIA: z.boolean().optional()
     })
     .strict(),
   confirmarEntendimiento: z
     .object({
       entendi: texto(300),
       seguir: texto(40),
-      alternativas: z.array(z.object({ etiqueta: texto(40), texto: texto(300).nullable() }).strict()).max(3)
+      alternativas: z.array(z.object({ etiqueta: texto(40), texto: texto(300).nullable() }).strict()).max(3),
+      textoSeguir: texto(2000).optional(),
+      modoSeguir: z.literal("ia").optional()
     })
     .strict(),
   rutina: z

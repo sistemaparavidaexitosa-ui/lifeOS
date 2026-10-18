@@ -11,8 +11,11 @@ import { createContext } from "react";
  */
 export const ContextoDelAgente = createContext<{
   workspaceId: string | null;
-  /** D-204: una sección puede mandar un turno nuevo (confirmación, «No es esto»). */
-  enviar?: (texto: string) => void;
+  /**
+   * D-204: una sección puede mandar un turno nuevo (confirmación, «No es esto»).
+   * D-205: con `modo: "ia"` se salta el intérprete y va directo al modelo.
+   */
+  enviar?: (texto: string, modo?: "ia") => void;
   /** D-204: lleva el foco al compositor («Otra cosa»). */
   enfocar?: () => void;
   /** D-204 fix ronda 1: hay un turno en vuelo — `enviar` lo va a ignorar. */

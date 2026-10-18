@@ -60,7 +60,10 @@ export default function SeccionPropuestaCambio({ data }: PropsDeSeccion<"propues
     startTransition(async () => {
       await descartarCambio(it.propuestaId, "malentendido").catch(() => null);
       setEstados((e) => ({ ...e, [it.propuestaId]: "descartado" }));
-      enviar?.(`No era eso (${verboDe(it.operacion)} · ${it.etiquetaTabla}: ${it.titulo})`);
+      // D-205: si lo propuso el intérprete, la petición original va tal cual a
+      // la IA — la persona no tiene que volver a escribirla.
+      if (data.textoOriginal) enviar?.(data.textoOriginal, "ia");
+      else enviar?.(`No era eso (${verboDe(it.operacion)} · ${it.etiquetaTabla}: ${it.titulo})`);
     });
   }
 
@@ -72,6 +75,17 @@ export default function SeccionPropuestaCambio({ data }: PropsDeSeccion<"propues
 
   return (
     <div className="ag-card">
+      {data.entendi && (
+        <p>
+          <span className="ag-muted">Entendí: </span>
+          {data.entendi}
+          {data.sinIA && (
+            <span className="ag-sin-ia" title="Lo entendí sin gastar IA">
+              sin IA
+            </span>
+          )}
+        </p>
+      )}
       {data.items.map((it) => {
         const estado = estados[it.propuestaId] ?? "pendiente";
         if (estado === "descartado") return null;

@@ -12,6 +12,7 @@
 // permisos.
 
 import type { Domain } from "../../insights/types.ts";
+import { TASK_TRANSITIONS } from "../../task-state.ts";
 
 export const OPERACIONES = ["crear", "editar", "borrar"] as const;
 export type Operacion = (typeof OPERACIONES)[number];
@@ -31,6 +32,21 @@ export interface CampoDeEscritura {
   refTabla?: string;
   soloCrear?: boolean;
   soloEditar?: boolean;
+  /**
+   * D-205, `opcion`: las palabras con que la persona dice cada valor
+   * («urgente» → `High`). Ya normalizadas (sin acentos, minúsculas).
+   */
+  sinonimos?: Readonly<Record<string, readonly string[]>>;
+  /** D-205, `numero`/`entero`: las unidades que lo acompañan («80 g»). */
+  unidades?: readonly string[];
+  /** D-205, `ref`: cómo se nombra el destino («en el proyecto …»). */
+  menciones?: readonly string[];
+  /**
+   * D-205, `opcion`: a qué valores se puede pasar desde cada uno. Es la regla
+   * de la sección (p. ej. la máquina de estados de tareas): el intérprete no
+   * propone un salto que la server action va a rechazar al pulsar Guardar.
+   */
+  transiciones?: Readonly<Record<string, readonly string[]>>;
 }
 
 export interface EntradaDeEscritura {
@@ -40,8 +56,18 @@ export interface EntradaDeEscritura {
   /** Una línea para el índice del prompt. */
   descripcion: string;
   operaciones: readonly Operacion[];
+  /**
+   * D-205: cómo llama la persona a una fila de esta tabla («tarea»). Lo usa
+   * el intérprete; ya normalizado, y ninguno puede estar en dos tablas (test).
+   */
+  sinonimos: readonly string[];
   /** El campo que titula la tarjeta. */
   titulo: string;
+  /**
+   * D-205: dónde pone el intérprete lo que se dictó al crear. Por defecto,
+   * `titulo`; en una nota es el cuerpo (el título es opcional y el cuerpo no).
+   */
+  dictado?: string;
   campos: Record<string, CampoDeEscritura>;
 }
 
@@ -49,20 +75,49 @@ const ESTADOS_DE_TAREA = ["Pending", "InProgress", "Blocked", "Rescheduled", "Co
 const PRIORIDADES = ["High", "Medium", "Low"] as const;
 const COMIDAS = ["Desayuno", "Almuerzo", "Cena", "Snack"] as const;
 
+// El PRIMER sinónimo de cada valor es también como se lee en «Entendí: …».
+const SINONIMOS_DE_ESTADO = {
+  Completed: ["completada", "completado", "hecha", "hecho", "terminada", "terminado", "lista", "listo"],
+  InProgress: ["en progreso", "empezada", "en curso"],
+  Blocked: ["bloqueada", "bloqueado"],
+  Rescheduled: ["reprogramada", "reprogramado"],
+  Cancelled: ["cancelada", "cancelado"],
+  Pending: ["pendiente"]
+} as const;
+const SINONIMOS_DE_PRIORIDAD = {
+  High: ["alta", "urgente", "prioridad alta", "alta prioridad", "importante"],
+  Medium: ["media", "prioridad media", "normal"],
+  Low: ["baja", "prioridad baja", "baja prioridad"]
+} as const;
+const SINONIMOS_DE_COMIDA = {
+  Desayuno: ["desayuno"],
+  Almuerzo: ["almuerzo", "comida del mediodia"],
+  Cena: ["cena"],
+  Snack: ["snack", "colacion", "merienda", "botana"]
+} as const;
+
 export const ESCRITURA_POR_TABLA = {
   tasks: {
     dominio: "execution",
     etiqueta: "Tarea",
     descripcion: "tareas de un proyecto (crear en un proyecto leído, cambiar estado/prioridad/fecha, borrar)",
     operaciones: ["crear", "editar", "borrar"],
+    sinonimos: ["tarea", "tareas"],
     titulo: "title",
     campos: {
-      project_id: { etiqueta: "Proyecto", tipo: "ref", refTabla: "projects", obligatorio: true, soloCrear: true },
+      project_id: {
+        etiqueta: "Proyecto",
+        tipo: "ref",
+        refTabla: "projects",
+        obligatorio: true,
+        soloCrear: true,
+        menciones: ["en el proyecto", "al proyecto", "del proyecto", "en proyecto"]
+      },
       title: { etiqueta: "Título", tipo: "texto", obligatorio: true, min: 1, max: 200 },
-      status: { etiqueta: "Estado", tipo: "opcion", opciones: ESTADOS_DE_TAREA, soloEditar: true },
-      priority: { etiqueta: "Prioridad", tipo: "opcion", opciones: PRIORIDADES },
+      status: { etiqueta: "Estado", tipo: "opcion", opciones: ESTADOS_DE_TAREA, soloEditar: true, sinonimos: SINONIMOS_DE_ESTADO, transiciones: TASK_TRANSITIONS },
+      priority: { etiqueta: "Prioridad", tipo: "opcion", opciones: PRIORIDADES, sinonimos: SINONIMOS_DE_PRIORIDAD },
       due: { etiqueta: "Vence", tipo: "fecha" },
-      est: { etiqueta: "Minutos estimados", tipo: "entero", min: 0, max: 1440, soloCrear: true }
+      est: { etiqueta: "Minutos estimados", tipo: "entero", min: 0, max: 1440, soloCrear: true, unidades: ["min", "minutos"] }
     }
   },
   notes: {
@@ -70,9 +125,18 @@ export const ESCRITURA_POR_TABLA = {
     etiqueta: "Nota",
     descripcion: "notas de un cuaderno (crear en un cuaderno leído, reescribir título o cuerpo, borrar)",
     operaciones: ["crear", "editar", "borrar"],
+    sinonimos: ["nota", "notas", "idea", "apunte"],
     titulo: "title",
+    dictado: "body",
     campos: {
-      notebook_id: { etiqueta: "Cuaderno", tipo: "ref", refTabla: "notebooks", obligatorio: true, soloCrear: true },
+      notebook_id: {
+        etiqueta: "Cuaderno",
+        tipo: "ref",
+        refTabla: "notebooks",
+        obligatorio: true,
+        soloCrear: true,
+        menciones: ["en el cuaderno", "al cuaderno", "en la libreta", "en cuaderno"]
+      },
       title: { etiqueta: "Título", tipo: "texto", min: 0, max: 300 },
       body: { etiqueta: "Texto", tipo: "texto", obligatorio: true, min: 1, max: 20000 }
     }
@@ -82,12 +146,13 @@ export const ESCRITURA_POR_TABLA = {
     etiqueta: "Comida",
     descripcion: "lo que comió la persona (registrar con macros por 100 g, corregir comida/nombre/gramos, borrar)",
     operaciones: ["crear", "editar", "borrar"],
+    sinonimos: ["comida", "comidas", "alimento"],
     titulo: "name",
     campos: {
       local_date: { etiqueta: "Día", tipo: "fecha", soloCrear: true },
-      meal: { etiqueta: "Comida", tipo: "opcion", opciones: COMIDAS, obligatorio: true },
+      meal: { etiqueta: "Comida", tipo: "opcion", opciones: COMIDAS, obligatorio: true, sinonimos: SINONIMOS_DE_COMIDA },
       name: { etiqueta: "Alimento", tipo: "texto", obligatorio: true, min: 1, max: 200 },
-      grams: { etiqueta: "Gramos", tipo: "numero", obligatorio: true, min: 0.1, max: 5000 },
+      grams: { etiqueta: "Gramos", tipo: "numero", obligatorio: true, min: 0.1, max: 5000, unidades: ["g", "gr", "grs", "gramos"] },
       kcal100: { etiqueta: "kcal por 100 g", tipo: "numero", obligatorio: true, min: 0, max: 900, soloCrear: true },
       protein100: { etiqueta: "Proteína por 100 g", tipo: "numero", min: 0, max: 100, soloCrear: true },
       carbs100: { etiqueta: "Carbohidratos por 100 g", tipo: "numero", min: 0, max: 100, soloCrear: true },

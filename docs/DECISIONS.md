@@ -4070,3 +4070,31 @@ implementa:
   Centro ignora un mensaje nuevo (`enVuelo`/`ocupado` en `ContextoDelAgente`):
   la tarjeta de confirmación, «No es esto» y los chips quedan inertes hasta
   que responde.
+
+- **D-205 · El Centro entiende sin IA lo que es de manos, y deja a la IA lo que
+  es de criterio.** Encargo de la persona: «para no quemar tokens de IA… consulta
+  siempre al usuario si el entendimiento es correcto, dejamos a la IA para
+  tareas de verdadero valor». Antes de cada turno, un intérprete PURO
+  (`src/lib/domain/centro/interprete/`: `analizar` → `resolverAnalisis`) lee
+  verbo, tabla (por los `sinonimos` que ahora lleva cada entrada de
+  `ESCRITURA_POR_TABLA`, obligatorios por tipo), fechas, números con unidad y
+  opciones por sinónimo; el servidor (`src/lib/centro/interprete/interpretar.ts`)
+  solo LEE con la sesión: catálogo de proyectos/cuadernos, las filas nombradas
+  (la misma `buscar_en_todo` + `tablaConsultable` que la herramienta `buscar`) y
+  la caché `foods`. Cuatro salidas: cambios (la tarjeta `propuestaCambio`
+  encabezada por «Entendí: …» y marcada «sin IA»), pregunta (¿en qué proyecto?,
+  ¿cuál de estas tres?), «no lo encontré» (con «Pregúntale a la IA») y navegar.
+  **Regla de oro: ante la duda, IA** — preguntas, análisis, consejo, textos de
+  más de 300 caracteres, verbo que no está al principio, dos tablas, un
+  obligatorio sin resolver (los macros de un alimento que no está en `foods`).
+  **Los cambios del intérprete salen con EL MISMO contrato que el bloque
+  `propuesta_cambio` del modelo** y entran por `proponerCambios`: heredan todas
+  las barreras de D-203 sin código nuevo, y nada se guarda sin Guardar. «No es
+  esto» en una tarjeta del intérprete descarta (malentendido de D-204) y le
+  pasa a la IA la petición original (`modo: "ia"` en `/api/centro/turno`).
+  Retro: `audit_log` `ai.centro_interprete` `{ salida, tabla, operacion }`; con
+  `ai.centro_escritura` y `ai.centro_entendimiento` se mide el acierto. Aprender
+  sinónimos de los rechazos queda fuera hasta ver datos reales.
+  **Pendiente (E2/E3 del spec 2026-10-18):** «el Centro hace todo lo que hace la
+  persona» = el resto de tablas del registro de D-203, ahora cada una con su
+  vocabulario. E1 solo cubre `tasks`, `notes`, `food_entries` y la navegación.

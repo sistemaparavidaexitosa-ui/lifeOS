@@ -4634,6 +4634,8 @@ html[data-theme="dark"] .rit-boton-centro { color: #0b0b12; background: #f6f6fa;
 .ag-card-cabecera { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
 .ag-card-titulo { margin: 0; font-size: 15px; font-weight: 600; }
 .ag-muted { color: var(--ag-muted); font-size: 13px; }
+/* D-205: el intérprete lo entendió sin llamar al modelo. Discreta: informa, no celebra. */
+.ag-sin-ia { margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: var(--ag-soft); color: var(--ag-muted); font-size: 11px; font-weight: 500; white-space: nowrap; }
 .ag-aviso { margin: 4px 0 12px; color: var(--ag-muted); font-size: 13px; }
 .ag-cifra-grande { margin: 4px 0 0; font-size: 32px; font-weight: 600; letter-spacing: -0.01em; }
 

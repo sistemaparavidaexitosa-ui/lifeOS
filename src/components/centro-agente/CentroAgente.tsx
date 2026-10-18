@@ -9,6 +9,7 @@ import { agregar, historialParaModelo, type Turno } from "@/lib/domain/centro/ag
 import type { Screen } from "@/lib/domain/centro/runtime/types.ts";
 import { startRitual } from "@/lib/ritual/actions";
 import { IconClose } from "@/components/icons";
+import { MARCA_DE_FILA } from "@/lib/domain/centro/interprete/analizar.ts";
 import Composer from "./Composer";
 
 const LIMITE_MS = 45_000;
@@ -158,7 +159,7 @@ export default function CentroAgente({
     finRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [hilo, pensando]);
 
-  async function enviar(texto: string) {
+  async function enviar(texto: string, modo?: "ia") {
     if (enVuelo.current) return;
     enVuelo.current = true;
     const pregunta: Turno = { id: `p${Date.now()}`, rol: "persona", texto, secciones: [] };
@@ -169,7 +170,7 @@ export default function CentroAgente({
       const res = await fetch("/api/centro/turno", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ texto, historial }),
+        body: JSON.stringify({ texto, historial, ...(modo ? { modo } : {}) }),
         signal: AbortSignal.timeout(LIMITE_MS)
       });
       const r = res.ok ? ((await res.json()) as { turno?: { id: string; texto: string; secciones: Turno["secciones"] } }) : null;
@@ -221,7 +222,8 @@ export default function CentroAgente({
           {hilo.map((t) =>
             t.rol === "persona" ? (
               <p key={t.id} className="ag-burbuja">
-                {t.texto}
+                {/* D-205: la marca `#<uuid>` de una opción elegida es para el intérprete, no para leerla. */}
+                {t.texto.replace(MARCA_DE_FILA, "")}
               </p>
             ) : (
               <section key={t.id} className="ag-turno">
