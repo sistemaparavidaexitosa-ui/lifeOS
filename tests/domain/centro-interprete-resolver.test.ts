@@ -128,3 +128,11 @@ test("Navegar e IA pasan tal cual", () => {
   assert.deepEqual(resolverAnalisis(analizar("llévame a presupuesto", H), ctx()), { tipo: "navegar", destino: { href: "/money/budget", etiqueta: "Presupuesto" } });
   assert.equal(resolverAnalisis(analizar("¿cómo voy?", H), ctx()).tipo, "ia");
 });
+
+test("Crear nota: lo dicho va al cuerpo (obligatorio), y el cambio valida", () => {
+  const r = resolverAnalisis(analizar("crea una nota idea para el blog en el cuaderno Trabajo", H), ctx());
+  assert.equal(r.tipo, "cambios", r.tipo === "ia" ? r.motivo : "");
+  if (r.tipo !== "cambios") return;
+  assert.deepEqual(r.cambios, [{ operacion: "crear", tabla: "notes", campos: { notebook_id: `fila:notebooks:${N1}`, body: "idea para el blog" } }]);
+  assert.equal(r.entendi, "Crear la nota «idea para el blog» en Trabajo");
+});

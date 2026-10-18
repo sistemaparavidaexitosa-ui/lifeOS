@@ -13,11 +13,11 @@ export default function SeccionConfirmarEntendimiento({ data }: PropsDeSeccion<"
   const { enviar, enfocar, ocupado } = useContext(ContextoDelAgente);
   const [usada, setUsada] = useState(false);
 
-  function elegir(resultado: "seguir" | "alternativa" | "otra", texto: string | null) {
+  function elegir(resultado: "seguir" | "alternativa" | "otra", texto: string | null, modo?: "ia") {
     if (usada) return;
     setUsada(true);
     void registrarEntendimiento(resultado);
-    if (texto) enviar?.(texto);
+    if (texto) enviar?.(texto, modo);
     else enfocar?.();
   }
 
@@ -28,7 +28,7 @@ export default function SeccionConfirmarEntendimiento({ data }: PropsDeSeccion<"
         {data.entendi}
       </p>
       <p className="ag-acciones">
-        <button type="button" className="ag-boton-chico" disabled={usada || ocupado} onClick={() => elegir("seguir", `Sí, sigue: ${data.entendi}`)}>
+        <button type="button" className="ag-boton-chico" disabled={usada || ocupado} onClick={() => elegir("seguir", data.textoSeguir ?? `Sí, sigue: ${data.entendi}`, data.modoSeguir)}>
           {data.seguir}
         </button>
         {data.alternativas.map((a, i) => (

@@ -56,6 +56,11 @@ export interface EntradaDeEscritura {
   sinonimos: readonly string[];
   /** El campo que titula la tarjeta. */
   titulo: string;
+  /**
+   * D-205: dónde pone el intérprete lo que se dictó al crear. Por defecto,
+   * `titulo`; en una nota es el cuerpo (el título es opcional y el cuerpo no).
+   */
+  dictado?: string;
   campos: Record<string, CampoDeEscritura>;
 }
 
@@ -114,6 +119,7 @@ export const ESCRITURA_POR_TABLA = {
     operaciones: ["crear", "editar", "borrar"],
     sinonimos: ["nota", "notas", "idea", "apunte"],
     titulo: "title",
+    dictado: "body",
     campos: {
       notebook_id: {
         etiqueta: "Cuaderno",

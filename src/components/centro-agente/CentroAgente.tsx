@@ -158,7 +158,7 @@ export default function CentroAgente({
     finRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [hilo, pensando]);
 
-  async function enviar(texto: string) {
+  async function enviar(texto: string, modo?: "ia") {
     if (enVuelo.current) return;
     enVuelo.current = true;
     const pregunta: Turno = { id: `p${Date.now()}`, rol: "persona", texto, secciones: [] };
@@ -169,7 +169,7 @@ export default function CentroAgente({
       const res = await fetch("/api/centro/turno", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ texto, historial }),
+        body: JSON.stringify({ texto, historial, ...(modo ? { modo } : {}) }),
         signal: AbortSignal.timeout(LIMITE_MS)
       });
       const r = res.ok ? ((await res.json()) as { turno?: { id: string; texto: string; secciones: Turno["secciones"] } }) : null;

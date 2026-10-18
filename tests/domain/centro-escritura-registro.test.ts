@@ -97,3 +97,11 @@ test("D-205: las menciones solo existen en refs", () => {
     }
   }
 });
+
+test("D-205: `dictado`, si existe, es un campo de texto que se puede crear", () => {
+  for (const [tabla, e] of Object.entries(ESCRITURA_POR_TABLA) as [string, EntradaDeEscritura][]) {
+    if (!e.dictado) continue;
+    const c = e.campos[e.dictado];
+    assert.ok(c && c.tipo === "texto" && !c.soloEditar, `${tabla}.${e.dictado}`);
+  }
+});

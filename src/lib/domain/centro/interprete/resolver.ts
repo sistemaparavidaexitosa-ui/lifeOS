@@ -94,7 +94,7 @@ function legible(c: CampoDeEscritura, v: Valor): string {
 
 /** «· vence 19 oct · prioridad alta»: fechas primero, luego en el orden del registro. */
 function detalles(entrada: EntradaDeEscritura, campos: Record<string, Valor>): string {
-  const lista = Object.entries(entrada.campos).filter(([n, c]) => n !== entrada.titulo && c.tipo !== "ref" && campos[n] !== undefined && campos[n] !== null);
+  const lista = Object.entries(entrada.campos).filter(([n, c]) => n !== entrada.titulo && n !== entrada.dictado && c.tipo !== "ref" && campos[n] !== undefined && campos[n] !== null);
   lista.sort(([, a], [, b]) => Number(b.tipo === "fecha") - Number(a.tipo === "fecha"));
   return lista.map(([n, c]) => ` · ${c.etiqueta.toLowerCase()} ${legible(c, campos[n]!)}`).join("");
 }
@@ -134,7 +134,7 @@ function resolverCrear(a: Escribir, entrada: EntradaDeEscritura & { tabla: strin
     campos.local_date ??= ctx.hoy;
   } else {
     if (!a.resto) return ia("sin título");
-    campos[entrada.titulo] = titulo;
+    campos[entrada.dictado ?? entrada.titulo] = titulo;
   }
 
   for (const [nombre, c] of camposDe(entrada, "crear")) {
@@ -172,7 +172,8 @@ function resolverCrear(a: Escribir, entrada: EntradaDeEscritura & { tabla: strin
   const v = validarCambio(cambio, { filas, autorizados: ctx.autorizados });
   if (!v.ok) return ia(v.reason);
 
-  const nombre = typeof campos[entrada.titulo] === "string" ? (campos[entrada.titulo] as string) : titulo;
+  const dictado = campos[entrada.dictado ?? entrada.titulo];
+  const nombre = typeof dictado === "string" ? dictado : titulo;
   const destino = enLaTarjeta.length ? ` en ${enLaTarjeta.join(", ")}` : "";
   const entendi = `${VERBO.crear} ${conArticulo(entrada.etiqueta)} «${nombre}»${destino}${detalles(entrada, campos)}`;
   return { tipo: "cambios", entendi: recortar(entendi, MAX_ENTENDI), cambios: [cambio], filas };
