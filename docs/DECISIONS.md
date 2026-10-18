@@ -4146,3 +4146,25 @@ implementa:
   ligada a una ocupación ya está en ella), contra la ventana de actividad, con
   margen del 20 % y un consejo por reglas. El objetivo es no saturarse, no
   llenar el día.
+
+- **D-207 · Interfaz simple: Home = Hoy, Execution estilo Linear, y el Centro
+  contesta consultas sin IA.** Encargo de la persona (2026-10-18): «que sea lo
+  más simple y reduzca la fricción», Execution con «la mejor forma de
+  trabajar» (eligió estilo Linear), Home = Hoy, consultas directas sin IA;
+  Money no se toca. **Centro:** «dame la lista de cuadernos» iba al modelo y
+  volvía sin la lista. Ahora `analizarConsulta` reconoce una petición ENTERA de
+  lista (17 colecciones: cuadernos, notas, proyectos, tareas con filtros hoy/
+  vencidas/bloqueadas/hechas, hábitos, rutinas, libros, metas, ahorros, deudas,
+  cuentas, agenda, recordatorios, rasgos, presupuestos, comidas, aprendizajes)
+  y la lee con la misma `tablaConsultable` + RLS que la herramienta del
+  modelo; ante cualquier palabra de más, sigue la IA. Componentes nuevos del
+  Centro, también para el modelo: `progreso` (actual/meta) y `agenda` (por
+  hora). El prompt pide contestar información con bloques, no solo texto.
+  **Home:** tu una cosa, tu día (`cargaDelDia`), rutinas de hoy, lo que vence,
+  recordatorios y lectura; sin dinero ni KPIs repetidos. **Execution:** vista
+  Lista por defecto (agrupada por estado, icono de estado que cambia el estado,
+  prioridad en barras, fecha corta que avisa, captura con Enter, detalle en
+  panel lateral); vistas ofrecidas Lista y Tablero; la cartera es una lista
+  con anillo de avance. **Pulido:** el objetivo de la barra abre el Centro aunque
+  su anfitrión no haya montado; fechas sin año del año en curso (`fcorta`);
+  fuera de la vista los códigos de requisitos (BR-/FR-) y avisos sin valor.
