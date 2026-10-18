@@ -1,205 +1,166 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getHomeData } from "@/lib/data/home";
-import { Card, Chip, Stat, Progress, EmptyState } from "@/components/ui";
-import { money0, fdate } from "@/lib/format";
-import { greetingFor, hourInTimeZone, todayInTimeZone } from "@/lib/domain/datetime.ts";
+import { loadHoy } from "@/lib/data/hoy";
+import { Card } from "@/components/ui";
+import { fdate } from "@/lib/format";
+import { greetingFor, hourInTimeZone } from "@/lib/domain/datetime.ts";
 import { getSessionUser } from "@/lib/data/session";
-import { FOCUS_TITLE } from "@/lib/domain/development/reading-plan.ts";
 import { BookCover } from "../development/library/BookForm";
 import RemindersCard from "./RemindersCard";
-import { loadRitualGate } from "@/lib/data/ritual";
-import ActivarPremium from "@/components/ritual/ActivarPremium";
+
+// HOME = HOY (rediseño). Cuatro preguntas, en este orden, y nada más:
+// ¿qué importa hoy?, ¿me cabe el día?, ¿qué rutina me toca?, ¿qué vence?
+// Sin dinero ni KPIs repetidos: cada sección tiene su pantalla, y el Centro
+// está a un toque en la barra. Lo que no aplica hoy no se pinta.
+const h = (m: number) => {
+  const x = Math.round((m / 60) * 10) / 10;
+  return `${Number.isInteger(x) ? x : x.toFixed(1)} h`;
+};
 
 export default async function HomePage() {
   const user = await getSessionUser();
   if (!user) redirect("/login");
 
-  // NO-MOCK (F8): si esto falla (BD desconectada), la página muestra el error
-  // de Next.js — NUNCA datos de relleno.
   const data = await getHomeData(user.id);
-  // El camino de vuelta a la navegación premium (D-166). `loadRitualGate` está
-  // en caché: el layout ya la pidió en este mismo request.
-  const puertaRitual = await loadRitualGate();
-  // El saludo y la fecha de corte usan la zona del PERFIL, no la del servidor
-  // (en Vercel el proceso corre en UTC: a la 1 pm en México decía "Buenas
-  // noches"). Ver src/lib/domain/datetime.ts.
-  const timeZone = data.profile.timezone;
-  const today = todayInTimeZone(timeZone);
-  const greet = greetingFor(hourInTimeZone(timeZone));
-  const sat = data.saturation;
-  const satKind = sat.status === "saturated" ? "bad" : sat.status === "warn" ? "warn" : "ok";
+  const hoy = await loadHoy(user.id, data.todayISO);
+  const greet = greetingFor(hourInTimeZone(data.profile.timezone));
+  const unaCosa = data.dailyPlan?.one_thing || null;
+  const c = hoy.carga;
+  const tono = c.estado === "saturado" ? "var(--danger)" : c.estado === "lleno" ? "var(--warn)" : "var(--ok)";
 
   return (
-    <div className="flex flex-col gap-3.5">
-      {puertaRitual?.navMode === "habitual" && <ActivarPremium />}
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div>
-          <div className="text-xs" style={{ color: "var(--muted)" }}>
-            {fdate(today)} · {timeZone}
-          </div>
-          <h2 className="text-2xl font-black" style={{ letterSpacing: "-0.03em" }}>
-            {greet}, {data.profile.name.split(" ")[0]}
-          </h2>
+    <div className="flex flex-col gap-4 max-w-[720px] w-full mx-auto">
+      <header className="pt-1">
+        <div className="text-sm capitalize" style={{ color: "var(--muted)" }}>
+          {new Intl.DateTimeFormat("es-MX", { weekday: "long", day: "numeric", month: "long", timeZone: data.profile.timezone }).format(new Date())}
         </div>
-        <Link href="/time" className="btn-primary">
-          {data.dailyPlan ? "Editar día" : "Planear mi día"}
-        </Link>
-      </div>
+        <h2 className="text-[28px] font-semibold leading-tight" style={{ letterSpacing: "-0.03em" }}>
+          {greet}, {data.profile.name.split(" ")[0]}
+        </h2>
+      </header>
 
-      <div className="grid md:grid-cols-2 gap-3.5">
-        <Card>
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-extrabold uppercase" style={{ color: "var(--muted)", letterSpacing: "0.08em" }}>
-              Tu Única Cosa
-            </span>
-            <Chip kind={data.dailyPlan?.approved ? "ok" : "warn"}>{data.dailyPlan?.approved ? "Plan aprobado" : "Sin aprobar"}</Chip>
-          </div>
-          <h2 className="my-2 text-lg font-bold">
-            {data.dailyPlan?.one_thing || data.impactTasks[0]?.title || "Aún no defines tu Única Cosa"}
-          </h2>
-          <p className="text-sm" style={{ color: "var(--muted)" }}>
-            The ONE Thing · lo más importante desbloquea lo demás.
+      <Card hero>
+        <div className="text-xs uppercase font-semibold" style={{ color: "var(--muted)", letterSpacing: "0.08em" }}>
+          Tu una cosa
+        </div>
+        {unaCosa ? (
+          <p className="text-xl font-semibold mt-1.5 leading-snug" style={{ letterSpacing: "-0.02em" }}>
+            {unaCosa}
           </p>
-          <div className="flex gap-2 mt-1.5">
-            <Link href="/time" className="btn-ghost btn-sm">
-              Definir plan diario
-            </Link>
-            <Link href="/execution" className="btn-ghost btn-sm">
-              Ver tareas
-            </Link>
-          </div>
-        </Card>
-
-        <Card hero>
-          <div className="text-xs" style={{ opacity: 0.85 }}>
-            Dinero disponible (periodo) · corte {fdate(today)}
-          </div>
-          <div className="text-3xl font-black" style={{ letterSpacing: "-0.03em" }}>
-            {money0(data.periodStats.available, data.profile.currency, data.profile.locale)}
-          </div>
-          <div className="flex justify-between mt-1 text-sm">
-            <span>Liquidez total</span>
-            <b>{money0(data.liquidity, data.profile.currency, data.profile.locale)}</b>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span>Presupuesto restante</span>
-            <b>{money0(data.budgetRemaining, data.profile.currency, data.profile.locale)}</b>
-          </div>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
-        <Stat label="Tareas abiertas" value={data.openCount} />
-        <Stat label="Vencidas" value={data.overdueCount} kind={data.overdueCount ? "warn" : undefined} />
-        <Stat label="Compromiso del día" value={`${sat.pct}%`} kind={sat.status === "saturated" ? "bad" : sat.status === "warn" ? "warn" : undefined} />
-        <Stat label="Disponible hoy" value={`${Math.round((sat.availableMinutes / 60) * 10) / 10} h`} />
-      </div>
-
-      <Card>
-        <div className="flex items-center justify-between">
-          <h3 className="font-bold">Tu tiempo hoy</h3>
-          <Chip kind={satKind}>{sat.status === "saturated" ? "Saturado" : sat.status === "warn" ? "Llenándose" : "En balance"}</Chip>
-        </div>
-        <div className="my-2">
-          <Progress pct={sat.pct} kind={sat.status === "saturated" ? "bad" : sat.status === "warn" ? "warn" : undefined} />
-        </div>
-        <div className="flex justify-between text-xs" style={{ color: "var(--muted)" }}>
-          <span>{Math.round((sat.totalCommitted / 60) * 10) / 10} h comprometidas</span>
-          <span>
-            {Math.round((sat.availableMinutes / 60) * 10) / 10} h disponibles de {Math.round((sat.capMinutes / 60) * 10) / 10} h
-          </span>
-        </div>
-        <Link href="/time" className="btn-ghost btn-sm mt-2 inline-block">
-          Ver tu carga del día
+        ) : (
+          <p className="text-base mt-1.5" style={{ color: "var(--muted)" }}>
+            Aún no eliges lo que haría que hoy valga la pena.
+          </p>
+        )}
+        <Link href="/time" className={unaCosa ? "btn-ghost btn-sm mt-3" : "btn-primary btn-sm mt-3"}>
+          {unaCosa ? "Ajustar el plan" : "Elegir mi una cosa"}
         </Link>
       </Card>
 
-      {data.readingFocus && (
+      <Link href="/time" className="card block" style={{ color: "inherit", textDecoration: "none" }}>
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="font-semibold">Tu día</span>
+          <span className="text-sm" style={{ color: "var(--muted)" }}>
+            {h(c.total)} de {h(c.capMin)}
+          </span>
+        </div>
+        <div className="mt-3 h-1.5 rounded-full overflow-hidden" style={{ background: "var(--surface2)" }}>
+          <div className="h-full rounded-full origin-left" style={{ width: `${Math.min(100, c.pct)}%`, background: tono }} />
+        </div>
+        <p className="text-sm mt-3" style={{ color: "var(--muted)" }}>
+          {c.consejo}
+        </p>
+      </Link>
+
+      {hoy.rutinas.length > 0 && (
         <Card>
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            {/* El título lo decide el PORQUÉ del foco, no la pantalla. Con un
-                plan detrás dice "el libro de esta semana"; sin plan, solo lo
-                que de verdad sabe: que es lo último que estabas leyendo.
-                Prometer un plan que no existe es la forma rápida de que el
-                usuario deje de creerle a la tarjeta. */}
-            <h3 className="font-bold">{FOCUS_TITLE[data.readingFocus.reason]}</h3>
-            <div className="flex items-center gap-2">
-              {data.readingFocus.planState === "Atrasado" && <Chip kind="bad">Atrasado</Chip>}
-              <Chip kind="purple">{data.readingFocus.pct}%</Chip>
-            </div>
+          <div className="flex items-baseline justify-between mb-1">
+            <span className="font-semibold">Rutinas de hoy</span>
+            <Link href="/development/routines" className="text-sm" style={{ color: "var(--muted)" }}>
+              Abrir
+            </Link>
           </div>
-          <div className="flex items-start gap-3 mt-2">
-            {/* La portada real, que ya vive en books.cover_url: aquí se estaba
-                pintando un 📖 fijo aunque el libro tuviera la suya. */}
-            <BookCover url={data.readingFocus.book.coverUrl} />
-            <div className="grow min-w-0">
-              <b style={{ overflowWrap: "anywhere" }}>{data.readingFocus.book.title}</b>
-              <div className="text-xs" style={{ color: "var(--muted)", overflowWrap: "anywhere" }}>
-                {data.readingFocus.book.author}
-                {data.readingFocus.book.author ? " · " : ""}
-                página {data.readingFocus.book.currentPage} de {data.readingFocus.book.totalPages}
-              </div>
-              {/* Barra y no solo el Chip: el resto de Home mide con barra, y
-                  un 34% suelto no se compara con nada de un vistazo. */}
-              <div className="mt-2">
-                <Progress pct={data.readingFocus.pct} kind={data.readingFocus.planState === "Atrasado" ? "warn" : undefined} />
-              </div>
-              {data.readingFocus.pace && (
-                <div className="text-xs mt-1.5" style={{ color: "var(--muted)" }}>
-                  Para acabar el <b>{fdate(data.readingFocus.pace.lastDay)}</b> necesitas{" "}
-                  <b>{data.readingFocus.pace.pagesPerDay}</b> págs./día.
-                </div>
-              )}
-            </div>
+          {hoy.rutinas.map((r) => (
+            <Link key={r.id} href="/development/routines" className="flex items-center gap-3 py-2.5" style={{ color: "inherit", textDecoration: "none", borderTop: "1px solid var(--line)" }}>
+              <Anillo pct={r.pct} />
+              <span className="grow min-w-0 truncate">{r.nombre}</span>
+              <span className="text-sm tabular-nums" style={{ color: r.hechos === r.total ? "var(--ok)" : "var(--muted)" }}>
+                {r.hechos === r.total ? "Hecha" : `${r.hechos}/${r.total}`}
+              </span>
+            </Link>
+          ))}
+        </Card>
+      )}
+
+      {hoy.vencen.length > 0 && (
+        <Card>
+          <div className="flex items-baseline justify-between mb-1">
+            <span className="font-semibold">Vence hoy</span>
+            <Link href="/execution" className="text-sm" style={{ color: "var(--muted)" }}>
+              Ver tareas
+            </Link>
           </div>
-          <Link href="/development/library" className="btn-ghost btn-sm mt-2 inline-block">
-            Ir a la Biblioteca
-          </Link>
+          {hoy.vencen.map((t) => (
+            <Link
+              key={t.id}
+              href={t.projectId ? `/execution?project=${t.projectId}&task=${t.id}` : "/execution"}
+              className="flex items-center gap-3 py-2.5"
+              style={{ color: "inherit", textDecoration: "none", borderTop: "1px solid var(--line)" }}
+            >
+              <span aria-hidden="true" className="flex-none rounded-full" style={{ width: 8, height: 8, background: t.vencida ? "var(--danger)" : "var(--warn)" }} />
+              <span className="grow min-w-0">
+                <span className="block truncate">{t.titulo}</span>
+                {t.proyecto && (
+                  <span className="block text-xs truncate" style={{ color: "var(--muted)" }}>
+                    {t.proyecto}
+                  </span>
+                )}
+              </span>
+              <span className="text-xs flex-none" style={{ color: t.vencida ? "var(--danger)" : "var(--muted)" }}>
+                {t.vencida ? `Venció ${fdate(t.due)}` : "Hoy"}
+              </span>
+            </Link>
+          ))}
         </Card>
       )}
 
       {data.reminders.length > 0 && (
         <Card>
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="font-bold">Te pediste recordar</h3>
-            <Chip kind={data.reminders.some((r) => r.remindOnISO < data.todayISO) ? "bad" : undefined}>
-              {data.reminders.length}
-            </Chip>
-          </div>
+          <div className="font-semibold mb-2">Te pediste recordar</div>
           <RemindersCard reminders={data.reminders} todayISO={data.todayISO} />
         </Card>
       )}
 
-      <Card>
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="font-bold">Tres tareas de impacto</h3>
-          <Chip>Hoy</Chip>
-        </div>
-        {data.impactTasks.length === 0 ? (
-          <EmptyState icon="◎" text="Marca hasta 3 tareas como de impacto en Ejecución." />
-        ) : (
-          data.impactTasks.map((t) => (
-            <div key={t.id} className="list-item flex items-center gap-3 py-2.5" style={{ borderBottom: "1px solid var(--line)" }}>
-              <div className="grow min-w-0">
-                <b className="block truncate">{t.title}</b>
-                <div className="text-xs" style={{ color: "var(--muted)" }}>
-                  {t.est ?? 0} min{t.due ? ` · vence ${fdate(t.due)}` : ""}
-                </div>
-              </div>
-              <span className={`badge-state s-${t.status}`}>{t.status}</span>
-              <Link href={`/execution?task=${t.id}`} className="btn-ghost btn-sm">
-                Abrir
-              </Link>
-            </div>
-          ))
-        )}
-      </Card>
-
-      {/* El ámbito `global` es el único que cruza los cinco dominios, y Home es
-          la única pantalla que no es de ninguno en particular. Es donde una
-          recomendación puede decir algo que ninguna otra puede: que la agenda
-          está llena justo la semana en que vence la tarjeta cara. */}
+      {data.readingFocus && (
+        <Link href="/development/library" className="card flex items-center gap-3" style={{ color: "inherit", textDecoration: "none" }}>
+          <BookCover url={data.readingFocus.book.coverUrl} />
+          <span className="grow min-w-0">
+            <span className="text-xs block" style={{ color: "var(--muted)" }}>
+              Leyendo
+            </span>
+            <b className="block truncate">{data.readingFocus.book.title}</b>
+            <span className="mt-2 block h-1 rounded-full overflow-hidden" style={{ background: "var(--surface2)" }}>
+              <span className="block h-full rounded-full" style={{ width: `${data.readingFocus.pct}%`, background: "var(--text)" }} />
+            </span>
+          </span>
+          <span className="text-sm tabular-nums flex-none" style={{ color: "var(--muted)" }}>
+            {data.readingFocus.pct}%
+          </span>
+        </Link>
+      )}
     </div>
+  );
+}
+
+/** Un anillo de avance, en SVG: menos ruido que una barra por fila. */
+function Anillo({ pct }: { pct: number }) {
+  const r = 9;
+  const c = 2 * Math.PI * r;
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" className="flex-none -rotate-90">
+      <circle cx="12" cy="12" r={r} fill="none" stroke="var(--surface3)" strokeWidth="3" />
+      <circle cx="12" cy="12" r={r} fill="none" stroke={pct >= 100 ? "var(--ok)" : "var(--text)"} strokeWidth="3" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - Math.min(100, pct) / 100)} />
+    </svg>
   );
 }
