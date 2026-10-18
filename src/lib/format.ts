@@ -51,6 +51,27 @@ export function fdate(iso: string | null | undefined, locale = "es-MX"): string 
  * una nota compartida no: saber que alguien la tocó "hoy" no dice si fue antes
  * o después de que tú la leyeras.
  */
+/**
+ * «19 oct» — y con el año solo si no es el de `hoy` (AAAA-MM-DD). Lo que usan
+ * las listas del rediseño: el año en cada fila es ruido.
+ */
+export function fcorta(iso: string | null | undefined, hoy: string, locale = "es-MX"): string {
+  if (!iso) return "";
+  const mismoAnio = iso.slice(0, 4) === hoy.slice(0, 4);
+  try {
+    return new Intl.DateTimeFormat(locale, {
+      day: "numeric",
+      month: "short",
+      ...(mismoAnio ? {} : { year: "numeric" }),
+      ...(SOLO_FECHA.test(iso) ? { timeZone: "UTC" } : {})
+    })
+      .format(new Date(iso))
+      .replace(".", "");
+  } catch {
+    return iso;
+  }
+}
+
 export function fdatetime(iso: string | null | undefined, locale = "es-MX"): string {
   if (!iso) return "—";
   try {

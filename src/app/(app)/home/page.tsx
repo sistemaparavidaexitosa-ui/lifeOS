@@ -32,7 +32,7 @@ export default async function HomePage() {
   return (
     <div className="flex flex-col gap-4 max-w-[720px] w-full mx-auto">
       <header className="pt-1">
-        <div className="text-sm capitalize" style={{ color: "var(--muted)" }}>
+        <div className="text-sm first-letter:uppercase" style={{ color: "var(--muted)" }}>
           {new Intl.DateTimeFormat("es-MX", { weekday: "long", day: "numeric", month: "long", timeZone: data.profile.timezone }).format(new Date())}
         </div>
         <h2 className="text-[28px] font-semibold leading-tight" style={{ letterSpacing: "-0.03em" }}>

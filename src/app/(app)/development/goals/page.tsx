@@ -6,7 +6,7 @@ import { todayForUser } from "@/lib/data/profile";
 import { loadSourceSnapshot } from "@/lib/data/development";
 import { getPersonalWorkspaceIds } from "@/lib/data/workspaces";
 import { keyResultProgress, goalProgress, goalAtRisk, type KeyResultSourceKind } from "@/lib/domain/development/goals.ts";
-import { CardHeader, ModuleNote, SectionHeader } from "../FormSheet";
+import { CardHeader, SectionHeader } from "../FormSheet";
 import GoalForm from "./GoalForm";
 import KeyResultForm, { type SourceOptions } from "./KeyResultForm";
 import { getSessionUser } from "@/lib/data/session";
@@ -83,11 +83,6 @@ export default async function PersonalGoalsPage() {
 
   return (
     <div className="flex flex-col gap-3.5">
-      <ModuleNote>
-        El progreso no se teclea. Cada resultado clave declara de dónde sale su número —un hábito, un proyecto personal, un
-        libro o una meta financiera— y LifeOS lo calcula. Todo aquí es privado (BR-012).
-      </ModuleNote>
-
       <SectionHeader action={<GoalForm />}>Metas Personales</SectionHeader>
 
       {!rows.length && (

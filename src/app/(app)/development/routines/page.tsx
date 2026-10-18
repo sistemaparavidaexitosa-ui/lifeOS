@@ -167,18 +167,6 @@ export default async function RoutinesPage() {
 
   return (
     <div className="flex flex-col gap-3.5">
-      {identidad && (
-        <div className="grid gap-3.5 md:grid-cols-2 items-start">
-          <IdentityHero overview={identidad} />
-          <IdentityScoreCard score={identidad.score} delta7={identidad.delta7} />
-        </div>
-      )}
-
-      {/* El brief solo se pide con una identidad escrita: sin ella no hay de
-          qué escribir, y la tarjeta de arriba ya invita a definirla. */}
-      {identidad?.profile &&
-        (brief ? <BriefCard initial={brief} traitNames={traitNames} /> : <BriefGenerator traitNames={traitNames} />)}
-
       {rows.length > 0 && (
         <div className="grid gap-2.5" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
           <Stat label="Hoy" value={periodos.day === null ? "—" : `${periodos.day}%`} />
@@ -251,6 +239,20 @@ export default async function RoutinesPage() {
         </Suspense>
       )}
 
+      {/* Rediseño: lo que hay que hacer HOY va primero; la identidad y su
+          puntaje, después — explican el porqué, no son la tarea del día. */}
+      {identidad && (
+        <div className="grid gap-3.5 md:grid-cols-2 items-start">
+          <IdentityHero overview={identidad} />
+          <IdentityScoreCard score={identidad.score} delta7={identidad.delta7} />
+        </div>
+      )}
+
+      {/* El brief solo se pide con una identidad escrita: sin ella no hay de
+          qué escribir, y la tarjeta de arriba ya invita a definirla. */}
+      {identidad?.profile &&
+        (brief ? <BriefCard initial={brief} traitNames={traitNames} /> : <BriefGenerator traitNames={traitNames} />)}
+
       {/* Gestionar va al final: se usa al montar el sistema, no cada mañana. La
           cabecera no lleva los botones al lado del título porque en 400px no
           caben tres y el título acababa partido letra a letra. Sin rutinas no
@@ -279,7 +281,7 @@ export default async function RoutinesPage() {
           </div>
           <ModuleNote>
             Cada hábito vive dentro de una rutina y toca cuando toca ella. El bloque horario sigue viviendo en Autogestión
-            del Tiempo: la rutina se ancla a uno que ya existe. Todo esto es privado, sin relación con Workspaces (BR-027).
+            del Tiempo: la rutina se ancla a uno que ya existe. Todo esto es privado, sin relación con Workspaces.
           </ModuleNote>
           {otras.length > 0 && (
             <>

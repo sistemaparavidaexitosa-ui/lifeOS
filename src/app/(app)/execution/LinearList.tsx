@@ -15,7 +15,7 @@
 import { useMemo, useState, useTransition } from "react";
 import MenuSurface, { useMenuAnchor } from "@/components/MenuSurface";
 import { Avatar } from "@/components/ui";
-import { fdate } from "@/lib/format";
+import { fcorta } from "@/lib/format";
 import type { Priority, TaskStatus } from "@/lib/domain/types.ts";
 import { setTaskStatus } from "./actions";
 import { STATUS_META, TASK_TRANSITIONS } from "./status-meta";
@@ -104,7 +104,7 @@ function Fila({ t, api, padre }: { t: BoardTask; api: BoardApi; padre: string | 
       </button>
       <span className="ln-fila-meta">
         <IconoPrioridad prioridad={t.priority} urgente={t.urgent} />
-        {t.due && <span className={`ln-fecha${vencida ? " es-vencida" : hoy ? " es-hoy" : ""}`}>{hoy ? "Hoy" : fdate(t.due)}</span>}
+        {t.due && <span className={`ln-fecha${vencida ? " es-vencida" : hoy ? " es-hoy" : ""}`}>{hoy ? "Hoy" : fcorta(t.due, api.today)}</span>}
         {responsables.length > 0 && (
           <span className="ln-responsables" title={responsables.join(", ")}>
             {responsables.slice(0, 2).map((n) => (

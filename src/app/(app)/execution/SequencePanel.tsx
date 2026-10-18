@@ -100,7 +100,7 @@ export default function SequencePanel({
         }}
       >
         Supuestos: {suggestion.assumptions.join(" ")} Esto es una recomendación explicable; no reordena nada hasta que la
-        aceptes (BR-022, FR-INT-008).
+        aceptes.
       </div>
 
       <div className="flex flex-col-reverse sm:flex-row sm:items-center gap-2">

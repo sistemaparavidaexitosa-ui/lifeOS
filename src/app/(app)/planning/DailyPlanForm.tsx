@@ -51,7 +51,7 @@ export default function DailyPlanForm({ projects, tasks }: { projects: ProjectLi
       className="flex flex-col gap-3"
     >
       <div className="text-xs p-2.5 rounded-r-xl" style={{ background: "color-mix(in srgb, var(--accent) 8%, var(--surface))", borderLeft: "3px solid var(--accent)" }}>
-        Primero selecciona el proyecto, luego la tarea que será tu Única Cosa (FR-PLN-008).
+        Primero selecciona el proyecto, luego la tarea que será tu Única Cosa.
       </div>
 
       <div className="field">

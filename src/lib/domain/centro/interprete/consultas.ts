@@ -19,6 +19,7 @@
 import { normalizar } from "./normalizar.ts";
 import { occupationAppliesOn } from "../../time.ts";
 import { formatear, rutaDeFila } from "../agente/resolver.ts";
+import { fcorta } from "../../../format.ts";
 import { LIMITES, recortar } from "../runtime/secciones.ts";
 import type { AnySection } from "../runtime/types.ts";
 
@@ -65,7 +66,7 @@ export interface Formateo {
 }
 
 const ABIERTAS: FiltroDeConsulta = { campo: "status", op: "notIn", valor: ["Completed", "Cancelled"] };
-const fecha = (v: unknown, f: Formateo) => formatear(v, "fecha", f.moneda, f.locale, LIMITES.fechaCorta);
+const fecha = (v: unknown, f: Formateo) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v) ? fcorta(v.slice(0, 10), f.hoy, f.locale) || null : null);
 const dinero = (v: unknown, f: Formateo) => formatear(v, "dinero", f.moneda, f.locale, LIMITES.metricaValor);
 const texto = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
 

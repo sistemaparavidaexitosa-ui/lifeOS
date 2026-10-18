@@ -53,7 +53,7 @@ export default function KnowledgeCard({ projectId, items }: { projectId: string;
     <div className="card" style={{ background: "var(--surface)" }}>
       <b className="text-sm">Base de conocimiento</b>
       <div className="text-xs" style={{ color: "var(--muted)", margin: "4px 0 8px" }}>
-        Notas, enlaces, documentos y archivos del proyecto (FR-EXE-008). Cada edición suma una versión.
+        Notas, enlaces, documentos y archivos del proyecto. Cada edición suma una versión.
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 260, overflowY: "auto" }}>

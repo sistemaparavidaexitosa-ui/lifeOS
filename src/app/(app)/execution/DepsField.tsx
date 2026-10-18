@@ -33,7 +33,7 @@ export default function DepsField({
     <div className="card" style={{ background: "var(--surface)", marginTop: 8 }}>
       <b className="text-sm">Dependencias</b>
       <div className="text-xs" style={{ color: "var(--muted)", margin: "4px 0 8px" }}>
-        No se puede completar esta tarea mientras alguna dependencia siga abierta (FR-EXE-005).
+        No se puede completar esta tarea mientras alguna dependencia siga abierta.
       </div>
       {candidates.length === 0 && (
         <div className="text-xs" style={{ color: "var(--muted)" }}>
