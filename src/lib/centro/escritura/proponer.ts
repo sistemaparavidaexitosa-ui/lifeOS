@@ -18,7 +18,9 @@ export async function proponerCambios(
   id: string,
   cerebro: Cerebro,
   filas: ReadonlyMap<string, Record<string, unknown>>,
-  cupo: { restantes: number }
+  cupo: { restantes: number },
+  /** D-205: cuando quien propone es el intérprete y no el modelo. */
+  extra?: { entendi: string; textoOriginal: string; sinIA: true }
 ): Promise<AnySection[]> {
   // Validar y reservar cupo ANTES del primer await: los bloques se resuelven
   // en paralelo y el tope de 10 por turno es de todos juntos.
@@ -57,6 +59,6 @@ export async function proponerCambios(
     else console.warn("[centro-agente] no se pudo guardar el cambio propuesto:", error);
   }
 
-  const s = seccionDeCambios(id, items, filas);
+  const s = seccionDeCambios(id, items, filas, extra);
   return s ? [s] : [];
 }

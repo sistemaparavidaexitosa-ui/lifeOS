@@ -88,7 +88,9 @@ function camposDeTarjeta(c: CambioGuardado, filas: ReadonlyMap<string, Record<st
 export function seccionDeCambios(
   id: string,
   items: { propuestaId: string; cambio: CambioGuardado }[],
-  filas: ReadonlyMap<string, Record<string, unknown>>
+  filas: ReadonlyMap<string, Record<string, unknown>>,
+  /** D-205: lo que el intérprete entendió. Sin él, la tarjeta de siempre. */
+  extra?: { entendi: string; textoOriginal: string; sinIA: true }
 ): AnySection | null {
   if (!items.length) return null;
   const datos: ItemDeCambio[] = items.map(({ propuestaId, cambio }) => ({
@@ -98,5 +100,5 @@ export function seccionDeCambios(
     titulo: tituloDeCambio(cambio),
     campos: camposDeTarjeta(cambio, filas)
   }));
-  return { id, kind: "propuestaCambio", data: { items: datos } };
+  return { id, kind: "propuestaCambio", data: extra ? { items: datos, ...extra } : { items: datos } };
 }

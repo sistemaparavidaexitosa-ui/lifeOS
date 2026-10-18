@@ -245,12 +245,22 @@ export interface ItemDeCambio {
 
 export interface DatosPropuestaCambio {
   items: ItemDeCambio[];
+  /** D-205: lo que el intérprete entendió, en una frase. Solo en sus tarjetas. */
+  entendi?: string;
+  /** D-205: la petición tal cual, para dársela a la IA si «No es esto». */
+  textoOriginal?: string;
+  /** D-205: se entendió sin llamar al modelo. */
+  sinIA?: boolean;
 }
 
 export interface DatosConfirmarEntendimiento {
   entendi: string;
   seguir: string;
   alternativas: { etiqueta: string; texto: string | null }[];
+  /** D-205: lo que manda el botón principal; sin él, «Sí, sigue: <entendi>». */
+  textoSeguir?: string;
+  /** D-205: el botón principal se lo pasa directo a la IA. */
+  modoSeguir?: "ia";
 }
 
 export interface DatosRutina {
