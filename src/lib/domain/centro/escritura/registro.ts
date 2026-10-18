@@ -63,15 +63,16 @@ const ESTADOS_DE_TAREA = ["Pending", "InProgress", "Blocked", "Rescheduled", "Co
 const PRIORIDADES = ["High", "Medium", "Low"] as const;
 const COMIDAS = ["Desayuno", "Almuerzo", "Cena", "Snack"] as const;
 
+// El PRIMER sinónimo de cada valor es también como se lee en «Entendí: …».
 const SINONIMOS_DE_ESTADO = {
-  Completed: ["hecha", "hecho", "completada", "completado", "terminada", "terminado", "lista", "listo"],
+  Completed: ["completada", "completado", "hecha", "hecho", "terminada", "terminado", "lista", "listo"],
   InProgress: ["en progreso", "empezada", "en curso"],
   Blocked: ["bloqueada", "bloqueado"],
   Cancelled: ["cancelada", "cancelado"],
   Pending: ["pendiente"]
 } as const;
 const SINONIMOS_DE_PRIORIDAD = {
-  High: ["urgente", "alta", "prioridad alta", "alta prioridad", "importante"],
+  High: ["alta", "urgente", "prioridad alta", "alta prioridad", "importante"],
   Medium: ["media", "prioridad media", "normal"],
   Low: ["baja", "prioridad baja", "baja prioridad"]
 } as const;
