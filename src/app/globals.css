@@ -5358,3 +5358,7 @@ a.ag-progreso-item:active, a.ag-agenda-item:active { transform: scale(0.98); }
 .ln-captura .mb-quickadd-go { flex: none !important; }
 /* El campo del Centro tiene su propia forma: no hereda el de los formularios. */
 .ag-composer textarea, .ag-composer input, .ag-composer textarea:focus, .ag-composer input:focus { background: transparent; border: 0; box-shadow: none; }
+.ag-composer .ag-campo, .ag-composer .ag-campo:focus, .ag-composer .ag-campo:focus-visible { outline: none; border: 0; background: transparent; box-shadow: none; }
+.ag-composer:focus-within { box-shadow: 0 0 0 1px color-mix(in srgb, var(--ag-text) 25%, transparent); }
+.ag-boton-chico, .ag-boton { transition: transform 160ms var(--ease-out), opacity 150ms ease; }
+.ag-boton-chico:active:not(:disabled), .ag-boton:active { transform: scale(0.96); }

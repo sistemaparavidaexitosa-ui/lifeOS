@@ -117,10 +117,10 @@ export default function SeccionPropuestaCambio({ data }: PropsDeSeccion<"propues
                 <button type="button" className={borrar ? "ag-boton-chico ag-tono-bad" : "ag-boton-chico"} disabled={pending} onClick={() => guardar([it])}>
                   {pending ? "…" : borrar ? "Borrar" : "Guardar"}
                 </button>
-                <button type="button" className="ag-boton-chico" disabled={pending} onClick={() => descartar(it)}>
+                <button type="button" className="ag-boton-chico ag-boton-chico-suave" disabled={pending} onClick={() => descartar(it)}>
                   Descartar
                 </button>
-                <button type="button" className="ag-boton-chico" disabled={pending || ocupado} onClick={() => noEsEsto(it)}>
+                <button type="button" className="ag-boton-chico ag-boton-chico-suave" disabled={pending || ocupado} onClick={() => noEsEsto(it)}>
                   No es esto
                 </button>
               </p>
