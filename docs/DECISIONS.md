@@ -4095,6 +4095,17 @@ implementa:
   Retro: `audit_log` `ai.centro_interprete` `{ salida, tabla, operacion }`; con
   `ai.centro_escritura` y `ai.centro_entendimiento` se mide el acierto. Aprender
   sinónimos de los rechazos queda fuera hasta ver datos reales.
-  **Pendiente (E2/E3 del spec 2026-10-18):** «el Centro hace todo lo que hace la
-  persona» = el resto de tablas del registro de D-203, ahora cada una con su
-  vocabulario. E1 solo cubre `tasks`, `notes`, `food_entries` y la navegación.
+  **E2 (hecha):** `projects`, `habit_logs` («marca el hábito meditar como
+  hecho»), `reminders` («recuérdame la tarea X el jueves», con la acción nueva
+  `createReminderOn`), `personal_goals`, `books`, `savings_goals`,
+  `financial_goals`, `debts`, `assets`, `logbook` (aprendizaje) y
+  `daily_reflections` (el check-in de hoy; lo que no se dice se conserva).
+  Con ellas el registro gana `porDefecto` (el valor inicial del formulario),
+  `etiquetas` («saldo 4500»), `refTitulo`, `crearCon`, `femenino` y `accion`, y
+  `dictado` puede ser una ref (lo dictado es el NOMBRE de la fila). Una tabla
+  que solo se nombra como destino, como lo dictado o como valor de otra («el
+  proyecto a ACTIVO») ya no hace dudar entre dos tablas. Los upsert de cada
+  sección piden la fila entera: editar lee la que hay y reenvía lo que no cambió.
+  **Pendiente (E3):** `occupations` (necesita un tipo hora), asientos de dinero
+  (`postTransaction`), presupuestos, cuentas, identidad, perfil y peso de
+  nutrición, comentarios y asignaciones.

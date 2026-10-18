@@ -34,7 +34,9 @@ export const VERBOS_DE_TABLA: Readonly<Record<string, { operacion: Operacion; ta
   cene: { operacion: "crear", tabla: "food_entries", valores: { meal: "Cena" } },
   completa: { operacion: "editar", tabla: "tasks", valores: { status: "Completed" } },
   termina: { operacion: "editar", tabla: "tasks", valores: { status: "Completed" } },
-  termine: { operacion: "editar", tabla: "tasks", valores: { status: "Completed" } }
+  termine: { operacion: "editar", tabla: "tasks", valores: { status: "Completed" } },
+  recuerdame: { operacion: "crear", tabla: "reminders", valores: {} },
+  recuerdamelo: { operacion: "crear", tabla: "reminders", valores: {} }
 };
 
 /**

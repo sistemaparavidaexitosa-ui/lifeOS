@@ -105,12 +105,38 @@ export function extraerFecha(n: string, hoy: string): Hallazgo<string> | null {
   return null;
 }
 
-export function extraerNumero(n: string, unidades: readonly string[]): Hallazgo<number> | null {
-  if (!unidades.length) return null;
-  const alternativas = [...unidades].sort((a, b) => b.length - a.length).map((u) => u.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  const m = new RegExp(`(?<![a-z0-9.,])(\\d+(?:[.,]\\d+)?) ?(?:${alternativas.join("|")})(?![a-z0-9])`).exec(n);
+/** «2,500,000» son miles; «80,5» es decimal. */
+const CIFRA = "\\$?(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+(?:[.,]\\d+)?)";
+
+function cifra(t: string): number {
+  return Number(/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(t) ? t.replace(/,/g, "") : t.replace(",", "."));
+}
+
+function alternativas(frases: readonly string[]): string {
+  return [...frases]
+    .sort((a, b) => b.length - a.length)
+    .map((u) => u.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/ /g, "\\s+"))
+    .join("|");
+}
+
+/**
+ * Un número con su unidad detrás («80 g», «5,000 pesos») o su etiqueta
+ * delante («saldo 4500», «página 120»). La etiqueta gana: es más explícita, y
+ * así «saldo 4500 pesos» no se lo lleva el primer campo que acepte «pesos».
+ */
+export function extraerNumero(n: string, unidades: readonly string[], etiquetas: readonly string[] = []): Hallazgo<number> | null {
+  const tras = unidades.length ? `(?: ?(?:${alternativas(unidades)})(?![a-z0-9]))` : "";
+  if (etiquetas.length) {
+    const m = new RegExp(`(?<![a-z0-9])(?:${alternativas(etiquetas)})(?: (?:de|en|a|es))?:? ?${CIFRA}(?![0-9])${tras ? `${tras}?` : ""}`).exec(n);
+    if (m) {
+      const valor = cifra(m[1]!);
+      if (Number.isFinite(valor)) return { valor, frase: m[0] };
+    }
+  }
+  if (!tras) return null;
+  const m = new RegExp(`(?<![a-z0-9.,$])${CIFRA}${tras}`).exec(n);
   if (!m) return null;
-  const valor = Number(m[1]!.replace(",", "."));
+  const valor = cifra(m[1]!);
   return Number.isFinite(valor) ? { valor, frase: m[0] } : null;
 }
 

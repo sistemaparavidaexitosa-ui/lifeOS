@@ -18,6 +18,18 @@ import { createTask, renameTask, setTaskStatus, updateTaskDates, deleteTask } fr
 import { setTaskPriority } from "@/app/(app)/execution/board-actions";
 import { createNote, saveNote, deleteNote } from "@/app/(app)/notebooks/actions";
 import { logFoodEntry, updateFoodEntry, deleteFoodEntry } from "@/app/(app)/development/nutrition/actions";
+import { createProject, updateProject, deleteProject } from "@/app/(app)/execution/actions";
+import { createReminderOn } from "@/app/(app)/execution/thread-actions";
+import { logHabit } from "@/app/(app)/development/routines/actions";
+import { saveDailyReflection } from "@/app/(app)/development/routines/reflection-actions";
+import { upsertPersonalGoal, deletePersonalGoal } from "@/app/(app)/development/goals/actions";
+import { upsertBook, updateBookPage, deleteBook } from "@/app/(app)/development/library/actions";
+import { upsertSavingsGoal, deleteSavingsGoal } from "@/app/(app)/savings/actions";
+import { upsertFinancialGoal, deleteFinancialGoal } from "@/app/(app)/goals/actions";
+import { upsertDebt, deleteDebt } from "@/app/(app)/debt/actions";
+import { upsertAsset, deleteAsset } from "@/app/(app)/wealth/actions";
+import { saveDailyLearning } from "@/app/(app)/planning/actions";
+import { todayForUser } from "@/lib/data/profile";
 import type { TaskStatus, Priority } from "@/lib/domain/types";
 
 export type Adaptador = (c: CambioGuardado) => Promise<ActionResult & { id?: string }>;
@@ -54,6 +66,25 @@ function formulario(campos: Record<string, string>): FormData {
 }
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * E2: los formularios de upsert (metas, deudas, activos, libros…) piden la
+ * fila ENTERA. Editar desde el Centro lee la que hay y cambia solo lo que
+ * viajó: lo demás se reenvía tal cual estaba.
+ */
+async function actual(tabla: string, id: string, columnas: string): Promise<Record<string, unknown> | null> {
+  const supabase = await createClient();
+  // Mismo atajo de tipos que `filaSigueVigente`: la tabla y las columnas son dinámicas.
+  const { data } = await supabase.from(tabla as "tasks").select(columnas).eq("id", id).maybeSingle();
+  return (data as unknown as Record<string, unknown> | null) ?? null;
+}
+
+/** El valor que viajó, o el que había. */
+function mezcla(c: CambioGuardado, fila: Record<string, unknown>) {
+  return (k: string) => s(k in c.campos ? c.campos[k] : fila[k]);
+}
+
+const ya = { ok: false as const, reason: "Esta fila ya no existe." };
 
 export const ADAPTADORES: Cobertura = {
   tasks: {
@@ -172,5 +203,195 @@ export const ADAPTADORES: Cobertura = {
         );
       }),
     borrar: (c) => seguro(() => deleteFoodEntry(c.id!))
+  },
+  projects: {
+    crear: (c) =>
+      seguro(async () => ({
+        id: await createProject(
+          formulario({
+            title: s(c.campos.title),
+            status: s(c.campos.status) || "Active",
+            priority: s(c.campos.priority) || "Medium",
+            targetDate: s(c.campos.target_date)
+          })
+        )
+      })),
+    editar: (c) =>
+      seguro(async () => {
+        const f = await actual("projects", c.id!, "title, objective, status, priority, target_date");
+        if (!f) return ya;
+        const v = mezcla(c, f);
+        await updateProject(
+          formulario({ projectId: c.id!, title: v("title"), objective: s(f.objective), status: v("status"), priority: v("priority"), targetDate: v("target_date") })
+        );
+      }),
+    borrar: (c) => seguro(() => deleteProject(c.id!))
+  },
+  habit_logs: {
+    crear: (c) =>
+      seguro(() =>
+        logHabit({
+          habitId: s(c.campos.habit_id),
+          date: s(c.campos.log_date),
+          status: s(c.campos.status) as "completed" | "skipped" | "postponed",
+          completionPct: c.campos.status === "completed" ? 100 : 0
+        })
+      )
+  },
+  reminders: {
+    crear: (c) => seguro(() => createReminderOn("task", s(c.campos.subject_id), s(c.campos.remind_on), s(c.campos.text)))
+  },
+  personal_goals: {
+    crear: (c) =>
+      seguro(() =>
+        upsertPersonalGoal(
+          null,
+          formulario({ title: s(c.campos.title), description: s(c.campos.description), area: s(c.campos.area), horizon: s(c.campos.horizon), status: s(c.campos.status) || "Activa" })
+        )
+      ),
+    editar: (c) =>
+      seguro(async () => {
+        const f = await actual("personal_goals", c.id!, "title, description, area, horizon, status");
+        if (!f) return ya;
+        const v = mezcla(c, f);
+        await upsertPersonalGoal(c.id!, formulario({ title: v("title"), description: v("description"), area: v("area"), horizon: v("horizon"), status: v("status") }));
+      }),
+    borrar: (c) => seguro(() => deletePersonalGoal(c.id!))
+  },
+  books: {
+    crear: (c) =>
+      seguro(() =>
+        upsertBook(
+          null,
+          formulario({
+            title: s(c.campos.title),
+            author: s(c.campos.author),
+            status: s(c.campos.status) || "Por leer",
+            currentPage: s(c.campos.current_page) || "0",
+            totalPages: s(c.campos.total_pages) || "0"
+          })
+        )
+      ),
+    editar: (c) =>
+      seguro(async () => {
+        // La página va por su acción: es la que apunta el progreso de lectura.
+        if (typeof c.campos.current_page === "number") {
+          const r = await updateBookPage(c.id!, c.campos.current_page);
+          if (!r.ok) return r;
+        }
+        if (!Object.keys(c.campos).some((k) => k !== "current_page")) return { ok: true };
+        const f = await actual("books", c.id!, "title, author, status, current_page, total_pages, category, cover_url");
+        if (!f) return ya;
+        const v = mezcla(c, f);
+        return upsertBook(
+          c.id!,
+          formulario({
+            title: v("title"),
+            author: v("author"),
+            status: v("status"),
+            currentPage: v("current_page"),
+            totalPages: v("total_pages"),
+            category: s(f.category),
+            coverUrl: s(f.cover_url)
+          })
+        );
+      }),
+    borrar: (c) => seguro(() => deleteBook(c.id!))
+  },
+  savings_goals: {
+    crear: (c) => seguro(() => upsertSavingsGoal(null, formularioDeAhorro((k) => s(c.campos[k])))),
+    editar: (c) =>
+      seguro(async () => {
+        const f = await actual("savings_goals", c.id!, "name, type, target, current_amount, monthly, target_date, priority");
+        if (!f) return ya;
+        await upsertSavingsGoal(c.id!, formularioDeAhorro(mezcla(c, f)));
+      }),
+    borrar: (c) => seguro(() => deleteSavingsGoal(c.id!))
+  },
+  financial_goals: {
+    crear: (c) => seguro(() => upsertFinancialGoal(null, formularioDeMeta((k) => s(c.campos[k]), []))),
+    editar: (c) =>
+      seguro(async () => {
+        const f = await actual("financial_goals", c.id!, "name, target, current_amount, horizon, priority, account_ids, family_member_id");
+        if (!f) return ya;
+        // Las cuentas y el dependiente no los dice el Centro: se conservan.
+        const fd = formularioDeMeta(mezcla(c, f), Array.isArray(f.account_ids) ? (f.account_ids as string[]) : []);
+        fd.set("familyMemberId", s(f.family_member_id));
+        await upsertFinancialGoal(c.id!, fd);
+      }),
+    borrar: (c) => seguro(() => deleteFinancialGoal(c.id!))
+  },
+  debts: {
+    crear: (c) => seguro(() => upsertDebt(null, formularioDeDeuda((k) => s(c.campos[k])))),
+    editar: (c) =>
+      seguro(async () => {
+        const f = await actual("debts", c.id!, "name, balance, rate, min_payment, due_day");
+        if (!f) return ya;
+        await upsertDebt(c.id!, formularioDeDeuda(mezcla(c, f)));
+      }),
+    borrar: (c) => seguro(() => deleteDebt(c.id!))
+  },
+  assets: {
+    crear: (c) => seguro(() => upsertAsset(null, formularioDeActivo((k) => s(c.campos[k])))),
+    editar: (c) =>
+      seguro(async () => {
+        const f = await actual("assets", c.id!, "name, kind, value, as_of, source");
+        if (!f) return ya;
+        await upsertAsset(c.id!, formularioDeActivo(mezcla(c, f)));
+      }),
+    borrar: (c) => seguro(() => deleteAsset(c.id!))
+  },
+  logbook: {
+    crear: (c) => seguro(() => saveDailyLearning(s(c.campos.text)))
+  },
+  daily_reflections: {
+    crear: (c) =>
+      seguro(async () => {
+        // `saveDailyReflection` reescribe el check-in de hoy entero: lo que no
+        // se dijo ahora se conserva de lo que ya había.
+        const supabase = await createClient();
+        const { data: hoy } = await supabase
+          .from("daily_reflections")
+          .select("mood, energy, sleep_hours, reflection_prompt, reflection, wins")
+          .eq("local_date", await todayForUser())
+          .maybeSingle();
+        const v = <T,>(k: string, previo: T) => (k in c.campos && c.campos[k] !== null ? c.campos[k] : previo);
+        return saveDailyReflection({
+          mood: v("mood", hoy?.mood ?? null) as number | null,
+          energy: v("energy", hoy?.energy ?? null) as number | null,
+          sleepHours: v("sleep_hours", hoy?.sleep_hours === null || hoy?.sleep_hours === undefined ? null : Number(hoy.sleep_hours)) as number | null,
+          reflectionPrompt: hoy?.reflection_prompt ?? "",
+          reflection: s(v("reflection", hoy?.reflection ?? "")),
+          wins: s(v("wins", hoy?.wins ?? ""))
+        });
+      })
   }
 };
+
+type Valor = (k: string) => string;
+
+function formularioDeAhorro(v: Valor): FormData {
+  return formulario({
+    name: v("name"),
+    type: v("type") || "Emergencia",
+    target: v("target"),
+    current: v("current_amount") || "0",
+    monthly: v("monthly") || "0",
+    targetDate: v("target_date"),
+    priority: v("priority") || "Medium"
+  });
+}
+
+function formularioDeMeta(v: Valor, cuentas: string[]): FormData {
+  const fd = formulario({ name: v("name"), target: v("target"), current: v("current_amount") || "0", horizon: v("horizon"), priority: v("priority") || "Medium", familyMemberId: "" });
+  for (const id of cuentas) fd.append("accountIds", id);
+  return fd;
+}
+
+function formularioDeDeuda(v: Valor): FormData {
+  return formulario({ name: v("name"), balance: v("balance"), rate: v("rate"), minPayment: v("min_payment"), dueDay: v("due_day") });
+}
+
+function formularioDeActivo(v: Valor): FormData {
+  return formulario({ name: v("name"), kind: v("kind") || "Otros", value: v("value"), asOf: v("as_of"), source: v("source") || "Estimación" });
+}

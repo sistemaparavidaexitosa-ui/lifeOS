@@ -49,7 +49,7 @@ export async function proponerCambios(
         message_id: null,
         origen: "centro",
         tipo: "cambio",
-        titulo: tituloDeCambio(cambio),
+        titulo: tituloDeCambio(cambio, filas),
         detalle: `${VERBO[cambio.operacion]} · ${ESCRITURA_POR_TABLA[cambio.tabla].etiqueta}`,
         payload: cambio as unknown as Record<string, never>
       })

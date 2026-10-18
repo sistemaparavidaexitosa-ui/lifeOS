@@ -64,19 +64,19 @@ const VERBO = { crear: "Crear", editar: "Cambiar", borrar: "Borrar" } as const;
 
 const ia = (motivo: string): Interpretacion => ({ tipo: "ia", motivo });
 
-/** «Tarea» → «la tarea»; sin una tabla de géneros: todas las de hoy acaban en -a. */
-function conArticulo(etiqueta: string): string {
+/** «Tarea» → «la tarea». El género lo dice la entrada (`femenino`) o la -a final. */
+function conArticulo(etiqueta: string, femenino?: boolean): string {
   const e = etiqueta.toLowerCase();
-  return `${e.endsWith("a") ? "la" : "el"} ${e}`;
+  return `${(femenino ?? e.endsWith("a")) ? "la" : "el"} ${e}`;
 }
 
-function ninguno(etiqueta: string): string {
-  return etiqueta.toLowerCase().endsWith("a") ? "ninguna" : "ningún";
+function ninguno(etiqueta: string, femenino?: boolean): string {
+  return (femenino ?? etiqueta.toLowerCase().endsWith("a")) ? "ninguna" : "ningún";
 }
 
-/** «proyecto» de «en el proyecto»: la última palabra de la primera mención. */
+/** «proyecto» de «en el proyecto»: la última palabra de la primera mención; si no hay, su etiqueta. */
 function nombreDeRef(c: CampoDeEscritura): string {
-  return c.menciones?.[0]?.split(" ").pop() ?? "destino";
+  return c.menciones?.[0]?.split(" ").pop() ?? c.etiqueta.toLowerCase();
 }
 
 function recortar(t: string, max: number): string {
@@ -140,9 +140,15 @@ function resolverCrear(a: Escribir, entrada: EntradaDeEscritura & { tabla: strin
   const filas = new Map<string, Record<string, unknown>>();
   const campos: Record<string, Valor> = { ...a.valores };
   const enLaTarjeta: string[] = [];
+  const accion = entrada.accion ?? VERBO.crear;
+  let nombreDictado: string | null = null;
 
   // Título: lo dicho, con las mayúsculas del original.
   const titulo = tramoOriginal(a.textoOriginal, a.resto);
+  const dictado = entrada.dictado ?? entrada.titulo;
+  // Lo dictado puede ser el NOMBRE de una fila («marca el hábito meditar»).
+  const dictadoEsRef = entrada.campos[dictado]?.tipo === "ref";
+  const menciones = { ...a.menciones };
 
   if (entrada.tabla === "food_entries") {
     // Sin el alimento en el catálogo no hay macros, y estimarlos es justo el
@@ -150,16 +156,24 @@ function resolverCrear(a: Escribir, entrada: EntradaDeEscritura & { tabla: strin
     const al = ctx.alimentos.find((x) => normalizar(x.nombre) === a.resto) ?? ctx.alimentos.find((x) => normalizar(x.nombre).includes(a.resto));
     if (!al || !a.resto) return ia("alimento sin macros conocidos");
     Object.assign(campos, { name: al.nombre, kcal100: al.kcal100, protein100: al.protein100, carbs100: al.carbs100, fat100: al.fat100 });
-    campos.local_date ??= ctx.hoy;
+  } else if (dictadoEsRef) {
+    menciones[dictado] ??= a.resto;
+    if (!menciones[dictado]) return ia("sin nombre de la fila");
   } else {
     if (!a.resto) return ia("sin título");
-    campos[entrada.dictado ?? entrada.titulo] = titulo;
+    campos[dictado] = titulo;
+  }
+
+  // Lo que no se dijo toma el valor inicial de su formulario.
+  for (const [nombre, c] of camposDe(entrada, "crear")) {
+    if (c.porDefecto === undefined || campos[nombre] !== undefined) continue;
+    campos[nombre] = c.tipo === "fecha" && c.porDefecto === "hoy" ? ctx.hoy : c.porDefecto;
   }
 
   for (const [nombre, c] of camposDe(entrada, "crear")) {
     if (c.tipo !== "ref" || !c.refTabla) continue;
     const opciones = ctx.catalogo[c.refTabla] ?? [];
-    const dicho = a.menciones[nombre];
+    const dicho = menciones[nombre];
     const marcada = a.elegida ? opciones.filter((o) => o.id === a.elegida) : [];
     const elegibles = marcada.length ? marcada : dicho ? coincidencias(opciones, dicho) : opciones;
     const ref = nombreDeRef(c);
@@ -174,7 +188,12 @@ function resolverCrear(a: Escribir, entrada: EntradaDeEscritura & { tabla: strin
       const nombres = etiquetas(mostradas.map((o) => o.nombre));
       return {
         tipo: "pregunta",
-        entendi: recortar(`${VERBO.crear} ${conArticulo(entrada.etiqueta)} «${titulo}». ¿En qué ${ref}?`, MAX_ENTENDI),
+        entendi: recortar(
+          nombre === dictado
+            ? `${accion} ${conArticulo(entrada.etiqueta, entrada.femenino)} «${titulo}». ¿Cuál de estos?`
+            : `${accion} ${conArticulo(entrada.etiqueta, entrada.femenino)} «${titulo}». ¿En qué ${ref}?`,
+          MAX_ENTENDI
+        ),
         opciones: mostradas.map((o, i) => ({
           etiqueta: nombres[i]!,
           // Cada opción es la petición entera otra vez, ya sin la duda, y con
@@ -188,17 +207,18 @@ function resolverCrear(a: Escribir, entrada: EntradaDeEscritura & { tabla: strin
     const fila = `fila:${c.refTabla}:${o.id}`;
     filas.set(fila, { id: o.id, title: o.nombre });
     campos[nombre] = fila;
-    enLaTarjeta.push(o.nombre);
+    if (nombre === dictado) nombreDictado = o.nombre;
+    else enLaTarjeta.push(o.nombre);
   }
 
   const cambio = { operacion: "crear", tabla: entrada.tabla, campos };
   const v = validarCambio(cambio, { filas, autorizados: ctx.autorizados });
   if (!v.ok) return ia(v.reason);
 
-  const dictado = campos[entrada.dictado ?? entrada.titulo];
-  const nombre = typeof dictado === "string" ? dictado : titulo;
+  const dicho = campos[dictado];
+  const nombre = nombreDictado ?? (typeof dicho === "string" ? dicho : titulo);
   const destino = enLaTarjeta.length ? ` en ${enLaTarjeta.join(", ")}` : "";
-  const entendi = `${VERBO.crear} ${conArticulo(entrada.etiqueta)} «${nombre}»${destino}${detalles(entrada, campos)}`;
+  const entendi = `${accion} ${conArticulo(entrada.etiqueta, entrada.femenino)} «${nombre}»${destino}${detalles(entrada, campos)}`;
   return { tipo: "cambios", entendi: recortar(entendi, MAX_ENTENDI), cambios: [cambio], filas };
 }
 
@@ -212,7 +232,7 @@ function resolverFila(a: Escribir, entrada: EntradaDeEscritura & { tabla: string
 
   if (!ctx.candidatos.length) {
     const e = entrada.etiqueta.toLowerCase();
-    return { tipo: "nada", entendi: `No encontré ${ninguno(e)} ${e} que se llame «${a.resto}».` };
+    return { tipo: "nada", entendi: `No encontré ${ninguno(e, entrada.femenino)} ${e} que se llame «${a.resto}».` };
   }
   if (!elegido) {
     const dicho = tramoOriginal(a.textoOriginal, a.resto);
@@ -220,7 +240,7 @@ function resolverFila(a: Escribir, entrada: EntradaDeEscritura & { tabla: string
     const nombres = etiquetas(mostrados.map((c) => c.nombre));
     return {
       tipo: "pregunta",
-      entendi: recortar(`${VERBO[a.operacion]} ${conArticulo(entrada.etiqueta)} «${dicho}». ¿Cuál de estas?`, MAX_ENTENDI),
+      entendi: recortar(`${VERBO[a.operacion]} ${conArticulo(entrada.etiqueta, entrada.femenino)} «${dicho}». ¿Cuál de estas?`, MAX_ENTENDI),
       opciones: mostrados.map((c, i) => ({
         etiqueta: nombres[i]!,
         texto: `${a.textoOriginal.replace(dicho, `«${c.nombre}»`)} #${uuidDe(c.fila)}`
@@ -238,7 +258,7 @@ function resolverFila(a: Escribir, entrada: EntradaDeEscritura & { tabla: string
   const v = validarCambio(cambio, { filas, autorizados: ctx.autorizados });
   if (!v.ok) return ia(v.reason);
 
-  const entendi = `${VERBO[a.operacion]} ${conArticulo(entrada.etiqueta)} «${elegido.nombre}»${a.operacion === "editar" ? detalles(entrada, v.cambio.campos) : ""}`;
+  const entendi = `${VERBO[a.operacion]} ${conArticulo(entrada.etiqueta, entrada.femenino)} «${elegido.nombre}»${a.operacion === "editar" ? detalles(entrada, v.cambio.campos) : ""}`;
   return { tipo: "cambios", entendi: recortar(entendi, MAX_ENTENDI), cambios: [cambio], filas };
 }
 
@@ -254,7 +274,8 @@ function saltoNoPermitido(a: Escribir, entrada: EntradaDeEscritura, elegido: Can
     if (!c?.transiciones || typeof desde !== "string" || typeof hacia !== "string" || desde === hacia) continue;
     const posibles = c.transiciones[desde] ?? [];
     if (posibles.includes(hacia)) continue;
-    const esta = `${conArticulo(entrada.etiqueta)[0]!.toUpperCase()}${conArticulo(entrada.etiqueta).slice(1)} «${elegido.nombre}» está ${legible(c, desde)}`;
+    const art = conArticulo(entrada.etiqueta, entrada.femenino);
+    const esta = `${art[0]!.toUpperCase()}${art.slice(1)} «${elegido.nombre}» está ${legible(c, desde)}`;
     if (!posibles.length) return { tipo: "nada", entendi: `${esta} y ya no puede cambiar de ${c.etiqueta.toLowerCase()}.` };
     const marca = uuidDe(elegido.fila);
     return {
@@ -262,7 +283,7 @@ function saltoNoPermitido(a: Escribir, entrada: EntradaDeEscritura, elegido: Can
       entendi: recortar(`${esta} y no puede pasar directo a ${legible(c, hacia)}. ¿Qué hago?`, MAX_ENTENDI),
       opciones: posibles.slice(0, MAX_OPCIONES).map((p) => ({
         etiqueta: recortar(`Pasar a ${legible(c, p)}`, MAX_ETIQUETA),
-        texto: `cambia ${conArticulo(entrada.etiqueta)} «${elegido.nombre}» a ${legible(c, p)} #${marca}`
+        texto: `cambia ${conArticulo(entrada.etiqueta, entrada.femenino)} «${elegido.nombre}» a ${legible(c, p)} #${marca}`
       }))
     };
   }

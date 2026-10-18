@@ -18,8 +18,11 @@ test("Ninguna tabla prohibida está en el registro (profiles, sobre todo)", () =
   for (const t of TABLAS_PROHIBIDAS) assert.ok(!tablas.includes(t), t);
 });
 
-test("Entrega 1: tasks, notes y food_entries", () => {
-  assert.deepStrictEqual(tablas.sort(), ["food_entries", "notes", "tasks"]);
+test("Entregas 1 y 2 (D-203, D-205 E2): las tablas que el Centro escribe", () => {
+  assert.deepStrictEqual(tablas.sort(), [
+    "assets", "books", "daily_reflections", "debts", "financial_goals", "food_entries", "habit_logs",
+    "logbook", "notes", "personal_goals", "projects", "reminders", "savings_goals", "tasks"
+  ]);
 });
 
 test("El dominio de cada tabla es el de la lista blanca de lectura", () => {
@@ -98,10 +101,41 @@ test("D-205: las menciones solo existen en refs", () => {
   }
 });
 
-test("D-205: `dictado`, si existe, es un campo de texto que se puede crear", () => {
+test("D-205: `dictado`, si existe, es un campo de texto o una ref que se puede crear", () => {
   for (const [tabla, e] of Object.entries(ESCRITURA_POR_TABLA) as [string, EntradaDeEscritura][]) {
     if (!e.dictado) continue;
     const c = e.campos[e.dictado];
-    assert.ok(c && c.tipo === "texto" && !c.soloEditar, `${tabla}.${e.dictado}`);
+    assert.ok(c && (c.tipo === "texto" || c.tipo === "ref") && !c.soloEditar, `${tabla}.${e.dictado}`);
+  }
+});
+
+test("D-205 E2: `porDefecto` es un valor válido de su campo, y `etiquetas` solo van en números", () => {
+  for (const [tabla, e] of Object.entries(ESCRITURA_POR_TABLA) as [string, EntradaDeEscritura][]) {
+    for (const [campo, c] of Object.entries(e.campos)) {
+      if (c.etiquetas) assert.ok(c.tipo === "numero" || c.tipo === "entero", `${tabla}.${campo}`);
+      if (c.porDefecto === undefined) continue;
+      if (c.tipo === "opcion") assert.ok(c.opciones?.includes(String(c.porDefecto)), `${tabla}.${campo}`);
+      else if (c.tipo === "fecha") assert.equal(c.porDefecto, "hoy", `${tabla}.${campo}`);
+      else if (c.tipo === "numero" || c.tipo === "entero") assert.equal(typeof c.porDefecto, "number", `${tabla}.${campo}`);
+      else assert.equal(c.tipo, "texto", `${tabla}.${campo}`);
+    }
+  }
+});
+
+test("D-205 E2: `crearCon` solo en tablas que se crean, y sin chocar con un verbo de tabla", () => {
+  for (const [tabla, e] of Object.entries(ESCRITURA_POR_TABLA) as [string, EntradaDeEscritura][]) {
+    if (!e.crearCon) continue;
+    assert.ok(e.operaciones.includes("crear"), tabla);
+    for (const v of e.crearCon) assert.equal(normalizar(v), v, `«${v}»`);
+  }
+});
+
+test("D-205 E2: la columna de nombre de cada ref (`refTitulo`, o `title`) se puede leer en su tabla", () => {
+  for (const [tabla, e] of Object.entries(ESCRITURA_POR_TABLA) as [string, EntradaDeEscritura][]) {
+    for (const [campo, c] of Object.entries(e.campos)) {
+      if (c.tipo !== "ref") continue;
+      const select = (TABLAS_CONSULTABLES as Record<string, { select: string }>)[c.refTabla!]!.select.split(",").map((x) => x.trim());
+      assert.ok(select.includes(c.refTitulo ?? "title") && select.includes("created_at"), `${tabla}.${campo} → ${c.refTabla}`);
+    }
   }
 });

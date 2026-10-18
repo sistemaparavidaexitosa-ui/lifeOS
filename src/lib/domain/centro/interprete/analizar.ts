@@ -46,7 +46,7 @@ export type Analisis =
     };
 
 /** Lo que sobra en los bordes del título: «una tarea DE llamar», «llamar a juan AL». */
-const CONECTORES = new Set(["un", "una", "unos", "unas", "la", "el", "los", "las", "lo", "de", "del", "que", "para", "a", "al", "como", "en", "y", "por", "favor"]);
+const CONECTORES = new Set(["un", "una", "unos", "unas", "la", "el", "los", "las", "lo", "de", "del", "que", "para", "a", "al", "como", "en", "y", "por", "favor", "mi", "mis"]);
 /** Lo que puede ir antes del verbo sin que deje de ser una orden. */
 const PREVIOS = new Set(["porfa", "oye", "centro", "hey", "ahora", "ayer", "hoy", "manana"]);
 
@@ -63,6 +63,11 @@ function recortarBordes(t: string): string {
   return palabras.join(" ");
 }
 
+const REGISTRO = ESCRITURA_POR_TABLA as Record<TablaEscribible, EntradaDeEscritura>;
+
+/** Verbos que solo existen como `crearCon` de alguna tabla («ponme»). */
+const SOLO_CREAR_CON = new Set(Object.values(REGISTRO).flatMap((e) => e.crearCon ?? []));
+
 /** El verbo, solo si es la primera palabra (o la segunda tras «oye», «ayer»…). */
 function verboDe(palabras: string[]): { verbo: string; operacion: Operacion; deTabla?: (typeof VERBOS_DE_TABLA)[string] } | null {
   const candidatos = PREVIOS.has(palabras[0] ?? "") ? [palabras[0], palabras[1]] : [palabras[0]];
@@ -73,19 +78,60 @@ function verboDe(palabras: string[]): { verbo: string; operacion: Operacion; deT
     for (const [operacion, verbos] of Object.entries(VERBOS) as [Operacion, readonly string[]][]) {
       if (verbos.includes(p)) return { verbo: p, operacion };
     }
+    if (SOLO_CREAR_CON.has(p)) return { verbo: p, operacion: "crear" };
   }
   return null;
 }
 
-/** Las tablas nombradas en el texto, por sus sinónimos (palabra completa). */
-function tablasNombradas(n: string): { tabla: TablaEscribible; frase: string }[] {
-  const salida: { tabla: TablaEscribible; frase: string }[] = [];
-  for (const [tabla, e] of Object.entries(ESCRITURA_POR_TABLA) as [TablaEscribible, EntradaDeEscritura][]) {
-    // El sinónimo más largo primero: «tareas» antes que «tarea».
-    const frase = [...e.sinonimos].sort((a, b) => b.length - a.length).find((s) => comoPalabra(s).test(n));
-    if (frase) salida.push({ tabla, frase });
+type Nombrada = { tabla: TablaEscribible; frase: string };
+
+/**
+ * Las tablas nombradas en el texto, por sus sinónimos (palabra completa). El
+ * sinónimo más largo se lleva su tramo: «meta de ahorro» no deja que «meta»
+ * cuente también como meta personal.
+ */
+function tablasNombradas(n: string): Nombrada[] {
+  const todas: Nombrada[] = [];
+  for (const [tabla, e] of Object.entries(REGISTRO) as [TablaEscribible, EntradaDeEscritura][]) {
+    for (const frase of e.sinonimos) if (comoPalabra(frase).test(n)) todas.push({ tabla, frase });
+  }
+  todas.sort((a, b) => b.frase.length - a.frase.length);
+  const salida: Nombrada[] = [];
+  let resto = n;
+  for (const t of todas) {
+    if (salida.some((s) => s.tabla === t.tabla) || !comoPalabra(t.frase).test(resto)) continue;
+    salida.push(t);
+    resto = quitar(resto, t.frase);
   }
   return salida;
+}
+
+/**
+ * Por qué la tabla `t` es solo parte de una orden sobre `de` y no la orden:
+ * - `mencion`: es el destino de una ref de `de` y se nombra con su mención
+ *   («una tarea … EN EL PROYECTO Casa»);
+ * - `dictado`: es la ref que `de` toma de lo dictado («recuérdame LA TAREA x»);
+ * - `opcion`: la palabra es un valor de un campo de `de` («el proyecto a ACTIVO»).
+ */
+function subordinada(t: Nombrada, de: TablaEscribible, n: string): "mencion" | "dictado" | "opcion" | null {
+  const e = REGISTRO[de];
+  for (const [nombre, c] of Object.entries(e.campos)) {
+    if (c.tipo === "ref" && c.refTabla === t.tabla) {
+      if (e.dictado === nombre) return "dictado";
+      if (c.menciones?.some((m) => comoPalabra(m).test(n))) return "mencion";
+    }
+    if (c.tipo === "opcion" && Object.values(c.sinonimos ?? {}).some((fs) => fs.includes(t.frase))) return "opcion";
+  }
+  return null;
+}
+
+/** La tabla de la orden: la única nombrada que no es parte de otra. */
+function tablaPrincipal(nombradas: Nombrada[], n: string, delVerbo?: TablaEscribible): { tabla: TablaEscribible; porDictado: Nombrada[] } | { motivo: string } {
+  const libres = nombradas.filter((t) => !nombradas.some((u) => u.tabla !== t.tabla && subordinada(t, u.tabla, n)) && !(delVerbo && t.tabla !== delVerbo && subordinada(t, delVerbo, n)));
+  const tabla = delVerbo ?? (libres.length === 1 ? libres[0]!.tabla : null);
+  if (!tabla) return { motivo: libres.length ? "nombra más de una tabla" : "no nombra ninguna tabla" };
+  if (libres.some((t) => t.tabla !== tabla)) return { motivo: "nombra más de una tabla" };
+  return { tabla, porDictado: nombradas.filter((t) => t.tabla !== tabla && subordinada(t, tabla, n) === "dictado") };
 }
 
 export function analizar(conMarca: string, hoy: string): Analisis {
@@ -110,30 +156,42 @@ export function analizar(conMarca: string, hoy: string): Analisis {
   if (!v) return ia("sin verbo de acción");
 
   const nombradas = tablasNombradas(trabajo);
-  const tabla = v.deTabla?.tabla ?? (nombradas.length === 1 ? nombradas[0]!.tabla : null);
-  if (!tabla) return ia(nombradas.length ? "nombra más de una tabla" : "no nombra ninguna tabla");
-  if (nombradas.some((t) => t.tabla !== tabla)) return ia("nombra más de una tabla");
+  const p = tablaPrincipal(nombradas, trabajo, v.deTabla?.tabla);
+  if ("motivo" in p) return ia(p.motivo);
+  const tabla = p.tabla;
 
-  const entrada = ESCRITURA_POR_TABLA[tabla] as EntradaDeEscritura;
-  if (!entrada.operaciones.includes(v.operacion)) return ia("operación no permitida en esa tabla");
+  const entrada = REGISTRO[tabla];
+  // «Marca el hábito» es crear su registro del día, no editar el hábito.
+  const operacion: Operacion = entrada.crearCon?.includes(v.verbo) ? "crear" : v.operacion;
+  if (!entrada.operaciones.includes(operacion)) return ia("operación no permitida en esa tabla");
 
   trabajo = quitar(trabajo, v.verbo);
-  for (const t of nombradas) trabajo = quitar(trabajo, t.frase);
+  // La frase de la tabla, y la de las que solo nombran lo dictado («la TAREA x»).
+  // Las mencionadas se quedan: su mención las recoge abajo con el nombre.
+  for (const t of [...nombradas.filter((t) => t.tabla === tabla), ...p.porDictado]) trabajo = quitar(trabajo, t.frase);
 
   const valores: Record<string, Valor> = { ...(v.deTabla?.valores ?? {}) };
-  const campos = v.operacion === "borrar" ? [] : camposDe(entrada, v.operacion);
+  const campos = operacion === "borrar" ? [] : camposDe(entrada, operacion);
   let fechaUsada = false;
-  for (const [nombre, c] of campos) {
-    if (nombre in valores) continue;
-    let h: Hallazgo<string | number> | null = null;
-    if (c.tipo === "opcion" && c.sinonimos) h = extraerOpcion(trabajo, c.sinonimos);
-    else if (c.tipo === "fecha" && !fechaUsada) {
-      h = extraerFecha(trabajo, hoy);
-      fechaUsada = h !== null;
-    } else if ((c.tipo === "numero" || c.tipo === "entero") && c.unidades) h = extraerNumero(trabajo, c.unidades);
-    if (!h) continue;
+  const tomar = (nombre: string, h: Hallazgo<string | number> | null) => {
+    if (!h) return;
     valores[nombre] = h.valor;
     trabajo = quitar(trabajo, h.frase);
+  };
+  for (const [nombre, c] of campos) {
+    if (nombre in valores) continue;
+    if (c.tipo === "opcion" && c.sinonimos) tomar(nombre, extraerOpcion(trabajo, c.sinonimos));
+    else if (c.tipo === "fecha" && !fechaUsada) {
+      const h = extraerFecha(trabajo, hoy);
+      fechaUsada = h !== null;
+      tomar(nombre, h);
+    } else if ((c.tipo === "numero" || c.tipo === "entero") && c.etiquetas) tomar(nombre, extraerNumero(trabajo, c.unidades ?? [], c.etiquetas));
+  }
+  // Los números con solo su unidad, DESPUÉS de los que traen etiqueta: en
+  // «ahorrado 2000 pesos, objetivo 50000 pesos» cada uno se lleva el suyo.
+  for (const [nombre, c] of campos) {
+    if (nombre in valores || (c.tipo !== "numero" && c.tipo !== "entero") || !c.unidades) continue;
+    tomar(nombre, extraerNumero(trabajo, c.unidades));
   }
 
   // Lo que se nombra como destino: «en el proyecto Rediseño», hasta la coma o el final.
@@ -151,5 +209,5 @@ export function analizar(conMarca: string, hoy: string): Analisis {
   }
 
   const resto = comillas ?? recortarBordes(trabajo);
-  return { tipo: "escribir", operacion: v.operacion, tabla, valores, menciones, resto, textoOriginal: texto, elegida };
+  return { tipo: "escribir", operacion, tabla, valores, menciones, resto, textoOriginal: texto, elegida };
 }
