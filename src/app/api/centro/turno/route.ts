@@ -15,7 +15,9 @@ export const maxDuration = 60;
 
 const Entrada = z.object({
   texto: z.string().trim().min(1).max(2000),
-  historial: z.array(z.object({ rol: z.enum(["persona", "agente"]), texto: z.string().max(MAX_TEXTO_HISTORIAL) })).max(MAX_HISTORIAL)
+  historial: z.array(z.object({ rol: z.enum(["persona", "agente"]), texto: z.string().max(MAX_TEXTO_HISTORIAL) })).max(MAX_HISTORIAL),
+  // D-205: `ia` se salta el intérprete.
+  modo: z.enum(["auto", "ia"]).default("auto")
 });
 
 export async function POST(req: Request) {

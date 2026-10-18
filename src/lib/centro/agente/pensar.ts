@@ -19,6 +19,7 @@ import type { AnySection } from "@/lib/domain/centro/runtime/types.ts";
 import { conEscritura } from "@/lib/domain/centro/escritura/esquema.ts";
 import { MAX_CAMBIOS_POR_TURNO } from "@/lib/domain/centro/agente/contrato.ts";
 import { proponerCambios } from "@/lib/centro/escritura/proponer";
+import { interpretarTurno } from "@/lib/centro/interprete/interpretar";
 import { CAPACIDADES_REGISTRADAS } from "./capacidades";
 import { cargarResultados } from "./resultados";
 import { seccionDeConfirmacion } from "@/lib/domain/centro/agente/entendimiento.ts";
@@ -43,11 +44,23 @@ export const DISCULPA = "No pude pensar esto ahora; inténtalo de nuevo.";
  * la disculpa de siempre, con 200, no en un 500 que la ruta no sabría cómo
  * explicar.
  */
-export async function pensarTurno(input: { texto: string; historial: { rol: "persona" | "agente"; texto: string }[] }) {
+export async function pensarTurno(input: {
+  texto: string;
+  historial: { rol: "persona" | "agente"; texto: string }[];
+  /** D-205: `ia` se salta el intérprete («No es esto», «Pregúntale a la IA»). */
+  modo?: "auto" | "ia";
+}) {
   const id = randomUUID();
   try {
     const cerebro = await prepararCerebro();
     if (!cerebro) return { id, texto: DISCULPA, secciones: [] as AnySection[] };
+
+    // D-205: primero sin modelo. Solo si el intérprete no lo tiene claro se
+    // gasta un turno de IA.
+    if (input.modo !== "ia") {
+      const interpretado = await interpretarTurno(input.texto, cerebro);
+      if (interpretado) return { id, ...interpretado };
+    }
 
     const resultados = await cargarResultados(cerebro.supabase, cerebro.user.id, cerebro.today).catch((e: unknown) => {
       console.warn("[centro-agente] resultados:", e);
