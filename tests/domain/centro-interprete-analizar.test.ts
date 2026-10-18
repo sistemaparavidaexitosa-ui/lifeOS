@@ -20,7 +20,8 @@ test("Crear tarea: verbo, tabla, fecha, prioridad, proyecto mencionado y título
     valores: { due: "2026-10-19", priority: "High" },
     menciones: { project_id: "rediseno" },
     resto: "llamar a juan",
-    textoOriginal: texto
+    textoOriginal: texto,
+    elegida: null
   });
 });
 
@@ -115,4 +116,13 @@ test("Navegar: verbo de ir + una sección", () => {
 test("pideCriterio: una pregunta con ¿ o ? siempre lo es", () => {
   assert.equal(pideCriterio("¿crea una tarea?", "crea una tarea"), true);
   assert.equal(pideCriterio("crea una tarea", "crea una tarea"), false);
+});
+
+test("La marca #<uuid> del final elige fila y no entra en el título", () => {
+  const id = "44444442-4444-4444-8444-444444444444";
+  const a = analizar(`borra la tarea «Llamar a Juan» #${id}`, H);
+  assert.equal(a.tipo === "escribir" && a.elegida, id);
+  assert.equal(a.tipo === "escribir" && a.resto, "Llamar a Juan");
+  const b = analizar("borra la tarea llamar a Juan", H);
+  assert.equal(b.tipo === "escribir" && b.elegida, null);
 });

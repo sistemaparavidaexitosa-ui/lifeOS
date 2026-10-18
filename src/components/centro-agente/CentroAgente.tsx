@@ -9,6 +9,7 @@ import { agregar, historialParaModelo, type Turno } from "@/lib/domain/centro/ag
 import type { Screen } from "@/lib/domain/centro/runtime/types.ts";
 import { startRitual } from "@/lib/ritual/actions";
 import { IconClose } from "@/components/icons";
+import { MARCA_DE_FILA } from "@/lib/domain/centro/interprete/analizar.ts";
 import Composer from "./Composer";
 
 const LIMITE_MS = 45_000;
@@ -221,7 +222,8 @@ export default function CentroAgente({
           {hilo.map((t) =>
             t.rol === "persona" ? (
               <p key={t.id} className="ag-burbuja">
-                {t.texto}
+                {/* D-205: la marca `#<uuid>` de una opción elegida es para el intérprete, no para leerla. */}
+                {t.texto.replace(MARCA_DE_FILA, "")}
               </p>
             ) : (
               <section key={t.id} className="ag-turno">

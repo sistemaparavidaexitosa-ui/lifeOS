@@ -19,6 +19,9 @@ import { VERBOS, VERBOS_DE_TABLA, destinoDe, pideCriterio } from "./vocabulario.
 
 export const MAX_TEXTO_INTERPRETABLE = 300;
 
+/** `#<uuid>` al final del texto: la fila que se eligió en una pregunta. */
+export const MARCA_DE_FILA = /\s*#([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\s*$/i;
+
 export type Analisis =
   | { tipo: "ia"; motivo: string }
   | { tipo: "navegar"; destino: { href: string; etiqueta: string } }
@@ -32,7 +35,14 @@ export type Analisis =
       menciones: Record<string, string>;
       /** El título al crear; el nombre de la fila a buscar al editar o borrar. */
       resto: string;
+      /** La petición, sin la marca `#<uuid>`. */
       textoOriginal: string;
+      /**
+       * El uuid de la marca `#<uuid>` del final, si la hay: lo pone una opción
+       * de `pregunta` cuando dos filas se llaman igual, y es la única forma de
+       * que elegir «la segunda» no vuelva a preguntar lo mismo.
+       */
+      elegida: string | null;
     };
 
 /** Lo que sobra en los bordes del título: «una tarea DE llamar», «llamar a juan AL». */
@@ -78,7 +88,10 @@ function tablasNombradas(n: string): { tabla: TablaEscribible; frase: string }[]
   return salida;
 }
 
-export function analizar(texto: string, hoy: string): Analisis {
+export function analizar(conMarca: string, hoy: string): Analisis {
+  const marca = MARCA_DE_FILA.exec(conMarca);
+  const elegida = marca ? marca[1]!.toLowerCase() : null;
+  const texto = marca ? conMarca.slice(0, marca.index) : conMarca;
   if (texto.length > MAX_TEXTO_INTERPRETABLE) return ia("demasiado largo");
   if (/^\s*s[ií],?\s+sigue/i.test(texto) || /^\s*no era eso/i.test(texto)) return ia("viene de una tarjeta de la IA");
 
@@ -138,5 +151,5 @@ export function analizar(texto: string, hoy: string): Analisis {
   }
 
   const resto = comillas ?? recortarBordes(trabajo);
-  return { tipo: "escribir", operacion: v.operacion, tabla, valores, menciones, resto, textoOriginal: texto };
+  return { tipo: "escribir", operacion: v.operacion, tabla, valores, menciones, resto, textoOriginal: texto, elegida };
 }

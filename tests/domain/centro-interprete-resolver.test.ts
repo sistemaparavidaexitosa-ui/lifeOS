@@ -104,7 +104,7 @@ test("Editar con cinco parecidas: pregunta con tres, nunca la primera a ciegas",
   assert.equal(r.tipo, "pregunta");
   if (r.tipo !== "pregunta") return;
   assert.equal(r.opciones.length, 3);
-  assert.equal(r.opciones[0]!.texto, "marca como hecha la tarea «Llamar a Juan 1»");
+  assert.equal(r.opciones[0]!.texto, `marca como hecha la tarea «Llamar a Juan 1» #${T(1)}`);
 });
 
 test("Editar: una exacta entre varias parecidas gana", () => {
@@ -135,4 +135,27 @@ test("Crear nota: lo dicho va al cuerpo (obligatorio), y el cambio valida", () =
   if (r.tipo !== "cambios") return;
   assert.deepEqual(r.cambios, [{ operacion: "crear", tabla: "notes", campos: { notebook_id: `fila:notebooks:${N1}`, body: "idea para el blog" } }]);
   assert.equal(r.entendi, "Crear la nota «idea para el blog» en Trabajo");
+});
+
+test("Dos filas con el mismo nombre: las opciones se distinguen y cada una elige SU fila (sin bucle)", () => {
+  const c1 = { ...tarea(1, "Llamar a Juan"), exacta: true };
+  const c2 = { ...tarea(2, "Llamar a Juan"), exacta: true };
+  const r = resolverAnalisis(analizar("borra la tarea llamar a Juan", H), ctx({ candidatos: [c1, c2] }));
+  assert.equal(r.tipo, "pregunta");
+  if (r.tipo !== "pregunta") return;
+  assert.deepEqual(r.opciones.map((o) => o.etiqueta), ["Llamar a Juan (1)", "Llamar a Juan (2)"]);
+  const segunda = analizar(r.opciones[1]!.texto, H);
+  assert.equal(segunda.tipo === "escribir" && segunda.elegida, T(2));
+  const final = resolverAnalisis(segunda, ctx({ candidatos: [c1, c2] }));
+  assert.deepEqual(final.tipo === "cambios" && final.cambios, [{ operacion: "borrar", fila: `fila:tasks:${T(2)}` }]);
+});
+
+test("Dos proyectos con el mismo nombre: la opción elegida gana", () => {
+  const c = ctx({ catalogo: { projects: [{ id: P1, nombre: "Casa" }, { id: P2, nombre: "Casa" }], notebooks: [] } });
+  const r = resolverAnalisis(analizar("crea una tarea pagar luz en el proyecto Casa", H), c);
+  assert.equal(r.tipo, "pregunta");
+  if (r.tipo !== "pregunta") return;
+  const final = resolverAnalisis(analizar(r.opciones[1]!.texto, H), c);
+  assert.equal(final.tipo === "cambios" && (final.cambios[0] as { campos: Record<string, unknown> }).campos.project_id, `fila:projects:${P2}`);
+  assert.equal(final.tipo === "cambios" && (final.cambios[0] as { campos: Record<string, unknown> }).campos.title, "pagar luz");
 });

@@ -99,6 +99,18 @@ function detalles(entrada: EntradaDeEscritura, campos: Record<string, Valor>): s
   return lista.map(([n, c]) => ` · ${c.etiqueta.toLowerCase()} ${legible(c, campos[n]!)}`).join("");
 }
 
+/** Dos opciones con el mismo nombre serían dos botones iguales: se numeran. */
+function etiquetas(nombres: string[]): string[] {
+  return nombres.map((n, i) => {
+    const e = recortar(n, MAX_ETIQUETA - 4);
+    return nombres.filter((x) => x === n).length > 1 ? `${e} (${i + 1})` : e;
+  });
+}
+
+function uuidDe(fila: string): string {
+  return fila.slice(fila.lastIndexOf(":") + 1);
+}
+
 function coincidencias(opciones: Opcion[], dicho: string): Opcion[] {
   const exactas = opciones.filter((o) => normalizar(o.nombre) === dicho);
   if (exactas.length) return exactas;
@@ -141,7 +153,8 @@ function resolverCrear(a: Escribir, entrada: EntradaDeEscritura & { tabla: strin
     if (c.tipo !== "ref" || !c.refTabla) continue;
     const opciones = ctx.catalogo[c.refTabla] ?? [];
     const dicho = a.menciones[nombre];
-    const elegibles = dicho ? coincidencias(opciones, dicho) : opciones;
+    const marcada = a.elegida ? opciones.filter((o) => o.id === a.elegida) : [];
+    const elegibles = marcada.length ? marcada : dicho ? coincidencias(opciones, dicho) : opciones;
     const ref = nombreDeRef(c);
     if (!elegibles.length) {
       return dicho
@@ -150,14 +163,17 @@ function resolverCrear(a: Escribir, entrada: EntradaDeEscritura & { tabla: strin
     }
     if (elegibles.length > 1) {
       const original = dicho ? tramoOriginal(a.textoOriginal, dicho) : "";
+      const mostradas = elegibles.slice(0, MAX_OPCIONES);
+      const nombres = etiquetas(mostradas.map((o) => o.nombre));
       return {
         tipo: "pregunta",
         entendi: recortar(`${VERBO.crear} ${conArticulo(entrada.etiqueta)} «${titulo}». ¿En qué ${ref}?`, MAX_ENTENDI),
-        opciones: elegibles.slice(0, MAX_OPCIONES).map((o) => ({
-          etiqueta: recortar(o.nombre, MAX_ETIQUETA),
-          // Cada opción es la petición entera otra vez, ya sin la duda: al
-          // pulsarla se vuelve a entender sola, sin estado guardado en ningún sitio.
-          texto: dicho ? a.textoOriginal.replace(original, o.nombre) : `${a.textoOriginal} ${c.menciones![0]} ${o.nombre}`
+        opciones: mostradas.map((o, i) => ({
+          etiqueta: nombres[i]!,
+          // Cada opción es la petición entera otra vez, ya sin la duda, y con
+          // la marca de SU fila: al pulsarla se vuelve a entender sola, sin
+          // estado guardado, aunque dos destinos se llamen igual.
+          texto: `${dicho ? a.textoOriginal.replace(original, o.nombre) : `${a.textoOriginal} ${c.menciones![0]} ${o.nombre}`} #${o.id}`
         }))
       };
     }
@@ -184,7 +200,8 @@ function resolverFila(a: Escribir, entrada: EntradaDeEscritura & { tabla: string
   if (!a.resto) return ia("sin nombre de la fila");
 
   const exactas = ctx.candidatos.filter((c) => c.exacta);
-  const elegido = ctx.candidatos.length === 1 ? ctx.candidatos[0] : exactas.length === 1 ? exactas[0] : undefined;
+  const marcado = a.elegida ? ctx.candidatos.find((c) => uuidDe(c.fila) === a.elegida) : undefined;
+  const elegido = marcado ?? (ctx.candidatos.length === 1 ? ctx.candidatos[0] : exactas.length === 1 ? exactas[0] : undefined);
 
   if (!ctx.candidatos.length) {
     const e = entrada.etiqueta.toLowerCase();
@@ -192,12 +209,14 @@ function resolverFila(a: Escribir, entrada: EntradaDeEscritura & { tabla: string
   }
   if (!elegido) {
     const dicho = tramoOriginal(a.textoOriginal, a.resto);
+    const mostrados = ctx.candidatos.slice(0, MAX_OPCIONES);
+    const nombres = etiquetas(mostrados.map((c) => c.nombre));
     return {
       tipo: "pregunta",
       entendi: recortar(`${VERBO[a.operacion]} ${conArticulo(entrada.etiqueta)} «${dicho}». ¿Cuál de estas?`, MAX_ENTENDI),
-      opciones: ctx.candidatos.slice(0, MAX_OPCIONES).map((c) => ({
-        etiqueta: recortar(c.nombre, MAX_ETIQUETA),
-        texto: a.textoOriginal.replace(dicho, `«${c.nombre}»`)
+      opciones: mostrados.map((c, i) => ({
+        etiqueta: nombres[i]!,
+        texto: `${a.textoOriginal.replace(dicho, `«${c.nombre}»`)} #${uuidDe(c.fila)}`
       }))
     };
   }
