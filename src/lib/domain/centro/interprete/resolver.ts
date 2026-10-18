@@ -120,11 +120,18 @@ function coincidencias(opciones: Opcion[], dicho: string): Opcion[] {
   });
 }
 
+/** Lo que admite una alternativa de `confirmarEntendimiento` (validador del runtime). */
+const MAX_TEXTO_OPCION = 300;
+
 export function resolverAnalisis(a: Analisis, ctx: ContextoDeResolucion): Interpretacion {
   if (a.tipo !== "escribir") return a;
   const entrada = entradaDe(a.tabla, ctx.autorizados);
   if (!entrada) return ia("dominio no autorizado");
-  return a.operacion === "crear" ? resolverCrear(a, entrada, ctx) : resolverFila(a, entrada, ctx);
+  const r = a.operacion === "crear" ? resolverCrear(a, entrada, ctx) : resolverFila(a, entrada, ctx);
+  // Una opción que el validador tumbaría se llevaría la pregunta entera: mejor
+  // que lo resuelva la IA que enseñar una tarjeta vacía.
+  if (r.tipo === "pregunta" && r.opciones.some((o) => o.texto.length > MAX_TEXTO_OPCION)) return ia("opción demasiado larga");
+  return r;
 }
 
 type Escribir = Extract<Analisis, { tipo: "escribir" }>;

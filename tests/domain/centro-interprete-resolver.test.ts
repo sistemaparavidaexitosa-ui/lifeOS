@@ -177,3 +177,10 @@ test("Una transición permitida sale directa", () => {
   const r = resolverAnalisis(analizar("marca como hecha la tarea llamar a Juan", H), ctx({ candidatos: [enCurso] }));
   assert.equal(r.tipo, "cambios");
 });
+
+test("Una opción que no cabría en la tarjeta (más de 300) no se ofrece: a la IA", () => {
+  const largo = "Proyecto ".repeat(30).trim();
+  const c = ctx({ catalogo: { projects: [{ id: P1, nombre: largo }, { id: P2, nombre: "Casa" }], notebooks: [] } });
+  const r = resolverAnalisis(analizar(`crea una tarea ${"revisar ".repeat(20)}`, H), c);
+  assert.equal(r.tipo, "ia");
+});

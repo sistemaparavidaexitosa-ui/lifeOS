@@ -20,6 +20,7 @@ import { MAX_CAMBIOS_POR_TURNO } from "@/lib/domain/centro/agente/contrato.ts";
 import { TABLAS_DE_BUSQUEDA, registrarFilas } from "@/lib/domain/ai/tools.ts";
 import { tablaConsultable } from "@/lib/insights/context";
 import { proponerCambios } from "@/lib/centro/escritura/proponer";
+import { validarPorSeccion } from "@/lib/domain/centro/runtime/validador.ts";
 
 const MAX_CATALOGO = 20;
 const MAX_CANDIDATOS = 5;
@@ -42,8 +43,14 @@ export async function interpretarTurno(texto: string, cerebro: Cerebro): Promise
     if (r.tipo === "ia") console.info(`[centro-interprete] a la IA (${a.tipo === "escribir" ? `${a.operacion} ${a.tabla}` : a.tipo}): ${r.motivo}`);
     // La marca `#<uuid>` es para el intérprete; a la IA le llega la petición limpia.
     const salida = await pintar(r, cerebro, texto.replace(MARCA_DE_FILA, ""));
+    if (!salida) return null;
+    // La misma última puerta que las secciones del modelo (`componerTurno`):
+    // lo que no pasa el validador del runtime no se pinta, y sin nada que
+    // pintar sigue la IA.
+    const secciones = validarPorSeccion(salida.secciones, [], "centro-interprete");
+    if (!secciones.length) return null;
     auditar(cerebro, r, a);
-    return salida;
+    return { texto: salida.texto, secciones };
   } catch (e) {
     console.warn("[centro-interprete] falló, sigue la IA:", e);
     return null;
