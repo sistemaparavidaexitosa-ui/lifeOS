@@ -27,7 +27,7 @@ test("Cada tabla va a su sección; lo que no está en el menú, sin enlace", () 
   assert.strictEqual(rutaDeFila(`fila:projects:${P}`, filas.get(`fila:projects:${P}`)!, pv), `/execution?project=${P}`);
   assert.strictEqual(rutaDeFila(`fila:debts:${D}`, {}, pv), "/debt");
   assert.strictEqual(rutaDeFila(`fila:habits:x`, {}, pv), "/development/routines");
-  assert.strictEqual(rutaDeFila(`fila:notes:${N}`, {}, pv), null);
+  assert.strictEqual(rutaDeFila(`fila:notes:${N}`, {}, pv), "/notebooks");
   assert.strictEqual(rutaDeFila(`fila:tablainventada:x`, {}, pv), null);
 });
 

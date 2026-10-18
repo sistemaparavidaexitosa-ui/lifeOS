@@ -18,8 +18,8 @@ test("foco: un href fuera del menú (inventado) no pasa", () => {
 });
 
 test("foco: un href de una ruta oculta no pasa", () => {
-  // /notebooks está en NAV_ITEMS con hidden: true.
-  assert.strictEqual(sanearRecomendacion(foco("/notebooks"), []), null);
+  // /intelligence está en NAV_ITEMS con hidden: true y no se alcanza.
+  assert.strictEqual(sanearRecomendacion(foco("/intelligence"), []), null);
 });
 
 test("foco: una ruta real de la app pasa", () => {
