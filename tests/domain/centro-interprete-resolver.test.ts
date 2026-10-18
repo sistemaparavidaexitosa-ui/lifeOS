@@ -90,7 +90,9 @@ test("Comida con alimento del catálogo: macros del catálogo y el día de hoy",
 });
 
 test("Editar con una coincidencia: el cambio apunta a esa fila", () => {
-  const r = resolverAnalisis(analizar("marca como hecha la tarea llamar a Juan", H), ctx({ candidatos: [tarea(1, "Llamar a Juan")] }));
+  // En progreso: desde Pendiente no se puede completar (ver el test de transiciones).
+  const t = tarea(1, "Llamar a Juan");
+  const r = resolverAnalisis(analizar("marca como hecha la tarea llamar a Juan", H), ctx({ candidatos: [{ ...t, registro: { ...t.registro, status: "InProgress" } }] }));
   assert.equal(r.tipo, "cambios");
   if (r.tipo !== "cambios") return;
   assert.deepEqual(r.cambios, [{ operacion: "editar", fila: `fila:tasks:${T(1)}`, campos: { status: "Completed" } }]);
@@ -158,4 +160,20 @@ test("Dos proyectos con el mismo nombre: la opción elegida gana", () => {
   const final = resolverAnalisis(analizar(r.opciones[1]!.texto, H), c);
   assert.equal(final.tipo === "cambios" && (final.cambios[0] as { campos: Record<string, unknown> }).campos.project_id, `fila:projects:${P2}`);
   assert.equal(final.tipo === "cambios" && (final.cambios[0] as { campos: Record<string, unknown> }).campos.title, "pagar luz");
+});
+
+test("Una transición de estado no permitida no se propone: se ofrece el paso que sí se puede", () => {
+  const r = resolverAnalisis(analizar("marca como hecha la tarea llamar a Juan", H), ctx({ candidatos: [tarea(1, "Llamar a Juan")] }));
+  assert.equal(r.tipo, "pregunta");
+  if (r.tipo !== "pregunta") return;
+  assert.equal(r.entendi, "La tarea «Llamar a Juan» está pendiente y no puede pasar directo a completada. ¿Qué hago?");
+  assert.deepEqual(r.opciones.map((o) => o.etiqueta), ["Pasar a en progreso", "Pasar a reprogramada", "Pasar a cancelada"]);
+  const paso = resolverAnalisis(analizar(r.opciones[0]!.texto, H), ctx({ candidatos: [tarea(1, "Llamar a Juan")] }));
+  assert.deepEqual(paso.tipo === "cambios" && paso.cambios, [{ operacion: "editar", fila: `fila:tasks:${T(1)}`, campos: { status: "InProgress" } }]);
+});
+
+test("Una transición permitida sale directa", () => {
+  const enCurso = { ...tarea(1, "Llamar a Juan"), registro: { ...tarea(1, "Llamar a Juan").registro, status: "InProgress" } };
+  const r = resolverAnalisis(analizar("marca como hecha la tarea llamar a Juan", H), ctx({ candidatos: [enCurso] }));
+  assert.equal(r.tipo, "cambios");
 });

@@ -221,6 +221,11 @@ function resolverFila(a: Escribir, entrada: EntradaDeEscritura & { tabla: string
     };
   }
 
+  if (a.operacion === "editar") {
+    const salto = saltoNoPermitido(a, entrada, elegido);
+    if (salto) return salto;
+  }
+
   const filas = new Map([[elegido.fila, elegido.registro]]);
   const cambio = a.operacion === "borrar" ? { operacion: "borrar", fila: elegido.fila } : { operacion: "editar", fila: elegido.fila, campos: { ...a.valores } };
   const v = validarCambio(cambio, { filas, autorizados: ctx.autorizados });
@@ -228,4 +233,31 @@ function resolverFila(a: Escribir, entrada: EntradaDeEscritura & { tabla: string
 
   const entendi = `${VERBO[a.operacion]} ${conArticulo(entrada.etiqueta)} «${elegido.nombre}»${a.operacion === "editar" ? detalles(entrada, v.cambio.campos) : ""}`;
   return { tipo: "cambios", entendi: recortar(entendi, MAX_ENTENDI), cambios: [cambio], filas };
+}
+
+/**
+ * Un cambio de estado que la regla de la sección no deja (Pendiente →
+ * Completada en tareas) no se propone: la tarjeta fallaría al Guardar. Se
+ * ofrecen los pasos que sí se pueden dar desde donde está, como en su pantalla.
+ */
+function saltoNoPermitido(a: Escribir, entrada: EntradaDeEscritura, elegido: Candidato): Interpretacion | null {
+  for (const [campo, hacia] of Object.entries(a.valores)) {
+    const c = entrada.campos[campo];
+    const desde = elegido.registro[campo];
+    if (!c?.transiciones || typeof desde !== "string" || typeof hacia !== "string" || desde === hacia) continue;
+    const posibles = c.transiciones[desde] ?? [];
+    if (posibles.includes(hacia)) continue;
+    const esta = `${conArticulo(entrada.etiqueta)[0]!.toUpperCase()}${conArticulo(entrada.etiqueta).slice(1)} «${elegido.nombre}» está ${legible(c, desde)}`;
+    if (!posibles.length) return { tipo: "nada", entendi: `${esta} y ya no puede cambiar de ${c.etiqueta.toLowerCase()}.` };
+    const marca = uuidDe(elegido.fila);
+    return {
+      tipo: "pregunta",
+      entendi: recortar(`${esta} y no puede pasar directo a ${legible(c, hacia)}. ¿Qué hago?`, MAX_ENTENDI),
+      opciones: posibles.slice(0, MAX_OPCIONES).map((p) => ({
+        etiqueta: recortar(`Pasar a ${legible(c, p)}`, MAX_ETIQUETA),
+        texto: `cambia ${conArticulo(entrada.etiqueta)} «${elegido.nombre}» a ${legible(c, p)} #${marca}`
+      }))
+    };
+  }
+  return null;
 }

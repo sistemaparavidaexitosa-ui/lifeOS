@@ -12,7 +12,7 @@ import "server-only";
 import { after } from "next/server";
 import type { Cerebro } from "@/lib/ai-chat/cerebro";
 import type { AnySection } from "@/lib/domain/centro/runtime/types.ts";
-import { analizar, type Analisis } from "@/lib/domain/centro/interprete/analizar.ts";
+import { analizar, MARCA_DE_FILA, type Analisis } from "@/lib/domain/centro/interprete/analizar.ts";
 import { resolverAnalisis, type Candidato, type ContextoDeResolucion, type Interpretacion } from "@/lib/domain/centro/interprete/resolver.ts";
 import { normalizar } from "@/lib/domain/centro/interprete/normalizar.ts";
 import { ESCRITURA_POR_TABLA, type EntradaDeEscritura } from "@/lib/domain/centro/escritura/registro.ts";
@@ -37,7 +37,11 @@ export async function interpretarTurno(texto: string, cerebro: Cerebro): Promise
     if (a.tipo === "escribir") await leer(a, cerebro, ctx);
 
     const r = resolverAnalisis(a, ctx);
-    const salida = await pintar(r, cerebro, texto);
+    // Se entendió la orden pero algo no cuadró: es la retro que dice qué
+    // vocabulario o qué caso le falta al intérprete.
+    if (r.tipo === "ia") console.info(`[centro-interprete] a la IA (${a.tipo === "escribir" ? `${a.operacion} ${a.tabla}` : a.tipo}): ${r.motivo}`);
+    // La marca `#<uuid>` es para el intérprete; a la IA le llega la petición limpia.
+    const salida = await pintar(r, cerebro, texto.replace(MARCA_DE_FILA, ""));
     auditar(cerebro, r, a);
     return salida;
   } catch (e) {
@@ -120,10 +124,13 @@ async function candidatos(a: Escribir, entrada: EntradaDeEscritura, cerebro: Cer
     filas = (data ?? []) as unknown as Record<string, unknown>[];
   }
 
+  // Las claves del mapa (`fila:<tabla>:<uuid>`), no lo que devuelve
+  // `registrarFilas`: ahí el `id` crudo de la fila pisa al de `fila:…`.
   const mapa = new Map<string, Record<string, unknown>>();
-  return registrarFilas(mapa, a.tabla, filas).map((f) => {
-    const nombre = String(mapa.get(f.id)?.[entrada.titulo] ?? "");
-    return { fila: f.id, nombre, exacta: normalizar(nombre) === normalizar(a.resto), registro: mapa.get(f.id)! };
+  registrarFilas(mapa, a.tabla, filas);
+  return [...mapa].map(([fila, registro]) => {
+    const nombre = String(registro[entrada.titulo] ?? "");
+    return { fila, nombre, exacta: normalizar(nombre) === normalizar(a.resto), registro };
   });
 }
 

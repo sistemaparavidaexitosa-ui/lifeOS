@@ -12,6 +12,7 @@
 // permisos.
 
 import type { Domain } from "../../insights/types.ts";
+import { TASK_TRANSITIONS } from "../../task-state.ts";
 
 export const OPERACIONES = ["crear", "editar", "borrar"] as const;
 export type Operacion = (typeof OPERACIONES)[number];
@@ -40,6 +41,12 @@ export interface CampoDeEscritura {
   unidades?: readonly string[];
   /** D-205, `ref`: cómo se nombra el destino («en el proyecto …»). */
   menciones?: readonly string[];
+  /**
+   * D-205, `opcion`: a qué valores se puede pasar desde cada uno. Es la regla
+   * de la sección (p. ej. la máquina de estados de tareas): el intérprete no
+   * propone un salto que la server action va a rechazar al pulsar Guardar.
+   */
+  transiciones?: Readonly<Record<string, readonly string[]>>;
 }
 
 export interface EntradaDeEscritura {
@@ -73,6 +80,7 @@ const SINONIMOS_DE_ESTADO = {
   Completed: ["completada", "completado", "hecha", "hecho", "terminada", "terminado", "lista", "listo"],
   InProgress: ["en progreso", "empezada", "en curso"],
   Blocked: ["bloqueada", "bloqueado"],
+  Rescheduled: ["reprogramada", "reprogramado"],
   Cancelled: ["cancelada", "cancelado"],
   Pending: ["pendiente"]
 } as const;
@@ -106,7 +114,7 @@ export const ESCRITURA_POR_TABLA = {
         menciones: ["en el proyecto", "al proyecto", "del proyecto", "en proyecto"]
       },
       title: { etiqueta: "Título", tipo: "texto", obligatorio: true, min: 1, max: 200 },
-      status: { etiqueta: "Estado", tipo: "opcion", opciones: ESTADOS_DE_TAREA, soloEditar: true, sinonimos: SINONIMOS_DE_ESTADO },
+      status: { etiqueta: "Estado", tipo: "opcion", opciones: ESTADOS_DE_TAREA, soloEditar: true, sinonimos: SINONIMOS_DE_ESTADO, transiciones: TASK_TRANSITIONS },
       priority: { etiqueta: "Prioridad", tipo: "opcion", opciones: PRIORIDADES, sinonimos: SINONIMOS_DE_PRIORIDAD },
       due: { etiqueta: "Vence", tipo: "fecha" },
       est: { etiqueta: "Minutos estimados", tipo: "entero", min: 0, max: 1440, soloCrear: true, unidades: ["min", "minutos"] }
