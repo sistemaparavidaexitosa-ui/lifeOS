@@ -2,6 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { setTaskDeps } from "./task-detail-actions";
+import { STATUS_META } from "./status-meta";
+import type { TaskStatus } from "@/lib/domain/types.ts";
 
 interface DepCandidate {
   id: string;
@@ -44,7 +46,7 @@ export default function DepsField({
         <label key={t.id} className="row sm" style={{ margin: "4px 0", display: "flex", gap: 8, alignItems: "center" }}>
           <input type="checkbox" checked={checked.includes(t.id)} onChange={() => toggleDep(t.id)} style={{ width: "auto" }} />
           <span>
-            {t.title} <span style={{ color: "var(--muted)" }}>({t.status})</span>
+            {t.title} <span style={{ color: "var(--muted)" }}>({STATUS_META[t.status as TaskStatus]?.label ?? t.status})</span>
           </span>
         </label>
       ))}

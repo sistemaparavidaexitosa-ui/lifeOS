@@ -16,7 +16,7 @@
 // Toda la lógica pura (filtrar, ordenar, estadísticas, reordenar, guardas de
 // jerarquía) vive en src/lib/domain/board.ts y está cubierta por
 // tests/domain/board.test.ts — este archivo solo orquesta.
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   EMPTY_FILTERS,
   activeFilterCount,
@@ -28,6 +28,7 @@ import {
   type SortKey
 } from "@/lib/domain/board.ts";
 import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
+import { siguientePaso, textoDelPaso } from "@/lib/domain/execution/avance.ts";
 import type { BoardApi, BoardGroup, BoardTask, ExecutionView, MoveTarget } from "./board-types";
 import { VIEWS_CON_HILO, VIEWS_SIN_HILO } from "./board-types";
 import BoardToolbar from "./BoardToolbar";
@@ -37,9 +38,11 @@ import LinearList from "./LinearList";
 import KanbanBoard from "./KanbanBoard";
 import TableView from "./TableView";
 import TimelineView from "./TimelineView";
-import TaskDetailPanel from "./TaskDetailPanel";
+import TaskSheet from "./TaskSheet";
 import ProjectThreadPanel from "./ProjectThreadPanel";
-import { deleteTask as deleteTaskAction } from "./actions";
+import { deleteTask as deleteTaskAction, setTaskStatus } from "./actions";
+import { STATUS_META } from "./status-meta";
+import Avisos, { aviso, cerrarAviso } from "./ui/avisos";
 import { moveTaskToGroup, reorderTasks, setTaskPriority } from "./board-actions";
 import { setTaskParent } from "./tree-actions";
 
@@ -88,6 +91,16 @@ export default function BoardShell({
   const [detailTaskId, setDetailTaskId] = useState<string | null>(openTaskId);
   const [error, setError] = useState<string | null>(null);
 
+  // Los errores ya no ocupan una franja fija sobre el tablero: salen como
+  // aviso, que es donde la persona está mirando cuando algo falla.
+  useEffect(() => {
+    if (!error) return;
+    aviso({ id: "error-tablero", tono: "error", mensaje: error });
+    setError(null);
+  }, [error]);
+
+  const estados = useCambiosConDeshacer(tasks, setTasks);
+
   // ADOPTAR LA ESTRUCTURA QUE TRAE EL SERVIDOR.
   //
   // page.tsx monta este componente con key={projectId}: cambiar de tablero lo
@@ -106,7 +119,10 @@ export default function BoardShell({
   const [syncedRevision, setSyncedRevision] = useState(revision);
   if (revision !== syncedRevision) {
     setSyncedRevision(revision);
-    setTasks(initialTasks);
+    // Los cambios de estado que esperan su «Deshacer» todavía no están en la
+    // base: el árbol que llega los traería con el estado viejo y el toque se
+    // «perdería» a ojos de la persona.
+    setTasks(estados.conPendientes(initialTasks));
     setGroups(initialGroups);
     setAssigneesByTask(initialAssignees);
     // La selección se limpia porque puede señalar filas que ya no existen; la
@@ -247,6 +263,9 @@ export default function BoardShell({
       clearSelection: () => setSelected(new Set()),
       patchTask,
       setStatus: (id, status: TaskStatus) => patchTask(id, { status }),
+      cambiarEstado: estados.cambiar,
+      avanzar: estados.avanzar,
+      retenidas: estados.retenidas,
       setPriority: (id, priority: Priority, urgent: boolean) => {
         const previous = tasks.find((t) => t.id === id);
         patchTask(id, { priority, urgent });
@@ -278,34 +297,23 @@ export default function BoardShell({
       patchTask,
       deleteTask,
       moveTask,
-      tasks
+      tasks,
+      estados
     ]
   );
 
   const detailTask = detailTaskId ? tasks.find((t) => t.id === detailTaskId) : null;
 
   return (
-    <div className="ex-board">
+    <div className="xr-tablero">
       <BoardToolbar
         view={view}
         views={threadEnabled ? VIEWS_CON_HILO : VIEWS_SIN_HILO}
         onViewChange={changeView}
         filters={filters}
         onFiltersChange={setFilters}
-        sort={sort}
-        onSortChange={setSort}
         members={members}
-        filtersActive={filtersActive}
       />
-
-      {error && (
-        <div className="ex-alert" role="alert">
-          <span>{error}</span>
-          <button type="button" className="btn-ghost btn-sm" onClick={() => setError(null)}>
-            Cerrar
-          </button>
-        </div>
-      )}
 
       {!orderingEnabled && (
         <p className="ex-hint">
@@ -315,8 +323,11 @@ export default function BoardShell({
       )}
 
       {filtersActive && (
-        <p className="ex-hint">
-          Mostrando {filteredStats.total} de {stats.total} tareas — el orden manual se reactiva al limpiar los filtros.
+        <p className="xr-nota">
+          {filteredStats.total} de {stats.total} tareas
+          <button type="button" className="xr-enlace" onClick={() => setFilters(EMPTY_FILTERS)}>
+            Quitar filtros
+          </button>
         </p>
       )}
 
@@ -339,20 +350,144 @@ export default function BoardShell({
 
       <BulkActionBar api={api} tasks={tasks} onTasksChange={setTasks} />
 
-      {/* Un solo Drawer de detalle para TODAS las vistas — antes cada vista
-          montaba el suyo por fila/tarjeta (hasta N drawers en el DOM). */}
-      {detailTask && (
-        <TaskDetailPanel
-          key={detailTask.id}
-          taskId={detailTask.id}
-          taskTitle={detailTask.title}
-          compact
-          open
-          onOpenChange={(open) => !open && setDetailTaskId(null)}
-        />
-      )}
+      {/* Una sola hoja de detalle para TODAS las vistas. Se monta siempre y
+          se abre/cierra con `task`, para que la salida se anime. */}
+      <TaskSheet
+        task={detailTask ?? null}
+        subtareas={detailTask ? sortTasks(tasks.filter((t) => t.parentTaskId === detailTask.id), "manual") : []}
+        padre={detailTask?.parentTaskId ? (tasks.find((t) => t.id === detailTask.parentTaskId) ?? null) : null}
+        api={api}
+        onClose={() => setDetailTaskId(null)}
+        onOpenTask={setDetailTaskId}
+      />
 
-
+      <Avisos />
     </div>
   );
+}
+
+/**
+ * Cambios de estado con «Deshacer».
+ *
+ * La máquina de estados no tiene vuelta atrás (lo hecho no se deshace en el
+ * servidor), así que deshacer no puede ser «guardar y luego revertir». Es
+ * esperar: el cambio se pinta al instante y se guarda a los 4 s. Varios
+ * toques seguidos sobre la misma tarea se encadenan (Sin empezar → Trabajando
+ * → Hecho) en una sola espera y un solo aviso. Al salir de la página, lo
+ * pendiente se guarda de inmediato.
+ */
+function useCambiosConDeshacer(tasks: BoardTask[], setTasks: React.Dispatch<React.SetStateAction<BoardTask[]>>) {
+  const ESPERA_MS = 4000;
+  const pendientes = useRef(new Map<string, { original: TaskStatus; pasos: TaskStatus[]; timer: number }>());
+  const [retenidas, setRetenidas] = useState<Map<string, TaskStatus>>(new Map());
+  const tareas = useRef(tasks);
+  tareas.current = tasks;
+
+  /** Superpone a una lista del servidor los estados que aún no se guardan. */
+  const conPendientes = useCallback((lista: BoardTask[]) => {
+    if (!pendientes.current.size) return lista;
+    return lista.map((t) => {
+      const p = pendientes.current.get(t.id);
+      const ultimo = p?.pasos[p.pasos.length - 1];
+      return ultimo ? { ...t, status: ultimo } : t;
+    });
+  }, []);
+
+  const publicar = useCallback(() => {
+    setRetenidas(new Map([...pendientes.current].map(([id, p]) => [id, p.original])));
+  }, []);
+
+  const pintar = useCallback(
+    (id: string, status: TaskStatus) => setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status } : t))),
+    [setTasks]
+  );
+
+  const guardar = useCallback(
+    async (id: string) => {
+      const p = pendientes.current.get(id);
+      if (!p) return;
+      window.clearTimeout(p.timer);
+      pendientes.current.delete(id);
+      publicar();
+      let ultimo = p.original;
+      try {
+        for (const paso of p.pasos) {
+          await setTaskStatus(id, paso);
+          ultimo = paso;
+        }
+      } catch (e) {
+        // Lo que sí se guardó se queda; lo demás vuelve atrás y se explica.
+        pintar(id, ultimo);
+        const titulo = tareas.current.find((t) => t.id === id)?.title;
+        aviso({
+          id: `estado-${id}`,
+          tono: "error",
+          mensaje: `No se pudo marcar${titulo ? ` «${titulo}»` : ""}`,
+          detalle: e instanceof Error ? e.message : undefined
+        });
+      }
+    },
+    [pintar, publicar]
+  );
+
+  const cambiar = useCallback(
+    (id: string, to: TaskStatus) => {
+      const t = tareas.current.find((x) => x.id === id);
+      if (!t || t.status === to) return;
+      const p = pendientes.current.get(id) ?? { original: t.status, pasos: [], timer: 0 };
+      window.clearTimeout(p.timer);
+      p.pasos.push(to);
+      p.timer = window.setTimeout(() => void guardar(id), ESPERA_MS);
+      pendientes.current.set(id, p);
+      pintar(id, to);
+      publicar();
+      aviso({
+        id: `estado-${id}`,
+        mensaje: t.title,
+        detalle: to === "Completed" || to === "InProgress" || to === "Pending" ? textoDelPaso(to) : STATUS_META[to].label,
+        duracion: ESPERA_MS,
+        accion: {
+          etiqueta: "Deshacer",
+          alPulsar: () => {
+            const q = pendientes.current.get(id);
+            if (!q) return;
+            window.clearTimeout(q.timer);
+            pendientes.current.delete(id);
+            pintar(id, q.original);
+            publicar();
+          }
+        }
+      });
+    },
+    [guardar, pintar, publicar]
+  );
+
+  const avanzar = useCallback(
+    (id: string) => {
+      const t = tareas.current.find((x) => x.id === id);
+      const to = t ? siguientePaso(t.status) : null;
+      if (to) cambiar(id, to);
+    },
+    [cambiar]
+  );
+
+  // Salir de la página no puede perder un toque: lo pendiente se guarda ya.
+  useEffect(() => {
+    const vaciar = () => {
+      for (const id of [...pendientes.current.keys()]) {
+        void guardar(id);
+        cerrarAviso(`estado-${id}`);
+      }
+    };
+    const alOcultar = () => document.visibilityState === "hidden" && vaciar();
+    window.addEventListener("pagehide", vaciar);
+    document.addEventListener("visibilitychange", alOcultar);
+    return () => {
+      window.removeEventListener("pagehide", vaciar);
+      document.removeEventListener("visibilitychange", alOcultar);
+      vaciar();
+    };
+  }, [guardar]);
+
+  return useMemo(() => ({ cambiar, avanzar, retenidas, conPendientes }), [cambiar, avanzar, retenidas, conPendientes]);
 }

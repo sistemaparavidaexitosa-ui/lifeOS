@@ -1,5 +1,4 @@
 import { Suspense } from "react";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { fcorta } from "@/lib/format";
@@ -19,6 +18,7 @@ import { isExecutionView, type BoardGroup, type BoardTask, type ExecutionView } 
 import { getProjectLogAndKnowledge } from "./logbook-knowledge-actions";
 import { getSessionUser } from "@/lib/data/session";
 import { listTemplates } from "@/lib/data/templates";
+import "./execution.css";
 
 // REDISEÑO DEL FLUJO DE PROYECTOS (estilo monday.com / ClickUp)
 //
@@ -105,6 +105,13 @@ export default async function ExecutionPage({
     const rootTasks = (allTasks ?? []).filter((t) => t.project_id === p.id && !t.parent_task_id);
     const countable = rootTasks.filter((t) => t.status !== "Cancelled");
     const done = countable.filter((t) => t.status === "Completed").length;
+    // La fecha más próxima entre lo abierto que todavía no vence: la «línea de
+    // pulso» de la tarjeta (PortfolioBoard).
+    const nextDue =
+      rootTasks
+        .filter((t) => isOpen(t.status as TaskStatus) && t.due && t.due > today)
+        .map((t) => t.due as string)
+        .sort()[0] ?? null;
     return {
       id: p.id,
       title: p.title,
@@ -114,6 +121,9 @@ export default async function ExecutionPage({
       taskCount: rootTasks.length,
       openCount: rootTasks.filter((t) => isOpen(t.status as TaskStatus)).length,
       overdueCount: rootTasks.filter((t) => isOverdue({ due: t.due, status: t.status as TaskStatus }, today)).length,
+      dueTodayCount: rootTasks.filter((t) => t.due === today && isOpen(t.status as TaskStatus)).length,
+      inProgressCount: rootTasks.filter((t) => t.status === "InProgress").length,
+      nextDue,
       targetDate: p.target_date,
       targetDateLabel: p.target_date ? fcorta(p.target_date, today) : ""
     };
@@ -123,12 +133,13 @@ export default async function ExecutionPage({
   const backHref = selectedProject?.workspace_id ? `/execution?ws=${selectedProject.workspace_id}` : "/execution";
 
   return (
-    <main className="ex-main">
+    <main className="ex-main xr">
       {!selectedProject ? (
         <>
         <PortfolioBoard
           projects={portfolio}
           view={view}
+          today={today}
           workspaceName={activeWorkspace?.name ?? ""}
           workspaceNav={
             activeWorkspace && (
@@ -141,7 +152,7 @@ export default async function ExecutionPage({
                     equipo, que casi nadie mira, retrasaba la lista de
                     proyectos que mira todo el mundo. */}
                 {!activeWorkspace.isPersonal && (
-                  <Suspense fallback={<span className="btn-ghost btn-sm" aria-hidden>Equipo…</span>}>
+                  <Suspense fallback={<span className="xr-ficha" aria-hidden>Equipo…</span>}>
                     <TeamSection workspace={activeWorkspace} userId={user.id} projectCount={portfolio.length} />
                   </Suspense>
                 )}
@@ -158,33 +169,16 @@ export default async function ExecutionPage({
           )}
         </PortfolioBoard>
 
-        {/* El análisis mira la CARTERA —lo vencido, lo estancado, lo que ya se
-            puede empezar—, así que vive aquí y no dentro del tablero de un
-            proyecto. Y va tras un límite de Suspense por el mismo motivo que
-            TeamSection: su consulta no puede retrasar la lista de proyectos. */}
-        <Suspense fallback={null}>
-        </Suspense>
         </>
       ) : (
         <>
-          {/* Sin navegador lateral, esta miga de pan es el único camino de
-              vuelta: no puede faltar ni esconderse tras un menú. Vuelve al
-              espacio DEL PROYECTO, no al que estuviera activo: si no, abrir un
-              proyecto de otro espacio y volver dejaba al usuario en una
-              cartera donde ese proyecto no aparece. */}
-          <nav className="ex-crumbs" aria-label="Ruta">
-            <Link href={backHref} className="ex-crumb-back">
-              ← Proyectos
-            </Link>
-            <span className="ex-crumb-sep">/</span>
-            <span className="ex-crumb-current">{selectedProject.title}</span>
-          </nav>
           <BoardWorkspace
             projectRow={selectedProject}
             view={view}
             userId={user.id}
             today={today}
             openTaskId={taskTarget?.id ?? null}
+            backHref={backHref}
           />
         </>
       )}
@@ -202,7 +196,8 @@ async function BoardWorkspace({
   view,
   userId,
   today,
-  openTaskId
+  openTaskId,
+  backHref
 }: {
   projectRow: {
     id: string; title: string; objective: string | null; status: string;
@@ -215,6 +210,8 @@ async function BoardWorkspace({
   today: string;
   /** Tarea a abrir en el drawer al montar, cuando se llegó por ?task=. */
   openTaskId: string | null;
+  /** La cartera del espacio DEL PROYECTO: volver a otro espacio lo perdería de vista. */
+  backHref: string;
 }) {
   const supabase = await createClient();
   const projectId = projectRow.id;
@@ -334,6 +331,7 @@ async function BoardWorkspace({
   return (
     <>
       <BoardHeader
+        backHref={backHref}
         templates={await listTemplates("project")}
         workspaces={moveTargets}
         currentWorkspaceId={projectRow.workspace_id}

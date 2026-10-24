@@ -4168,3 +4168,26 @@ implementa:
   con anillo de avance. **Pulido:** el objetivo de la barra abre el Centro aunque
   su anfitrión no haya montado; fechas sin año del año en curso (`fcorta`);
   fuera de la vista los códigos de requisitos (BR-/FR-) y avisos sin valor.
+
+- **D-208 · Execution rediseñado para el iPhone: marcar sin preguntar, con
+  «Deshacer».** Encargo de la persona (2026-10-24): rediseño total de
+  /execution, moderno, «diseño Emil Kowalski»; lo usa sobre todo desde el
+  iPhone para marcar y revisar, y para planear proyectos con varias tareas.
+  **Portada:** pulso del espacio (para hoy · vencidas · en curso) y tarjetas
+  de proyecto con anillo y UNA línea de lo más urgente; borradores y pausados
+  aparte, cerrados plegados; estado, meta y borrar en una hoja del «⋯».
+  **Lista:** el círculo avanza un paso (`siguientePaso`: Sin empezar →
+  Trabajando → Hecho; la máquina de estados no deja saltar ni volver), también
+  deslizando la fila a la derecha; mantener el círculo abre todos los estados.
+  **«Deshacer» es esperar, no revertir:** lo hecho no vuelve en el servidor,
+  así que el cambio se pinta al instante y se guarda a los 4 s; la fila se
+  queda en su grupo mientras tanto (`retenidas`), los toques seguidos se
+  encadenan, al ocultar o salir de la página se guarda ya, y una lista nueva
+  del servidor no pisa lo pendiente. **Captura en lenguaje natural sin IA**
+  (`interpretarCaptura`): hoy, mañana, pasado, día de la semana, d/m, alta/
+  media/baja y «!» al final; las fichas dicen lo entendido antes de Enter.
+  **Detalle en una hoja** (cajón con arrastre y velocidad en el teléfono,
+  panel en escritorio): propiedades que se guardan al cambiarlas, subtareas
+  con su captura, notas, personas, archivos, hilo; borrar manteniendo
+  presionado. Vistas ofrecidas: Lista, Tablero, Calendario (+ Hilo en equipo).
+  Errores y confirmaciones como avisos. Nada del backend cambió.

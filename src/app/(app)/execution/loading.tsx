@@ -1,20 +1,25 @@
-// Esqueleto de la cartera de proyectos.
+// Esqueleto de Execution.
 //
-// Repite la FORMA de lo que va a llegar —barra del espacio y filas de tablero—
-// en vez de un spinner centrado: así el contenido aparece donde ya estaba
-// mirando el ojo, sin el salto que produce sustituir un spinner por una lista.
+// Repite la FORMA de lo que va a llegar —título, línea de pulso y tarjetas—
+// en vez de un spinner centrado: el contenido aparece donde ya estaba
+// mirando el ojo, sin el salto de sustituir un spinner por una lista.
+import "./execution.css";
+
 export default function Loading() {
   return (
-    <main className="ex-main" role="status" aria-label="Cargando proyectos">
-      <div className="sk-bar">
-        <div className="sk sk-chip" />
-        <div className="sk sk-chip" style={{ width: 168 }} />
-        <div className="sk sk-chip" style={{ width: 92 }} />
-      </div>
-      <div className="sk-stack" style={{ gap: 8 }}>
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="sk sk-row" />
-        ))}
+    <main className="ex-main xr" role="status" aria-label="Cargando proyectos">
+      <div className="xr-portada">
+        <div className="xr-portada-cabeza">
+          <div style={{ display: "grid", gap: 10 }}>
+            <div className="sk" style={{ width: 168, height: 34 }} />
+            <div className="sk" style={{ width: 220, height: 16 }} />
+          </div>
+        </div>
+        <div className="xr-tarjetas">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="sk" style={{ height: 72, borderRadius: 16 }} />
+          ))}
+        </div>
       </div>
     </main>
   );
