@@ -1,15 +1,20 @@
-// Encabezado del tablero abierto: identidad del proyecto + acciones que
-// aplican a TODO el proyecto (secuencia sugerida, editar, bitácora, base de
-// conocimiento). Server Component puro.
-import { Chip, Progress } from "@/components/ui";
+// Cabecera del proyecto abierto. Server Component puro.
+//
+// Arriba, el camino de vuelta; luego el título grande con el anillo de avance
+// a su lado y una sola línea de contexto (estado · meta · lo vencido). El
+// objetivo, si lo hay, debajo y en gris. Todo lo que se HACE con el proyecto
+// vive en el «⋯»: la cabecera informa, no ofrece diez botones.
+import Link from "next/link";
 import { PRIORITY_META, PROJECT_STATUS_META } from "./status-meta";
 import type { Priority, ProjectStatus } from "@/lib/domain/types.ts";
 import ProjectMenu, { type ProjectMenuData } from "./ProjectMenu";
 import type { LogEntry, KnowledgeItem } from "./logbook-knowledge-actions";
 import type { WorkspaceSummary } from "@/lib/data/workspaces";
 import type { ProjectTemplate } from "@/lib/domain/execution/project-templates.ts";
+import { Anillo } from "./ui/iconos";
 
 export default function BoardHeader({
+  backHref,
   project,
   progress,
   taskCount,
@@ -25,6 +30,8 @@ export default function BoardHeader({
   workspaceIsPersonal,
   templates
 }: {
+  /** A la cartera del espacio DEL PROYECTO (ver page.tsx). */
+  backHref: string;
   project: ProjectMenuData;
   progress: number;
   taskCount: number;
@@ -43,35 +50,20 @@ export default function BoardHeader({
   /** El catálogo publicado, de camino al menú del proyecto. */
   templates: ProjectTemplate[];
 }) {
+  const estado = PROJECT_STATUS_META[project.status as ProjectStatus];
+  const hechas = taskCount - openCount;
+
   return (
-    <header className="ex-header">
-      <h2 className="ex-header-title">{project.title}</h2>
-
-      <div className="ex-header-main">
-        <span className="lp-estado" style={{ cursor: "default" }}>
-          <span className="lp-punto" style={{ background: PROJECT_STATUS_META[project.status as ProjectStatus]?.color }} />
-          {PROJECT_STATUS_META[project.status as ProjectStatus]?.label ?? project.status}
-        </span>
-        <span className="lp-estado" style={{ cursor: "default" }}>
-          Prioridad {PRIORITY_META[project.priority as Priority]?.label.toLowerCase() ?? project.priority}
-        </span>
-        {targetDateLabel && <span className="lp-estado" style={{ cursor: "default" }}>Meta {targetDateLabel}</span>}
-        {overdueCount > 0 && <Chip kind="bad">{overdueCount} {overdueCount === 1 ? "vencida" : "vencidas"}</Chip>}
-      </div>
-
-      {project.objective && <p className="ex-header-objective text-sm">{project.objective}</p>}
-
-      <div className="ex-header-progress">
-        <Progress pct={progress} />
-        <span className="text-xs">
-          {progress}% · {openCount} abiertas de {taskCount}
-        </span>
-      </div>
-
-      {/* Una sola acción visible. "✨ Sugerir secuencia" era un botón ancho
-          permanente para algo que se usa de vez en cuando: ahora es una
-          entrada del "⋯" y esta fila deja de estirarse por él. */}
-      <div className="ex-header-actions">
+    <header className="xr-cabecera">
+      <div className="xr-cabecera-arriba">
+        {/* Sin navegador lateral, este es el único camino de vuelta: no puede
+            faltar ni esconderse tras un menú. */}
+        <Link href={backHref} className="xr-volver">
+          <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+          Proyectos
+        </Link>
         <ProjectMenu
           project={project}
           taskCount={taskCount}
@@ -85,6 +77,32 @@ export default function BoardHeader({
           templates={templates}
         />
       </div>
+
+      <div className="xr-cabecera-principal">
+        <div className="xr-cabecera-texto">
+          <h1 className="xr-cabecera-titulo">{project.title}</h1>
+          <p className="xr-cabecera-linea">
+            <span className="xr-punto" style={{ background: estado?.color }} />
+            {estado?.label ?? project.status}
+            {targetDateLabel && <span>Meta {targetDateLabel}</span>}
+            {project.priority === "High" && <span>Prioridad {PRIORITY_META[project.priority as Priority].label.toLowerCase()}</span>}
+            {overdueCount > 0 && (
+              <span className="xr-tono-vencida">
+                {overdueCount} {overdueCount === 1 ? "vencida" : "vencidas"}
+              </span>
+            )}
+          </p>
+        </div>
+        <div className="xr-cabecera-avance">
+          <Anillo pct={progress} size={52} grosor={4} />
+          <span className="xr-cabecera-pct">{progress}%</span>
+          <span className="xr-cabecera-cuenta">
+            {hechas} de {taskCount}
+          </span>
+        </div>
+      </div>
+
+      {project.objective && <p className="xr-cabecera-objetivo">{project.objective}</p>}
     </header>
   );
 }

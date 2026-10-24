@@ -21,13 +21,13 @@ export interface BoardGroup {
 
 export type ExecutionView = "lista" | "board" | "kanban" | "table" | "timeline" | "hilo";
 
-export const VIEW_LABELS: Record<ExecutionView, { label: string; icon: string }> = {
-  lista: { label: "Lista", icon: "☰" },
-  board: { label: "Grupos", icon: "📋" },
-  kanban: { label: "Tablero", icon: "🗂️" },
-  table: { label: "Tabla", icon: "📑" },
-  timeline: { label: "Timeline", icon: "📆" },
-  hilo: { label: "Hilo", icon: "💬" }
+export const VIEW_LABELS: Record<ExecutionView, { label: string }> = {
+  lista: { label: "Lista" },
+  board: { label: "Grupos" },
+  kanban: { label: "Tablero" },
+  table: { label: "Tabla" },
+  timeline: { label: "Calendario" },
+  hilo: { label: "Hilo" }
 };
 
 export function isExecutionView(value: string | undefined): value is ExecutionView {
@@ -42,9 +42,10 @@ export function isExecutionView(value: string | undefined): value is ExecutionVi
  * recorren las claves de VIEW_LABELS para que esa condición viva en UN sitio
  * —quien monta el tablero— y no repartida por la barra de pestañas.
  */
-// Rediseño (estilo Linear): Lista y Tablero. Grupos, Tabla y Timeline siguen
-// existiendo para los enlaces viejos (?view=), pero ya no se ofrecen.
-export const VIEWS_SIN_HILO: ExecutionView[] = ["lista", "kanban"];
+// Rediseño: Lista, Tablero y Calendario (la línea de tiempo, para planear un
+// proyecto con fechas). Grupos y Tabla siguen existiendo para los enlaces
+// viejos (?view=), pero ya no se ofrecen.
+export const VIEWS_SIN_HILO: ExecutionView[] = ["lista", "kanban", "timeline"];
 export const VIEWS_CON_HILO: ExecutionView[] = [...VIEWS_SIN_HILO, "hilo"];
 
 /** Destino de un arrastre: grupo y/o padre nuevos para la tarea movida. */
@@ -74,6 +75,20 @@ export interface BoardApi {
   clearSelection: () => void;
   patchTask: (id: string, patch: Partial<BoardTask>) => void;
   setStatus: (id: string, status: TaskStatus) => void;
+  /**
+   * Cambio de estado con «Deshacer»: se ve al instante y se guarda a los
+   * pocos segundos, salvo que la persona se arrepienta (BoardShell).
+   */
+  cambiarEstado: (id: string, to: TaskStatus) => void;
+  /** El toque en el círculo: el siguiente paso del camino feliz (avance.ts). */
+  avanzar: (id: string) => void;
+  /**
+   * Tareas con un cambio de estado todavía sin guardar, con el estado que
+   * tenían antes. La lista las deja en su sitio mientras tanto: que una fila
+   * salte de grupo bajo el dedo justo al marcarla es lo que hace dudar de si
+   * el toque contó.
+   */
+  retenidas: Map<string, TaskStatus>;
   setPriority: (id: string, priority: Priority, urgent: boolean) => void;
   setAssignees: (id: string, names: string[]) => void;
   taskCreated: (task: BoardTask) => void;

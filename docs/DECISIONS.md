@@ -4168,3 +4168,57 @@ implementa:
   con anillo de avance. **Pulido:** el objetivo de la barra abre el Centro aunque
   su anfitrión no haya montado; fechas sin año del año en curso (`fcorta`);
   fuera de la vista los códigos de requisitos (BR-/FR-) y avisos sin valor.
+
+- **D-208 · Execution rediseñado para el iPhone: marcar sin preguntar, con
+  «Deshacer».** Encargo de la persona (2026-10-24): rediseño total de
+  /execution, moderno, «diseño Emil Kowalski»; lo usa sobre todo desde el
+  iPhone para marcar y revisar, y para planear proyectos con varias tareas.
+  **Portada:** pulso del espacio (para hoy · vencidas · en curso) y tarjetas
+  de proyecto con anillo y UNA línea de lo más urgente; borradores y pausados
+  aparte, cerrados plegados; estado, meta y borrar en una hoja del «⋯».
+  **Lista:** el círculo avanza un paso (`siguientePaso`: Sin empezar →
+  Trabajando → Hecho; la máquina de estados no deja saltar ni volver), también
+  deslizando la fila a la derecha; mantener el círculo abre todos los estados.
+  **«Deshacer» es esperar, no revertir:** lo hecho no vuelve en el servidor,
+  así que el cambio se pinta al instante y se guarda a los 4 s; la fila se
+  queda en su grupo mientras tanto (`retenidas`), los toques seguidos se
+  encadenan, al ocultar o salir de la página se guarda ya, y una lista nueva
+  del servidor no pisa lo pendiente. **Captura en lenguaje natural sin IA**
+  (`interpretarCaptura`): hoy, mañana, pasado, día de la semana, d/m, alta/
+  media/baja y «!» al final; las fichas dicen lo entendido antes de Enter.
+  **Detalle en una hoja** (cajón con arrastre y velocidad en el teléfono,
+  panel en escritorio): propiedades que se guardan al cambiarlas, subtareas
+  con su captura, notas, personas, archivos, hilo; borrar manteniendo
+  presionado. Vistas ofrecidas: Lista, Tablero, Calendario (+ Hilo en equipo).
+  Errores y confirmaciones como avisos. Nada del backend cambió.
+
+- **D-209 · La Lista es un árbol; filtrar con fichas, buscar en su pantalla.**
+  Encargo de la persona (2026-10-24): los filtros y la búsqueda «no encajan ni
+  sirven bien», y la vista por defecto debe agrupar por tarea principal con sus
+  subtareas, hasta tres subniveles. **Árbol** (`construirArbol`, arbol.ts):
+  cada tarea principal con sus subtareas debajo, línea guía y «3/5 ⌄» para
+  plegar (instantáneo; se recuerda por proyecto); más allá del tercer subnivel
+  solo un «+N» que abre el detalle. Al pie de cada rama, «Añadir subtarea»;
+  deslizar una fila a la izquierda la abre bajo cualquier tarea. Lo hecho se
+  pliega solo («2 hechas»; principales cerradas a «Hechas» al final) en vez de
+  ser un filtro. Al cerrar la última subtarea, un aviso propone cerrar la
+  principal (`caminoA` recorre los pasos que pida la máquina de estados).
+  **Filtrar ≠ mostrar:** fichas excluyentes bajo las pestañas (Todo · Mías ·
+  Hoy · Vencidas · Semana, con su cuenta), que son formas de los filtros de
+  siempre (`filtrosDeRapido`), así Lista, Tablero y Calendario filtran igual;
+  al filtrar, el padre queda atenuado como contexto («1 de 2») y solo salen
+  las hijas que coinciden. La hoja «Mostrar» (⋯): agrupar por tarea, estado,
+  fecha o nada; ordenar manual, fecha o prioridad; ver lo hecho; prioridad y
+  personas al final. Ficha, forma y plegado viajan en una cookie por proyecto
+  que lee el servidor: con almacenamiento del navegador la lista saltaba al
+  hidratar. **Buscar** abre una pantalla propia (montada e inerte para que
+  Safari saque el teclado en el mismo toque): sin acentos, títulos y notas,
+  con la ruta del padre y el círculo para marcar; vacía, lo reciente.
+  **Guardado de estados por `/api/execution/estado`** (fetch con `keepalive`,
+  todos los pasos en una petición): con Server Actions, Next las manda de una
+  en una y al salir de la app lo que seguía en cola se perdía (verificado:
+  tareas que quedaban en «Trabajando»). La lógica de un paso vive en
+  `lib/data/estado-tarea.ts` y la comparten setTaskStatus y la ruta. La
+  captura ya no se bloquea mientras el servidor contesta (se encolan). La barra
+  de vistas deja de ser fija: era una tercera franja fija y se escondía bajo
+  las pestañas de la sección.
