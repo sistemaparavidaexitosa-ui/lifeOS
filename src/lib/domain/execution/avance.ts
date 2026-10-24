@@ -8,7 +8,7 @@
 //
 // El servidor sigue validando cada transición; esto solo elige cuál pedir.
 
-import { canTransition } from "../task-state.ts";
+import { TASK_TRANSITIONS, canTransition } from "../task-state.ts";
 import type { TaskStatus } from "../types.ts";
 
 const SIGUIENTE: Partial<Record<TaskStatus, TaskStatus>> = {
@@ -37,4 +37,30 @@ export function textoDelPaso(to: TaskStatus): string {
     default:
       return "Actualizada";
   }
+}
+
+/**
+ * Los pasos para llevar una tarea de `desde` a `hasta` por transiciones
+ * válidas, el camino más corto. Cerrar una tarea principal desde «Sin
+ * empezar» es [Trabajando, Hecho]: el servidor no deja saltar. Vacío si ya
+ * está ahí; null si no hay camino (lo cerrado no vuelve).
+ */
+export function caminoA(desde: TaskStatus, hasta: TaskStatus): TaskStatus[] | null {
+  if (desde === hasta) return [];
+  const previo = new Map<TaskStatus, TaskStatus>();
+  const cola: TaskStatus[] = [desde];
+  while (cola.length) {
+    const actual = cola.shift()!;
+    for (const siguiente of TASK_TRANSITIONS[actual]) {
+      if (siguiente === desde || previo.has(siguiente)) continue;
+      previo.set(siguiente, actual);
+      if (siguiente === hasta) {
+        const camino: TaskStatus[] = [];
+        for (let x: TaskStatus | undefined = hasta; x && x !== desde; x = previo.get(x)) camino.unshift(x);
+        return camino;
+      }
+      cola.push(siguiente);
+    }
+  }
+  return null;
 }

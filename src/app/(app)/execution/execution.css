@@ -114,6 +114,21 @@
 .xr-ficha-btn:disabled { opacity: 0.45; cursor: default; }
 .xr-fichas { display: flex; flex-wrap: wrap; gap: 6px; }
 
+/* Fichas rápidas bajo la barra: una fila que se desliza de lado. */
+.xr-rapidos {
+  display: flex;
+  gap: 6px;
+  margin: -6px -16px 0;
+  padding: 0 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.xr-rapidos::-webkit-scrollbar { display: none; }
+.xr-rapidos .xr-ficha-btn { flex: none; }
+.xr-ficha-cuenta { font-size: 12px; opacity: 0.6; font-variant-numeric: tabular-nums; }
+.xr-ficha-btn[data-alerta]:not([aria-pressed="true"]) .xr-ficha-cuenta { color: var(--danger); opacity: 1; }
+
 .xr-nota {
   display: flex;
   align-items: center;
@@ -182,7 +197,9 @@
   font-size: 16px; /* 16 px: Safari no hace zoom al enfocar */
   color: var(--text);
 }
-.xr-buscar input:focus { background: transparent; }
+.xr-buscar input:focus,
+.xr-buscar input:focus-visible { background: transparent; outline: none; box-shadow: none; }
+.xr-buscar:focus-within { box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 28%, transparent) inset; }
 .xr-buscar .xr-icono-btn { width: 32px; height: 32px; }
 
 .xr-menu { display: grid; gap: 2px; padding: 2px; min-width: 196px; }
@@ -433,18 +450,14 @@
 
 .xr-tablero { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 
+/* No se fija: arriba ya están fijas la barra de la app y las pestañas de la
+   sección, y una tercera franja fija se comía un quinto de la pantalla del
+   iPhone (y se escondía debajo de las pestañas). */
 .xr-barra {
-  position: sticky;
-  top: var(--topbar-h);
-  z-index: var(--z-toolbar);
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 0 -16px;
-  padding: 8px 16px;
-  background: color-mix(in srgb, var(--bg) 82%, transparent);
-  -webkit-backdrop-filter: saturate(1.4) blur(16px);
-  backdrop-filter: saturate(1.4) blur(16px);
+  padding: 8px 0;
 }
 .xr-barra-acciones { display: flex; align-items: center; margin-left: auto; }
 
@@ -488,6 +501,11 @@ button.xr-vista:active { transform: var(--xr-press); }
   transition: clip-path 260ms var(--ease-out);
 }
 .xr-vistas-activa .xr-vista { color: var(--text); }
+.xr-vistas:not([data-medido]) .xr-vista[aria-selected="true"] {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 0 0 1px var(--line) inset;
+}
 
 /* ── Lista ───────────────────────────────────────────────────────────────── */
 
@@ -505,7 +523,8 @@ button.xr-vista:active { transform: var(--xr-press); }
   transition: border-color 150ms ease;
 }
 .xr-captura:focus-within { border-color: color-mix(in srgb, var(--text) 28%, transparent); }
-.xr-captura[data-pendiente] { opacity: 0.7; }
+/* Creándose: solo el «+» lo dice; el campo sigue libre para la siguiente. */
+.xr-captura[data-pendiente] .xr-captura-mas { opacity: 0.5; }
 .xr-captura input {
   flex: 1;
   min-width: 0;
@@ -565,7 +584,104 @@ button.xr-vista:active { transform: var(--xr-press); }
 }
 
 .xr-fila { position: relative; border-bottom: 1px solid var(--line); }
-.xr-fila:last-child { border-bottom: 0; }
+li.xr-fila:last-child { border-bottom: 0; }
+
+/* ── Árbol: tarea principal y sus subtareas ──────────────────────────────
+   Cada nivel entra 22 px; una línea fina baja desde el círculo del padre.
+   La última línea divisoria de la tarjeta se esconde bajo su borde. */
+.xr-nodo { list-style: none; }
+.xr-filas > li:last-child { margin-bottom: -1px; }
+.xr-rama { position: relative; list-style: none; margin: 0; padding: 0; }
+.xr-rama::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  bottom: 22px;
+  left: calc(26px + (var(--nivel) - 1) * 22px);
+  width: 1px;
+  background: var(--line);
+  pointer-events: none;
+}
+.xr-fila[data-nivel]:not([data-nivel="0"]) { --xr-fila: 46px; }
+.xr-fila[data-nivel]:not([data-nivel="0"]) .xr-fila-titulo { font-size: 15px; }
+.xr-fila[data-contexto] .xr-titulo-texto { color: var(--muted); }
+.xr-fila[data-contexto] .xr-estado { opacity: 0.5; }
+
+.xr-plegar {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 36px;
+  margin-right: -6px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 160ms var(--ease-out);
+}
+.xr-plegar:active { transform: var(--xr-press); }
+.xr-mas-hondas {
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface2);
+  cursor: pointer;
+}
+/* Con ratón: «+» para añadir subtarea al pasar por la fila. En el teléfono
+   eso es deslizar a la izquierda. */
+.xr-fila-agregar {
+  display: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.xr-ver-hechas {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px 0 calc(18px + var(--nivel) * 22px);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* El «Añadir subtarea» al pie de cada rama: una fila más, no una tarjeta. */
+.xr-captura-fila {
+  min-height: 44px;
+  padding: 0 12px 0 calc(4px + var(--nivel) * 22px);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--surface);
+}
+.xr-captura-fila .xr-captura-mas {
+  width: 44px;
+  height: 36px;
+  background: transparent;
+  color: var(--muted);
+}
+.xr-captura-fila:focus-within .xr-captura-mas { background: transparent; color: var(--text); }
+.xr-captura-fila input::placeholder { color: var(--muted); }
+.xr-captura-fila input:focus,
+.xr-captura-fila input:focus-visible { outline: none; box-shadow: none; }
 
 /* Lo que asoma al deslizar: el estado al que se va a pasar. */
 .xr-fila-fondo {
@@ -590,7 +706,15 @@ button.xr-vista:active { transform: var(--xr-press); }
 /* La palomita y la cruz se recortan contra el color del fondo, no contra
    el del icono: si no, «Hecho» asomaba como un círculo negro liso. */
 .xr-fila-fondo[data-a="Completed"] .xr-icono-estado .xr-palomita { stroke: var(--st-done); }
-.xr-fila[data-deslizando] .xr-fila-fondo { opacity: 1; }
+/* A la izquierda asoma «Subtarea», pegado al borde derecho. */
+.xr-fila-fondo-izq {
+  justify-content: flex-end;
+  padding: 0 18px 0 0;
+  background: var(--info);
+  color: #fff;
+}
+.xr-fila[data-deslizando="der"] .xr-fila-fondo:not(.xr-fila-fondo-izq),
+.xr-fila[data-deslizando="izq"] .xr-fila-fondo-izq { opacity: 1; }
 
 .xr-fila-cuerpo {
   position: relative;
@@ -696,6 +820,10 @@ button.xr-vista:active { transform: var(--xr-press); }
   button.xr-vista:hover { color: var(--text); }
   .xr-ficha-btn:not([aria-pressed="true"]):hover { border-color: var(--line); }
   .xr-nuevo:hover { opacity: 0.88; }
+  .xr-fila-cuerpo:hover .xr-fila-agregar { display: grid; }
+  .xr-fila-agregar:hover,
+  .xr-plegar:hover,
+  .xr-ver-hechas:hover { color: var(--text); }
 }
 
 /* ── Tablero y calendario: se visten igual que la lista ──────────────────── */
@@ -1108,6 +1236,80 @@ button.xr-vista:active { transform: var(--xr-press); }
 }
 
 .xr-filtros { display: flex; flex-direction: column; gap: 22px; }
+.xr-segmentos-ancho { display: flex; width: 100%; }
+.xr-segmentos-ancho .xr-segmento { flex: 1; min-width: 0; padding: 0 6px; }
+
+/* ── Búsqueda a pantalla completa ────────────────────────────────────────
+   Montada siempre e inerte: así la lupa enfoca el campo en el mismo toque
+   y Safari saca el teclado. Entra en 220 ms, sale en 160. */
+.xr-busqueda {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-centro) + 1);
+  display: flex;
+  flex-direction: column;
+  padding-top: env(safe-area-inset-top);
+  background: var(--bg);
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+  transition: opacity 160ms ease, transform 160ms var(--ease-out);
+}
+.xr-busqueda[data-abierta] {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+  transition-duration: 220ms;
+}
+.xr-busqueda-cabeza { display: flex; align-items: center; gap: 10px; padding: 10px 16px; }
+.xr-busqueda-cancelar {
+  flex: none;
+  height: 40px;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 550;
+  cursor: pointer;
+}
+.xr-busqueda-cuerpo {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px 16px calc(24px + env(safe-area-inset-bottom));
+}
+.xr-busqueda-pista { margin: 32px auto; max-width: 32ch; text-align: center; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.xr-resultado-texto {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-height: var(--xr-fila);
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 15.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.xr-resultado-texto .xr-titulo-texto { max-width: 100%; }
+.xr-resultado-ruta {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--muted);
+}
+.xr-resultado mark {
+  background: color-mix(in srgb, var(--warn) 30%, transparent);
+  color: inherit;
+  border-radius: 3px;
+}
 
 .xr-cargando { display: grid; gap: 10px; }
 .xr-cargando .sk { height: 46px; border-radius: 14px; }
@@ -1257,7 +1459,9 @@ button.xr-vista:active { transform: var(--xr-press); }
   .xr-chevron,
   .xr-interruptor-bola,
   .xr-vistas-activa,
+  .xr-busqueda,
   .xr-anillo-valor { transition-property: opacity; }
+  .xr-busqueda { transform: none; }
   .xr-sheet { transform: none !important; opacity: 0; transition: opacity 200ms ease; }
   .xr-sheet-root[data-state="open"] .xr-sheet { opacity: 1; }
   .xr-aviso,

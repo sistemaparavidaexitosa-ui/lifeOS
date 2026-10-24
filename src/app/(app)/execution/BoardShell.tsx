@@ -17,18 +17,28 @@
 // jerarquía) vive en src/lib/domain/board.ts y está cubierta por
 // tests/domain/board.test.ts — este archivo solo orquesta.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   EMPTY_FILTERS,
   activeFilterCount,
-  computeStats,
   filterTaskTree,
+  isOpen,
+  matchesFilters,
   sortTasks,
   subtreeIds,
   type BoardFilters,
   type SortKey
 } from "@/lib/domain/board.ts";
 import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
-import { siguientePaso, textoDelPaso } from "@/lib/domain/execution/avance.ts";
+import { caminoA, siguientePaso, textoDelPaso } from "@/lib/domain/execution/avance.ts";
+import {
+  RAPIDOS,
+  filtrosDeRapido,
+  padreListoParaCerrar,
+  type PreferenciasLista,
+  type Presentacion,
+  type Rapido
+} from "@/lib/domain/execution/arbol.ts";
 import type { BoardApi, BoardGroup, BoardTask, ExecutionView, MoveTarget } from "./board-types";
 import { VIEWS_CON_HILO, VIEWS_SIN_HILO } from "./board-types";
 import BoardToolbar from "./BoardToolbar";
@@ -40,7 +50,9 @@ import TableView from "./TableView";
 import TimelineView from "./TimelineView";
 import TaskSheet from "./TaskSheet";
 import ProjectThreadPanel from "./ProjectThreadPanel";
-import { deleteTask as deleteTaskAction, setTaskStatus } from "./actions";
+import Busqueda, { type BusquedaHandle } from "./Busqueda";
+import { esListaDeTextos, useGuardado, usePreferenciasLista } from "./ui/guardado";
+import { deleteTask as deleteTaskAction } from "./actions";
 import { STATUS_META } from "./status-meta";
 import Avisos, { aviso, cerrarAviso } from "./ui/avisos";
 import { moveTaskToGroup, reorderTasks, setTaskPriority } from "./board-actions";
@@ -58,7 +70,10 @@ export default function BoardShell({
   orderingEnabled,
   threadEnabled,
   openTaskId,
-  today
+  today,
+  yo,
+  notas,
+  preferencias
 }: {
   projectId: string;
   initialTasks: BoardTask[];
@@ -76,12 +91,27 @@ export default function BoardShell({
   openTaskId: string | null;
   /** "Hoy" en la zona horaria del PERFIL, calculado en el servidor. */
   today: string;
+  /** Nombre con el que esta persona aparece como responsable (ficha «Mías»). */
+  yo: string | null;
+  /** Notas de cada tarea que tiene, para la búsqueda. */
+  notas: Record<string, string>;
+  /** Ficha, forma de la Lista y ramas plegadas, leídas de la cookie del proyecto. */
+  preferencias: PreferenciasLista;
 }) {
   const [tasks, setTasks] = useState<BoardTask[]>(initialTasks);
   const [groups, setGroups] = useState<BoardGroup[]>(initialGroups);
   const [assigneesByTask, setAssigneesByTask] = useState(initialAssignees);
   const [view, setView] = useState<ExecutionView>(initialView);
+  // Filtros finos (prioridad, personas). Las fichas rápidas van aparte y se
+  // recuerdan por proyecto, igual que la forma de la Lista y lo plegado.
   const [filters, setFilters] = useState<BoardFilters>(EMPTY_FILTERS);
+  const [prefs, setPrefs] = usePreferenciasLista(projectId, preferencias);
+  const { rapido, presentacion } = prefs;
+  const setRapido = useCallback((r: Rapido) => setPrefs((p) => ({ ...p, rapido: r })), [setPrefs]);
+  const setPresentacion = useCallback((x: Presentacion) => setPrefs((p) => ({ ...p, presentacion: x })), [setPrefs]);
+  const [recientes, setRecientes] = useGuardado<string[]>(`xr:recientes:${projectId}`, [], esListaDeTextos);
+  const plegados = useMemo(() => new Set(prefs.plegados), [prefs.plegados]);
+  const busqueda = useRef<BusquedaHandle>(null);
   const [sort, setSort] = useState<SortKey>("manual");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   // Se abre YA con la tarea que venía en la URL: llegar desde una mención y
@@ -142,14 +172,50 @@ export default function BoardShell({
     }
   }
 
+  // «Mías» solo existe con equipo; si la ficha guardada ya no aplica, cuenta como «Todo».
+  const conMias = members.length > 1 && Boolean(yo);
+  const rapidoVigente: Rapido = rapido === "mias" && !conMias ? "todo" : rapido;
+  const efectivos = useMemo(() => filtrosDeRapido(rapidoVigente, filters, yo), [rapidoVigente, filters, yo]);
+  const filtersActive = activeFilterCount(efectivos) > 0;
+
+  // Tablero y Calendario: la lista filtrada conservando los padres.
   const filteredTasks = useMemo(
-    () => filterTaskTree(tasks, filters, { assigneesByTask, today }),
-    [tasks, filters, assigneesByTask, today]
+    () => filterTaskTree(tasks, efectivos, { assigneesByTask, today }),
+    [tasks, efectivos, assigneesByTask, today]
+  );
+  // La Lista arma su árbol con TODAS las tareas y este criterio: así distingue
+  // lo que coincide de lo que solo está para dar contexto.
+  const coincide = useMemo(
+    () => (filtersActive ? (t: BoardTask) => matchesFilters(t, efectivos, { assigneesByTask, today }) : undefined),
+    [filtersActive, efectivos, assigneesByTask, today]
+  );
+  // Cuántas tareas vivas hay detrás de cada ficha, con los filtros finos puestos.
+  const cuentas = useMemo(() => {
+    const out: Partial<Record<Rapido, number>> = {};
+    for (const r of RAPIDOS) {
+      const f = filtrosDeRapido(r.clave, filters, yo);
+      out[r.clave] = tasks.filter((t) => isOpen(t.status) && matchesFilters(t, f, { assigneesByTask, today })).length;
+    }
+    return out;
+  }, [tasks, filters, yo, assigneesByTask, today]);
+
+  const alternarPlegado = useCallback(
+    (id: string) =>
+      setPrefs((p) => ({ ...p, plegados: p.plegados.includes(id) ? p.plegados.filter((x) => x !== id) : [...p.plegados, id] })),
+    [setPrefs]
+  );
+  const desplegar = useCallback(
+    (id: string) => setPrefs((p) => (p.plegados.includes(id) ? { ...p, plegados: p.plegados.filter((x) => x !== id) } : p)),
+    [setPrefs]
   );
 
-  const stats = useMemo(() => computeStats(tasks, today), [tasks, today]);
-  const filteredStats = useMemo(() => computeStats(filteredTasks, today), [filteredTasks, today]);
-  const filtersActive = activeFilterCount(filters) > 0;
+  const abrirDetalle = useCallback(
+    (id: string) => {
+      setDetailTaskId(id);
+      setRecientes((prev) => [id, ...prev.filter((x) => x !== id)].slice(0, 8));
+    },
+    [setRecientes]
+  );
 
   /** Hermanos de una tarea (misma lista de orden): raíz de un grupo o subtareas de un padre. */
   const siblingsOf = useCallback(
@@ -278,7 +344,7 @@ export default function BoardShell({
       taskCreated: (task) => setTasks((prev) => [...prev, task]),
       deleteTask,
       moveTask,
-      openDetail: (taskId) => setDetailTaskId(taskId),
+      openDetail: abrirDetalle,
       reportError: setError
     }),
     [
@@ -298,7 +364,8 @@ export default function BoardShell({
       deleteTask,
       moveTask,
       tasks,
-      estados
+      estados,
+      abrirDetalle
     ]
   );
 
@@ -310,9 +377,16 @@ export default function BoardShell({
         view={view}
         views={threadEnabled ? VIEWS_CON_HILO : VIEWS_SIN_HILO}
         onViewChange={changeView}
+        rapido={rapidoVigente}
+        onRapidoChange={setRapido}
+        cuentas={cuentas}
+        conMias={conMias}
         filters={filters}
         onFiltersChange={setFilters}
         members={members}
+        presentacion={presentacion}
+        onPresentacionChange={setPresentacion}
+        onBuscar={() => busqueda.current?.abrir()}
       />
 
       {!orderingEnabled && (
@@ -322,16 +396,22 @@ export default function BoardShell({
         </p>
       )}
 
-      {filtersActive && (
-        <p className="xr-nota">
-          {filteredStats.total} de {stats.total} tareas
-          <button type="button" className="xr-enlace" onClick={() => setFilters(EMPTY_FILTERS)}>
-            Quitar filtros
-          </button>
-        </p>
+      {view === "lista" && (
+        <LinearList
+          api={api}
+          tasks={tasks}
+          coincide={coincide}
+          presentacion={presentacion}
+          plegados={plegados}
+          alternarPlegado={alternarPlegado}
+          desplegar={desplegar}
+          filtro={filtersActive ? (rapidoVigente !== "todo" ? (RAPIDOS.find((r) => r.clave === rapidoVigente)?.etiqueta ?? null) : "estos filtros") : null}
+          onQuitarFiltro={() => {
+            setRapido("todo");
+            setFilters(EMPTY_FILTERS);
+          }}
+        />
       )}
-
-      {view === "lista" && <LinearList api={api} tasks={filteredTasks} />}
       {view === "board" && (
         <MondayBoard
           api={api}
@@ -358,8 +438,10 @@ export default function BoardShell({
         padre={detailTask?.parentTaskId ? (tasks.find((t) => t.id === detailTask.parentTaskId) ?? null) : null}
         api={api}
         onClose={() => setDetailTaskId(null)}
-        onOpenTask={setDetailTaskId}
+        onOpenTask={abrirDetalle}
       />
+
+      <Busqueda ref={busqueda} tasks={tasks} notas={notas} recientes={recientes} api={api} onAbrirTarea={abrirDetalle} />
 
       <Avisos />
     </div>
@@ -378,6 +460,7 @@ export default function BoardShell({
  */
 function useCambiosConDeshacer(tasks: BoardTask[], setTasks: React.Dispatch<React.SetStateAction<BoardTask[]>>) {
   const ESPERA_MS = 4000;
+  const router = useRouter();
   const pendientes = useRef(new Map<string, { original: TaskStatus; pasos: TaskStatus[]; timer: number }>());
   const [retenidas, setRetenidas] = useState<Map<string, TaskStatus>>(new Map());
   const tareas = useRef(tasks);
@@ -402,32 +485,58 @@ function useCambiosConDeshacer(tasks: BoardTask[], setTasks: React.Dispatch<Reac
     [setTasks]
   );
 
+  /**
+   * Manda cambios a /api/execution/estado: todos los pasos de cada tarea en una
+   * sola petición con `keepalive`, que el navegador termina aunque la página
+   * muera (cambiar de app en el iPhone, recargar). No por Server Action: Next
+   * las encola de una en una y lo que seguía en cola al salir se perdía.
+   */
+  const enviar = useCallback(
+    (cambios: { id: string; pasos: TaskStatus[]; original: TaskStatus }[]) => {
+      const revertir = (id: string, a: TaskStatus, detalle: string) => {
+        pintar(id, a);
+        const titulo = tareas.current.find((t) => t.id === id)?.title;
+        aviso({ id: `estado-${id}`, tono: "error", mensaje: `No se pudo marcar${titulo ? ` «${titulo}»` : ""}`, detalle });
+      };
+      fetch("/api/execution/estado", {
+        method: "POST",
+        keepalive: true,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ cambios: cambios.map(({ id, pasos }) => ({ id, pasos })) })
+      })
+        .then(async (r) => {
+          const datos = (await r.json().catch(() => ({}))) as {
+            reason?: string;
+            resultados?: { id: string; ultimo: TaskStatus | null; error: string | null }[];
+          };
+          if (!r.ok) throw new Error(datos.reason ?? "No se pudo guardar");
+          // Lo que sí se guardó se queda; lo demás vuelve atrás y se explica.
+          for (const res of datos.resultados ?? []) {
+            const c = cambios.find((x) => x.id === res.id);
+            if (res.error && c) revertir(res.id, res.ultimo ?? c.original, res.error);
+          }
+          // El resto de la página (avance del proyecto, Home) se pone al día.
+          if (document.visibilityState === "visible") router.refresh();
+        })
+        .catch((e) => {
+          // Sin red o con la página ya cerrada. Si sigue viva, nada se guardó.
+          if (document.visibilityState !== "visible") return;
+          for (const c of cambios) revertir(c.id, c.original, e instanceof Error ? e.message : "Sin conexión");
+        });
+    },
+    [pintar, router]
+  );
+
   const guardar = useCallback(
-    async (id: string) => {
+    (id: string) => {
       const p = pendientes.current.get(id);
       if (!p) return;
       window.clearTimeout(p.timer);
       pendientes.current.delete(id);
       publicar();
-      let ultimo = p.original;
-      try {
-        for (const paso of p.pasos) {
-          await setTaskStatus(id, paso);
-          ultimo = paso;
-        }
-      } catch (e) {
-        // Lo que sí se guardó se queda; lo demás vuelve atrás y se explica.
-        pintar(id, ultimo);
-        const titulo = tareas.current.find((t) => t.id === id)?.title;
-        aviso({
-          id: `estado-${id}`,
-          tono: "error",
-          mensaje: `No se pudo marcar${titulo ? ` «${titulo}»` : ""}`,
-          detalle: e instanceof Error ? e.message : undefined
-        });
-      }
+      enviar([{ id, pasos: p.pasos, original: p.original }]);
     },
-    [pintar, publicar]
+    [enviar, publicar]
   );
 
   const cambiar = useCallback(
@@ -437,10 +546,11 @@ function useCambiosConDeshacer(tasks: BoardTask[], setTasks: React.Dispatch<Reac
       const p = pendientes.current.get(id) ?? { original: t.status, pasos: [], timer: 0 };
       window.clearTimeout(p.timer);
       p.pasos.push(to);
-      p.timer = window.setTimeout(() => void guardar(id), ESPERA_MS);
+      p.timer = window.setTimeout(() => guardar(id), ESPERA_MS);
       pendientes.current.set(id, p);
       pintar(id, to);
       publicar();
+      if (to === "Completed") proponerCerrarPadre(id);
       aviso({
         id: `estado-${id}`,
         mensaje: t.title,
@@ -455,12 +565,40 @@ function useCambiosConDeshacer(tasks: BoardTask[], setTasks: React.Dispatch<Reac
             pendientes.current.delete(id);
             pintar(id, q.original);
             publicar();
+            const padre = tareas.current.find((x) => x.id === id)?.parentTaskId;
+            if (padre) cerrarAviso(`cerrar-${padre}`);
           }
         }
       });
     },
     [guardar, pintar, publicar]
   );
+  const cambiarRef = useRef(cambiar);
+  cambiarRef.current = cambiar;
+
+  /**
+   * Al marcar la última subtarea, el aviso propone cerrar también la tarea
+   * principal. «Cerrar» recorre los pasos que pida la máquina de estados
+   * (Sin empezar → Trabajando → Hecho) como un solo cambio con «Deshacer», y
+   * de ahí puede subir otro nivel.
+   */
+  function proponerCerrarPadre(hijaId: string) {
+    const padre = padreListoParaCerrar(tareas.current, hijaId, (x) => (x.id === hijaId ? "Completed" : x.status));
+    if (!padre) return;
+    aviso({
+      id: `cerrar-${padre.id}`,
+      mensaje: `Todo listo en «${padre.title}»`,
+      detalle: "¿La cierras también?",
+      duracion: 6000,
+      accion: {
+        etiqueta: "Cerrar",
+        alPulsar: () => {
+          const actual = tareas.current.find((x) => x.id === padre.id);
+          for (const paso of (actual && caminoA(actual.status, "Completed")) ?? []) cambiarRef.current(padre.id, paso);
+        }
+      }
+    });
+  }
 
   const avanzar = useCallback(
     (id: string) => {
@@ -471,13 +609,19 @@ function useCambiosConDeshacer(tasks: BoardTask[], setTasks: React.Dispatch<Reac
     [cambiar]
   );
 
-  // Salir de la página no puede perder un toque: lo pendiente se guarda ya.
+  // Salir de la página no puede perder un toque: lo pendiente se guarda ya,
+  // todo junto.
   useEffect(() => {
     const vaciar = () => {
-      for (const id of [...pendientes.current.keys()]) {
-        void guardar(id);
+      if (!pendientes.current.size) return;
+      const cambios = [...pendientes.current].map(([id, p]) => {
+        window.clearTimeout(p.timer);
         cerrarAviso(`estado-${id}`);
-      }
+        return { id, pasos: p.pasos, original: p.original };
+      });
+      pendientes.current.clear();
+      publicar();
+      enviar(cambios);
     };
     const alOcultar = () => document.visibilityState === "hidden" && vaciar();
     window.addEventListener("pagehide", vaciar);
@@ -487,7 +631,7 @@ function useCambiosConDeshacer(tasks: BoardTask[], setTasks: React.Dispatch<Reac
       document.removeEventListener("visibilitychange", alOcultar);
       vaciar();
     };
-  }, [guardar]);
+  }, [enviar, publicar]);
 
   return useMemo(() => ({ cambiar, avanzar, retenidas, conPendientes }), [cambiar, avanzar, retenidas, conPendientes]);
 }

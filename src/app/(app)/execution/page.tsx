@@ -1,9 +1,11 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { fcorta } from "@/lib/format";
 import { boardRevision, isOverdue, isOpen, type BoardTaskLike } from "@/lib/domain/board.ts";
 import { todayInTimeZone } from "@/lib/domain/datetime.ts";
+import { cookiePreferencias, leerPreferencias } from "@/lib/domain/execution/arbol.ts";
 import { getUserTimeZone } from "@/lib/data/profile";
 import { listWorkspaces, ROLES_QUE_CREAN, type WorkspaceSummary } from "@/lib/data/workspaces";
 import type { TaskStatus, Priority, ProjectStatus } from "@/lib/domain/types.ts";
@@ -249,7 +251,7 @@ async function BoardWorkspace({
     .eq("project_id", projectId)
     .maybeSingle();
 
-  const TASK_COLUMNS = "id, title, status, priority, due, start_date, est, urgent, parent_task_id, group_id, position";
+  const TASK_COLUMNS = "id, title, status, priority, due, start_date, est, urgent, parent_task_id, group_id, position, description";
   let orderingEnabled = true;
   let taskRows: Record<string, unknown>[] = [];
 
@@ -261,7 +263,7 @@ async function BoardWorkspace({
     orderingEnabled = false;
     const { data: legacy } = await supabase
       .from("tasks")
-      .select("id, title, status, priority, due, start_date, est, urgent, parent_task_id, group_id")
+      .select("id, title, status, priority, due, start_date, est, urgent, parent_task_id, group_id, description")
       .eq("project_id", projectId)
       .order("created_at");
     taskRows = (legacy ?? []) as Record<string, unknown>[];
@@ -282,6 +284,14 @@ async function BoardWorkspace({
     groupId: (t.group_id as string | null) ?? null,
     position: (t.position as number | undefined) ?? index
   }));
+
+  // Las notas solo viajan para la búsqueda (BoardShell → Busqueda): el detalle
+  // las vuelve a pedir frescas al abrirse.
+  const notas: Record<string, string> = {};
+  for (const t of taskRows) {
+    const d = typeof t.description === "string" ? t.description.trim() : "";
+    if (d) notas[t.id as string] = d;
+  }
 
   const taskIds = tasks.map((t) => t.id);
   const [{ data: groupRows }, { data: assigneeRows }, { data: commentRows }, logAndKnowledge] = await Promise.all([
@@ -308,13 +318,16 @@ async function BoardWorkspace({
   // 0030 todo proyecto vive en uno, y en el personal el RPC devuelve al propio
   // usuario como único miembro, que es exactamente lo que aquella rama
   // fabricaba a mano consultando `profiles`.
-  const { data: memberRows } = await supabase.rpc("list_workspace_members", { p_workspace_id: projectRow.workspace_id });
+  const [{ data: memberRows }, { data: miPerfil }] = await Promise.all([
+    supabase.rpc("list_workspace_members", { p_workspace_id: projectRow.workspace_id }),
+    // El nombre con el que esta persona figura como responsable: la ficha «Mías».
+    supabase.from("profiles").select("name").eq("user_id", userId).maybeSingle()
+  ]);
   let members: string[] = ((memberRows ?? []) as { user_name: string }[]).map((m) => m.user_name);
   if (!members.length) {
     // Red de seguridad para una cuenta anterior a 0030 cuya membresía Owner no
     // llegó a crearse: sin esto el selector de responsables saldría vacío.
-    const { data: profile } = await supabase.from("profiles").select("name").eq("user_id", userId).single();
-    if (profile?.name) members = [profile.name];
+    if (miPerfil?.name) members = [miPerfil.name];
   }
 
   const groups = (groupRows ?? []) as BoardGroup[];
@@ -371,6 +384,9 @@ async function BoardWorkspace({
         threadEnabled={threadEnabled}
         openTaskId={openTaskId}
         today={today}
+        yo={miPerfil?.name ?? null}
+        notas={notas}
+        preferencias={leerPreferencias((await cookies()).get(cookiePreferencias(projectId))?.value)}
       />
     </>
   );

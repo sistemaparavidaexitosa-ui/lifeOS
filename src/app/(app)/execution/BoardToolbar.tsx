@@ -1,119 +1,172 @@
 "use client";
 
-// La barra de un proyecto: vistas a la izquierda, buscar y filtrar a la derecha.
+// La barra de un proyecto. Arriba, fija: las vistas, la lupa y «Mostrar».
+// Debajo, las fichas rápidas (Todo · Mías · Hoy · Vencidas · Semana).
+//
+// Se separa QUÉ se ve de CÓMO se ve, como en Linear:
+//   - las fichas filtran, con un toque y sin hojas. Son excluyentes: en el
+//     teléfono casi nunca se combinan filtros. Cada una dice cuántas tareas
+//     vivas tiene, para saber antes de tocar;
+//   - «Mostrar» (⋯) decide la forma de la Lista: agrupar, ordenar, ver lo
+//     hecho. Al final lleva el filtro fino (prioridad, personas), que se usa
+//     poco y por eso no ocupa la barra.
+// Buscar ya no filtra: abre su propia pantalla (Busqueda.tsx).
 //
 // El selector de vistas usa la técnica de las pestañas duplicadas: debajo, la
 // fila normal; encima, una copia pintada como «activa» y recortada con
 // `clip-path` justo sobre la pestaña elegida. Al cambiar, el recorte se
 // desliza, y el color del texto cambia exactamente en el borde del indicador
 // —algo que animar colores por separado nunca consigue—.
-//
-// Los filtros dejan de ser seis menús sueltos: una sola hoja con todo, que en
-// el iPhone sube desde abajo. El botón dice cuántos hay activos.
 
 import { useLayoutEffect, useRef, useState } from "react";
-import { IconFilter, IconSearch, IconClose } from "@/components/icons";
-import { EMPTY_FILTERS, activeFilterCount, type BoardFilters, type DateBucket } from "@/lib/domain/board.ts";
-import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
-import { STATUS_META, STATUS_ORDER, PRIORITY_META, PRIORITY_ORDER } from "./status-meta";
+import { IconClose, IconSearch } from "@/components/icons";
+import { EMPTY_FILTERS, type BoardFilters } from "@/lib/domain/board.ts";
+import {
+  PRESENTACION_INICIAL,
+  RAPIDOS,
+  type Agrupacion,
+  type OrdenLista,
+  type Presentacion,
+  type Rapido
+} from "@/lib/domain/execution/arbol.ts";
+import type { Priority } from "@/lib/domain/types.ts";
+import { PRIORITY_META, PRIORITY_ORDER } from "./status-meta";
 import { VIEW_LABELS, type ExecutionView } from "./board-types";
 import Sheet from "./ui/Sheet";
-import { IconoEstado } from "./ui/iconos";
 
-const FECHAS: { key: DateBucket; label: string }[] = [
-  { key: "all", label: "Todas" },
-  { key: "overdue", label: "Vencidas" },
-  { key: "today", label: "Hoy" },
-  { key: "week", label: "7 días" },
-  { key: "nodate", label: "Sin fecha" }
+const AGRUPAR: { clave: Agrupacion; etiqueta: string }[] = [
+  { clave: "principal", etiqueta: "Tarea" },
+  { clave: "estado", etiqueta: "Estado" },
+  { clave: "fecha", etiqueta: "Fecha" },
+  { clave: "ninguno", etiqueta: "Nada" }
 ];
+const ORDENAR: { clave: OrdenLista; etiqueta: string }[] = [
+  { clave: "manual", etiqueta: "Manual" },
+  { clave: "fecha", etiqueta: "Fecha" },
+  { clave: "prioridad", etiqueta: "Prioridad" }
+];
+
+/** Filtros finos activos (los de la hoja, no las fichas). */
+export function filtrosFinos(f: BoardFilters): number {
+  return (f.priorities.length ? 1 : 0) + (f.people.length ? 1 : 0);
+}
 
 export default function BoardToolbar({
   view,
   views,
   onViewChange,
+  rapido,
+  onRapidoChange,
+  cuentas,
+  conMias,
   filters,
   onFiltersChange,
-  members
+  members,
+  presentacion,
+  onPresentacionChange,
+  onBuscar
 }: {
   view: ExecutionView;
   /** Qué pestañas se ofrecen. Ver VIEWS_CON_HILO/VIEWS_SIN_HILO en board-types. */
   views: ExecutionView[];
   onViewChange: (v: ExecutionView) => void;
+  rapido: Rapido;
+  onRapidoChange: (r: Rapido) => void;
+  /** Tareas vivas por ficha. */
+  cuentas: Partial<Record<Rapido, number>>;
+  /** «Mías» solo con equipo: en el espacio personal todo es de uno. */
+  conMias: boolean;
+  /** Solo los filtros finos (prioridad, personas). */
   filters: BoardFilters;
   onFiltersChange: (f: BoardFilters) => void;
   members: string[];
+  presentacion: Presentacion;
+  onPresentacionChange: (p: Presentacion) => void;
+  /** Debe abrir y enfocar la búsqueda en el mismo toque (ver Busqueda.tsx). */
+  onBuscar: () => void;
 }) {
-  const [buscando, setBuscando] = useState(Boolean(filters.text));
   const [hojaAbierta, setHojaAbierta] = useState(false);
-  const busqueda = useRef<HTMLInputElement>(null);
-  // El texto tiene su propio campo; el contador del botón cuenta lo demás.
-  const activos = activeFilterCount({ ...filters, text: "" });
+  const finos = filtrosFinos(filters);
+  const enLista = view === "lista";
+  const cambiada =
+    enLista &&
+    (presentacion.agrupar !== PRESENTACION_INICIAL.agrupar ||
+      presentacion.orden !== PRESENTACION_INICIAL.orden ||
+      presentacion.hechas !== PRESENTACION_INICIAL.hechas);
+  // Las fichas no aplican al hilo: es una conversación, no tareas.
+  const conFichas = view !== "hilo";
 
   return (
-    <div className="xr-barra">
-      {/* Vistas: un toque, sin animación de contenido (se usa muchas veces). */}
-      {!buscando && <SelectorDeVistas views={views} view={view} onChange={onViewChange} />}
-
-      {buscando && (
-        <div className="xr-buscar">
-          <IconSearch width={16} height={16} aria-hidden />
-          <input
-            ref={busqueda}
-            type="search"
-            value={filters.text}
-            onChange={(e) => onFiltersChange({ ...filters, text: e.target.value })}
-            placeholder="Buscar en el proyecto"
-            aria-label="Buscar en el proyecto"
-            autoFocus
-            onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                onFiltersChange({ ...filters, text: "" });
-                setBuscando(false);
-              }
-            }}
-          />
+    <>
+      <div className="xr-barra">
+        <SelectorDeVistas views={views} view={view} onChange={onViewChange} />
+        <div className="xr-barra-acciones">
+          <button type="button" className="xr-icono-btn" onClick={onBuscar} aria-label="Buscar">
+            <IconSearch width={18} height={18} />
+          </button>
           <button
             type="button"
             className="xr-icono-btn"
-            aria-label="Cerrar búsqueda"
-            onClick={() => {
-              onFiltersChange({ ...filters, text: "" });
-              setBuscando(false);
-            }}
+            data-activo={finos > 0 || cambiada || undefined}
+            onClick={() => setHojaAbierta(true)}
+            aria-label={finos ? `Mostrar y filtrar (${finos} filtros)` : "Mostrar y filtrar"}
           >
-            <IconClose width={16} height={16} />
+            <IconoMas />
+            {finos > 0 && <span className="xr-contador">{finos}</span>}
           </button>
         </div>
-      )}
-
-      <div className="xr-barra-acciones">
-        {!buscando && (
-          <button type="button" className="xr-icono-btn" onClick={() => setBuscando(true)} aria-label="Buscar">
-            <IconSearch width={18} height={18} />
-          </button>
-        )}
-        <button
-          type="button"
-          className="xr-icono-btn"
-          data-activo={activos > 0 || undefined}
-          onClick={() => setHojaAbierta(true)}
-          aria-label={activos ? `Filtros (${activos} activos)` : "Filtros"}
-        >
-          <IconFilter width={18} height={18} />
-          {activos > 0 && <span className="xr-contador">{activos}</span>}
-        </button>
       </div>
+
+      {conFichas && (
+        <div className="xr-rapidos" role="toolbar" aria-label="Filtrar tareas">
+          {RAPIDOS.filter((r) => conMias || r.clave !== "mias").map((r) => {
+            const n = cuentas[r.clave];
+            return (
+              <button
+                key={r.clave}
+                type="button"
+                className="xr-ficha-btn"
+                aria-pressed={rapido === r.clave}
+                data-alerta={(r.clave === "vencidas" && n) || undefined}
+                onClick={() => onRapidoChange(r.clave)}
+              >
+                {r.etiqueta}
+                {r.clave !== "todo" && n ? <span className="xr-ficha-cuenta">{n}</span> : null}
+              </button>
+            );
+          })}
+          {finos > 0 && (
+            <button
+              type="button"
+              className="xr-ficha-btn"
+              aria-pressed="true"
+              onClick={() => onFiltersChange(EMPTY_FILTERS)}
+              aria-label="Quitar los filtros de prioridad y personas"
+            >
+              {finos === 1 ? "1 filtro" : `${finos} filtros`}
+              <IconClose width={13} height={13} />
+            </button>
+          )}
+        </div>
+      )}
 
       <Sheet
         open={hojaAbierta}
         onClose={() => setHojaAbierta(false)}
-        title="Filtros"
+        title={enLista ? "Mostrar" : "Filtrar"}
         size="sm"
         footer={
           <div className="xr-pie-acciones">
-            <button type="button" className="btn-ghost" onClick={() => onFiltersChange({ ...EMPTY_FILTERS, text: filters.text })} disabled={!activos}>
-              Limpiar
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => {
+                onFiltersChange(EMPTY_FILTERS);
+                if (enLista) onPresentacionChange(PRESENTACION_INICIAL);
+              }}
+              disabled={!finos && !cambiada}
+            >
+              Restablecer
             </button>
             <button type="button" className="btn-primary" onClick={() => setHojaAbierta(false)}>
               Listo
@@ -121,8 +174,75 @@ export default function BoardToolbar({
           </div>
         }
       >
-        <Filtros filters={filters} onChange={onFiltersChange} members={members} />
+        <div className="xr-filtros">
+          {enLista && (
+            <>
+              <section className="xr-ajuste">
+                <h3 className="xr-etiqueta">Agrupar por</h3>
+                <Segmentos
+                  opciones={AGRUPAR}
+                  valor={presentacion.agrupar}
+                  onChange={(agrupar) => onPresentacionChange({ ...presentacion, agrupar })}
+                  etiqueta="Agrupar por"
+                />
+              </section>
+              <section className="xr-ajuste">
+                <h3 className="xr-etiqueta">Ordenar</h3>
+                <Segmentos
+                  opciones={ORDENAR}
+                  valor={presentacion.orden}
+                  onChange={(orden) => onPresentacionChange({ ...presentacion, orden })}
+                  etiqueta="Ordenar"
+                />
+              </section>
+              <label className="xr-interruptor-fila">
+                <span>Mostrar lo hecho en su sitio</span>
+                <Interruptor checked={presentacion.hechas} onChange={(hechas) => onPresentacionChange({ ...presentacion, hechas })} />
+              </label>
+            </>
+          )}
+          <FiltrosFinos filters={filters} onChange={onFiltersChange} members={members} />
+        </div>
       </Sheet>
+    </>
+  );
+}
+
+function IconoMas() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+      <circle cx="4" cy="9" r="1.5" fill="currentColor" />
+      <circle cx="9" cy="9" r="1.5" fill="currentColor" />
+      <circle cx="14" cy="9" r="1.5" fill="currentColor" />
+    </svg>
+  );
+}
+
+function Segmentos<T extends string>({
+  opciones,
+  valor,
+  onChange,
+  etiqueta
+}: {
+  opciones: { clave: T; etiqueta: string }[];
+  valor: T;
+  onChange: (v: T) => void;
+  etiqueta: string;
+}) {
+  return (
+    <div className="xr-segmentos xr-segmentos-ancho" role="radiogroup" aria-label={etiqueta}>
+      {opciones.map((o) => (
+        <button
+          key={o.clave}
+          type="button"
+          role="radio"
+          aria-checked={valor === o.clave}
+          className="xr-segmento"
+          onClick={() => onChange(o.clave)}
+        >
+          {o.etiqueta}
+        </button>
+      ))}
     </div>
   );
 }
@@ -161,7 +281,9 @@ function SelectorDeVistas({
   const ofrecida = views.includes(view);
 
   return (
-    <div className="xr-vistas" ref={contenedor} role="tablist" aria-label="Vistas del proyecto">
+    // Hasta medir (antes de hidratar) no hay recorte: la pestaña activa se
+    // pinta sola por CSS para que nunca se vea el selector sin elegida.
+    <div className="xr-vistas" ref={contenedor} role="tablist" aria-label="Vistas del proyecto" data-medido={Boolean(recorte) || undefined}>
       {views.map((key) => (
         <button
           key={key}
@@ -188,52 +310,13 @@ function SelectorDeVistas({
   );
 }
 
-function Filtros({ filters, onChange, members }: { filters: BoardFilters; onChange: (f: BoardFilters) => void; members: string[] }) {
+function FiltrosFinos({ filters, onChange, members }: { filters: BoardFilters; onChange: (f: BoardFilters) => void; members: string[] }) {
   function alternar<T>(lista: T[], valor: T): T[] {
     return lista.includes(valor) ? lista.filter((x) => x !== valor) : [...lista, valor];
   }
 
   return (
-    <div className="xr-filtros">
-      <section>
-        <h3 className="xr-etiqueta">Vencimiento</h3>
-        <div className="xr-fichas">
-          {FECHAS.map((f) => (
-            <button
-              key={f.key}
-              type="button"
-              className="xr-ficha-btn"
-              aria-pressed={filters.date === f.key}
-              onClick={() => onChange({ ...filters, date: f.key })}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section>
-        <h3 className="xr-etiqueta">Estado</h3>
-        <div className="xr-fichas">
-          {STATUS_ORDER.map((s: TaskStatus) => (
-            <button
-              key={s}
-              type="button"
-              className="xr-ficha-btn"
-              aria-pressed={filters.statuses.includes(s)}
-              onClick={() => onChange({ ...filters, statuses: alternar(filters.statuses, s) })}
-            >
-              <IconoEstado estado={s} size={14} />
-              {STATUS_META[s].label}
-            </button>
-          ))}
-        </div>
-        <label className="xr-interruptor-fila">
-          <span>Ocultar lo hecho y cancelado</span>
-          <Interruptor checked={filters.hideDone} onChange={(hideDone) => onChange({ ...filters, hideDone })} />
-        </label>
-      </section>
-
+    <>
       <section>
         <h3 className="xr-etiqueta">Prioridad</h3>
         <div className="xr-fichas">
@@ -270,7 +353,7 @@ function Filtros({ filters, onChange, members }: { filters: BoardFilters; onChan
           </div>
         </section>
       )}
-    </div>
+    </>
   );
 }
 
