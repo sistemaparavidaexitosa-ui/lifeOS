@@ -1,398 +1,366 @@
 "use client";
-// Ribbon del tablero, al estilo de monday.com: una fila de acciones planas
-// (buscar / persona / filtro / ordenar / status / fechas) debajo de las
-// pestañas de vista.
+
+// La barra de un proyecto. Arriba, fija: las vistas, la lupa y «Mostrar».
+// Debajo, las fichas rápidas (Todo · Mías · Hoy · Vencidas · Semana).
 //
-// POR QUÉ ASÍ
-//   - Antes la barra apilaba TRES bloques: pestañas, una fila con input +
-//     botones sueltos, y un resumen de 6 chips de estado. Ocupaba media
-//     pantalla antes de mostrar una sola tarea, y el resumen repetía lo que
-//     el propio tablero ya dice (cada fila lleva su estado y su fecha).
-//   - Ahora cada control es un botón plano con ícono que abre su popover.
-//     Los filtros activos se ven en el propio botón (tinte + contador), así
-//     que no hace falta un panel siempre abierto ni una fila de estadísticas.
+// Se separa QUÉ se ve de CÓMO se ve, como en Linear:
+//   - las fichas filtran, con un toque y sin hojas. Son excluyentes: en el
+//     teléfono casi nunca se combinan filtros. Cada una dice cuántas tareas
+//     vivas tiene, para saber antes de tocar;
+//   - «Mostrar» (⋯) decide la forma de la Lista: agrupar, ordenar, ver lo
+//     hecho. Al final lleva el filtro fino (prioridad, personas), que se usa
+//     poco y por eso no ocupa la barra.
+// Buscar ya no filtra: abre su propia pantalla (Busqueda.tsx).
 //
-// El filtro sigue siendo UNO solo para las 4 vistas: BoardShell filtra con
-// filterTaskTree() y les pasa el resultado ya filtrado.
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import MenuSurface, { useMenuAnchor } from "@/components/MenuSurface";
-import { STATUS_META, STATUS_ORDER, PRIORITY_META, PRIORITY_ORDER } from "./status-meta";
-import { VIEW_LABELS, type ExecutionView } from "./board-types";
-import { EMPTY_FILTERS, type BoardFilters, type DateBucket, type SortKey } from "@/lib/domain/board.ts";
-import type { TaskStatus, Priority } from "@/lib/domain/types.ts";
+// El selector de vistas usa la técnica de las pestañas duplicadas: debajo, la
+// fila normal; encima, una copia pintada como «activa» y recortada con
+// `clip-path` justo sobre la pestaña elegida. Al cambiar, el recorte se
+// desliza, y el color del texto cambia exactamente en el borde del indicador
+// —algo que animar colores por separado nunca consigue—.
+
+import { useLayoutEffect, useRef, useState } from "react";
+import { IconClose, IconSearch } from "@/components/icons";
+import { EMPTY_FILTERS, type BoardFilters } from "@/lib/domain/board.ts";
 import {
-  IconCalendar,
-  IconChevronDown,
-  IconClose,
-  IconFilter,
-  IconSearch,
-  IconSort,
-  IconStatus,
-  IconUser,
-  type IconProps
-} from "@/components/icons";
+  PRESENTACION_INICIAL,
+  RAPIDOS,
+  type Agrupacion,
+  type OrdenLista,
+  type Presentacion,
+  type Rapido
+} from "@/lib/domain/execution/arbol.ts";
+import type { Priority } from "@/lib/domain/types.ts";
+import { PRIORITY_META, PRIORITY_ORDER } from "./status-meta";
+import { VIEW_LABELS, type ExecutionView } from "./board-types";
+import Sheet from "./ui/Sheet";
 
-const DATE_BUCKETS: { key: DateBucket; label: string }[] = [
-  { key: "all", label: "Todas" },
-  { key: "overdue", label: "Vencidas" },
-  { key: "today", label: "Hoy" },
-  { key: "week", label: "Próx. 7 días" },
-  { key: "nodate", label: "Sin fecha" }
+const AGRUPAR: { clave: Agrupacion; etiqueta: string }[] = [
+  { clave: "principal", etiqueta: "Tarea" },
+  { clave: "estado", etiqueta: "Estado" },
+  { clave: "fecha", etiqueta: "Fecha" },
+  { clave: "ninguno", etiqueta: "Nada" }
+];
+const ORDENAR: { clave: OrdenLista; etiqueta: string }[] = [
+  { clave: "manual", etiqueta: "Manual" },
+  { clave: "fecha", etiqueta: "Fecha" },
+  { clave: "prioridad", etiqueta: "Prioridad" }
 ];
 
-const SORTS: { key: SortKey; label: string }[] = [
-  { key: "manual", label: "Manual (arrastrar)" },
-  { key: "due", label: "Fecha de vencimiento" },
-  { key: "priority", label: "Prioridad" },
-  { key: "status", label: "Estado" },
-  { key: "title", label: "Título (A-Z)" }
-];
+/** Filtros finos activos (los de la hoja, no las fichas). */
+export function filtrosFinos(f: BoardFilters): number {
+  return (f.priorities.length ? 1 : 0) + (f.people.length ? 1 : 0);
+}
 
 export default function BoardToolbar({
   view,
   views,
   onViewChange,
+  rapido,
+  onRapidoChange,
+  cuentas,
+  conMias,
   filters,
   onFiltersChange,
-  sort,
-  onSortChange,
   members,
-  filtersActive
+  presentacion,
+  onPresentacionChange,
+  onBuscar
 }: {
   view: ExecutionView;
   /** Qué pestañas se ofrecen. Ver VIEWS_CON_HILO/VIEWS_SIN_HILO en board-types. */
   views: ExecutionView[];
   onViewChange: (v: ExecutionView) => void;
+  rapido: Rapido;
+  onRapidoChange: (r: Rapido) => void;
+  /** Tareas vivas por ficha. */
+  cuentas: Partial<Record<Rapido, number>>;
+  /** «Mías» solo con equipo: en el espacio personal todo es de uno. */
+  conMias: boolean;
+  /** Solo los filtros finos (prioridad, personas). */
   filters: BoardFilters;
   onFiltersChange: (f: BoardFilters) => void;
-  sort: SortKey;
-  onSortChange: (s: SortKey) => void;
   members: string[];
-  filtersActive: boolean;
+  presentacion: Presentacion;
+  onPresentacionChange: (p: Presentacion) => void;
+  /** Debe abrir y enfocar la búsqueda en el mismo toque (ver Busqueda.tsx). */
+  onBuscar: () => void;
 }) {
-  function toggleIn<T>(list: T[], value: T): T[] {
-    return list.includes(value) ? list.filter((x) => x !== value) : [...list, value];
-  }
-
-  // "Filtro" recoge lo que no tiene botón propio en el ribbon.
-  const extraFilters = (filters.priorities.length ? 1 : 0) + (filters.hideDone ? 1 : 0);
+  const [hojaAbierta, setHojaAbierta] = useState(false);
+  const finos = filtrosFinos(filters);
+  const enLista = view === "lista";
+  const cambiada =
+    enLista &&
+    (presentacion.agrupar !== PRESENTACION_INICIAL.agrupar ||
+      presentacion.orden !== PRESENTACION_INICIAL.orden ||
+      presentacion.hechas !== PRESENTACION_INICIAL.hechas);
+  // Las fichas no aplican al hilo: es una conversación, no tareas.
+  const conFichas = view !== "hilo";
 
   return (
-    <div className="ex-toolbar">
-      <div className="ex-tabs" role="tablist" aria-label="Vistas del tablero">
-        {views.map((key) => (
-          <button
-            key={key}
-            type="button"
-            role="tab"
-            aria-selected={view === key}
-            className={`ex-tab${view === key ? " active" : ""}`}
-            onClick={() => onViewChange(key)}
-          >
-            {VIEW_LABELS[key].label}
+    <>
+      <div className="xr-barra">
+        <SelectorDeVistas views={views} view={view} onChange={onViewChange} />
+        <div className="xr-barra-acciones">
+          <button type="button" className="xr-icono-btn" onClick={onBuscar} aria-label="Buscar">
+            <IconSearch width={18} height={18} />
           </button>
-        ))}
+          <button
+            type="button"
+            className="xr-icono-btn"
+            data-activo={finos > 0 || cambiada || undefined}
+            onClick={() => setHojaAbierta(true)}
+            aria-label={finos ? `Mostrar y filtrar (${finos} filtros)` : "Mostrar y filtrar"}
+          >
+            <IconoMas />
+            {finos > 0 && <span className="xr-contador">{finos}</span>}
+          </button>
+        </div>
       </div>
 
-      <div className="ex-ribbon" role="toolbar" aria-label="Herramientas del tablero">
-        <RibbonSearch value={filters.text} onChange={(text) => onFiltersChange({ ...filters, text })} />
-
-        <RibbonMenu icon={IconUser} label="Persona" count={filters.people.length} width={230}>
-          {() => (
-            <div className="ex-menu-list">
-              <span className="ex-menu-title">Responsables</span>
-              {members.length === 0 ? (
-                <span className="ex-menu-empty">Este tablero todavía no tiene responsables.</span>
-              ) : (
-                <div className="ex-menu-scroll">
-                  {members.map((m) => (
-                    <label key={m} className="ex-menu-check">
-                      <input
-                        type="checkbox"
-                        checked={filters.people.includes(m)}
-                        onChange={() => onFiltersChange({ ...filters, people: toggleIn(filters.people, m) })}
-                      />
-                      <span className="ex-rib-avatar" aria-hidden>
-                        {initials(m)}
-                      </span>
-                      {m}
-                    </label>
-                  ))}
-                </div>
-              )}
-              {filters.people.length > 0 && (
-                <div className="ex-menu-actions">
-                  <button
-                    type="button"
-                    className="btn-ghost btn-sm"
-                    onClick={() => onFiltersChange({ ...filters, people: [] })}
-                  >
-                    Limpiar
-                  </button>
-                </div>
-              )}
-            </div>
+      {conFichas && (
+        <div className="xr-rapidos" role="toolbar" aria-label="Filtrar tareas">
+          {RAPIDOS.filter((r) => conMias || r.clave !== "mias").map((r) => {
+            const n = cuentas[r.clave];
+            return (
+              <button
+                key={r.clave}
+                type="button"
+                className="xr-ficha-btn"
+                aria-pressed={rapido === r.clave}
+                data-alerta={(r.clave === "vencidas" && n) || undefined}
+                onClick={() => onRapidoChange(r.clave)}
+              >
+                {r.etiqueta}
+                {r.clave !== "todo" && n ? <span className="xr-ficha-cuenta">{n}</span> : null}
+              </button>
+            );
+          })}
+          {finos > 0 && (
+            <button
+              type="button"
+              className="xr-ficha-btn"
+              aria-pressed="true"
+              onClick={() => onFiltersChange(EMPTY_FILTERS)}
+              aria-label="Quitar los filtros de prioridad y personas"
+            >
+              {finos === 1 ? "1 filtro" : `${finos} filtros`}
+              <IconClose width={13} height={13} />
+            </button>
           )}
-        </RibbonMenu>
+        </div>
+      )}
 
-        <RibbonMenu icon={IconFilter} label="Filtro" count={extraFilters} caret width={264}>
-          {(close) => (
-            <div className="ex-menu-list">
-              <span className="ex-menu-title">Prioridad</span>
-              <div className="ex-filter-row">
-                {PRIORITY_ORDER.map((priority: Priority) => (
-                  <button
-                    key={priority}
-                    type="button"
-                    className={`ex-filter-pill${filters.priorities.includes(priority) ? " active" : ""}`}
-                    style={{ borderColor: PRIORITY_META[priority].color, color: PRIORITY_META[priority].color }}
-                    onClick={() => onFiltersChange({ ...filters, priorities: toggleIn(filters.priorities, priority) })}
-                  >
-                    {PRIORITY_META[priority].label}
-                  </button>
-                ))}
-              </div>
-
-              <label className="ex-menu-check">
-                <input
-                  type="checkbox"
-                  checked={filters.hideDone}
-                  onChange={() => onFiltersChange({ ...filters, hideDone: !filters.hideDone })}
+      <Sheet
+        open={hojaAbierta}
+        onClose={() => setHojaAbierta(false)}
+        title={enLista ? "Mostrar" : "Filtrar"}
+        size="sm"
+        footer={
+          <div className="xr-pie-acciones">
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => {
+                onFiltersChange(EMPTY_FILTERS);
+                if (enLista) onPresentacionChange(PRESENTACION_INICIAL);
+              }}
+              disabled={!finos && !cambiada}
+            >
+              Restablecer
+            </button>
+            <button type="button" className="btn-primary" onClick={() => setHojaAbierta(false)}>
+              Listo
+            </button>
+          </div>
+        }
+      >
+        <div className="xr-filtros">
+          {enLista && (
+            <>
+              <section className="xr-ajuste">
+                <h3 className="xr-etiqueta">Agrupar por</h3>
+                <Segmentos
+                  opciones={AGRUPAR}
+                  valor={presentacion.agrupar}
+                  onChange={(agrupar) => onPresentacionChange({ ...presentacion, agrupar })}
+                  etiqueta="Agrupar por"
                 />
-                Solo trabajo vivo
+              </section>
+              <section className="xr-ajuste">
+                <h3 className="xr-etiqueta">Ordenar</h3>
+                <Segmentos
+                  opciones={ORDENAR}
+                  valor={presentacion.orden}
+                  onChange={(orden) => onPresentacionChange({ ...presentacion, orden })}
+                  etiqueta="Ordenar"
+                />
+              </section>
+              <label className="xr-interruptor-fila">
+                <span>Mostrar lo hecho en su sitio</span>
+                <Interruptor checked={presentacion.hechas} onChange={(hechas) => onPresentacionChange({ ...presentacion, hechas })} />
               </label>
-
-              <div className="ex-menu-actions">
-                <button type="button" className="btn-ghost btn-sm" onClick={() => onFiltersChange(EMPTY_FILTERS)}>
-                  Limpiar todo
-                </button>
-                <button type="button" className="btn-primary btn-sm" onClick={close}>
-                  Listo
-                </button>
-              </div>
-            </div>
+            </>
           )}
-        </RibbonMenu>
+          <FiltrosFinos filters={filters} onChange={onFiltersChange} members={members} />
+        </div>
+      </Sheet>
+    </>
+  );
+}
 
-        <RibbonMenu icon={IconSort} label="Ordenar" value={sort === "manual" ? null : sortLabel(sort)} width={232}>
-          {(close) => (
-            <div className="ex-menu-list">
-              <span className="ex-menu-title">Ordenar por</span>
-              <div className="ex-menu-scroll">
-                {SORTS.map((s) => (
-                  <button
-                    key={s.key}
-                    type="button"
-                    className={`ex-menu-opt${sort === s.key ? " active" : ""}`}
-                    onClick={() => {
-                      onSortChange(s.key);
-                      close();
-                    }}
-                  >
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </RibbonMenu>
+function IconoMas() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+      <circle cx="4" cy="9" r="1.5" fill="currentColor" />
+      <circle cx="9" cy="9" r="1.5" fill="currentColor" />
+      <circle cx="14" cy="9" r="1.5" fill="currentColor" />
+    </svg>
+  );
+}
 
-        <RibbonMenu icon={IconStatus} label="Status" count={filters.statuses.length} width={214}>
-          {() => (
-            <div className="ex-menu-list">
-              <span className="ex-menu-title">Estado</span>
-              <div className="ex-menu-scroll">
-                {STATUS_ORDER.map((status: TaskStatus) => (
-                  <label key={status} className="ex-menu-check">
-                    <input
-                      type="checkbox"
-                      checked={filters.statuses.includes(status)}
-                      onChange={() => onFiltersChange({ ...filters, statuses: toggleIn(filters.statuses, status) })}
-                    />
-                    <span className="ex-rib-dot" style={{ background: STATUS_META[status].color }} aria-hidden />
-                    {STATUS_META[status].label}
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
-        </RibbonMenu>
-
-        <RibbonMenu
-          icon={IconCalendar}
-          label="Fechas"
-          value={filters.date === "all" ? null : dateLabel(filters.date)}
-          width={206}
+function Segmentos<T extends string>({
+  opciones,
+  valor,
+  onChange,
+  etiqueta
+}: {
+  opciones: { clave: T; etiqueta: string }[];
+  valor: T;
+  onChange: (v: T) => void;
+  etiqueta: string;
+}) {
+  return (
+    <div className="xr-segmentos xr-segmentos-ancho" role="radiogroup" aria-label={etiqueta}>
+      {opciones.map((o) => (
+        <button
+          key={o.clave}
+          type="button"
+          role="radio"
+          aria-checked={valor === o.clave}
+          className="xr-segmento"
+          onClick={() => onChange(o.clave)}
         >
-          {(close) => (
-            <div className="ex-menu-list">
-              <span className="ex-menu-title">Vencimiento</span>
-              <div className="ex-menu-scroll">
-                {DATE_BUCKETS.map((bucket) => (
-                  <button
-                    key={bucket.key}
-                    type="button"
-                    className={`ex-menu-opt${filters.date === bucket.key ? " active" : ""}`}
-                    onClick={() => {
-                      onFiltersChange({ ...filters, date: bucket.key });
-                      close();
-                    }}
-                  >
-                    {bucket.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </RibbonMenu>
-
-        {filtersActive && (
-          <button
-            type="button"
-            className="ex-rib-btn ex-rib-clear"
-            onClick={() => onFiltersChange(EMPTY_FILTERS)}
-            title="Quitar todos los filtros"
-          >
-            <IconClose aria-hidden />
-            <span>Limpiar</span>
-          </button>
-        )}
-      </div>
+          {o.etiqueta}
+        </button>
+      ))}
     </div>
   );
 }
 
-/** Buscador estilo monday: es un botón hasta que lo pulsas; ahí se abre el campo. */
-function RibbonSearch({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  // Con texto escrito se queda abierto: cerrar el campo escondería un filtro activo.
-  const expanded = open || value.trim().length > 0;
+function SelectorDeVistas({
+  views,
+  view,
+  onChange
+}: {
+  views: ExecutionView[];
+  view: ExecutionView;
+  onChange: (v: ExecutionView) => void;
+}) {
+  const contenedor = useRef<HTMLDivElement>(null);
+  const activa = useRef<HTMLButtonElement>(null);
+  const [recorte, setRecorte] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (open) inputRef.current?.focus();
-  }, [open]);
+  // El recorte se mide antes de pintar para no ver un fotograma sin indicador.
+  useLayoutEffect(() => {
+    const c = contenedor.current;
+    const a = activa.current;
+    if (!c || !a) return;
+    const medir = () => {
+      const izq = a.offsetLeft;
+      const der = c.offsetWidth - (a.offsetLeft + a.offsetWidth);
+      setRecorte(`inset(3px ${der}px 3px ${izq}px round 999px)`);
+    };
+    medir();
+    const ro = new ResizeObserver(medir);
+    ro.observe(c);
+    return () => ro.disconnect();
+  }, [view, views]);
 
-  if (!expanded) {
-    return (
-      <button
-        type="button"
-        className="ex-rib-btn"
-        onClick={() => setOpen(true)}
-        title="Buscar tarea"
-        aria-label="Buscar tarea"
-      >
-        <IconSearch aria-hidden />
-      </button>
-    );
-  }
+  // Una vista que ya no se ofrece (?view=table de un enlace viejo) no tiene
+  // pestaña: el indicador se esconde en vez de señalar otra.
+  const ofrecida = views.includes(view);
 
   return (
-    <div className="ex-rib-search">
-      <IconSearch aria-hidden />
-      <input
-        ref={inputRef}
-        type="text"
-        value={value}
-        placeholder="Buscar tarea…"
-        aria-label="Buscar tarea"
-        onChange={(e) => onChange(e.target.value)}
-        onBlur={() => {
-          if (!value.trim()) setOpen(false);
-        }}
-        onKeyDown={(e) => {
-          if (e.key !== "Escape") return;
-          onChange("");
-          setOpen(false);
-        }}
-      />
-      {value.length > 0 && (
+    // Hasta medir (antes de hidratar) no hay recorte: la pestaña activa se
+    // pinta sola por CSS para que nunca se vea el selector sin elegida.
+    <div className="xr-vistas" ref={contenedor} role="tablist" aria-label="Vistas del proyecto" data-medido={Boolean(recorte) || undefined}>
+      {views.map((key) => (
         <button
+          key={key}
+          ref={key === view ? activa : undefined}
           type="button"
-          className="ex-rib-x"
-          aria-label="Limpiar búsqueda"
-          onClick={() => {
-            onChange("");
-            inputRef.current?.focus();
-          }}
+          role="tab"
+          aria-selected={view === key}
+          className="xr-vista"
+          onClick={() => onChange(key)}
         >
-          <IconClose aria-hidden />
+          {VIEW_LABELS[key].label}
         </button>
+      ))}
+      {ofrecida && recorte && (
+        <div className="xr-vistas-activa" aria-hidden style={{ clipPath: recorte }}>
+          {views.map((key) => (
+            <span key={key} className="xr-vista">
+              {VIEW_LABELS[key].label}
+            </span>
+          ))}
+        </div>
       )}
     </div>
   );
 }
 
-/**
- * Botón plano del ribbon + su popover. Cada control lleva su propio anclaje,
- * así que abrir uno cierra el anterior sin coordinación entre ellos (el
- * backdrop de MenuSurface se encarga).
- */
-function RibbonMenu({
-  icon: Icon,
-  label,
-  count = 0,
-  value = null,
-  caret = false,
-  width,
-  children
-}: {
-  icon: (p: IconProps) => ReactNode;
-  label: string;
-  /** Nº de opciones marcadas: pinta el botón como activo y muestra la cifra. */
-  count?: number;
-  /** Alternativa al contador para controles de opción única (orden, fechas). */
-  value?: string | null;
-  caret?: boolean;
-  width?: number;
-  children: (close: () => void) => ReactNode;
-}) {
-  const menu = useMenuAnchor();
-  const active = count > 0 || value !== null;
-  // La etiqueta deja de pintarse y pasa al title/aria-label: seis controles con
-  // texto ocupaban la fila entera y obligaban a envolverla. Lo que SÍ se queda
-  // es el estado —el contador y el valor elegido—, porque sin él un filtro
-  // activo no se distinguiría de uno vacío más que por el tinte del botón.
-  const described = value !== null ? `${label}: ${value}` : count > 0 ? `${label} (${count})` : label;
+function FiltrosFinos({ filters, onChange, members }: { filters: BoardFilters; onChange: (f: BoardFilters) => void; members: string[] }) {
+  function alternar<T>(lista: T[], valor: T): T[] {
+    return lista.includes(valor) ? lista.filter((x) => x !== valor) : [...lista, valor];
+  }
 
   return (
     <>
-      <button
-        type="button"
-        className={`ex-rib-btn${active ? " active" : ""}${menu.open ? " open" : ""}`}
-        onClick={menu.toggle}
-        aria-haspopup="menu"
-        aria-expanded={menu.open}
-        title={described}
-        aria-label={described}
-      >
-        <Icon aria-hidden />
-        {count > 0 && <span className="ex-rib-count">{count}</span>}
-        {value !== null && <span className="ex-rib-value">{value}</span>}
-        {caret && <IconChevronDown className="ex-rib-caret" aria-hidden />}
-      </button>
-      {menu.open && (
-        <MenuSurface anchor={menu.anchor} onClose={menu.close} align="start" width={width} label={label}>
-          {children(menu.close)}
-        </MenuSurface>
+      <section>
+        <h3 className="xr-etiqueta">Prioridad</h3>
+        <div className="xr-fichas">
+          {PRIORITY_ORDER.map((p: Priority) => (
+            <button
+              key={p}
+              type="button"
+              className="xr-ficha-btn"
+              aria-pressed={filters.priorities.includes(p)}
+              onClick={() => onChange({ ...filters, priorities: alternar(filters.priorities, p) })}
+            >
+              <span className="xr-punto" style={{ background: PRIORITY_META[p].color }} />
+              {PRIORITY_META[p].label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {members.length > 1 && (
+        <section>
+          <h3 className="xr-etiqueta">Responsables</h3>
+          <div className="xr-fichas">
+            {members.map((m) => (
+              <button
+                key={m}
+                type="button"
+                className="xr-ficha-btn"
+                aria-pressed={filters.people.includes(m)}
+                onClick={() => onChange({ ...filters, people: alternar(filters.people, m) })}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+        </section>
       )}
     </>
   );
 }
 
-function sortLabel(sort: SortKey): string {
-  return SORTS.find((s) => s.key === sort)?.label ?? "";
-}
-
-function dateLabel(bucket: DateBucket): string {
-  return DATE_BUCKETS.find((b) => b.key === bucket)?.label ?? "";
-}
-
-function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
+export function Interruptor({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label?: string }) {
+  return (
+    <button type="button" role="switch" aria-checked={checked} aria-label={label} className="xr-interruptor" onClick={() => onChange(!checked)}>
+      <span className="xr-interruptor-bola" />
+    </button>
+  );
 }

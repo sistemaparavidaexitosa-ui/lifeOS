@@ -1,8 +1,8 @@
 "use client";
 // Menú "⋯" del proyecto: editar, bitácora, base de conocimiento y eliminar.
 //
-// Sus paneles viven en el Drawer lateral (.td-*), el mismo del detalle de
-// tarea: lateral en escritorio, hoja desde abajo en móvil.
+// Sus paneles viven en la hoja de Execution (ui/Sheet.tsx), la misma del
+// detalle de tarea: lateral en escritorio, cajón desde abajo en el iPhone.
 //
 // FIX (móvil): este era el ÚNICO popover del módulo que seguía con
 // posicionamiento a mano — `position: absolute; right: 0; top: calc(100% +
@@ -27,7 +27,8 @@ import { moveProject, shareProjectWithGuest, unshareProjectFromGuests } from "@/
 import type { WorkspaceSummary } from "@/lib/data/workspaces";
 import type { ProjectTemplate } from "@/lib/domain/execution/project-templates.ts";
 import type { LogEntry, KnowledgeItem } from "./logbook-knowledge-actions";
-import { IconClose, IconTrash } from "@/components/icons";
+import { IconTrash } from "@/components/icons";
+import Sheet from "./ui/Sheet";
 
 export interface ProjectMenuData {
   id: string;
@@ -87,6 +88,10 @@ export default function ProjectMenu({
 }) {
   const menu = useMenuAnchor();
   const [panel, setPanel] = useState<Panel>(null);
+  // El panel que se ve sigue siendo el último mientras la hoja sale, para que
+  // no se vacíe a mitad de la animación.
+  const [mostrado, setMostrado] = useState<Panel>(null);
+  if (panel && panel !== mostrado) setMostrado(panel);
   // Lo necesita el panel de plan con IA para repintar el tablero al aplicar.
   const router = useRouter();
 
@@ -99,55 +104,52 @@ export default function ProjectMenu({
     <>
       <button
         type="button"
-        className="btn-ghost btn-sm ex-header-more"
+        className="xr-icono-btn"
         onClick={menu.toggle}
         aria-label="Opciones del proyecto"
         aria-haspopup="menu"
         aria-expanded={menu.open}
       >
-        ⋯
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+          <circle cx="5" cy="12" r="1.7" />
+          <circle cx="12" cy="12" r="1.7" />
+          <circle cx="19" cy="12" r="1.7" />
+        </svg>
       </button>
 
       {menu.open && (
         <MenuSurface anchor={menu.anchor} onClose={menu.close} align="end" width={236} label="Opciones del proyecto">
-          <div className="ex-menu-list">
-            <MenuItem icon="✨" label="Sugerir secuencia" onClick={() => openPanel("sequence")} />
-            <MenuItem icon="🤖" label="Generar plan con IA" onClick={() => openPanel("ai-plan")} />
-            <MenuItem icon="🧩" label="Aplicar plantilla" onClick={() => openPanel("template")} />
-            <MenuItem icon="✏️" label="Editar proyecto" onClick={() => openPanel("edit")} />
+          <div className="xr-menu">
+            <MenuItem label="Sugerir secuencia" onClick={() => openPanel("sequence")} />
+            <MenuItem label="Generar plan con IA" onClick={() => openPanel("ai-plan")} />
+            <MenuItem label="Aplicar plantilla" onClick={() => openPanel("template")} />
+            <MenuItem label="Editar proyecto" onClick={() => openPanel("edit")} />
             {/* Sustituye a la vieja pantalla "Compartir un proyecto personal":
                 desde 0031 la membresía del espacio YA da acceso, así que
                 compartir un proyecto es sencillamente moverlo de espacio. */}
             {workspaces.length > 1 && (
-              <MenuItem icon="📦" label="Mover a otro espacio" onClick={() => openPanel("move")} />
+              <MenuItem label="Mover a otro espacio" onClick={() => openPanel("move")} />
             )}
             {/* Los demás roles entran por membresía (0031); el Guest es el
                 único que necesita esta llave por proyecto. */}
             {!workspaceIsPersonal && (
               <MenuItem
-                icon="🔑"
                 label={guestAccess ? `Acceso de invitados (${guestAccess})` : "Acceso de invitados"}
                 onClick={() => openPanel("guests")}
               />
             )}
-            <MenuItem icon="📓" label="Bitácora" onClick={() => openPanel("logbook")} />
-            <MenuItem icon="📚" label="Base de conocimiento" onClick={() => openPanel("knowledge")} />
-            <MenuItem icon="🗑️" label="Eliminar proyecto" danger onClick={() => openPanel("delete")} />
+            <MenuItem label="Bitácora" onClick={() => openPanel("logbook")} />
+            <MenuItem label="Base de conocimiento" onClick={() => openPanel("knowledge")} />
+            <MenuItem label="Eliminar proyecto" danger onClick={() => openPanel("delete")} />
           </div>
         </MenuSurface>
       )}
 
-      {panel && (
-        <>
-          <div className="td-backdrop" onClick={() => setPanel(null)} />
-          <aside className="td-drawer" role="dialog" aria-modal="true" aria-label={PANEL_TITLE[panel]}>
-            <div className="td-drawer-header">
-              <b className="td-drawer-title">{PANEL_TITLE[panel]}</b>
-              <button type="button" className="td-drawer-close" onClick={() => setPanel(null)} aria-label="Cerrar">
-                <IconClose />
-              </button>
-            </div>
-            <div className="td-drawer-body">
+      <Sheet open={panel !== null} onClose={() => setPanel(null)} title={mostrado ? PANEL_TITLE[mostrado] : ""}>
+        {(() => {
+          const panel = mostrado;
+          return (
+            <div className="xr-panel">
               {panel === "sequence" && (
                 <SequencePanel projectId={project.id} tasks={sequenceTasks} onClose={() => setPanel(null)} />
               )}
@@ -195,9 +197,9 @@ export default function ProjectMenu({
                 <DeleteProjectPanel project={project} taskCount={taskCount} onCancel={() => setPanel(null)} />
               )}
             </div>
-          </aside>
-        </>
-      )}
+          );
+        })()}
+      </Sheet>
     </>
   );
 }
@@ -483,19 +485,16 @@ function DeleteProjectPanel({
 }
 
 function MenuItem({
-  icon,
   label,
   onClick,
   danger = false
 }: {
-  icon: string;
   label: string;
   onClick: () => void;
   danger?: boolean;
 }) {
   return (
-    <button type="button" role="menuitem" onClick={onClick} className={`ex-menu-item${danger ? " danger" : ""}`}>
-      <span aria-hidden>{icon}</span>
+    <button type="button" role="menuitem" onClick={onClick} className="xr-menu-item" data-peligro={danger || undefined}>
       {label}
     </button>
   );

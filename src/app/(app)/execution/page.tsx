@@ -1,10 +1,11 @@
 import { Suspense } from "react";
-import Link from "next/link";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { fcorta } from "@/lib/format";
 import { boardRevision, isOverdue, isOpen, type BoardTaskLike } from "@/lib/domain/board.ts";
 import { todayInTimeZone } from "@/lib/domain/datetime.ts";
+import { cookiePreferencias, leerPreferencias } from "@/lib/domain/execution/arbol.ts";
 import { getUserTimeZone } from "@/lib/data/profile";
 import { listWorkspaces, ROLES_QUE_CREAN, type WorkspaceSummary } from "@/lib/data/workspaces";
 import type { TaskStatus, Priority, ProjectStatus } from "@/lib/domain/types.ts";
@@ -19,6 +20,7 @@ import { isExecutionView, type BoardGroup, type BoardTask, type ExecutionView } 
 import { getProjectLogAndKnowledge } from "./logbook-knowledge-actions";
 import { getSessionUser } from "@/lib/data/session";
 import { listTemplates } from "@/lib/data/templates";
+import "./execution.css";
 
 // REDISEÑO DEL FLUJO DE PROYECTOS (estilo monday.com / ClickUp)
 //
@@ -105,6 +107,13 @@ export default async function ExecutionPage({
     const rootTasks = (allTasks ?? []).filter((t) => t.project_id === p.id && !t.parent_task_id);
     const countable = rootTasks.filter((t) => t.status !== "Cancelled");
     const done = countable.filter((t) => t.status === "Completed").length;
+    // La fecha más próxima entre lo abierto que todavía no vence: la «línea de
+    // pulso» de la tarjeta (PortfolioBoard).
+    const nextDue =
+      rootTasks
+        .filter((t) => isOpen(t.status as TaskStatus) && t.due && t.due > today)
+        .map((t) => t.due as string)
+        .sort()[0] ?? null;
     return {
       id: p.id,
       title: p.title,
@@ -114,6 +123,9 @@ export default async function ExecutionPage({
       taskCount: rootTasks.length,
       openCount: rootTasks.filter((t) => isOpen(t.status as TaskStatus)).length,
       overdueCount: rootTasks.filter((t) => isOverdue({ due: t.due, status: t.status as TaskStatus }, today)).length,
+      dueTodayCount: rootTasks.filter((t) => t.due === today && isOpen(t.status as TaskStatus)).length,
+      inProgressCount: rootTasks.filter((t) => t.status === "InProgress").length,
+      nextDue,
       targetDate: p.target_date,
       targetDateLabel: p.target_date ? fcorta(p.target_date, today) : ""
     };
@@ -123,12 +135,13 @@ export default async function ExecutionPage({
   const backHref = selectedProject?.workspace_id ? `/execution?ws=${selectedProject.workspace_id}` : "/execution";
 
   return (
-    <main className="ex-main">
+    <main className="ex-main xr">
       {!selectedProject ? (
         <>
         <PortfolioBoard
           projects={portfolio}
           view={view}
+          today={today}
           workspaceName={activeWorkspace?.name ?? ""}
           workspaceNav={
             activeWorkspace && (
@@ -141,7 +154,7 @@ export default async function ExecutionPage({
                     equipo, que casi nadie mira, retrasaba la lista de
                     proyectos que mira todo el mundo. */}
                 {!activeWorkspace.isPersonal && (
-                  <Suspense fallback={<span className="btn-ghost btn-sm" aria-hidden>Equipo…</span>}>
+                  <Suspense fallback={<span className="xr-ficha" aria-hidden>Equipo…</span>}>
                     <TeamSection workspace={activeWorkspace} userId={user.id} projectCount={portfolio.length} />
                   </Suspense>
                 )}
@@ -158,33 +171,16 @@ export default async function ExecutionPage({
           )}
         </PortfolioBoard>
 
-        {/* El análisis mira la CARTERA —lo vencido, lo estancado, lo que ya se
-            puede empezar—, así que vive aquí y no dentro del tablero de un
-            proyecto. Y va tras un límite de Suspense por el mismo motivo que
-            TeamSection: su consulta no puede retrasar la lista de proyectos. */}
-        <Suspense fallback={null}>
-        </Suspense>
         </>
       ) : (
         <>
-          {/* Sin navegador lateral, esta miga de pan es el único camino de
-              vuelta: no puede faltar ni esconderse tras un menú. Vuelve al
-              espacio DEL PROYECTO, no al que estuviera activo: si no, abrir un
-              proyecto de otro espacio y volver dejaba al usuario en una
-              cartera donde ese proyecto no aparece. */}
-          <nav className="ex-crumbs" aria-label="Ruta">
-            <Link href={backHref} className="ex-crumb-back">
-              ← Proyectos
-            </Link>
-            <span className="ex-crumb-sep">/</span>
-            <span className="ex-crumb-current">{selectedProject.title}</span>
-          </nav>
           <BoardWorkspace
             projectRow={selectedProject}
             view={view}
             userId={user.id}
             today={today}
             openTaskId={taskTarget?.id ?? null}
+            backHref={backHref}
           />
         </>
       )}
@@ -202,7 +198,8 @@ async function BoardWorkspace({
   view,
   userId,
   today,
-  openTaskId
+  openTaskId,
+  backHref
 }: {
   projectRow: {
     id: string; title: string; objective: string | null; status: string;
@@ -215,6 +212,8 @@ async function BoardWorkspace({
   today: string;
   /** Tarea a abrir en el drawer al montar, cuando se llegó por ?task=. */
   openTaskId: string | null;
+  /** La cartera del espacio DEL PROYECTO: volver a otro espacio lo perdería de vista. */
+  backHref: string;
 }) {
   const supabase = await createClient();
   const projectId = projectRow.id;
@@ -252,7 +251,7 @@ async function BoardWorkspace({
     .eq("project_id", projectId)
     .maybeSingle();
 
-  const TASK_COLUMNS = "id, title, status, priority, due, start_date, est, urgent, parent_task_id, group_id, position";
+  const TASK_COLUMNS = "id, title, status, priority, due, start_date, est, urgent, parent_task_id, group_id, position, description";
   let orderingEnabled = true;
   let taskRows: Record<string, unknown>[] = [];
 
@@ -264,7 +263,7 @@ async function BoardWorkspace({
     orderingEnabled = false;
     const { data: legacy } = await supabase
       .from("tasks")
-      .select("id, title, status, priority, due, start_date, est, urgent, parent_task_id, group_id")
+      .select("id, title, status, priority, due, start_date, est, urgent, parent_task_id, group_id, description")
       .eq("project_id", projectId)
       .order("created_at");
     taskRows = (legacy ?? []) as Record<string, unknown>[];
@@ -285,6 +284,14 @@ async function BoardWorkspace({
     groupId: (t.group_id as string | null) ?? null,
     position: (t.position as number | undefined) ?? index
   }));
+
+  // Las notas solo viajan para la búsqueda (BoardShell → Busqueda): el detalle
+  // las vuelve a pedir frescas al abrirse.
+  const notas: Record<string, string> = {};
+  for (const t of taskRows) {
+    const d = typeof t.description === "string" ? t.description.trim() : "";
+    if (d) notas[t.id as string] = d;
+  }
 
   const taskIds = tasks.map((t) => t.id);
   const [{ data: groupRows }, { data: assigneeRows }, { data: commentRows }, logAndKnowledge] = await Promise.all([
@@ -311,13 +318,16 @@ async function BoardWorkspace({
   // 0030 todo proyecto vive en uno, y en el personal el RPC devuelve al propio
   // usuario como único miembro, que es exactamente lo que aquella rama
   // fabricaba a mano consultando `profiles`.
-  const { data: memberRows } = await supabase.rpc("list_workspace_members", { p_workspace_id: projectRow.workspace_id });
+  const [{ data: memberRows }, { data: miPerfil }] = await Promise.all([
+    supabase.rpc("list_workspace_members", { p_workspace_id: projectRow.workspace_id }),
+    // El nombre con el que esta persona figura como responsable: la ficha «Mías».
+    supabase.from("profiles").select("name").eq("user_id", userId).maybeSingle()
+  ]);
   let members: string[] = ((memberRows ?? []) as { user_name: string }[]).map((m) => m.user_name);
   if (!members.length) {
     // Red de seguridad para una cuenta anterior a 0030 cuya membresía Owner no
     // llegó a crearse: sin esto el selector de responsables saldría vacío.
-    const { data: profile } = await supabase.from("profiles").select("name").eq("user_id", userId).single();
-    if (profile?.name) members = [profile.name];
+    if (miPerfil?.name) members = [miPerfil.name];
   }
 
   const groups = (groupRows ?? []) as BoardGroup[];
@@ -334,6 +344,7 @@ async function BoardWorkspace({
   return (
     <>
       <BoardHeader
+        backHref={backHref}
         templates={await listTemplates("project")}
         workspaces={moveTargets}
         currentWorkspaceId={projectRow.workspace_id}
@@ -373,6 +384,9 @@ async function BoardWorkspace({
         threadEnabled={threadEnabled}
         openTaskId={openTaskId}
         today={today}
+        yo={miPerfil?.name ?? null}
+        notas={notas}
+        preferencias={leerPreferencias((await cookies()).get(cookiePreferencias(projectId))?.value)}
       />
     </>
   );

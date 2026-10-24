@@ -11,6 +11,8 @@ import { TemplateSelect, TemplatePreview } from "./ProjectTemplatePicker";
 import AiPlanPanel from "./AiPlanPanel";
 import { planSummary, type AiPlanDraft } from "@/lib/domain/execution/ai-plan.ts";
 import type { ProjectTemplate } from "@/lib/domain/execution/project-templates.ts";
+import { IconPlus } from "@/components/icons";
+import Sheet from "./ui/Sheet";
 
 export default function NewProjectForm({
   workspaceId,
@@ -55,15 +57,23 @@ export default function NewProjectForm({
     setAiPlan(null);
   }
 
-  if (!open) {
-    return (
-      <button type="button" className="btn-primary btn-sm" onClick={() => setOpen(true)}>
-        + Nuevo proyecto
-      </button>
-    );
-  }
-
+  // El formulario vive en la hoja de Execution: en el iPhone sube desde abajo
+  // en vez de empujar la cartera entera hacia abajo.
   return (
+    <>
+    <button type="button" className="xr-nuevo" onClick={() => setOpen(true)}>
+      <IconPlus width={16} height={16} />
+      Nuevo proyecto
+    </button>
+    <Sheet
+      open={open}
+      onClose={() => {
+        if (pending) return;
+        reset();
+        setOpen(false);
+      }}
+      title="Nuevo proyecto"
+    >
     <form
       ref={ref}
       action={(fd) =>
@@ -83,9 +93,8 @@ export default function NewProjectForm({
           }
         })
       }
-      className="card flex flex-col gap-2"
+      className="xr-form"
     >
-      <b>+ Nuevo proyecto</b>
       {/* Decir dónde va a caer el proyecto ANTES de crearlo: con varios
           espacios abiertos en pestañas distintas, crear a ciegas y descubrir
           después que el equipo entero lo ve (o que nadie lo ve) es el error
@@ -149,7 +158,7 @@ export default function NewProjectForm({
             setTemplateId("");
           }}
         >
-          🤖 O deja que la IA proponga el plan
+          O deja que la IA proponga el plan
         </button>
       )}
 
@@ -224,5 +233,7 @@ export default function NewProjectForm({
         </button>
       </div>
     </form>
+    </Sheet>
+    </>
   );
 }

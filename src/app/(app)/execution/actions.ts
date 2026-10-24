@@ -4,9 +4,8 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getPersonalWorkspace } from "@/lib/data/workspaces";
 import { recordActivity } from "@/lib/data/activity";
-import { evaluateTransition } from "@/lib/domain/task-state.ts";
-import { PRIORITY_META, PROJECT_STATUS_META, STATUS_META } from "./status-meta";
-import { dispatchAutomations } from "@/lib/automations/dispatch";
+import { aplicarPaso } from "@/lib/data/estado-tarea";
+import { PRIORITY_META, PROJECT_STATUS_META } from "./status-meta";
 import { getTemplate } from "@/lib/data/templates";
 import { templateFromPayload } from "@/lib/domain/execution/ai-plan.ts";
 import { writeTemplate } from "./template-actions";
@@ -367,39 +366,7 @@ export async function updateTaskDates(taskId: string, startDate: string | null, 
 /** FR-EXE-003/004/005: aplica la máquina de estados con validación real de dependencias. */
 export async function setTaskStatus(taskId: string, to: TaskStatus) {
   const { supabase, user } = await requireUser();
-
-  const { data: task, error: taskErr } = await supabase.from("tasks").select("*").eq("id", taskId).single();
-  if (taskErr || !task) throw new Error("Tarea no encontrada");
-
-  let depStatuses: Record<string, TaskStatus> = {};
-  if (task.deps?.length) {
-    const { data: deps } = await supabase.from("tasks").select("id, status").in("id", task.deps);
-    depStatuses = Object.fromEntries((deps ?? []).map((d) => [d.id, d.status as TaskStatus]));
-  }
-
-  const result = evaluateTransition({ status: task.status as TaskStatus, deps: task.deps ?? [] }, to, depStatuses);
-  if (!result.ok) throw new Error(result.message ?? "Transición no permitida");
-
-  const { error } = await supabase
-    .from("tasks")
-    .update({ status: to, completed_at: to === "Completed" ? new Date().toISOString() : null, version: task.version + 1 })
-    .eq("id", taskId);
-  if (error) throw new Error(describeDbError(error));
-
-  await supabase.from("task_history").insert({ task_id: taskId, from_state: task.status, to_state: to });
-  await supabase.from("audit_log").insert({ user_id: user.id, action: "task.status", object: taskId, meta: { to } });
-  await recordActivity({
-    projectId: task.project_id,
-    type: "task.status",
-    // Con el estado de origen, no solo el destino: «movió X a Bloqueada» no
-    // dice si venía de trabajarse o de no haber empezado nunca.
-    text: `movió "${task.title}" de ${STATUS_META[task.status as TaskStatus].label} a ${STATUS_META[to].label}`
-  });
-
-  // Al FINAL, y nunca lanza: el cambio de estado ya ocurrió y una regla rota no
-  // puede deshacerlo ni presentarlo como un fallo.
-  await dispatchAutomations({ type: "task.status_changed", taskId, projectId: task.project_id, toStatus: to });
-
+  await aplicarPaso(supabase, user.id, taskId, to);
   revalidatePath("/execution");
   revalidatePath("/home");
 }
